@@ -54,7 +54,7 @@
   [../]
 
   [./ffn]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn
     implicit = false
@@ -67,6 +67,7 @@
   [./all]
     type = FunctionDirichletBC
     variable = u
+    preset = false
     boundary = '0 1 2 3'
     function = exact_fn
     implicit = true

@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSCHBULK_H
-#define KKSCHBULK_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "CHBulk.h"
 
 // Forward Declarations
-class KKSCHBulk;
-
-template <>
-InputParameters validParams<KKSCHBulk>();
 
 /**
  * CHBulk child class that takes all the necessary data from a
@@ -30,6 +28,8 @@ InputParameters validParams<KKSCHBulk>();
 class KKSCHBulk : public CHBulk<Real>
 {
 public:
+  static InputParameters validParams();
+
   KKSCHBulk(const InputParameters & parameters);
 
 protected:
@@ -37,9 +37,6 @@ protected:
   virtual Real computeQpOffDiagJacobian(unsigned int jvar);
 
 private:
-  /// Number of coupled variables
-  unsigned int _nvar;
-
   ///@{
   /// Phase concnetration variables
   unsigned int _ca_var;
@@ -69,5 +66,3 @@ private:
   /// Second derivative \f$ d^2Fb/dcb^2 \f$
   const MaterialProperty<Real> & _second_derivative_Fb;
 };
-
-#endif // KKSCHBULK_H

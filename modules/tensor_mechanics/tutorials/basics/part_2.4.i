@@ -17,56 +17,11 @@
   second_order = true
 []
 
-[Variables]
-  [./disp_r]
-    order = SECOND
-  [../]
-  [./disp_z]
-    order = SECOND
-  [../]
-[]
-
-[Kernels]
-  [./TensorMechanics]
-    use_displaced_mesh = true
-  [../]
-[]
-
-[AuxVariables]
-  [./stress_zz]
-    family = MONOMIAL
-    order = CONSTANT
-  [../]
-  [./strain_zz]
-    family = MONOMIAL
-    order = CONSTANT
-  [../]
-  [./VM_stress]
-    family = MONOMIAL
-    order = CONSTANT
-  [../]
-[]
-
-[AuxKernels]
-  [./stress_zz]
-    type = RankTwoAux
-    variable = stress_zz
-    rank_two_tensor = stress
-    index_i = 1
-    index_j = 1
-  [../]
-  [./strain_zz]
-    type = RankTwoAux
-    variable = strain_zz
-    rank_two_tensor = total_strain
-    index_i = 1
-    index_j = 1
-  [../]
-  [./VM_stress]
-    type = RankTwoScalarAux
-    variable = VM_stress
-    rank_two_tensor = stress
-    scalar_type = VonMisesStress
+[Modules/TensorMechanics/Master]
+  [./block1]
+    strain = FINITE
+    add_variables = true
+    generate_output = 'stress_yy strain_yy vonmises_stress'
   [../]
 []
 
@@ -75,9 +30,6 @@
     type = ComputeIsotropicElasticityTensor
     youngs_modulus = 2.1e5
     poissons_ratio = 0.3
-  [../]
-  [./strain]
-    type = ComputeAxisymmetricRZFiniteStrain
   [../]
   [./stress]
     type = ComputeMultiPlasticityStress
@@ -104,19 +56,19 @@
 
 [BCs]
   [./left]
-    type = PresetBC
+    type = DirichletBC
     variable = disp_r
     boundary = left
     value = 0.0
   [../]
   [./bottom]
-    type = PresetBC
+    type = DirichletBC
     variable = disp_z
     boundary = bottom
     value = 0.0
   [../]
   [./top]
-    type = FunctionPresetBC
+    type = FunctionDirichletBC
     variable = disp_z
     boundary = top
     function = '0.0007*t'
@@ -145,19 +97,19 @@
 [Postprocessors]
   [./ave_stress_bottom]
     type = SideAverageValue
-    variable = stress_zz
+    variable = stress_yy
     boundary = bottom
   [../]
   [./ave_strain_bottom]
     type = SideAverageValue
-    variable = strain_zz
+    variable = strain_yy
     boundary = bottom
   [../]
 []
 
 [Outputs]
   exodus = true
-  print_perf_log = true
+  perf_graph = true
   csv = true
   print_linear_residuals = false
 []

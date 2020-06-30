@@ -1,17 +1,13 @@
 #pylint: disable=missing-docstring
-#################################################################
-#                   DO NOT MODIFY THIS HEADER                   #
-#  MOOSE - Multiphysics Object Oriented Simulation Environment  #
-#                                                               #
-#            (c) 2010 Battelle Energy Alliance, LLC             #
-#                      ALL RIGHTS RESERVED                      #
-#                                                               #
-#           Prepared by Battelle Energy Alliance, LLC           #
-#             Under Contract No. DE-AC07-05ID14517              #
-#              With the U. S. Department of Energy              #
-#                                                               #
-#              See COPYRIGHT for full restrictions              #
-#################################################################
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import os
 import glob
 import xml.etree.ElementTree as xml
@@ -26,7 +22,7 @@ except ImportError:
 
 import vtk
 import mooseutils
-from ChiggerObject import ChiggerObject
+from .ChiggerObject import ChiggerObject
 
 def get_xml_table_values():
     """
@@ -60,6 +56,7 @@ class ColorMap(ChiggerObject):
         opt.add('cmap_reverse', False, "Reverse the order of colormap.")
         opt.add('cmap_num_colors', 256, "Number of colors to use (matplotlib only).")
         opt.add('cmap_range', [0, 1], "Set the data range for the color map to display.")
+        opt.add('cmap_nan', [0.5, 0.5, 0.5, 1], "Set the NaN color.")
         return opt
 
     # The table is only needed once
@@ -103,6 +100,9 @@ class ColorMap(ChiggerObject):
 
         if self.isOptionValid('cmap_range'):
             vtktable.SetRange(*self.getOption('cmap_range'))
+
+        if self.isOptionValid('cmap_nan'):
+            vtktable.SetNanColor(*self.getOption('cmap_nan'))
         vtktable.Build()
         return vtktable
 

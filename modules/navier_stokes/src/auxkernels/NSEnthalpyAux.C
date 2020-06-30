@@ -1,19 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // Navier-Stokes includes
 #include "NSEnthalpyAux.h"
 #include "NS.h"
 
-template <>
+registerMooseObject("NavierStokesApp", NSEnthalpyAux);
+
 InputParameters
-validParams<NSEnthalpyAux>()
+NSEnthalpyAux::validParams()
 {
-  InputParameters params = validParams<AuxKernel>();
+  InputParameters params = AuxKernel::validParams();
 
   params.addClassDescription("Nodal auxiliary variable, for computing enthalpy at the nodes.");
   // Mark variables as required
@@ -30,6 +33,8 @@ NSEnthalpyAux::NSEnthalpyAux(const InputParameters & parameters)
     _rhoE(coupledValue(NS::total_energy)),
     _pressure(coupledValue(NS::pressure))
 {
+  mooseDeprecated("The NSEnthalpyAux auxiliary kernel has been replaced by the EnthalpyAux "
+                  "auxiliary kernel");
 }
 
 Real

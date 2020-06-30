@@ -1,22 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSDENSITYAUX_H
-#define RICHARDSDENSITYAUX_H
+#pragma once
 
 #include "AuxKernel.h"
 
 #include "RichardsDensity.h"
 
 // Forward Declarations
-class RichardsDensityAux;
-
-template <>
-InputParameters validParams<RichardsDensityAux>();
 
 /**
  * Fluid density as a function of porepressure
@@ -24,6 +21,8 @@ InputParameters validParams<RichardsDensityAux>();
 class RichardsDensityAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   RichardsDensityAux(const InputParameters & parameters);
 
 protected:
@@ -35,5 +34,3 @@ protected:
   /// userobject that defines density as a fcn of porepressure
   const RichardsDensity & _density_UO;
 };
-
-#endif // RICHARDSDENSITYAUX_H

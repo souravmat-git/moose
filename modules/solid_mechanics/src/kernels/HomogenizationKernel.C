@@ -1,18 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "HomogenizationKernel.h"
 #include "Material.h"
 #include "SymmElasticityTensor.h"
 
-template <>
+registerMooseObjectDeprecated("SolidMechanicsApp", HomogenizationKernel, "07/30/2020 24:00");
+
 InputParameters
-validParams<HomogenizationKernel>()
+HomogenizationKernel::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addRequiredRangeCheckedParam<unsigned int>("component",
                                                     "component >= 0 & component < 3",
                                                     "An integer corresponding to the direction "
@@ -38,6 +42,12 @@ HomogenizationKernel::HomogenizationKernel(const InputParameters & parameters)
     _component(getParam<unsigned int>("component")),
     _column(getParam<unsigned int>("column"))
 {
+  mooseDeprecated(name(), ": HomogenizationKernel is deprecated. \
+                  The solid_mechanics module will be removed from MOOSE on July 31, 2020. \
+                  Please update your input files to utilize the tensor_mechanics equivalents of \
+                  models based on solid_mechanics. A detailed migration guide that was developed \
+                  for BISON, but which is generally applicable to any MOOSE model is available at: \
+                  https://mooseframework.org/bison/tutorials/mechanics_conversion/overview.html");
 }
 
 Real

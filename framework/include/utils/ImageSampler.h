@@ -1,26 +1,19 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef IMAGESAMPLER_H
-#define IMAGESAMPLER_H
+#pragma once
 
 // MOOSE includes
 #include "FileRangeBuilder.h"
 #include "ConsoleStream.h"
 
-// libmesh includes
-#include "libmesh/mesh_tools.h"
+#include "libmesh/bounding_box.h"
 
 // VTK includes
 #ifdef LIBMESH_HAVE_VTK
@@ -66,13 +59,15 @@ public:
    *
    * @see ImageFunction
    */
+  static InputParameters validParams();
+
   ImageSampler(const InputParameters & parameters);
 
   /**
    * Return the pixel value for the given point
    * @param p The point at which to extract pixel data
    */
-  virtual Real sample(const Point & p);
+  virtual Real sample(const Point & p) const;
 
   /**
    * Perform initialization of image data
@@ -159,7 +154,7 @@ private:
 #endif
 
   /// Bounding box for testing points
-  MeshTools::BoundingBox _bounding_box;
+  BoundingBox _bounding_box;
 
   /// Parameters for interface
   const InputParameters & _is_pars;
@@ -167,5 +162,3 @@ private:
   /// Create a console stream object for this helper class
   ConsoleStream _is_console;
 };
-
-#endif // IMAGESAMPLER_H

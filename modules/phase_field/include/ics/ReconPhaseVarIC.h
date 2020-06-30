@@ -1,21 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RECONPHASEVARIC_H
-#define RECONPHASEVARIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "InitialCondition.h"
 #include "EBSDReader.h"
 #include "PolycrystalICTools.h"
 
 // Forward Declarations
-class ReconPhaseVarIC;
-
-template <>
-InputParameters validParams<ReconPhaseVarIC>();
 
 /**
  * ReconPhaseVarIC initializes a single order parameter to represent a phase
@@ -26,6 +24,8 @@ InputParameters validParams<ReconPhaseVarIC>();
 class ReconPhaseVarIC : public InitialCondition
 {
 public:
+  static InputParameters validParams();
+
   ReconPhaseVarIC(const InputParameters & parameters);
 
   virtual Real value(const Point & /*p*/);
@@ -39,5 +39,3 @@ private:
 
   const std::map<dof_id_type, std::vector<Real>> & _node_to_phase_weight_map;
 };
-
-#endif // RECONPHASEVARIC_H

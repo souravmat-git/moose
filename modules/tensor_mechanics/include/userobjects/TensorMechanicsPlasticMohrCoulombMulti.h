@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICMOHRCOULOMBMULTI_H
-#define TENSORMECHANICSPLASTICMOHRCOULOMBMULTI_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticModel.h"
 #include "TensorMechanicsHardeningModel.h"
-
-class TensorMechanicsPlasticMohrCoulombMulti;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticMohrCoulombMulti>();
 
 /**
  * FiniteStrainMohrCoulombMulti implements rate-independent non-associative mohr-coulomb
@@ -22,6 +19,8 @@ InputParameters validParams<TensorMechanicsPlasticMohrCoulombMulti>();
 class TensorMechanicsPlasticMohrCoulombMulti : public TensorMechanicsPlasticModel
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticMohrCoulombMulti(const InputParameters & parameters);
 
   /// The number of yield surfaces for this plasticity model
@@ -322,5 +321,3 @@ private:
     plane000100 = 4
   };
 };
-
-#endif // TENSORMECHANICSPLASTICMOHRCOULOMBMULTI_H

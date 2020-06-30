@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SWITCHINGFUNCTIONMULTIPHASEMATERIAL_H
-#define SWITCHINGFUNCTIONMULTIPHASEMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class SwitchingFunctionMultiPhaseMaterial;
-
-template <>
-InputParameters validParams<SwitchingFunctionMultiPhaseMaterial>();
 
 /**
  * SwitchingFunctionMultiPhaseMaterial is a switching function for a multi-phase,
@@ -26,6 +24,8 @@ InputParameters validParams<SwitchingFunctionMultiPhaseMaterial>();
 class SwitchingFunctionMultiPhaseMaterial : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   SwitchingFunctionMultiPhaseMaterial(const InputParameters & parameters);
 
 protected:
@@ -52,5 +52,3 @@ protected:
   std::vector<MaterialProperty<Real> *> _prop_dh;
   std::vector<std::vector<MaterialProperty<Real> *>> _prop_d2h;
 };
-
-#endif // SWITCHINGFUNCTIONMULTIPHASEMATERIAL_H

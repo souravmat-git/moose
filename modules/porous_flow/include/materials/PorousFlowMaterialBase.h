@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWMATERIALBASE_H
-#define POROUSFLOWMATERIALBASE_H
+#pragma once
 
 #include "PorousFlowMaterial.h"
 #include "DerivativeMaterialInterface.h"
-
-class PorousFlowMaterialBase;
-
-template <>
-InputParameters validParams<PorousFlowMaterialBase>();
 
 /**
  * Base class for all PorousFlow materials that provide phase-dependent properties.
@@ -26,6 +22,8 @@ InputParameters validParams<PorousFlowMaterialBase>();
 class PorousFlowMaterialBase : public DerivativeMaterialInterface<PorousFlowMaterial>
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowMaterialBase(const InputParameters & parameters);
 
 protected:
@@ -35,5 +33,3 @@ protected:
   /// Stringified fluid phase number
   const std::string _phase;
 };
-
-#endif // POROUSFLOWMATERIALBASE_H

@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "SusceptibilityTimeDerivative.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", SusceptibilityTimeDerivative);
+
 InputParameters
-validParams<SusceptibilityTimeDerivative>()
+SusceptibilityTimeDerivative::validParams()
 {
-  InputParameters params = validParams<TimeDerivative>();
+  InputParameters params = TimeDerivative::validParams();
   params.addClassDescription(
       "A modified time derivative Kernel that multiplies the time derivative "
       "of a variable by a generalized susceptibility");
@@ -24,11 +28,11 @@ SusceptibilityTimeDerivative::SusceptibilityTimeDerivative(const InputParameters
   : DerivativeMaterialInterface<JvarMapKernelInterface<TimeDerivative>>(parameters),
     _Chi(getMaterialProperty<Real>("f_name")),
     _dChidu(getMaterialPropertyDerivative<Real>("f_name", _var.name())),
-    _dChidarg(_coupled_moose_vars.size())
+    _dChidarg(_n_args)
 {
   // fetch derivatives
-  for (unsigned int i = 0; i < _dChidarg.size(); ++i)
-    _dChidarg[i] = &getMaterialPropertyDerivative<Real>("f_name", _coupled_moose_vars[i]->name());
+  for (unsigned int i = 0; i < _n_args; ++i)
+    _dChidarg[i] = &getMaterialPropertyDerivative<Real>("f_name", i);
 }
 
 void

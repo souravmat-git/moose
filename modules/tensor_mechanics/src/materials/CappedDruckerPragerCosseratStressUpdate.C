@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CappedDruckerPragerCosseratStressUpdate.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", CappedDruckerPragerCosseratStressUpdate);
+
 InputParameters
-validParams<CappedDruckerPragerCosseratStressUpdate>()
+CappedDruckerPragerCosseratStressUpdate::validParams()
 {
-  InputParameters params = validParams<CappedDruckerPragerStressUpdate>();
+  InputParameters params = CappedDruckerPragerStressUpdate::validParams();
   params.addClassDescription("Capped Drucker-Prager plasticity stress calculator for the Cosserat "
                              "situation where the host medium (ie, the limit where all Cosserat "
                              "effects are zero) is isotropic.  Note that the return-map flow rule "
@@ -20,7 +24,7 @@ validParams<CappedDruckerPragerCosseratStressUpdate>()
                                             "host_youngs_modulus>0",
                                             "Young's modulus for the isotropic host medium");
   params.addRequiredRangeCheckedParam<Real>("host_poissons_ratio",
-                                            "host_poissons_ratio>=0",
+                                            "host_poissons_ratio>=0 & host_poissons_ratio<0.5",
                                             "Poisson's ratio for the isotropic host medium");
   return params;
 }
@@ -82,9 +86,6 @@ CappedDruckerPragerCosseratStressUpdate::consistentTangentOperator(
     bool compute_full_tangent_operator,
     RankFourTensor & cto) const
 {
-  if (!_fe_problem.currentlyComputingJacobian())
-    return;
-
   if (!compute_full_tangent_operator)
   {
     cto = Eijkl;

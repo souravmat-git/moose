@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef OUTPUT_H
-#define OUTPUT_H
+#pragma once
 
 // MOOSE includes
 #include "MooseObject.h"
@@ -21,9 +15,11 @@
 #include "MeshChangedInterface.h"
 #include "SetupInterface.h"
 #include "AdvancedOutputUtils.h"
+#include "PerfGraphInterface.h"
 
 // Forward declarations
 class Output;
+class MooseMesh;
 
 // libMesh forward declarations
 namespace libMesh
@@ -45,9 +41,12 @@ InputParameters validParams<Output>();
 class Output : public MooseObject,
                public Restartable,
                public MeshChangedInterface,
-               public SetupInterface
+               public SetupInterface,
+               public PerfGraphInterface
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Class constructor
    *
@@ -113,10 +112,9 @@ public:
   virtual const OutputOnWarehouse & advancedExecuteOn() const;
 
   /**
-   * Return the support output execution times
-   * @param default_type The default MultiMooseEnum option
+   * Return an ExecFlagEnum object with the available execution flags for Output objects.
    */
-  static MultiMooseEnum getExecuteOptions(std::string default_type = "");
+  static ExecFlagEnum getDefaultExecFlagEnum();
 
   /**
    * Method for controlling the allow output state
@@ -179,11 +177,14 @@ protected:
   /// Reference the the libMesh::EquationSystems object that contains the data
   EquationSystems * _es_ptr;
 
+  /// A convenience pointer to the current mesh (reference or displaced depending on "use_displaced")
+  MooseMesh * _mesh_ptr;
+
   /// Flag for forcing call to outputSetup() with every call to output() (restartable)
   bool _sequence;
 
   /// The common Execution types; this is used as the default execution type for everything except system information and input
-  MultiMooseEnum _execute_on;
+  ExecFlagEnum _execute_on;
 
   /// The current time for output purposes
   Real & _time;
@@ -215,6 +216,12 @@ protected:
   /// End outputting time
   Real _end_time;
 
+  /// Start outputting at this time step
+  int _start_step;
+
+  /// End outputting at this time step
+  int _end_step;
+
   /// Time checking tolerance
   Real _t_tol;
 
@@ -236,7 +243,9 @@ protected:
   // the output settings.
   OutputOnWarehouse _advanced_execute_on;
 
+  /// Timers
+  PerfID _output_step_timer;
+
   friend class OutputWarehouse;
 };
 
-#endif /* OUTPUT_H */

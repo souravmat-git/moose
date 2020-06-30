@@ -1,28 +1,18 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef PACKEDCOLUMN_H
-#define PACKEDCOLUMN_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#include "Material.h"
+#pragma once
+
+#include "ADMaterial.h"
 
 // A helper class from MOOSE that linear interpolates x,y data
 #include "LinearInterpolation.h"
-
-class PackedColumn;
-
-template <>
-InputParameters validParams<PackedColumn>();
 
 /**
  * Material-derived objects override the computeQpProperties()
@@ -30,9 +20,11 @@ InputParameters validParams<PackedColumn>();
  * use by other objects in the calculation such as Kernels and
  * BoundaryConditions.
  */
-class PackedColumn : public Material
+class PackedColumn : public ADMaterial
 {
 public:
+  static InputParameters validParams();
+
   PackedColumn(const InputParameters & parameters);
 
 protected:
@@ -42,36 +34,73 @@ protected:
    */
   virtual void computeQpProperties() override;
 
-  /// The radius of the spheres in the column
-  const Real & _sphere_radius;
+  /**
+   * Helper function for reading CSV data for use in an interpolator object.
+   */
+  bool initInputData(const std::string & param_name, ADLinearInterpolation & interp);
 
-  /// The permeability of the medium is based on a linear
-  /// interpolation between the two different sphere sizes which are
-  /// assumed to be present.
+  /// The radius of the spheres in the column
+  const Function & _input_radius;
+
+  /// The input porosity
+  const Function & _input_porosity;
+
+  /// Temperature
+  const ADVariableValue & _temperature;
+
+  /// Compute permeability based on the radius (mm)
   LinearInterpolation _permeability_interpolation;
 
+  /// Fluid viscosity
+  bool _use_fluid_mu_interp;
+  const Real & _fluid_mu;
+  ADLinearInterpolation _fluid_mu_interpolation;
+
+  /// Fluid thermal conductivity
+  bool _use_fluid_k_interp = false;
+  const Real & _fluid_k;
+  ADLinearInterpolation _fluid_k_interpolation;
+
+  /// Fluid density
+  bool _use_fluid_rho_interp = false;
+  const Real & _fluid_rho;
+  ADLinearInterpolation _fluid_rho_interpolation;
+
+  /// Fluid specific heat
+  bool _use_fluid_cp_interp;
+  const Real & _fluid_cp;
+  ADLinearInterpolation _fluid_cp_interpolation;
+
+  /// Solid thermal conductivity
+  bool _use_solid_k_interp = false;
+  const Real & _solid_k;
+  ADLinearInterpolation _solid_k_interpolation;
+
+  /// Solid density
+  bool _use_solid_rho_interp = false;
+  const Real & _solid_rho;
+  ADLinearInterpolation _solid_rho_interpolation;
+
+  /// Fluid specific heat
+  bool _use_solid_cp_interp;
+  const Real & _solid_cp;
+  ADLinearInterpolation _solid_cp_interpolation;
+
   /// The permeability (K)
-  MaterialProperty<Real> & _permeability;
+  ADMaterialProperty<Real> & _permeability;
 
   /// The porosity (eps)
-  MaterialProperty<Real> & _porosity;
+  ADMaterialProperty<Real> & _porosity;
 
   /// The viscosity of the fluid (mu)
-  MaterialProperty<Real> & _viscosity;
+  ADMaterialProperty<Real> & _viscosity;
 
   /// The bulk thermal conductivity
-  MaterialProperty<Real> & _thermal_conductivity;
+  ADMaterialProperty<Real> & _thermal_conductivity;
 
   /// The bulk heat capacity
-  MaterialProperty<Real> & _heat_capacity;
+  ADMaterialProperty<Real> & _specific_heat;
 
   /// The bulk density
-  MaterialProperty<Real> & _density;
-
-  /// Single value to store the interpolated permeability base on
-  /// sphere size.  The _sphere_radius is assumed to be constant, so
-  /// we only have to compute this once.
-  Real _interpolated_permeability;
+  ADMaterialProperty<Real> & _density;
 };
-
-#endif // PACKEDCOLUMN_H

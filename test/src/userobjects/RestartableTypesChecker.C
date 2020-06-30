@@ -1,24 +1,20 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "RestartableTypesChecker.h"
 
-template <>
+registerMooseObject("MooseTestApp", RestartableTypesChecker);
+
 InputParameters
-validParams<RestartableTypesChecker>()
+RestartableTypesChecker::validParams()
 {
-  InputParameters params = validParams<RestartableTypes>();
+  InputParameters params = RestartableTypes::validParams();
   return params;
 }
 
@@ -70,6 +66,7 @@ RestartableTypesChecker::execute()
   dataStore(oss, _map_data, this);
   dataStore(oss, _dense_vector_data, this);
   dataStore(oss, _dense_matrix_data, this);
+  dataStore(oss, _raw_parameters, this);
 
   send_buffers[0] = oss.str();
 
@@ -105,6 +102,7 @@ RestartableTypesChecker::execute()
     dataLoad(iss, _map_data, this);
     dataLoad(iss, _dense_vector_data, this);
     dataLoad(iss, _dense_matrix_data, this);
+    dataLoad(iss, _raw_parameters, this);
     dataLoad(iss, *this, this);
 
     // Finally confirm that the data is sane
@@ -175,6 +173,16 @@ RestartableTypesChecker::checkData()
     for (unsigned int j = 0; j < _dense_matrix_data.n(); j++)
       if (_dense_matrix_data(i, j) != static_cast<Real>(i + j + 1))
         mooseError("Error reading restartable DenseMatrix data!");
+
+  if (_raw_parameters.n_parameters() != 3)
+    mooseError("Error reading restartable Parameters size");
+  if (!_raw_parameters.have_parameter<int>("i") || _raw_parameters.get<int>("i") != 42)
+    mooseError("Error reading int Parameter");
+  if (!_raw_parameters.have_parameter<unsigned int>("j") ||
+      _raw_parameters.get<unsigned int>("j") != 55)
+    mooseError("Error reading unsigned int Parameter");
+  if (!_raw_parameters.have_parameter<Real>("Pi") || _raw_parameters.get<Real>("Pi") != 3.14159)
+    mooseError("Error reading unsigned Real Parameter");
 }
 
 void

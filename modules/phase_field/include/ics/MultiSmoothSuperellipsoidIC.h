@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MULTISMOOTHSUPERELLIPSOIDIC_H
-#define MULTISMOOTHSUPERELLIPSOIDIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "SmoothSuperellipsoidBaseIC.h"
 
 // Forward Declarations
-class MultiSmoothSuperellipsoidIC;
-
-template <>
-InputParameters validParams<MultiSmoothSuperellipsoidIC>();
 
 /**
  * MultismoothSuperellipsoidIC creates multiple SmoothSuperellipsoid (number = numbub) that are
@@ -23,6 +21,8 @@ InputParameters validParams<MultiSmoothSuperellipsoidIC>();
 class MultiSmoothSuperellipsoidIC : public SmoothSuperellipsoidBaseIC
 {
 public:
+  static InputParameters validParams();
+
   MultiSmoothSuperellipsoidIC(const InputParameters & parameters);
 
   virtual void initialSetup();
@@ -57,5 +57,3 @@ protected:
   std::vector<Real> _semiaxis_b_variation;
   std::vector<Real> _semiaxis_c_variation;
 };
-
-#endif // MULTISMOOTHSUPERELLIPSOIDIC_H

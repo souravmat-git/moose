@@ -1,29 +1,24 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef LEVELSETCFLCONDITION_H
-#define LEVELSETCFLCONDITION_H
+#pragma once
 
-// MOOSE includes
 #include "ElementPostprocessor.h"
-#include "LevelSetVelocityInterface.h"
-
-// Forward declarations
-class LevelSetCFLCondition;
-
-template <>
-InputParameters validParams<LevelSetCFLCondition>();
 
 /**
  * Computes the maximum timestep based on the CFL condition.
  */
-class LevelSetCFLCondition : public LevelSetVelocityInterface<ElementPostprocessor>
+class LevelSetCFLCondition : public ElementPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   LevelSetCFLCondition(const InputParameters & parameters);
   void initialize() override {}
   void execute() override;
@@ -37,6 +32,7 @@ private:
 
   /// The minimum timestep computed using CFL condition.
   Real _cfl_timestep;
-};
 
-#endif // LEVELSETCFLCONDITION_H
+  /// Velocity vector variable
+  const ADVectorVariableValue & _velocity;
+};

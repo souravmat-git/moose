@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "StressDivergenceRZ.h"
 
 // MOOSE includes
@@ -13,14 +16,14 @@
 #include "SymmElasticityTensor.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObjectDeprecated("SolidMechanicsApp", StressDivergenceRZ, "07/30/2020 24:00");
+
 InputParameters
-validParams<StressDivergenceRZ>()
+StressDivergenceRZ::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addRequiredParam<unsigned int>("component",
                                         "An integer corresponding to the direction "
                                         "the variable this kernel acts in. (0 for r, "
@@ -28,6 +31,14 @@ validParams<StressDivergenceRZ>()
   params.addCoupledVar("disp_r", "The r displacement");
   params.addCoupledVar("disp_z", "The z displacement");
   params.addCoupledVar("temp", "The temperature");
+
+  params.addParam<Real>("zeta", 0.0, "Stiffness dependent damping parameter for Rayleigh damping");
+  params.addParam<Real>("alpha", 0.0, "alpha parameter for HHT time integration");
+  params.addParam<std::string>(
+      "appended_property_name", "", "Name appended to material properties to make them unique");
+  params.addParam<bool>("volumetric_locking_correction",
+                        true,
+                        "Set to false to turn off volumetric locking correction");
 
   params.set<bool>("use_displaced_mesh") = true;
 
@@ -50,14 +61,18 @@ StressDivergenceRZ::StressDivergenceRZ(const InputParameters & parameters)
     _avg_grad_phi(_phi.size(), std::vector<Real>(3, 0.0)),
     _volumetric_locking_correction(getParam<bool>("volumetric_locking_correction"))
 {
+  mooseDeprecated(name(), ": StressDivergenceRZ is deprecated. \
+                  The solid_mechanics module will be removed from MOOSE on July 31, 2020. \
+                  Please update your input files to utilize the tensor_mechanics equivalents of \
+                  models based on solid_mechanics. A detailed migration guide that was developed \
+                  for BISON, but which is generally applicable to any MOOSE model is available at: \
+                  https://mooseframework.org/bison/tutorials/mechanics_conversion/overview.html");
 }
 
 void
 StressDivergenceRZ::computeResidual()
 {
-  DenseVector<Number> & re = _assembly.residualBlock(_var.number());
-  _local_re.resize(re.size());
-  _local_re.zero();
+  prepareVectorTag(_assembly, _var.number());
 
   if (_volumetric_locking_correction)
   {
@@ -86,7 +101,7 @@ StressDivergenceRZ::computeResidual()
     for (_qp = 0; _qp < _qrule->n_points(); _qp++)
       _local_re(_i) += _JxW[_qp] * _coord[_qp] * computeQpResidual();
 
-  re += _local_re;
+  accumulateTaggedLocalResidual();
 
   if (_has_save_in)
   {
@@ -135,9 +150,7 @@ StressDivergenceRZ::computeQpResidual()
 void
 StressDivergenceRZ::computeJacobian()
 {
-  DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), _var.number());
-  _local_ke.resize(ke.m(), ke.n());
-  _local_ke.zero();
+  prepareMatrixTag(_assembly, _var.number(), _var.number());
 
   if (_volumetric_locking_correction)
   {
@@ -187,11 +200,11 @@ StressDivergenceRZ::computeJacobian()
       for (_qp = 0; _qp < _qrule->n_points(); _qp++)
         _local_ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpJacobian();
 
-  ke += _local_ke;
+  accumulateTaggedLocalMatrix();
 
   if (_has_diag_save_in)
   {
-    unsigned int rows = ke.m();
+    unsigned int rows = _local_ke.m();
     DenseVector<Number> diag(rows);
     for (unsigned int i = 0; i < rows; i++)
       diag(i) = _local_ke(i, i);
@@ -280,12 +293,17 @@ StressDivergenceRZ::calculateJacobian(unsigned int ivar, unsigned int jvar)
 }
 
 void
-StressDivergenceRZ::computeOffDiagJacobian(unsigned int jvar)
+StressDivergenceRZ::computeOffDiagJacobian(MooseVariableFEBase & jvar)
 {
-  if (jvar == _var.number())
+  size_t jvar_num = jvar.number();
+  if (jvar_num == _var.number())
     computeJacobian();
   else
   {
+    // This (undisplaced) jvar could potentially yield the wrong phi size if this object is acting
+    // on the displaced mesh
+    auto phi_size = _sys.getVariable(_tid, jvar.number()).dofIndices().size();
+
     if (_volumetric_locking_correction)
     {
       // calculate volume averaged value of shape function derivative
@@ -307,8 +325,8 @@ StressDivergenceRZ::computeOffDiagJacobian(unsigned int jvar)
         _avg_grad_test[_i][_component] /= _current_elem_volume;
       }
 
-      _avg_grad_phi.resize(_phi.size());
-      for (_i = 0; _i < _phi.size(); _i++)
+      _avg_grad_phi.resize(phi_size);
+      for (_i = 0; _i < phi_size; _i++)
       {
         _avg_grad_phi[_i].resize(3);
         for (unsigned int component = 0; component < 2; component++)
@@ -330,12 +348,14 @@ StressDivergenceRZ::computeOffDiagJacobian(unsigned int jvar)
       }
     }
 
-    DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), jvar);
+    prepareMatrixTag(_assembly, _var.number(), jvar_num);
 
     for (_i = 0; _i < _test.size(); _i++)
-      for (_j = 0; _j < _phi.size(); _j++)
+      for (_j = 0; _j < phi_size; _j++)
         for (_qp = 0; _qp < _qrule->n_points(); _qp++)
-          ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(jvar);
+          _local_ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(jvar_num);
+
+    accumulateTaggedLocalMatrix();
   }
 }
 

@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef BICUBICSPLINEFUNCTION_H
-#define BICUBICSPLINEFUNCTION_H
+#pragma once
 
 #include "Function.h"
 #include "FunctionInterface.h"
@@ -30,16 +24,21 @@ InputParameters validParams<BicubicSplineFunction>();
 class BicubicSplineFunction : public Function, public FunctionInterface
 {
 public:
+  static InputParameters validParams();
+
   BicubicSplineFunction(const InputParameters & parameters);
 
-  virtual Real value(Real t, const Point & p) override;
+  virtual Real value(Real t, const Point & p) const override;
 
-  virtual Real derivative(const Point & p, unsigned int deriv_var);
-  virtual RealGradient gradient(Real t, const Point & p) override;
-  virtual Real secondDerivative(const Point & p, unsigned int deriv_var);
+  virtual Real derivative(const Point & p, unsigned int deriv_var) const;
+  virtual RealGradient gradient(Real t, const Point & p) const override;
+  virtual Real secondDerivative(const Point & p, unsigned int deriv_var) const;
 
 protected:
-  BicubicSplineInterpolation _ipol;
+  mutable BicubicSplineInterpolation _ipol;
+
+  // Desired normal direction
+  unsigned int _normal_component;
 
   std::vector<Real> _x1;
   std::vector<Real> _x2;
@@ -48,8 +47,10 @@ protected:
   std::vector<Real> _yx21;
   std::vector<Real> _yx2n;
 
-  Function & _yx1;
-  Function & _yx2;
-};
+  const Function & _yx1;
+  const Function & _yx2;
 
-#endif /* BICUBICSPLINEFUNCTION_H */
+  // The xyz index that x1/x2 should map to
+  Real _x1_index;
+  Real _x2_index;
+};

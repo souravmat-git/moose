@@ -1,26 +1,27 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CONSERVEDNOISEINTERFACE_H
-#define CONSERVEDNOISEINTERFACE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ElementUserObject.h"
 
 // Forward Declarations
-class ConservedNoiseInterface;
 
 /**
-  * This Userobject is the base class of Userobjects that generate one
-  * random number per timestep and quadrature point in a way that the integral
-  * over all random numbers is zero. This can be used for a concentration fluctuation
-  * kernel such as ConservedLangevinNoise, that keeps the total concenration constant.
-  *
-  * \see ConservedUniformNoise
-  * \see ConservedNormalNoise
-  */
+ * This Userobject is the base class of Userobjects that generate one
+ * random number per timestep and quadrature point in a way that the integral
+ * over all random numbers is zero. This can be used for a concentration fluctuation
+ * kernel such as ConservedLangevinNoise, that keeps the total concenration constant.
+ *
+ * \see ConservedUniformNoise
+ * \see ConservedNormalNoise
+ */
 class ConservedNoiseInterface : public ElementUserObject
 {
 public:
@@ -38,5 +39,3 @@ protected:
 
   unsigned int _qp;
 };
-
-#endif // CONSERVEDNOISEINTERFACE_H

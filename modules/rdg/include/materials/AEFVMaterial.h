@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef AEFVMATERIAL_H
-#define AEFVMATERIAL_H
+#pragma once
 
 #include "Material.h"
 #include "SlopeLimitingBase.h"
-
-class AEFVMaterial;
-
-template <>
-InputParameters validParams<AEFVMaterial>();
 
 /**
  * A material kernel for the advection equation
@@ -42,6 +38,8 @@ InputParameters validParams<AEFVMaterial>();
 class AEFVMaterial : public Material
 {
 public:
+  static InputParameters validParams();
+
   AEFVMaterial(const InputParameters & parameters);
   virtual ~AEFVMaterial();
 
@@ -57,5 +55,3 @@ protected:
   // derived variables at face center
   MaterialProperty<Real> & _u;
 };
-
-#endif

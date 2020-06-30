@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWFULLYSATURATEDHEATADVECTION_H
-#define POROUSFLOWFULLYSATURATEDHEATADVECTION_H
+#pragma once
 
 #include "PorousFlowFullySaturatedDarcyBase.h"
-
-class PorousFlowFullySaturatedHeatAdvection;
-
-template <>
-InputParameters validParams<PorousFlowFullySaturatedHeatAdvection>();
 
 /**
  * Advection of heat via flux via Darcy flow of a single phase
@@ -22,6 +18,8 @@ InputParameters validParams<PorousFlowFullySaturatedHeatAdvection>();
 class PorousFlowFullySaturatedHeatAdvection : public PorousFlowFullySaturatedDarcyBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowFullySaturatedHeatAdvection(const InputParameters & parameters);
 
 protected:
@@ -34,5 +32,3 @@ protected:
   /// Derivative of the enthalpy wrt PorousFlow variables
   const MaterialProperty<std::vector<std::vector<Real>>> & _denthalpy_dvar;
 };
-
-#endif // POROUSFLOWFULLYSATURATEDHEATADVECTION_H

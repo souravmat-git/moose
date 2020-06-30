@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef OVERSAMPLEOUTPUT_H
-#define OVERSAMPLEOUTPUT_H
+#pragma once
 
 // MOOSE includes
 #include "AdvancedOutput.h"
@@ -40,9 +34,6 @@ InputParameters validParams<OversampleOutput>();
  * changes to the libMesh::EquationsSystems() pointer (_es_ptr), i.e., this pointer is
  * will point to the oversampled system, if oversamping is utilized.
  *
- * Additionally, the class adds a pointer to the mesh object (_mesh_ptr) that again
- * points to the correct mesh depending on the use of oversampling.
- *
  * The use of oversampling is triggered by setting the oversample input parameter to a
  * integer value greater than 0, indicating the number of refinements to perform.
  *
@@ -51,28 +42,14 @@ InputParameters validParams<OversampleOutput>();
 class OversampleOutput : public AdvancedOutput
 {
 public:
-  /**
-   * Class constructor
-   *
-   * If oversampling is desired the constructor will perform the correct initialization
-   * required for oversampling.
-   * @see initOversample()
-   */
+  static InputParameters validParams();
+
   OversampleOutput(const InputParameters & parameters);
 
-  /**
-   * Class destructor
-   *
-   * Cleans up the various objects associated with the oversample EquationsSystem and Mesh
-   * objects.
-   */
   virtual ~OversampleOutput();
 
-  /**
-   * Executes when the mesh alterted and sets a flag used by oversampling
-   */
+  virtual void initialSetup() override;
   virtual void meshChanged() override;
-
   virtual void outputStep(const ExecFlagType & type) override;
 
 protected:
@@ -80,11 +57,6 @@ protected:
    * Performs the update of the solution vector for the oversample/re-positioned mesh
    */
   virtual void updateOversample();
-
-  /**
-   * A convenience pointer to the current mesh (reference or displaced depending on "use_displaced")
-   */
-  MooseMesh * _mesh_ptr;
 
   /// The number of oversampling refinements
   const unsigned int _refinements;
@@ -136,4 +108,3 @@ private:
   std::unique_ptr<NumericVector<Number>> _serialized_solution;
 };
 
-#endif // OVERSAMPLEOUTPUT_H

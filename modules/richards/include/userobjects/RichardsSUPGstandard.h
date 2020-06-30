@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSSUPGstandard_H
-#define RICHARDSSUPGstandard_H
+#pragma once
 
 #include "RichardsSUPG.h"
-
-class RichardsSUPGstandard;
-
-template <>
-InputParameters validParams<RichardsSUPGstandard>();
 
 /**
  * standard SUPG relationships
@@ -26,6 +22,8 @@ InputParameters validParams<RichardsSUPGstandard>();
 class RichardsSUPGstandard : public RichardsSUPG
 {
 public:
+  static InputParameters validParams();
+
   RichardsSUPGstandard(const InputParameters & parameters);
 
   /**
@@ -152,5 +150,3 @@ private:
   /// derivative of cosh_relation wrt alpha
   Real cosh_relation_prime(Real alpha) const;
 };
-
-#endif // RICHARDSSUPGstandard_H

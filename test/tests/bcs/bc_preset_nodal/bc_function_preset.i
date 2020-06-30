@@ -43,14 +43,14 @@
   active = 'left right'
 
    [./left]
-    type = FunctionPresetBC
+    type = FunctionDirichletBC
     variable = u
     boundary = 3
     function = left
   [../]
 
   [./right]
-    type = FunctionPresetBC
+    type = FunctionDirichletBC
     variable = u
     boundary = 1
     function = right
@@ -60,7 +60,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

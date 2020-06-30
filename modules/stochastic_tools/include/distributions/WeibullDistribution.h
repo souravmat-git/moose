@@ -1,31 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef WEIBULLDISTRIBUTION_H
-#define WEIBULLDISTRIBUTION_H
+#pragma once
 
-#include "BoostDistribution.h"
-
-class WeibullDistribution;
-
-template <>
-InputParameters validParams<WeibullDistribution>();
+#include "Weibull.h"
 
 /**
- * A class used to generate Weibull distribution via Boost
+ * A deprecated wrapper class used to generate a Weibull distribution
  */
-#ifdef LIBMESH_HAVE_EXTERNAL_BOOST
-class WeibullDistribution : public BoostDistribution<boost::math::weibull_distribution<Real>>
-#else
-class WeibullDistribution : public BoostDistribution<>
-#endif
+class WeibullDistribution : public Weibull
 {
 public:
+  static InputParameters validParams();
   WeibullDistribution(const InputParameters & parameters);
 };
-
-#endif // WEIBULLDISTRIBUTION_H

@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CRYSTALPLASTICITYSTATEVARRATECOMPONENT_H
-#define CRYSTALPLASTICITYSTATEVARRATECOMPONENT_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "CrystalPlasticityUOBase.h"
-
-class CrystalPlasticityStateVarRateComponent;
-
-template <>
-InputParameters validParams<CrystalPlasticityStateVarRateComponent>();
 
 /**
  * Crystal plasticity state variable evolution rate component userobject base class.
@@ -22,10 +19,10 @@ InputParameters validParams<CrystalPlasticityStateVarRateComponent>();
 class CrystalPlasticityStateVarRateComponent : public CrystalPlasticityUOBase
 {
 public:
+  static InputParameters validParams();
+
   CrystalPlasticityStateVarRateComponent(const InputParameters & parameters);
 
   virtual bool calcStateVariableEvolutionRateComponent(unsigned int qp,
                                                        std::vector<Real> & val) const = 0;
 };
-
-#endif // CRYSTALPLASTICITYSTATEVARRATECOMPONENT_H

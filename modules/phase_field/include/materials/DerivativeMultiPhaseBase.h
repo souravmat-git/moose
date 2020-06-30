@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef DERIVATIVEMULTIPHASEBASE_H
-#define DERIVATIVEMULTIPHASEBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "DerivativeFunctionMaterialBase.h"
 
 // Forward Declarations
-class DerivativeMultiPhaseBase;
-
-template <>
-InputParameters validParams<DerivativeMultiPhaseBase>();
 
 /**
  * DerivativeMaterial child class to evaluate a parsed function for the
@@ -24,6 +22,8 @@ InputParameters validParams<DerivativeMultiPhaseBase>();
 class DerivativeMultiPhaseBase : public DerivativeFunctionMaterialBase
 {
 public:
+  static InputParameters validParams();
+
   DerivativeMultiPhaseBase(const InputParameters & parameters);
 
   virtual void initialSetup();
@@ -82,5 +82,3 @@ protected:
   /// Phase transformation energy barrier
   Real _W;
 };
-
-#endif // DERIVATIVEMULTIPHASEBASE_H

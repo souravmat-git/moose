@@ -1,39 +1,39 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ConstraintWarehouse.h"
 
 // MOOSE includes
 #include "ElemElemConstraint.h"
-#include "FaceFaceConstraint.h"
+#include "MortarConstraintBase.h"
 #include "MooseVariable.h"
 #include "NodalConstraint.h"
 #include "NodeFaceConstraint.h"
+#include "NodeElemConstraint.h"
 
 ConstraintWarehouse::ConstraintWarehouse() : MooseObjectWarehouse<Constraint>(/*threaded=*/false) {}
 
 void
-ConstraintWarehouse::addObject(std::shared_ptr<Constraint> object, THREAD_ID /*tid = 0*/)
+ConstraintWarehouse::addObject(std::shared_ptr<Constraint> object,
+                               THREAD_ID /*tid = 0*/,
+                               bool /*recurse = true*/)
 {
   // Adds to the storage of _all_objects
   MooseObjectWarehouse<Constraint>::addObject(object);
 
   // Cast the the possible Contraint types
   std::shared_ptr<NodeFaceConstraint> nfc = std::dynamic_pointer_cast<NodeFaceConstraint>(object);
-  std::shared_ptr<FaceFaceConstraint> ffc = std::dynamic_pointer_cast<FaceFaceConstraint>(object);
+  std::shared_ptr<MortarConstraintBase> mc =
+      std::dynamic_pointer_cast<MortarConstraintBase>(object);
   std::shared_ptr<NodalConstraint> nc = std::dynamic_pointer_cast<NodalConstraint>(object);
   std::shared_ptr<ElemElemConstraint> ec = std::dynamic_pointer_cast<ElemElemConstraint>(object);
+  std::shared_ptr<NodeElemConstraint> nec = std::dynamic_pointer_cast<NodeElemConstraint>(object);
 
   // NodeFaceConstraint
   if (nfc)
@@ -49,18 +49,48 @@ ConstraintWarehouse::addObject(std::shared_ptr<Constraint> object, THREAD_ID /*t
       _node_face_constraints[slave].addObject(nfc);
   }
 
-  // FaceFaceConstraint
-  else if (ffc)
+  // MortarConstraint
+  else if (mc)
   {
-    const std::string & interface = ffc->getParam<std::string>("interface");
-    _face_face_constraints[interface].addObject(ffc);
+    MooseMesh & mesh = mc->getParam<FEProblemBase *>("_fe_problem_base")->mesh();
+    bool displaced = mc->getParam<bool>("use_displaced_mesh");
+
+    auto slave_boundary_id = mesh.getBoundaryID(mc->getParam<BoundaryName>("slave_boundary"));
+    auto master_boundary_id = mesh.getBoundaryID(mc->getParam<BoundaryName>("master_boundary"));
+    auto key = std::make_pair(master_boundary_id, slave_boundary_id);
+
+    if (displaced)
+      _displaced_mortar_constraints[key].addObject(mc);
+    else
+      _mortar_constraints[key].addObject(mc);
   }
 
   // ElemElemConstraint
   else if (ec)
   {
-    const InterfaceID interface_id = ec->getParam<InterfaceID>("interface_id");
-    _element_constraints[interface_id].addObject(ec);
+    bool displaced = ec->parameters().have_parameter<bool>("use_displaced_mesh") &&
+                     ec->getParam<bool>("use_displaced_mesh");
+    const InterfaceID interface_id = ec->getInterfaceID();
+
+    if (displaced)
+      _displaced_element_constraints[interface_id].addObject(ec);
+    else
+      _element_constraints[interface_id].addObject(ec);
+  }
+
+  // NodeElemConstraint
+  else if (nec)
+  {
+    MooseMesh & mesh = nec->getParam<FEProblemBase *>("_fe_problem_base")->mesh();
+    SubdomainID slave = mesh.getSubdomainID(nec->getParam<SubdomainName>("slave"));
+    SubdomainID master = mesh.getSubdomainID(nec->getParam<SubdomainName>("master"));
+    bool displaced = nec->parameters().have_parameter<bool>("use_displaced_mesh") &&
+                     nec->getParam<bool>("use_displaced_mesh");
+
+    if (displaced)
+      _displaced_node_elem_constraints[std::make_pair(slave, master)].addObject(nec);
+    else
+      _node_elem_constraints[std::make_pair(slave, master)].addObject(nec);
   }
 
   // NodalConstraint
@@ -78,7 +108,7 @@ ConstraintWarehouse::getActiveNodalConstraints() const
 }
 
 const std::vector<std::shared_ptr<NodeFaceConstraint>> &
-ConstraintWarehouse::getActiveNodeFaceConstraints(BoundaryID boundary_id, bool displaced)
+ConstraintWarehouse::getActiveNodeFaceConstraints(BoundaryID boundary_id, bool displaced) const
 {
   std::map<BoundaryID, MooseObjectWarehouse<NodeFaceConstraint>>::const_iterator it, end_it;
 
@@ -100,25 +130,80 @@ ConstraintWarehouse::getActiveNodeFaceConstraints(BoundaryID boundary_id, bool d
   return it->second.getActiveObjects();
 }
 
-const std::vector<std::shared_ptr<FaceFaceConstraint>> &
-ConstraintWarehouse::getActiveFaceFaceConstraints(const std::string & interface) const
+const std::vector<std::shared_ptr<MortarConstraintBase>> &
+ConstraintWarehouse::getActiveMortarConstraints(
+    const std::pair<BoundaryID, BoundaryID> & mortar_interface_key, bool displaced) const
 {
-  std::map<std::string, MooseObjectWarehouse<FaceFaceConstraint>>::const_iterator it =
-      _face_face_constraints.find(interface);
-  mooseAssert(it != _face_face_constraints.end(),
-              "Unable to locate storage for FaceFaceConstraint objects for the given interface: "
-                  << interface);
+  std::map<std::pair<BoundaryID, BoundaryID>,
+           MooseObjectWarehouse<MortarConstraintBase>>::const_iterator it,
+      end_it;
+
+  if (displaced)
+  {
+    it = _displaced_mortar_constraints.find(mortar_interface_key);
+    end_it = _displaced_mortar_constraints.end();
+  }
+  else
+  {
+    it = _mortar_constraints.find(mortar_interface_key);
+    end_it = _mortar_constraints.end();
+  }
+
+  mooseAssert(it != end_it,
+              "No MortarConstraints exist for the specified master-slave boundary pair, master "
+                  << mortar_interface_key.first << " and slave " << mortar_interface_key.second);
+
   return it->second.getActiveObjects();
 }
 
 const std::vector<std::shared_ptr<ElemElemConstraint>> &
-ConstraintWarehouse::getActiveElemElemConstraints(const InterfaceID interface_id) const
+ConstraintWarehouse::getActiveElemElemConstraints(const InterfaceID interface_id,
+                                                  bool displaced) const
 {
-  std::map<unsigned int, MooseObjectWarehouse<ElemElemConstraint>>::const_iterator it =
-      _element_constraints.find(interface_id);
-  mooseAssert(it != _element_constraints.end(),
+  std::map<unsigned int, MooseObjectWarehouse<ElemElemConstraint>>::const_iterator it, end_it;
+
+  if (displaced)
+  {
+    it = _displaced_element_constraints.find(interface_id);
+    end_it = _displaced_element_constraints.end();
+  }
+
+  else
+  {
+    it = _element_constraints.find(interface_id);
+    end_it = _element_constraints.end();
+  }
+
+  mooseAssert(it != end_it,
               "Unable to locate storage for ElemElemConstraint objects for the given interface id: "
                   << interface_id);
+  return it->second.getActiveObjects();
+}
+
+const std::vector<std::shared_ptr<NodeElemConstraint>> &
+ConstraintWarehouse::getActiveNodeElemConstraints(SubdomainID slave_id,
+                                                  SubdomainID master_id,
+                                                  bool displaced) const
+{
+  std::map<std::pair<SubdomainID, SubdomainID>,
+           MooseObjectWarehouse<NodeElemConstraint>>::const_iterator it,
+      end_it;
+
+  if (displaced)
+  {
+    it = _displaced_node_elem_constraints.find(std::make_pair(slave_id, master_id));
+    end_it = _displaced_node_elem_constraints.end();
+  }
+  else
+  {
+    it = _node_elem_constraints.find(std::make_pair(slave_id, master_id));
+    end_it = _node_elem_constraints.end();
+  }
+
+  mooseAssert(it != end_it,
+              "Unable to locate storage for NodeElemConstraint objects for the given slave and "
+              "master id pair: ["
+                  << slave_id << ", " << master_id << "]");
   return it->second.getActiveObjects();
 }
 
@@ -129,19 +214,24 @@ ConstraintWarehouse::hasActiveNodalConstraints() const
 }
 
 bool
-ConstraintWarehouse::hasActiveFaceFaceConstraints(const std::string & interface) const
+ConstraintWarehouse::hasActiveElemElemConstraints(const InterfaceID interface_id,
+                                                  bool displaced) const
 {
-  std::map<std::string, MooseObjectWarehouse<FaceFaceConstraint>>::const_iterator it =
-      _face_face_constraints.find(interface);
-  return (it != _face_face_constraints.end() && it->second.hasActiveObjects());
-}
+  std::map<unsigned int, MooseObjectWarehouse<ElemElemConstraint>>::const_iterator it, end_it;
 
-bool
-ConstraintWarehouse::hasActiveElemElemConstraints(const InterfaceID interface_id) const
-{
-  std::map<unsigned int, MooseObjectWarehouse<ElemElemConstraint>>::const_iterator it =
-      _element_constraints.find(interface_id);
-  return (it != _element_constraints.end() && it->second.hasActiveObjects());
+  if (displaced)
+  {
+    it = _displaced_element_constraints.find(interface_id);
+    end_it = _displaced_element_constraints.end();
+  }
+
+  else
+  {
+    it = _element_constraints.find(interface_id);
+    end_it = _element_constraints.end();
+  }
+
+  return (it != end_it && it->second.hasActiveObjects());
 }
 
 bool
@@ -164,6 +254,30 @@ ConstraintWarehouse::hasActiveNodeFaceConstraints(BoundaryID boundary_id, bool d
   return (it != end_it && it->second.hasActiveObjects());
 }
 
+bool
+ConstraintWarehouse::hasActiveNodeElemConstraints(SubdomainID slave_id,
+                                                  SubdomainID master_id,
+                                                  bool displaced) const
+{
+  std::map<std::pair<SubdomainID, SubdomainID>,
+           MooseObjectWarehouse<NodeElemConstraint>>::const_iterator it,
+      end_it;
+
+  if (displaced)
+  {
+    it = _displaced_node_elem_constraints.find(std::make_pair(slave_id, master_id));
+    end_it = _displaced_node_elem_constraints.end();
+  }
+
+  else
+  {
+    it = _node_elem_constraints.find(std::make_pair(slave_id, master_id));
+    end_it = _node_elem_constraints.end();
+  }
+
+  return (it != end_it && it->second.hasActiveObjects());
+}
+
 void ConstraintWarehouse::updateActive(THREAD_ID /*tid*/)
 {
   MooseObjectWarehouse<Constraint>::updateActive();
@@ -181,6 +295,9 @@ void ConstraintWarehouse::updateActive(THREAD_ID /*tid*/)
 
   for (auto & it : _element_constraints)
     it.second.updateActive();
+
+  for (auto & it : _node_elem_constraints)
+    it.second.updateActive();
 }
 
 void
@@ -188,15 +305,51 @@ ConstraintWarehouse::subdomainsCovered(std::set<SubdomainID> & subdomains_covere
                                        std::set<std::string> & unique_variables,
                                        THREAD_ID /*tid=0*/) const
 {
-  for (const auto & it : _face_face_constraints)
+  // Loop over undisplaced
+  for (const auto & pr : _mortar_constraints)
   {
-    const auto & objects = it.second.getActiveObjects();
-    for (const auto & ffc : objects)
+    const auto & objects = pr.second.getActiveObjects();
+    for (const auto & mc : objects)
     {
-      MooseVariable & var = ffc->variable();
-      unique_variables.insert(var.name());
-      const std::set<SubdomainID> & subdomains = var.activeSubdomains();
-      subdomains_covered.insert(subdomains.begin(), subdomains.end());
+      const MooseVariableFEBase * lm_var = mc->variable();
+      if (lm_var)
+      {
+        unique_variables.insert(lm_var->name());
+        const std::set<SubdomainID> & lm_subdomains = lm_var->activeSubdomains();
+        subdomains_covered.insert(lm_subdomains.begin(), lm_subdomains.end());
+      }
+
+      // Mortar constraints require the creation of a master lower dimensional subdomain in order to
+      // create the mortar segment mesh. We don't need any computing objects on it
+      subdomains_covered.insert(mc->masterSubdomain());
     }
   }
+
+  // Loop over displaced
+  for (const auto & pr : _displaced_mortar_constraints)
+  {
+    const auto & objects = pr.second.getActiveObjects();
+    for (const auto & mc : objects)
+    {
+      const MooseVariableFEBase * lm_var = mc->variable();
+      if (lm_var)
+      {
+        unique_variables.insert(lm_var->name());
+        const std::set<SubdomainID> & lm_subdomains = lm_var->activeSubdomains();
+        subdomains_covered.insert(lm_subdomains.begin(), lm_subdomains.end());
+      }
+
+      // Mortar constraints require the creation of a master lower dimensional subdomain in order to
+      // create the mortar segment mesh. We don't need any computing objects on it
+      subdomains_covered.insert(mc->masterSubdomain());
+    }
+  }
+}
+
+void
+ConstraintWarehouse::residualEnd(THREAD_ID tid /* = 0*/) const
+{
+  checkThreadID(tid);
+  for (const auto & object : _active_objects[tid])
+    object->residualEnd();
 }

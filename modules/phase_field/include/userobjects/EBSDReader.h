@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef EBSDREADER_H
-#define EBSDREADER_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "EulerAngleProvider.h"
 #include "EBSDAccessFunctors.h"
-
-class EBSDReader;
-
-template <>
-InputParameters validParams<EBSDReader>();
 
 /**
  * A GeneralUserObject that reads an EBSD file and stores the centroid
@@ -34,6 +31,8 @@ InputParameters validParams<EBSDReader>();
 class EBSDReader : public EulerAngleProvider, public EBSDAccessFunctors
 {
 public:
+  static InputParameters validParams();
+
   EBSDReader(const InputParameters & params);
   virtual ~EBSDReader();
 
@@ -76,7 +75,7 @@ public:
   /**
    * Return the number of grains in a given phase
    */
-  unsigned int getGrainNum(unsigned int phase) const;
+  virtual unsigned int getGrainNum(unsigned int phase) const;
 
   /// Return the EBSD feature id for a given phase and phase (local) grain number
   unsigned int getFeatureID(unsigned int phase, unsigned int local_id) const
@@ -90,12 +89,12 @@ public:
   }
 
   /// Return the (global) grain id for a given phase and (local) grain number
-  unsigned int getGlobalID(unsigned int phase, unsigned int local_id) const
+  virtual unsigned int getGlobalID(unsigned int phase, unsigned int local_id) const
   {
     return _global_id[phase][local_id];
   }
-  /// Return the (global) grain id for a given phase and (local) grain number
-  unsigned int getGlobalID(unsigned int feature_id) const;
+  /// Return the (global) grain id for a given feature_id
+  virtual unsigned int getGlobalID(unsigned int feature_id) const;
 
   /// Factory function to return a point functor specified by name
   MooseSharedPointer<EBSDPointDataFunctor>
@@ -162,6 +161,12 @@ protected:
   /// Dimension of the problem domain
   unsigned int _mesh_dimension;
 
+  /// number of bins for each quaternion component
+  unsigned int _bins;
+
+  /// L_norm value for averaging
+  unsigned int _L_norm;
+
   /// The number of values in the x, y and z directions.
   unsigned _nx, _ny, _nz;
 
@@ -183,5 +188,3 @@ protected:
   /// Build grain and phase weight maps
   void buildNodeWeightMaps();
 };
-
-#endif // EBSDREADER_H

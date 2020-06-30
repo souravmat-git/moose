@@ -1,23 +1,20 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "FuncCoefDiffusion.h"
 
-template <>
+registerMooseObject("MooseTestApp", FuncCoefDiffusion);
+
 InputParameters
-validParams<FuncCoefDiffusion>()
+FuncCoefDiffusion::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addParam<FunctionName>("coef", "0.5*x+0.5*y", "The function for conductivity");
   return params;
 }
@@ -30,13 +27,13 @@ FuncCoefDiffusion::FuncCoefDiffusion(const InputParameters & parameters)
 Real
 FuncCoefDiffusion::computeQpResidual()
 {
-  Real k = _function.value(_t, _qp);
+  Real k = _function.value(_t, _q_point[_qp]);
   return k * _grad_test[_i][_qp] * _grad_u[_qp];
 }
 
 Real
 FuncCoefDiffusion::computeQpJacobian()
 {
-  Real k = _function.value(_t, _qp);
+  Real k = _function.value(_t, _q_point[_qp]);
   return k * _grad_test[_i][_qp] * _grad_phi[_j][_qp];
 }

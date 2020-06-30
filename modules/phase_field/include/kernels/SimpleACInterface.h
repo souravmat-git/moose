@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SIMPLEACINTERFACE_H
-#define SIMPLEACINTERFACE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
-
-class SimpleACInterface;
-
-template <>
-InputParameters validParams<SimpleACInterface>();
 
 /**
  * Compute the Allen-Cahn interface term with constant Mobility and Interfacial parameter
@@ -20,6 +17,8 @@ InputParameters validParams<SimpleACInterface>();
 class SimpleACInterface : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   SimpleACInterface(const InputParameters & parameters);
 
 protected:
@@ -31,5 +30,3 @@ protected:
   /// Interfacial parameter
   const MaterialProperty<Real> & _kappa;
 };
-
-#endif // SIMPLEACINTERFACE_H

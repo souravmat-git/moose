@@ -37,7 +37,7 @@
   active = 'diff abs forcing'
 
   [./diff]
-    type = MatDiffusion
+    type = MatDiffusionTest
     variable = u
     prop_name = matp
   [../]
@@ -48,7 +48,7 @@
   [../]
 
   [./forcing]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn
   [../]
@@ -99,7 +99,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "NonconservedAction.h"
 
@@ -14,16 +16,18 @@
 #include "MooseObjectAction.h"
 #include "MooseMesh.h"
 
-// libMesh includes
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", NonconservedAction, "add_variable");
+
+registerMooseAction("PhaseFieldApp", NonconservedAction, "add_kernel");
+
 InputParameters
-validParams<NonconservedAction>()
+NonconservedAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription(
-      "Set up the variable and the kernels needed for a nonconserved phase field variable");
+      "Set up the variable and the kernels needed for a non-conserved phase field variable");
   // Get MooseEnums for the possible order/family options for this variable
   MooseEnum families(AddVariableAction::getNonlinearVariableFamilies());
   MooseEnum orders(AddVariableAction::getNonlinearVariableOrders());
@@ -71,8 +75,14 @@ NonconservedAction::act()
   //
   if (_current_task == "add_variable")
   {
+    auto type = AddVariableAction::determineType(_fe_type, 1);
+    auto var_params = _factory.getValidParams(type);
+
+    var_params.applySpecificParameters(_pars, {"family", "order"});
+    var_params.set<std::vector<Real>>("scaling") = {getParam<Real>("scaling")};
+
     // Create nonconserved variable
-    _problem->addVariable(_var_name, _fe_type, getParam<Real>("scaling"));
+    _problem->addVariable(type, _var_name, var_params);
   }
 
   //

@@ -1,17 +1,13 @@
 #pylint: disable=missing-docstring
-#################################################################
-#                   DO NOT MODIFY THIS HEADER                   #
-#  MOOSE - Multiphysics Object Oriented Simulation Environment  #
-#                                                               #
-#            (c) 2010 Battelle Energy Alliance, LLC             #
-#                      ALL RIGHTS RESERVED                      #
-#                                                               #
-#           Prepared by Battelle Energy Alliance, LLC           #
-#             Under Contract No. DE-AC07-05ID14517              #
-#              With the U. S. Department of Energy              #
-#                                                               #
-#              See COPYRIGHT for full restrictions              #
-#################################################################
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import os
 import collections
 import bisect
@@ -49,7 +45,7 @@ class ExodusReaderErrorObserver(object):
         """
         self._errors.append(args)
 
-    def __nonzero__(self):
+    def __bool__(self):
         """
         Return True if an error occured.
         """
@@ -99,11 +95,11 @@ class ExodusReader(base.ChiggerObject):
     NODAL = vtk.vtkExodusIIReader.NODAL
     ELEMENTAL = vtk.vtkExodusIIReader.ELEM_BLOCK
     GLOBAL = vtk.vtkExodusIIReader.GLOBAL
-    VARIABLE_TYPES = [NODAL, ELEMENTAL, GLOBAL]
+    VARIABLE_TYPES = [ELEMENTAL, NODAL, GLOBAL]
 
     # Information data structures
     BlockInformation = collections.namedtuple('BlockInformation', ['name', 'object_type',
-                                                                   'object_index',
+                                                                   'object_index', 'number',
                                                                    'multiblock_index'])
     VariableInformation = collections.namedtuple('VariableInformation', ['name', 'object_type',
                                                                          'num_components'])
@@ -188,7 +184,7 @@ class ExodusReader(base.ChiggerObject):
             active_blockinfo = self.__getActiveBlocks()
             blockinfo = self.getBlockInformation()
             for object_type in ExodusReader.BLOCK_TYPES:
-                for data in blockinfo[object_type].itervalues():
+                for data in blockinfo[object_type].values():
                     if (not active_blockinfo) or (data in active_blockinfo):
                         self.__vtkreader.SetObjectStatus(data.object_type, data.object_index, 1)
                     else:
@@ -208,7 +204,7 @@ class ExodusReader(base.ChiggerObject):
             # reduces loading times. If 'variables' is not given, all the variables are loaded.
             variables = self.getOption('variables')
             variable_info = self.getVariableInformation()
-            for vinfo in variable_info.itervalues():
+            for vinfo in variable_info.values():
                 if (not variables) or (vinfo.name in variables):
                     self.__vtkreader.SetObjectArrayStatus(vinfo.object_type, vinfo.name, 1)
                 else:
@@ -315,7 +311,7 @@ class ExodusReader(base.ChiggerObject):
             var_types = ExodusReader.VARIABLE_TYPES
 
         variables = collections.OrderedDict()
-        for name, var in self.__variableinfo.iteritems():
+        for name, var in self.__variableinfo.items():
             if var.object_type in var_types:
                 variables[name] = var
         return variables
@@ -355,10 +351,12 @@ class ExodusReader(base.ChiggerObject):
             # Account for out-of-range timesteps
             if (timestep < 0) and (timestep != -1):
                 mooseutils.mooseWarning("Timestep out of range:", timestep, 'not in', repr([0, n]))
+                self.setOption('timestep', 0)
                 timestep = 0
             elif timestep > n:
                 mooseutils.mooseWarning("Timestep out of range:", timestep, 'not in', repr([0, n]))
-                timestep = -1
+                self.setOption('timestep', n)
+                timestep = n
 
         # Time
         elif self.isOptionValid('time'):
@@ -401,7 +399,7 @@ class ExodusReader(base.ChiggerObject):
                                       [self.BLOCK, self.SIDESET, self.NODESET]):
             if self.isOptionValid(param):
                 blocks = self.getOption(param)
-                for data in blockinfo[object_type].itervalues():
+                for data in blockinfo[object_type].values():
                     if data.name in blocks:
                         output.append(data)
         return output
@@ -416,7 +414,7 @@ class ExodusReader(base.ChiggerObject):
         self.__active = filenames
 
         # Re-move any old files in timeinfo dict()
-        for fname in self.__fileinfo.keys():
+        for fname in list(self.__fileinfo.keys()):
             if fname not in filenames:
                 self.__fileinfo.pop(fname)
 
@@ -446,7 +444,7 @@ class ExodusReader(base.ChiggerObject):
         # Re-populate the time data
         self.__timedata = []
         timestep = 0
-        for tinfo in self.__fileinfo.itervalues():
+        for tinfo in self.__fileinfo.values():
             for i, t in enumerate(tinfo.times):
                 tdata = ExodusReader.TimeData(timestep=timestep, time=t, filename=tinfo.filename,
                                               index=i)
@@ -474,7 +472,7 @@ class ExodusReader(base.ChiggerObject):
                 if name.startswith('Unnamed'):
                     name = vtkid
 
-                binfo = ExodusReader.BlockInformation(object_type=obj_type, name=name,
+                binfo = ExodusReader.BlockInformation(object_type=obj_type, name=name, number=vtkid,
                                                       object_index=j, multiblock_index=index)
                 self.__blockinfo[obj_type][vtkid] = binfo
 
@@ -511,7 +509,7 @@ class ExodusReader(base.ChiggerObject):
                      (ExodusReader.GLOBAL, 'POSTPROCESSORS')]
         for vartype, vartitle in variables:
             out += '\n{}:\n'.format(mooseutils.colorText(vartitle, 'GREEN'))
-            for varinfo in self.getVariableInformation([vartype]).itervalues():
+            for varinfo in self.getVariableInformation([vartype]).values():
                 out += '  {}\n'.format(mooseutils.colorText(varinfo.name, 'CYAN'))
                 out += '{:>16}: {}\n'.format('components', varinfo.num_components)
         return out

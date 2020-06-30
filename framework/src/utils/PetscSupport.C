@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PetscSupport.h"
 
@@ -32,10 +27,9 @@
 #include "Conversion.h"
 #include "Executioner.h"
 #include "MooseMesh.h"
+#include "ComputeLineSearchObjectWrapper.h"
 
-// libMesh includes
 #include "libmesh/equation_systems.h"
-#include "libmesh/getpot.h"
 #include "libmesh/linear_implicit_system.h"
 #include "libmesh/nonlinear_implicit_system.h"
 #include "libmesh/petsc_linear_solver.h"
@@ -71,6 +65,36 @@
 #include <fstream>
 #include <string>
 
+void
+MooseVecView(NumericVector<Number> & vector)
+{
+  PetscVector<Number> & petsc_vec = static_cast<PetscVector<Number> &>(vector);
+  VecView(petsc_vec.vec(), 0);
+}
+
+void
+MooseMatView(SparseMatrix<Number> & mat)
+{
+  PetscMatrix<Number> & petsc_mat = static_cast<PetscMatrix<Number> &>(mat);
+  MatView(petsc_mat.mat(), 0);
+}
+
+void
+MooseVecView(const NumericVector<Number> & vector)
+{
+  PetscVector<Number> & petsc_vec =
+      static_cast<PetscVector<Number> &>(const_cast<NumericVector<Number> &>(vector));
+  VecView(petsc_vec.vec(), 0);
+}
+
+void
+MooseMatView(const SparseMatrix<Number> & mat)
+{
+  PetscMatrix<Number> & petsc_mat =
+      static_cast<PetscMatrix<Number> &>(const_cast<SparseMatrix<Number> &>(mat));
+  MatView(petsc_mat.mat(), 0);
+}
+
 namespace Moose
 {
 namespace PetscSupport
@@ -103,9 +127,28 @@ stringify(const LineSearchType & t)
       return "bt";
     case LS_CP:
       return "cp";
+    case LS_CONTACT:
+      return "contact";
+    case LS_PROJECT:
+      return "project";
 #endif
     case LS_INVALID:
       mooseError("Invalid LineSearchType");
+  }
+  return "";
+}
+
+std::string
+stringify(const MffdType & t)
+{
+  switch (t)
+  {
+    case MFFD_WP:
+      return "wp";
+    case MFFD_DS:
+      return "ds";
+    case MFFD_INVALID:
+      mooseError("Invalid MffdType");
   }
   return "";
 }
@@ -118,10 +161,12 @@ setSolverOptions(SolverParams & solver_params)
   {
     case Moose::ST_PJFNK:
       setSinglePetscOption("-snes_mf_operator");
+      setSinglePetscOption("-mat_mffd_type", stringify(solver_params._mffd_type));
       break;
 
     case Moose::ST_JFNK:
       setSinglePetscOption("-snes_mf");
+      setSinglePetscOption("-mat_mffd_type", stringify(solver_params._mffd_type));
       break;
 
     case Moose::ST_NEWTON:
@@ -133,6 +178,7 @@ setSolverOptions(SolverParams & solver_params)
 
     case Moose::ST_LINEAR:
       setSinglePetscOption("-snes_type", "ksponly");
+      setSinglePetscOption("-snes_monitor_cancel");
       break;
   }
 
@@ -140,7 +186,7 @@ setSolverOptions(SolverParams & solver_params)
   if (ls_type == Moose::LS_NONE)
     ls_type = Moose::LS_BASIC;
 
-  if (ls_type != Moose::LS_DEFAULT)
+  if (ls_type != Moose::LS_DEFAULT && ls_type != Moose::LS_CONTACT && ls_type != Moose::LS_PROJECT)
   {
 #if PETSC_VERSION_LESS_THAN(3, 3, 0)
     setSinglePetscOption("-snes_type", "ls");
@@ -235,13 +281,10 @@ petscSetOptions(FEProblemBase & problem)
 
   // Add any additional options specified in the input file
   for (const auto & flag : petsc.flags)
-    setSinglePetscOption(flag.c_str());
+    setSinglePetscOption(flag.rawName().c_str());
+  // Add option pairs
   for (unsigned int i = 0; i < petsc.inames.size(); ++i)
     setSinglePetscOption(petsc.inames[i], petsc.values[i]);
-
-  // set up DM which is required if use a field split preconditioner
-  if (problem.getNonlinearSystemBase().haveFieldSplitPreconditioner())
-    petscSetupDM(problem.getNonlinearSystemBase());
 
   addPetscOptionsFromCommandline();
 }
@@ -250,100 +293,15 @@ PetscErrorCode
 petscSetupOutput(CommandLine * cmd_line)
 {
   char code[10] = {45, 45, 109, 111, 111, 115, 101};
-  if (cmd_line->getPot()->search(code))
-    Console::petscSetupOutput();
-  return 0;
-}
-
-PetscErrorCode
-petscConverged(KSP ksp, PetscInt n, PetscReal rnorm, KSPConvergedReason * reason, void * ctx)
-{
-  // Cast the context pointer coming from PETSc to an FEProblemBase& and
-  // get a reference to the System from it.
-  FEProblemBase & problem = *static_cast<FEProblemBase *>(ctx);
-
-  // Let's be nice and always check PETSc error codes.
-  PetscErrorCode ierr = 0;
-
-  // We want the default behavior of the KSPDefaultConverged test, but
-  // we don't want PETSc to die in that function with a CHKERRQ
-  // call... that is probably extremely unlikely/impossible, but just
-  // to be on the safe side, we push a different error handler before
-  // calling KSPDefaultConverged().
-  ierr = PetscPushErrorHandler(PetscReturnErrorHandler, /*void* ctx=*/PETSC_NULL);
-  CHKERRABORT(problem.comm().get(), ierr);
-
-#if PETSC_VERSION_LESS_THAN(3, 0, 0)
-  // Prior to PETSc 3.0.0, you could call KSPDefaultConverged with a NULL context
-  // pointer, as it was unused.
-  KSPDefaultConverged(ksp, n, rnorm, reason, PETSC_NULL);
-#elif PETSC_RELEASE_LESS_THAN(3, 5, 0)
-  // As of PETSc 3.0.0, you must call KSPDefaultConverged with a
-  // non-NULL context pointer which must be created with
-  // KSPDefaultConvergedCreate(), and destroyed with
-  // KSPDefaultConvergedDestroy().
-  void * default_ctx = NULL;
-  KSPDefaultConvergedCreate(&default_ctx);
-  KSPDefaultConverged(ksp, n, rnorm, reason, default_ctx);
-  KSPDefaultConvergedDestroy(default_ctx);
-#else
-  // As of PETSc 3.5.0, use KSPConvergedDefaultXXX
-  void * default_ctx = NULL;
-  KSPConvergedDefaultCreate(&default_ctx);
-  KSPConvergedDefault(ksp, n, rnorm, reason, default_ctx);
-  KSPConvergedDefaultDestroy(default_ctx);
-#endif
-
-  // Pop the Error handler we pushed on the stack to go back
-  // to default PETSc error handling behavior.
-  ierr = PetscPopErrorHandler();
-  CHKERRABORT(problem.comm().get(), ierr);
-
-  // Get tolerances from the KSP object
-  PetscReal rtol = 0.;
-  PetscReal atol = 0.;
-  PetscReal dtol = 0.;
-  PetscInt maxits = 0;
-  ierr = KSPGetTolerances(ksp, &rtol, &atol, &dtol, &maxits);
-  CHKERRABORT(problem.comm().get(), ierr);
-
-  // Now do some additional MOOSE-specific tests...
-  std::string msg;
-  MooseLinearConvergenceReason moose_reason =
-      problem.checkLinearConvergence(msg, n, rnorm, rtol, atol, dtol, maxits);
-
-  switch (moose_reason)
+  const std::vector<std::string> argv = cmd_line->getArguments();
+  for (const auto & arg : argv)
   {
-    case MOOSE_CONVERGED_RTOL:
-      *reason = KSP_CONVERGED_RTOL;
-      break;
-
-    case MOOSE_CONVERGED_ITS:
-      *reason = KSP_CONVERGED_ITS;
-      break;
-
-    case MOOSE_DIVERGED_NANORINF:
-#if PETSC_VERSION_LESS_THAN(3, 4, 0)
-      // Report divergence due to exceeding the divergence tolerance.
-      *reason = KSP_DIVERGED_DTOL;
-#else
-      // KSP_DIVERGED_NANORINF was added in PETSc 3.4.0.
-      *reason = KSP_DIVERGED_NANORINF;
-#endif
-      break;
-#if !PETSC_VERSION_LESS_THAN(3, 6, 0) // A new convergence enum in PETSc 3.6
-    case MOOSE_DIVERGED_PCSETUP_FAILED:
-      *reason = KSP_DIVERGED_PCSETUP_FAILED;
-      break;
-#endif
-    default:
+    if (arg == std::string(code, 10))
     {
-      // If it's not either of the two specific cases we handle, just go
-      // with whatever PETSc decided in KSPDefaultConverged.
+      Console::petscSetupOutput();
       break;
     }
   }
-
   return 0;
 }
 
@@ -375,10 +333,25 @@ petscNonlinearConverged(SNES snes,
   ierr = SNESGetTolerances(snes, &atol, &rtol, &stol, &maxit, &maxf);
   CHKERRABORT(problem.comm().get(), ierr);
 
+  // Ask the SNES object about its divergence tolerance.
+  PetscReal divtol = 0.; // relative divergence tolerance
+#if !PETSC_VERSION_LESS_THAN(3, 8, 0)
+  ierr = SNESGetDivergenceTolerance(snes, &divtol);
+  CHKERRABORT(problem.comm().get(), ierr);
+#endif
+
   // Get current number of function evaluations done by SNES.
   PetscInt nfuncs = 0;
   ierr = SNESGetNumberFunctionEvals(snes, &nfuncs);
   CHKERRABORT(problem.comm().get(), ierr);
+
+  // Whether or not to force SNESSolve() take at least one iteration regardless of the initial
+  // residual norm
+  PetscBool force_iteration = PETSC_FALSE;
+#if !PETSC_VERSION_LESS_THAN(3, 8, 4)
+  ierr = SNESGetForceIteration(snes, &force_iteration);
+  CHKERRABORT(problem.comm().get(), ierr);
+#endif
 
 // See if SNESSetFunctionDomainError() has been called.  Note:
 // SNESSetFunctionDomainError() and SNESGetFunctionDomainError()
@@ -400,38 +373,46 @@ petscNonlinearConverged(SNES snes,
   // xnorm: 2-norm of current iterate
   // snorm: 2-norm of current step
   // fnorm: 2-norm of function at current iterate
-  MooseNonlinearConvergenceReason moose_reason = problem.checkNonlinearConvergence(
-      msg,
-      it,
-      xnorm,
-      snorm,
-      fnorm,
-      rtol,
-      stol,
-      atol,
-      nfuncs,
-      maxf,
-      system._initial_residual_before_preset_bcs,
-      /*div_threshold=*/(1.0 / rtol) * system._initial_residual_before_preset_bcs);
+  MooseNonlinearConvergenceReason moose_reason =
+      problem.checkNonlinearConvergence(msg,
+                                        it,
+                                        xnorm,
+                                        snorm,
+                                        fnorm,
+                                        rtol,
+                                        divtol,
+                                        stol,
+                                        atol,
+                                        nfuncs,
+                                        maxf,
+                                        force_iteration,
+                                        system._initial_residual_before_preset_bcs,
+                                        std::numeric_limits<Real>::max());
 
   if (msg.length() > 0)
     PetscInfo(snes, msg.c_str());
 
   switch (moose_reason)
   {
-    case MOOSE_NONLINEAR_ITERATING:
+    case MooseNonlinearConvergenceReason::ITERATING:
       *reason = SNES_CONVERGED_ITERATING;
       break;
 
-    case MOOSE_CONVERGED_FNORM_ABS:
+    case MooseNonlinearConvergenceReason::CONVERGED_FNORM_ABS:
       *reason = SNES_CONVERGED_FNORM_ABS;
       break;
 
-    case MOOSE_CONVERGED_FNORM_RELATIVE:
+    case MooseNonlinearConvergenceReason::CONVERGED_FNORM_RELATIVE:
       *reason = SNES_CONVERGED_FNORM_RELATIVE;
       break;
 
-    case MOOSE_CONVERGED_SNORM_RELATIVE:
+    case MooseNonlinearConvergenceReason::DIVERGED_DTOL:
+#if !PETSC_VERSION_LESS_THAN(3, 8, 0) // A new convergence enum in PETSc 3.8
+      *reason = SNES_DIVERGED_DTOL;
+#endif
+      break;
+
+    case MooseNonlinearConvergenceReason::CONVERGED_SNORM_RELATIVE:
 #if PETSC_VERSION_LESS_THAN(3, 3, 0)
       *reason = SNES_CONVERGED_PNORM_RELATIVE;
 #else
@@ -439,15 +420,15 @@ petscNonlinearConverged(SNES snes,
 #endif
       break;
 
-    case MOOSE_DIVERGED_FUNCTION_COUNT:
+    case MooseNonlinearConvergenceReason::DIVERGED_FUNCTION_COUNT:
       *reason = SNES_DIVERGED_FUNCTION_COUNT;
       break;
 
-    case MOOSE_DIVERGED_FNORM_NAN:
+    case MooseNonlinearConvergenceReason::DIVERGED_FNORM_NAN:
       *reason = SNES_DIVERGED_FNORM_NAN;
       break;
 
-    case MOOSE_DIVERGED_LINE_SEARCH:
+    case MooseNonlinearConvergenceReason::DIVERGED_LINE_SEARCH:
 #if PETSC_VERSION_LESS_THAN(3, 2, 0)
       *reason = SNES_DIVERGED_LS_FAILURE;
 #else
@@ -498,27 +479,17 @@ getPetscKSPNormType(Moose::MooseKSPNormType kspnorm)
 }
 
 void
-petscSetDefaultKSPNormType(FEProblemBase & problem)
+petscSetDefaultKSPNormType(FEProblemBase & problem, KSP ksp)
 {
   NonlinearSystemBase & nl = problem.getNonlinearSystemBase();
-  PetscNonlinearSolver<Number> * petsc_solver =
-      dynamic_cast<PetscNonlinearSolver<Number> *>(nl.nonlinearSolver());
-  SNES snes = petsc_solver->snes();
-  KSP ksp;
-  SNESGetKSP(snes, &ksp);
+
   KSPSetNormType(ksp, getPetscKSPNormType(nl.getMooseKSPNormType()));
 }
 
 void
-petscSetDefaultPCSide(FEProblemBase & problem)
+petscSetDefaultPCSide(FEProblemBase & problem, KSP ksp)
 {
-  // dig out Petsc solver
   NonlinearSystemBase & nl = problem.getNonlinearSystemBase();
-  PetscNonlinearSolver<Number> * petsc_solver =
-      dynamic_cast<PetscNonlinearSolver<Number> *>(nl.nonlinearSolver());
-  SNES snes = petsc_solver->snes();
-  KSP ksp;
-  SNESGetKSP(snes, &ksp);
 
 #if PETSC_VERSION_LESS_THAN(3, 2, 0)
   // pc_side is NOT set, PETSc will make the decision
@@ -530,6 +501,28 @@ petscSetDefaultPCSide(FEProblemBase & problem)
   if (nl.getPCSide() != Moose::PCS_DEFAULT)
     KSPSetPCSide(ksp, getPetscPCSide(nl.getPCSide()));
 #endif
+}
+
+void
+petscSetKSPDefaults(FEProblemBase & problem, KSP ksp)
+{
+  auto & es = problem.es();
+
+  PetscReal rtol = es.parameters.get<Real>("linear solver tolerance");
+  PetscReal atol = es.parameters.get<Real>("linear solver absolute tolerance");
+
+  // MOOSE defaults this to -1 for some dumb reason
+  if (atol < 0)
+    atol = 1e-50;
+
+  PetscReal maxits = es.parameters.get<unsigned int>("linear solver maximum iterations");
+
+  // 1e100 is because we don't use divtol currently
+  KSPSetTolerances(ksp, rtol, atol, 1e100, maxits);
+
+  petscSetDefaultPCSide(problem, ksp);
+
+  petscSetDefaultKSPNormType(problem, ksp);
 }
 
 void
@@ -547,7 +540,6 @@ petscSetDefaults(FEProblemBase & problem)
 
 #if PETSC_VERSION_LESS_THAN(3, 0, 0)
   // PETSc 2.3.3-
-  KSPSetConvergenceTest(ksp, petscConverged, &problem);
   SNESSetConvergenceTest(snes, petscNonlinearConverged, &problem);
 #else
   // PETSc 3.0.0+
@@ -558,23 +550,19 @@ petscSetDefaults(FEProblemBase & problem)
   // we use the default context provided by PETSc in addition to
   // a few other tests.
   {
-    PetscErrorCode ierr = KSPSetConvergenceTest(ksp, petscConverged, &problem, PETSC_NULL);
-    CHKERRABORT(nl.comm().get(), ierr);
-    ierr = SNESSetConvergenceTest(snes, petscNonlinearConverged, &problem, PETSC_NULL);
+    auto ierr = SNESSetConvergenceTest(snes, petscNonlinearConverged, &problem, PETSC_NULL);
     CHKERRABORT(nl.comm().get(), ierr);
   }
 #endif
 
-  petscSetDefaultPCSide(problem);
-
-  petscSetDefaultKSPNormType(problem);
+  petscSetKSPDefaults(problem, ksp);
 }
 
 void
 storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
 {
   // Note: Options set in the Preconditioner block will override those set in the Executioner block
-  if (params.isParamValid("solve_type"))
+  if (params.isParamValid("solve_type") && !params.isParamValid("_use_eigen_value"))
   {
     // Extract the solve type
     const std::string & solve_type = params.get<MooseEnum>("solve_type");
@@ -585,8 +573,32 @@ storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
   {
     MooseEnum line_search = params.get<MooseEnum>("line_search");
     if (fe_problem.solverParams()._line_search == Moose::LS_INVALID || line_search != "default")
-      fe_problem.solverParams()._line_search =
+    {
+      Moose::LineSearchType enum_line_search =
           Moose::stringToEnum<Moose::LineSearchType>(line_search);
+      fe_problem.solverParams()._line_search = enum_line_search;
+      if (enum_line_search == LS_CONTACT || enum_line_search == LS_PROJECT)
+      {
+        NonlinearImplicitSystem * nl_system =
+            dynamic_cast<NonlinearImplicitSystem *>(&fe_problem.getNonlinearSystemBase().system());
+        if (!nl_system)
+          mooseError("You've requested a line search but you must be solving an EigenProblem. "
+                     "These two things are not consistent.");
+        PetscNonlinearSolver<Real> * petsc_nonlinear_solver =
+            dynamic_cast<PetscNonlinearSolver<Real> *>(nl_system->nonlinear_solver.get());
+        if (!petsc_nonlinear_solver)
+          mooseError("Currently the MOOSE line searches all use Petsc, so you "
+                     "must use Petsc as your non-linear solver.");
+        petsc_nonlinear_solver->linesearch_object =
+            libmesh_make_unique<ComputeLineSearchObjectWrapper>(fe_problem);
+      }
+    }
+  }
+
+  if (params.isParamValid("mffd_type"))
+  {
+    MooseEnum mffd_type = params.get<MooseEnum>("mffd_type");
+    fe_problem.solverParams()._mffd_type = Moose::stringToEnum<Moose::MffdType>(mffd_type);
   }
 
   // The parameters contained in the Action
@@ -624,13 +636,13 @@ storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
 
       if (help_string != "")
         mooseWarning("The PETSc option ",
-                     option,
+                     std::string(option),
                      " should not be used directly in a MOOSE input file. ",
                      help_string);
     }
 
     // Update the stored items, but do not create duplicates
-    if (find(po.flags.begin(), po.flags.end(), option) == po.flags.end())
+    if (!po.flags.contains(option))
       po.flags.push_back(option);
   }
 
@@ -644,6 +656,7 @@ storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
 #if !PETSC_VERSION_LESS_THAN(3, 7, 0)
   bool superlu_dist_found = false;
   bool fact_pattern_found = false;
+  bool tiny_pivot_found = false;
 #endif
   std::string pc_description = "";
   for (unsigned int i = 0; i < petsc_options_inames.size(); i++)
@@ -651,7 +664,17 @@ storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
     // Do not add duplicate settings
     if (find(po.inames.begin(), po.inames.end(), petsc_options_inames[i]) == po.inames.end())
     {
-      po.inames.push_back(petsc_options_inames[i]);
+#if !PETSC_VERSION_LESS_THAN(3, 9, 0)
+      if (petsc_options_inames[i] == "-pc_factor_mat_solver_package")
+        po.inames.push_back("-pc_factor_mat_solver_type");
+      else
+        po.inames.push_back(petsc_options_inames[i]);
+#else
+      if (petsc_options_inames[i] == "-pc_factor_mat_solver_type")
+        po.inames.push_back("-pc_factor_mat_solver_package");
+      else
+        po.inames.push_back(petsc_options_inames[i]);
+#endif
       po.values.push_back(petsc_options_values[i]);
 
       // Look for a pc description
@@ -665,11 +688,14 @@ storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
       if (petsc_options_inames[i] == "-pc_hypre_boomeramg_strong_threshold")
         strong_threshold_found = true;
 #if !PETSC_VERSION_LESS_THAN(3, 7, 0)
-      if (petsc_options_inames[i] == "-pc_factor_mat_solver_package" &&
+      if ((petsc_options_inames[i] == "-pc_factor_mat_solver_package" ||
+           petsc_options_inames[i] == "-pc_factor_mat_solver_type") &&
           petsc_options_values[i] == "superlu_dist")
         superlu_dist_found = true;
       if (petsc_options_inames[i] == "-mat_superlu_dist_fact")
         fact_pattern_found = true;
+      if (petsc_options_inames[i] == "-mat_superlu_dist_replacetinypivot")
+        tiny_pivot_found = true;
 #endif
     }
     else
@@ -692,16 +718,39 @@ storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
 
 #if !PETSC_VERSION_LESS_THAN(3, 7, 0)
   // In PETSc-3.7.{0--4}, there is a bug when using superlu_dist, and we have to use
-  // SamePattern_SameRowPerm
+  // SamePattern_SameRowPerm, otherwise we use whatever we have in PETSc
   if (superlu_dist_found && !fact_pattern_found)
   {
     po.inames.push_back("-mat_superlu_dist_fact");
+#if PETSC_VERSION_LESS_THAN(3, 7, 5)
     po.values.push_back("SamePattern_SameRowPerm");
-    pc_description += "mat_superlu_dist_fact: SamePattern_SameRowPerm";
+    pc_description += "mat_superlu_dist_fact: SamePattern_SameRowPerm ";
+#else
+    po.values.push_back("SamePattern");
+    pc_description += "mat_superlu_dist_fact: SamePattern ";
+#endif
+  }
+
+  // restore this superlu  option
+  if (superlu_dist_found && !tiny_pivot_found)
+  {
+    po.inames.push_back("-mat_superlu_dist_replacetinypivot");
+    po.values.push_back("1");
+    pc_description += " mat_superlu_dist_replacetinypivot: true ";
   }
 #endif
   // Set Preconditioner description
   po.pc_description = pc_description;
+}
+
+std::set<std::string>
+getPetscValidLineSearches()
+{
+#if PETSC_VERSION_LESS_THAN(3, 3, 0)
+  return {"default", "cubic", "quadratic", "none", "basic", "basicnonorms"};
+#else
+  return {"default", "shell", "none", "basic", "l2", "bt", "cp"};
+#endif
 }
 
 InputParameters
@@ -718,20 +767,12 @@ getPetscValidParams()
                              "FD: Use finite differences to compute Jacobian "
                              "LINEAR: Solving a linear problem");
 
-// Line Search Options
-#ifdef LIBMESH_HAVE_PETSC
-#if PETSC_VERSION_LESS_THAN(3, 3, 0)
-  MooseEnum line_search("default cubic quadratic none basic basicnonorms", "default");
-#else
-  MooseEnum line_search("default shell none basic l2 bt cp", "default");
-#endif
-  std::string addtl_doc_str(" (Note: none = basic)");
-#else
-  MooseEnum line_search("default", "default");
-  std::string addtl_doc_str("");
-#endif
-  params.addParam<MooseEnum>(
-      "line_search", line_search, "Specifies the line search type" + addtl_doc_str);
+  MooseEnum mffd_type("wp ds", "wp");
+  params.addParam<MooseEnum>("mffd_type",
+                             mffd_type,
+                             "Specifies the finite differencing type for "
+                             "Jacobian-free solve types. Note that the "
+                             "default is wp (for Walker and Pernice).");
 
   params.addParam<MultiMooseEnum>(
       "petsc_options", getCommonPetscFlags(), "Singleton PETSc options");
@@ -740,7 +781,6 @@ getPetscValidParams()
   params.addParam<std::vector<std::string>>(
       "petsc_options_value",
       "Values of PETSc name/value pairs (must correspond with \"petsc_options_iname\"");
-
   return params;
 }
 
@@ -751,7 +791,7 @@ getCommonPetscFlags()
       "-dm_moose_print_embedding -dm_view -ksp_converged_reason -ksp_gmres_modifiedgramschmidt "
       "-ksp_monitor -ksp_monitor_snes_lg-snes_ksp_ew -ksp_snes_ew -snes_converged_reason "
       "-snes_ksp -snes_ksp_ew -snes_linesearch_monitor -snes_mf -snes_mf_operator -snes_monitor "
-      "-snes_test_display -snes_view -snew_ksp_ew",
+      "-snes_test_display -snes_view",
       "",
       true);
 }
@@ -766,9 +806,32 @@ getCommonPetscKeys()
                         "-pc_hypre_boomeramg_max_iter "
                         "-pc_hypre_boomeramg_strong_threshold -pc_hypre_type -pc_type -snes_atol "
                         "-snes_linesearch_type "
-                        "-snes_ls -snes_max_it -snes_rtol -snes_type -sub_ksp_type -sub_pc_type",
+                        "-snes_ls -snes_max_it -snes_rtol -snes_divergence_tolerance -snes_type "
+                        "-sub_ksp_type -sub_pc_type",
                         "",
                         true);
+}
+
+bool
+isSNESVI(FEProblemBase & fe_problem)
+{
+  PetscOptions & petsc = fe_problem.getPetscOptions();
+
+  int argc;
+  char ** args;
+  PetscGetArgs(&argc, &args);
+
+  std::vector<std::string> cml_arg;
+  for (int i = 0; i < argc; i++)
+    cml_arg.push_back(args[i]);
+
+  if (std::find(petsc.values.begin(), petsc.values.end(), "vinewtonssls") == petsc.values.end() &&
+      std::find(petsc.values.begin(), petsc.values.end(), "vinewtonrsls") == petsc.values.end() &&
+      std::find(cml_arg.begin(), cml_arg.end(), "vinewtonssls") == cml_arg.end() &&
+      std::find(cml_arg.begin(), cml_arg.end(), "vinewtonrsls") == cml_arg.end())
+    return false;
+
+  return true;
 }
 
 void
@@ -787,7 +850,7 @@ setSinglePetscOption(const std::string & name, const std::string & value)
   // Not convenient to use the usual error checking macro, because we
   // don't have a specific communicator in this helper function.
   if (ierr)
-    mooseError("Error setting PETSc option.");
+    mooseError("Error setting PETSc option: ", name);
 }
 
 void
@@ -817,8 +880,11 @@ colorAdjacencyMatrix(PetscScalar * adjacency_matrix,
 #endif
              &A);
 
-  MatColoring mc;
   ISColoring iscoloring;
+#if PETSC_VERSION_LESS_THAN(3, 5, 0)
+  MatGetColoring(A, coloring_algorithm, &iscoloring);
+#else
+  MatColoring mc;
   MatColoringCreate(A, &mc);
   MatColoringSetType(mc, coloring_algorithm);
   MatColoringSetMaxColors(mc, static_cast<PetscInt>(colors));
@@ -827,12 +893,19 @@ colorAdjacencyMatrix(PetscScalar * adjacency_matrix,
   MatColoringSetDistance(mc, 1);
   MatColoringSetFromOptions(mc);
   MatColoringApply(mc, &iscoloring);
+#endif
 
   PetscInt nn;
   IS * is;
+#if PETSC_RELEASE_LESS_THAN(3, 12, 0)
   ISColoringGetIS(iscoloring, &nn, &is);
+#else
+  ISColoringGetIS(iscoloring, PETSC_USE_POINTER, &nn, &is);
+#endif
 
-  mooseAssert(nn <= static_cast<PetscInt>(colors), "Not enough available colors");
+  if (nn > static_cast<PetscInt>(colors))
+    throw std::runtime_error("Not able to color with designated number of colors");
+
   for (int i = 0; i < nn; i++)
   {
     PetscInt isize;
@@ -848,7 +921,9 @@ colorAdjacencyMatrix(PetscScalar * adjacency_matrix,
   }
 
   MatDestroy(&A);
+#if !PETSC_VERSION_LESS_THAN(3, 5, 0)
   MatColoringDestroy(&mc);
+#endif
   ISColoringDestroy(&iscoloring);
 }
 

@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef STRESSUPDATEBASE_H
-#define STRESSUPDATEBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Conversion.h"
 #include "InputParameters.h"
@@ -14,10 +16,22 @@
 #include "RankTwoTensor.h"
 
 // Forward declaration
-class StressUpdateBase;
 
-template <>
-InputParameters validParams<StressUpdateBase>();
+/**
+ * TangentCalculationMethod is an enum that determines the calculation method for the tangent
+ * operator. ELASTIC uses the elasticity tensor as the tangent operator: J = C. The elasticity
+ * tensor does not need to be provided by the StressUpdateBase models in this case. FULL calculates
+ * the full tangent operator tensor in each inherited class. The full tangent operator is then
+ * combined in ComputeMultipleInelasicStress by J = J_1 * C^-1 * J_2 * C^-1 * ... J_N. PARTIAL
+ * calculates the contribution to the tangent operator if the terms need to be combined before being
+ * inverted by J = (J_1 + J_2 + ... J_N)^-1 * C.
+ */
+enum class TangentCalculationMethod
+{
+  ELASTIC,
+  FULL,
+  PARTIAL
+};
 
 /**
  * StressUpdateBase is a material that is not called by MOOSE because
@@ -34,14 +48,17 @@ InputParameters validParams<StressUpdateBase>();
 class StressUpdateBase : public Material
 {
 public:
+  static InputParameters validParams();
+
   StressUpdateBase(const InputParameters & parameters);
 
   /**
    * Given a strain increment that results in a trial stress, perform some
    * procedure (such as an iterative return-mapping process) to produce
    * an admissible stress, an elastic strain increment and an inelastic
-   * strain increment, as well as d(stress)/d(strain) (or some approximation
-   * to it).
+   * strain increment.
+   * If _fe_problem.currentlyComputingJacobian() = true, then updateState also computes
+   * d(stress)/d(strain) (or some approximation to it).
    *
    * This method is called by ComputeMultipleInelasticStress.
    * This method is pure virutal: all inheriting classes must overwrite this method.
@@ -55,10 +72,11 @@ public:
    * @param stress_old The old value of stress
    * @param elasticity_tensor The elasticity tensor
    * @param compute_full_tangent_operator The calling routine would like the full consistent tangent
-   * operator to be placed in tangent_operator, if possible.
+   * operator to be placed in tangent_operator, if possible.  This is irrelevant if
+   * _fe_problem.currentlyComputingJacobian() = false
    * @param tangent_operator d(stress)/d(strain), or some approximation to it  If
    * compute_full_tangent_operator=false, then tangent_operator=elasticity_tensor is an appropriate
-   * choice
+   * choice.  tangent_operator is only computed if _fe_problem.currentlyComputingJacobian() = true
    */
   virtual void updateState(RankTwoTensor & strain_increment,
                            RankTwoTensor & inelastic_strain_increment,
@@ -84,12 +102,24 @@ public:
    */
   virtual bool requiresIsotropicTensor() = 0;
 
+  /**
+   * Is the implmented model isotropic? The safe default is 'false'.
+   */
+  virtual bool isIsotropic() { return false; };
+
   virtual Real computeTimeStepLimit();
+
+  virtual TangentCalculationMethod getTangentCalculationMethod()
+  {
+    return TangentCalculationMethod::ELASTIC;
+  }
 
   ///@{ Retained as empty methods to avoid a warning from Material.C in framework. These methods are unused in all inheriting classes and should not be overwritten.
   void resetQpProperties() final {}
   void resetProperties() final {}
   ///@}
-};
 
-#endif // STRESSUPDATEBASE_H
+protected:
+  /// Name used as a prefix for all material properties related to the stress update model.
+  const std::string _base_name;
+};

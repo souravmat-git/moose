@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TWOPARAMETERPLASTICITYSTRESSUPDATE_H
-#define TWOPARAMETERPLASTICITYSTRESSUPDATE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "MultiParameterPlasticityStressUpdate.h"
 
 #include <array>
-
-class TwoParameterPlasticityStressUpdate;
-
-template <>
-InputParameters validParams<TwoParameterPlasticityStressUpdate>();
 
 /**
  * TwoParameterPlasticityStressUpdate performs the return-map
@@ -27,6 +24,8 @@ InputParameters validParams<TwoParameterPlasticityStressUpdate>();
 class TwoParameterPlasticityStressUpdate : public MultiParameterPlasticityStressUpdate
 {
 public:
+  static InputParameters validParams();
+
   TwoParameterPlasticityStressUpdate(const InputParameters & parameters,
                                      unsigned num_yf,
                                      unsigned num_intnl);
@@ -59,7 +58,6 @@ protected:
   Real _dp_dqt;
   /// derivative of Variable with respect to trial variable (used in consistent-tangent-operator calculation)
   Real _dq_dqt;
-
 
   /**
    * Computes the values of the yield functions, given p, q and intnl parameters.
@@ -138,14 +136,14 @@ protected:
    * @param gaE[out] The "good guess" value of gaE.  Default = 0
    * @param intnl[out] The "good guess" value of the internal parameters
    */
-  virtual void initialiseVars(Real p_trial,
+  virtual void initializeVars(Real p_trial,
                               Real q_trial,
                               const std::vector<Real> & intnl_old,
                               Real & p,
                               Real & q,
                               Real & gaE,
                               std::vector<Real> & intnl) const;
-  void initialiseVarsV(const std::vector<Real> & trial_stress_params,
+  void initializeVarsV(const std::vector<Real> & trial_stress_params,
                        const std::vector<Real> & intnl_old,
                        std::vector<Real> & stress_params,
                        Real & gaE,
@@ -241,7 +239,7 @@ protected:
                                     const std::vector<Real> & intnl,
                                     const yieldAndFlow & smoothed_q,
                                     const RankFourTensor & Eijkl,
-                                    RankTwoTensor & stress) const;
+                                    RankTwoTensor & stress) const = 0;
   void setStressAfterReturnV(const RankTwoTensor & stress_trial,
                              const std::vector<Real> & stress_params,
                              Real gaE,
@@ -336,5 +334,3 @@ protected:
    */
   virtual RankFourTensor d2qdstress2(const RankTwoTensor & stress) const = 0;
 };
-
-#endif // TWOPARAMETERPLASTICITYSTRESSUPDATE_H

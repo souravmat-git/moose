@@ -1,23 +1,34 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "Q2PAction.h"
 
 #include "Factory.h"
 #include "FEProblem.h"
 #include "Parser.h"
+#include "AddVariableAction.h"
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("RichardsApp", Q2PAction, "add_kernel");
+
+registerMooseAction("RichardsApp", Q2PAction, "add_aux_variable");
+
+registerMooseAction("RichardsApp", Q2PAction, "add_function");
+
+registerMooseAction("RichardsApp", Q2PAction, "add_postprocessor");
+
 InputParameters
-validParams<Q2PAction>()
+Q2PAction::validParams()
 {
   MooseEnum orders("CONSTANT FIRST SECOND THIRD FOURTH", "FIRST");
 
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addRequiredParam<NonlinearVariableName>("porepressure", "The porepressure variable");
   params.addRequiredParam<NonlinearVariableName>("saturation", "The water saturation variable");
   params.addRequiredParam<UserObjectName>(
@@ -67,11 +78,11 @@ validParams<Q2PAction>()
                         false,
                         "Save the diagonal component of the Q2PSaturationFlux Jacobian into the "
                         "AuxVariable called Q2PWaterJacobian");
-  params.addParam<MooseEnum>("ORDER",
-                             orders,
-                             "The order for the porepressure and saturation: " +
-                                 orders.getRawNames() +
-                                 " (only needed if you're calculating masses)");
+  params.addParam<MooseEnum>(
+      "ORDER",
+      orders,
+      "The order for the porepressure and saturation: " + orders.getRawNames() +
+          " (only needed if you're calculating masses)");
   return params;
 }
 
@@ -201,32 +212,27 @@ Q2PAction::act()
 
   if (_current_task == "add_aux_variable")
   {
+    FEType fe_type(Utility::string_to_enum<Order>(getParam<MooseEnum>("ORDER")),
+                   Utility::string_to_enum<FEFamily>("LAGRANGE"));
+    auto type = AddVariableAction::determineType(fe_type, 1);
+    auto var_params = _factory.getValidParams(type);
+    var_params.set<MooseEnum>("family") = "LAGRANGE";
+    var_params.set<MooseEnum>("order") = getParam<MooseEnum>("ORDER");
+
     if (!_no_mass_calculations)
     {
       // user wants nodal masses or total masses
-      _problem->addAuxVariable("Q2P_nodal_water_mass_divided_by_dt",
-                               FEType(Utility::string_to_enum<Order>(getParam<MooseEnum>("ORDER")),
-                                      Utility::string_to_enum<FEFamily>("LAGRANGE")));
-      _problem->addAuxVariable("Q2P_nodal_gas_mass_divided_by_dt",
-                               FEType(Utility::string_to_enum<Order>(getParam<MooseEnum>("ORDER")),
-                                      Utility::string_to_enum<FEFamily>("LAGRANGE")));
+      _problem->addAuxVariable(type, "Q2P_nodal_water_mass_divided_by_dt", var_params);
+      _problem->addAuxVariable(type, "Q2P_nodal_gas_mass_divided_by_dt", var_params);
     }
     if (_save_gas_flux_in_Q2PGasFluxResidual)
-      _problem->addAuxVariable("Q2PGasFluxResidual",
-                               FEType(Utility::string_to_enum<Order>(getParam<MooseEnum>("ORDER")),
-                                      Utility::string_to_enum<FEFamily>("LAGRANGE")));
+      _problem->addAuxVariable(type, "Q2PGasFluxResidual", var_params);
     if (_save_water_flux_in_Q2PWaterFluxResidual)
-      _problem->addAuxVariable("Q2PWaterFluxResidual",
-                               FEType(Utility::string_to_enum<Order>(getParam<MooseEnum>("ORDER")),
-                                      Utility::string_to_enum<FEFamily>("LAGRANGE")));
+      _problem->addAuxVariable(type, "Q2PWaterFluxResidual", var_params);
     if (_save_gas_Jacobian_in_Q2PGasJacobian)
-      _problem->addAuxVariable("Q2PGasJacobian",
-                               FEType(Utility::string_to_enum<Order>(getParam<MooseEnum>("ORDER")),
-                                      Utility::string_to_enum<FEFamily>("LAGRANGE")));
+      _problem->addAuxVariable(type, "Q2PGasJacobian", var_params);
     if (_save_water_Jacobian_in_Q2PWaterJacobian)
-      _problem->addAuxVariable("Q2PWaterJacobian",
-                               FEType(Utility::string_to_enum<Order>(getParam<MooseEnum>("ORDER")),
-                                      Utility::string_to_enum<FEFamily>("LAGRANGE")));
+      _problem->addAuxVariable(type, "Q2PWaterJacobian", var_params);
   }
 
   if (_current_task == "add_function" && _output_total_masses_to.size() > 0)
@@ -260,7 +266,7 @@ Q2PAction::act()
 
     InputParameters params = _factory.getValidParams("TimestepSize");
 
-    params.set<MultiMooseEnum>("execute_on") = "timestep_begin";
+    params.set<ExecFlagEnum>("execute_on") = EXEC_TIMESTEP_BEGIN;
     params.set<std::vector<OutputName>>("outputs") = {"none"};
     _problem->addPostprocessor("TimestepSize", "Q2P_dt", params);
 

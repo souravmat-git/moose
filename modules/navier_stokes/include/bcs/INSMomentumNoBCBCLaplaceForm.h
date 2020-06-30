@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INSMOMENTUMNOBCBCLAPLACEFORM_H
-#define INSMOMENTUMNOBCBCLAPLACEFORM_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "INSMomentumNoBCBCBase.h"
 
 // Forward Declarations
-class INSMomentumNoBCBCLaplaceForm;
-
-template <>
-InputParameters validParams<INSMomentumNoBCBCLaplaceForm>();
 
 /**
  * This class implements the "No BC" boundary condition based on the
@@ -22,6 +20,8 @@ InputParameters validParams<INSMomentumNoBCBCLaplaceForm>();
 class INSMomentumNoBCBCLaplaceForm : public INSMomentumNoBCBCBase
 {
 public:
+  static InputParameters validParams();
+
   INSMomentumNoBCBCLaplaceForm(const InputParameters & parameters);
 
   virtual ~INSMomentumNoBCBCLaplaceForm() {}
@@ -31,5 +31,3 @@ protected:
   virtual Real computeQpJacobian();
   virtual Real computeQpOffDiagJacobian(unsigned jvar);
 };
-
-#endif

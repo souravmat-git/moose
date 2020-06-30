@@ -1,24 +1,22 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "SplineFunction.h"
 
-template <>
+registerMooseObject("MooseApp", SplineFunction);
+
+defineLegacyParams(SplineFunction);
+
 InputParameters
-validParams<SplineFunction>()
+SplineFunction::validParams()
 {
-  InputParameters params = validParams<Function>();
+  InputParameters params = Function::validParams();
   MooseEnum component("x=0 y=1 z=2", "x");
   params.addParam<MooseEnum>(
       "component", component, "The component of the geometry point to interpolate with");
@@ -43,13 +41,13 @@ SplineFunction::SplineFunction(const InputParameters & parameters)
 }
 
 Real
-SplineFunction::value(Real /*t*/, const Point & p)
+SplineFunction::value(Real /*t*/, const Point & p) const
 {
   return _ipol.sample(p(_component));
 }
 
 RealGradient
-SplineFunction::gradient(Real /*t*/, const Point & p)
+SplineFunction::gradient(Real /*t*/, const Point & p) const
 {
   RealGradient grad(0.0);
   grad(0) = derivative(p);
@@ -57,13 +55,13 @@ SplineFunction::gradient(Real /*t*/, const Point & p)
 }
 
 Real
-SplineFunction::derivative(const Point & p)
+SplineFunction::derivative(const Point & p) const
 {
   return _ipol.sampleDerivative(p(_component));
 }
 
 Real
-SplineFunction::secondDerivative(const Point & p)
+SplineFunction::secondDerivative(const Point & p) const
 {
   return _ipol.sample2ndDerivative(p(_component));
 }

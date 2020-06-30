@@ -1,30 +1,30 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "ElementsAlongPlane.h"
 #include "ElementsIntersectedByPlane.h"
 #include "MooseMesh.h"
 
-template <>
+registerMooseObject("MooseApp", ElementsAlongPlane);
+
+defineLegacyParams(ElementsAlongPlane);
+
 InputParameters
-validParams<ElementsAlongPlane>()
+ElementsAlongPlane::validParams()
 {
-  InputParameters params = validParams<GeneralVectorPostprocessor>();
+  InputParameters params = GeneralVectorPostprocessor::validParams();
 
   params.addRequiredParam<Point>("point", "Point in the plane");
   params.addRequiredParam<Point>("normal", "Normal vector to the plane");
+  params.addClassDescription(
+      "Outputs the IDs of every element intersected by a user-defined plane");
   return params;
 }
 
@@ -34,6 +34,7 @@ ElementsAlongPlane::ElementsAlongPlane(const InputParameters & parameters)
     _normal(getParam<Point>("normal")),
     _elem_ids(declareVector("elem_ids"))
 {
+  _fe_problem.mesh().errorIfDistributedMesh("ElementsAlongPlane");
 }
 
 void

@@ -1,18 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LevelSetProblem.h"
+#include "LevelSetTypes.h"
+
 #include "MultiAppTransfer.h"
 
-template <>
+registerMooseObject("LevelSetApp", LevelSetProblem);
+
 InputParameters
-validParams<LevelSetProblem>()
+LevelSetProblem::validParams()
 {
-  InputParameters params = validParams<FEProblem>();
+  InputParameters params = FEProblem::validParams();
   params.addClassDescription("A specilized problem class that adds a custom call to "
                              "MultiAppTransfer execution to transfer adaptivity for the level set "
                              "reinitialization.");
@@ -22,34 +27,20 @@ validParams<LevelSetProblem>()
 LevelSetProblem::LevelSetProblem(const InputParameters & parameters) : FEProblem(parameters) {}
 
 void
+LevelSetProblem::computeMarkers()
+{
+  FEProblem::computeMarkers();
+  setCurrentExecuteOnFlag(LevelSet::EXEC_COMPUTE_MARKERS);
+  execMultiAppTransfers(LevelSet::EXEC_COMPUTE_MARKERS, MultiAppTransfer::TO_MULTIAPP);
+  setCurrentExecuteOnFlag(EXEC_NONE);
+}
+
+bool
 LevelSetProblem::adaptMesh()
 {
-  if (!_adaptivity.isAdaptivityDue())
-    return;
-
-  unsigned int cycles_per_step = _adaptivity.getCyclesPerStep();
-  _cycles_completed = 0;
-  for (unsigned int i = 0; i < cycles_per_step; ++i)
-  {
-
-    execMultiAppTransfers(EXEC_CUSTOM, MultiAppTransfer::TO_MULTIAPP);
-
-    _console << "Adaptivity step " << i + 1 << " of " << cycles_per_step << '\n';
-    // Markers were already computed once by Executioner
-    if (_adaptivity.getRecomputeMarkersFlag() && i > 0)
-      computeMarkers();
-    if (_adaptivity.adaptMesh())
-    {
-      meshChanged();
-      _cycles_completed++;
-    }
-    else
-    {
-      _console << "Mesh unchanged, skipping remaining steps..." << std::endl;
-      return;
-    }
-
-    // Show adaptivity progress
-    _console << std::flush;
-  }
+  bool adapt = FEProblem::adaptMesh();
+  setCurrentExecuteOnFlag(LevelSet::EXEC_ADAPT_MESH);
+  execMultiAppTransfers(LevelSet::EXEC_ADAPT_MESH, MultiAppTransfer::TO_MULTIAPP);
+  setCurrentExecuteOnFlag(EXEC_NONE);
+  return adapt;
 }

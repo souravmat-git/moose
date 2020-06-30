@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef LIBMESHPARTITIONER_H
-#define LIBMESHPARTITIONER_H
+#pragma once
 
 // MOOSE includes
 #include "MooseEnum.h"
@@ -36,6 +30,8 @@ public:
   LibmeshPartitioner(const InputParameters & params);
   virtual ~LibmeshPartitioner();
 
+  static InputParameters validParams();
+
   virtual std::unique_ptr<Partitioner> clone() const;
   virtual void partition(MeshBase & mesh, const unsigned int n);
   virtual void partition(MeshBase & mesh);
@@ -50,5 +46,3 @@ protected:
   const std::vector<std::vector<SubdomainName>> & _subdomain_blocks;
   MooseMesh & _mesh;
 };
-
-#endif /* LIBMESHPARTITIONER_H */

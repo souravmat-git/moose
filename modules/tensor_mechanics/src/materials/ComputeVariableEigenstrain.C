@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeVariableEigenstrain.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeVariableEigenstrain);
+
 InputParameters
-validParams<ComputeVariableEigenstrain>()
+ComputeVariableEigenstrain::validParams()
 {
-  InputParameters params = validParams<ComputeEigenstrain>();
+  InputParameters params = ComputeEigenstrain::validParams();
   params.addClassDescription("Computes an Eigenstrain and its derivatives that is a function of "
                              "multiple variables, where the prefactor is defined in a derivative "
                              "material");

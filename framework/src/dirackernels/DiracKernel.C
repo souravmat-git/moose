@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // Moose includes
 #include "DiracKernel.h"
@@ -19,15 +14,16 @@
 #include "Problem.h"
 #include "MooseMesh.h"
 
-// libMesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+defineLegacyParams(DiracKernel);
+
 InputParameters
-validParams<DiracKernel>()
+DiracKernel::validParams()
 {
-  InputParameters params = validParams<MooseObject>();
-  params += validParams<MaterialPropertyInterface>();
+  InputParameters params = MooseObject::validParams();
+  params += MaterialPropertyInterface::validParams();
+  params += TaggingInterface::validParams();
   params.addRequiredParam<NonlinearVariableName>(
       "variable", "The name of the variable that this kernel operates on");
 
@@ -56,20 +52,25 @@ DiracKernel::DiracKernel(const InputParameters & parameters)
   : MooseObject(parameters),
     SetupInterface(this),
     CoupleableMooseVariableDependencyIntermediateInterface(this, false),
+    MooseVariableInterface<Real>(this,
+                                 false,
+                                 "variable",
+                                 Moose::VarKindType::VAR_NONLINEAR,
+                                 Moose::VarFieldType::VAR_FIELD_STANDARD),
     FunctionInterface(this),
     UserObjectInterface(this),
     TransientInterface(this),
-    MaterialPropertyInterface(this),
+    MaterialPropertyInterface(this, Moose::EMPTY_BLOCK_IDS, Moose::EMPTY_BOUNDARY_IDS),
     PostprocessorInterface(this),
     GeometricSearchInterface(this),
-    Restartable(parameters, "DiracKernels"),
-    ZeroInterface(parameters),
+    Restartable(this, "DiracKernels"),
     MeshChangedInterface(parameters),
-    _subproblem(*parameters.get<SubProblem *>("_subproblem")),
-    _sys(*parameters.get<SystemBase *>("_sys")),
+    TaggingInterface(this),
+    _subproblem(*getCheckedPointerParam<SubProblem *>("_subproblem")),
+    _sys(*getCheckedPointerParam<SystemBase *>("_sys")),
     _tid(parameters.get<THREAD_ID>("_tid")),
     _assembly(_subproblem.assembly(_tid)),
-    _var(_sys.getVariable(_tid, parameters.get<NonlinearVariableName>("variable"))),
+    _var(*mooseVariable()),
     _mesh(_subproblem.mesh()),
     _coord_sys(_assembly.coordSystem()),
     _dirac_kernel_info(_subproblem.diracKernelInfo()),
@@ -78,16 +79,16 @@ DiracKernel::DiracKernel(const InputParameters & parameters)
     _physical_point(_assembly.physicalPoints()),
     _qrule(_assembly.qRule()),
     _JxW(_assembly.JxW()),
-    _phi(_assembly.phi()),
-    _grad_phi(_assembly.gradPhi()),
+    _phi(_assembly.phi(_var)),
+    _grad_phi(_assembly.gradPhi(_var)),
     _test(_var.phi()),
     _grad_test(_var.gradPhi()),
     _u(_var.sln()),
     _grad_u(_var.gradSln()),
-    _u_dot(_var.uDot()),
-    _du_dot_du(_var.duDotDu()),
     _drop_duplicate_points(parameters.get<bool>("drop_duplicate_points"))
 {
+  addMooseVariableDependency(mooseVariable());
+
   // Stateful material properties are not allowed on DiracKernels
   statefulPropertiesAllowed(false);
 }
@@ -95,7 +96,7 @@ DiracKernel::DiracKernel(const InputParameters & parameters)
 void
 DiracKernel::computeResidual()
 {
-  DenseVector<Number> & re = _assembly.residualBlock(_var.number());
+  prepareVectorTag(_assembly, _var.number());
 
   const std::vector<unsigned int> * multiplicities =
       _drop_duplicate_points ? NULL : &_local_dirac_kernel_info.getPoints()[_current_elem].second;
@@ -111,15 +112,17 @@ DiracKernel::computeResidual()
         multiplicity = (*multiplicities)[local_qp++];
 
       for (_i = 0; _i < _test.size(); _i++)
-        re(_i) += multiplicity * computeQpResidual();
+        _local_re(_i) += multiplicity * computeQpResidual();
     }
   }
+
+  accumulateTaggedLocalResidual();
 }
 
 void
 DiracKernel::computeJacobian()
 {
-  DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), _var.number());
+  prepareMatrixTag(_assembly, _var.number(), _var.number());
 
   const std::vector<unsigned int> * multiplicities =
       _drop_duplicate_points ? NULL : &_local_dirac_kernel_info.getPoints()[_current_elem].second;
@@ -136,9 +139,11 @@ DiracKernel::computeJacobian()
 
       for (_i = 0; _i < _test.size(); _i++)
         for (_j = 0; _j < _phi.size(); _j++)
-          ke(_i, _j) += multiplicity * computeQpJacobian();
+          _local_ke(_i, _j) += multiplicity * computeQpJacobian();
     }
   }
+
+  accumulateTaggedLocalMatrix();
 }
 
 void
@@ -150,7 +155,7 @@ DiracKernel::computeOffDiagJacobian(unsigned int jvar)
   }
   else
   {
-    DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), jvar);
+    prepareMatrixTag(_assembly, _var.number(), jvar);
 
     const std::vector<unsigned int> * multiplicities =
         _drop_duplicate_points ? NULL : &_local_dirac_kernel_info.getPoints()[_current_elem].second;
@@ -167,9 +172,11 @@ DiracKernel::computeOffDiagJacobian(unsigned int jvar)
 
         for (_i = 0; _i < _test.size(); _i++)
           for (_j = 0; _j < _phi.size(); _j++)
-            ke(_i, _j) += multiplicity * computeQpOffDiagJacobian(jvar);
+            _local_ke(_i, _j) += multiplicity * computeQpOffDiagJacobian(jvar);
       }
     }
+
+    accumulateTaggedLocalMatrix();
   }
 }
 
@@ -433,6 +440,13 @@ void
 DiracKernel::clearPoints()
 {
   _local_dirac_kernel_info.clearPoints();
+}
+
+void
+DiracKernel::meshChanged()
+{
+  _point_cache.clear();
+  _reverse_point_cache.clear();
 }
 
 MooseVariable &

@@ -1,25 +1,25 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GAPHEATPOINTSOURCEMASTER_H
-#define GAPHEATPOINTSOURCEMASTER_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 // Moose Includes
 #include "DiracKernel.h"
 #include "PenetrationLocator.h"
 
 // Forward Declarations
-class GapHeatPointSourceMaster;
-
-template <>
-InputParameters validParams<GapHeatPointSourceMaster>();
 
 class GapHeatPointSourceMaster : public DiracKernel
 {
 public:
+  static InputParameters validParams();
+
   GapHeatPointSourceMaster(const InputParameters & parameters);
 
   virtual void addPoints();
@@ -33,5 +33,3 @@ protected:
 
   //  std::vector<Real> _localized_slave_flux;
 };
-
-#endif // GAPHEATPOINTSOURCEMASTER_H

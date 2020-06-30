@@ -1,21 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef TORQUEREACTION_H
-#define TORQUEREACTION_H
+#pragma once
 
 #include "NodalPostprocessor.h"
 
 // Forward Declarations
-class TorqueReaction;
 class AuxiliarySystem;
-
-template <>
-InputParameters validParams<TorqueReaction>();
 
 /*
  * TorqueReaction calculates the torque in 2D and 3D about a user-specified
@@ -35,6 +32,8 @@ InputParameters validParams<TorqueReaction>();
 class TorqueReaction : public NodalPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   TorqueReaction(const InputParameters & parameters);
 
   virtual void initialize();
@@ -54,5 +53,3 @@ protected:
 
   Real _sum;
 };
-
-#endif // TORQUEREACTION_H

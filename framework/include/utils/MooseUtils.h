@@ -1,30 +1,39 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef MOOSEUTILS_H
-#define MOOSEUTILS_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 // MOOSE includes
 #include "HashMap.h"
-#include "MaterialProperty.h" // MaterialProperties
+#include "InfixIterator.h"
+#include "MooseEnumItem.h"
+#include "MooseError.h"
+#include "Moose.h"
+#include "DualReal.h"
+
+#include "libmesh/compare_types.h"
+#include "libmesh/bounding_box.h"
+#include "metaphysicl/raw_type.h"
+#include "metaphysicl/metaphysicl_version.h"
 
 // C++ includes
 #include <string>
 #include <vector>
 #include <map>
 #include <list>
+#include <iterator>
 
 // Forward Declarations
+class InputParameters;
+class ExecFlagEnum;
+class MaterialProperties;
+
 namespace libMesh
 {
 class Elem;
@@ -33,9 +42,47 @@ namespace Parallel
 class Communicator;
 }
 }
+class MultiMooseEnum;
+namespace MetaPhysicL
+{
+#if METAPHYSICL_MAJOR_VERSION < 1
+template <typename, typename>
+class DualNumber;
+#else
+#include "metaphysicl/dualnumber_forward.h"
+#endif
+}
+namespace std
+{
+#if METAPHYSICL_MAJOR_VERSION < 1
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> abs(const MetaPhysicL::DualNumber<T, D> & in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> abs(MetaPhysicL::DualNumber<T, D> && in);
+#else
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> abs(const MetaPhysicL::DualNumber<T, D, asd> & in);
+template <typename T, typename D, bool asd>
+MetaPhysicL::DualNumber<T, D, asd> abs(MetaPhysicL::DualNumber<T, D, asd> && in);
+#endif
+}
 
 namespace MooseUtils
 {
+
+/// Replaces all occurences of from in str with to and returns the result.
+std::string replaceAll(std::string str, const std::string & from, const std::string & to);
+
+/**
+ * Replaces "LATEST" placeholders with the latest checkpoint file name.  If base_only is true, then
+ * only return the base-name of the checkpoint directory - otherwise, a full mesh
+ * checkpoint file path is returned.
+ */
+std::string convertLatestCheckpoint(std::string orig, bool base_only = true);
+
+/// Computes and returns the Levenshtein distance between strings s1 and s2.
+int levenshteinDist(const std::string & s1, const std::string & s2);
+
 /**
  * This function will escape all of the standard C++ escape characters so that they can be printed.
  * The
@@ -46,7 +93,26 @@ void escape(std::string & str);
 /**
  * Standard scripting language trim function
  */
-std::string trim(std::string str, const std::string & white_space = " \t\n\v\f\r");
+std::string trim(const std::string & str, const std::string & white_space = " \t\n\v\f\r");
+
+/**
+ * Python like split function for strings.
+ *
+ * NOTE: This is similar to the tokenize function, but it maintains empty items, which tokenize does
+ *       not. For example, "foo;bar;;" becomes {"foo", "bar", "", ""}.
+ */
+std::vector<std::string> split(const std::string & str, const std::string & delimiter);
+
+/**
+ * Python like join function for strings.
+ */
+template <typename T>
+std::string join(const T & strings, const std::string & delimiter);
+
+/**
+ * Check the file size.
+ */
+std::size_t fileSize(const std::string & filename);
 
 /**
  * This function tokenizes a path and checks to see if it contains the string to look for
@@ -78,21 +144,25 @@ bool checkFileWriteable(const std::string & filename, bool throw_on_unwritable =
  * This function implements a parallel barrier function but writes progress
  * to stdout.
  */
-void parallelBarrierNotify(const libMesh::Parallel::Communicator & comm);
+void parallelBarrierNotify(const libMesh::Parallel::Communicator & comm, bool messaging = true);
 
 /**
  * This function marks the begin of a section of code that is executed in serial
  * rank by rank. The section must be closed with a call to serialEnd.
  * These functions are intended for debugging use to obtain clean terminal output
  * from multiple ranks (use --keep-cout).
+ * @param comm The communicator to use
+ * @param warn Whether or not to warn that something is being serialized
  */
-void serialBegin(const libMesh::Parallel::Communicator & comm);
+void serialBegin(const libMesh::Parallel::Communicator & comm, bool warn = true);
 
 /**
  * Closes a section of code that is executed in serial rank by rank, and that was
  * opened with a call to serialBegin. No MPI communication can happen in this block.
+ * @param comm The communicator to use
+ * @param warn Whether or not to warn that something is being serialized
  */
-void serialEnd(const libMesh::Parallel::Communicator & comm);
+void serialEnd(const libMesh::Parallel::Communicator & comm, bool warn = true);
 
 /**
  * Function tests if the supplied filename as the desired extension
@@ -102,6 +172,12 @@ void serialEnd(const libMesh::Parallel::Communicator & comm);
  * @return True if the filename has the supplied extension
  */
 bool hasExtension(const std::string & filename, std::string ext, bool strip_exodus_ext = false);
+
+/**
+ * Removes any file extension from the fiven string s (i.e. any ".[extension]" suffix of s) and
+ * returns the result.
+ */
+std::string stripExtension(const std::string & s);
 
 /**
  * Function for splitting path and filename
@@ -137,6 +213,11 @@ std::string shortName(const std::string & name);
 std::string baseName(const std::string & name);
 
 /**
+ * Get the hostname the current process is running on
+ */
+std::string hostname();
+
+/**
  * This routine is a simple helper function for searching a map by values instead of keys
  */
 template <typename T1, typename T2>
@@ -157,9 +238,20 @@ doesMapContainValue(const std::map<T1, T2> & the_map, const T2 & value)
  * @param tol The tolerance to be used
  * @return true if var1 and var2 are equal within tol
  */
-bool absoluteFuzzyEqual(const libMesh::Real & var1,
-                        const libMesh::Real & var2,
-                        const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+absoluteFuzzyEqual(const T & var1,
+                   const T2 & var2,
+                   const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (std::abs(MetaPhysicL::raw_value(var1) - MetaPhysicL::raw_value(var2)) <=
+          MetaPhysicL::raw_value(tol));
+}
 
 /**
  * Function to check whether a variable is greater than or equal to another variable within an
@@ -169,9 +261,20 @@ bool absoluteFuzzyEqual(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 > var2 or var1 == var2 within tol
  */
-bool absoluteFuzzyGreaterEqual(const libMesh::Real & var1,
-                               const libMesh::Real & var2,
-                               const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+absoluteFuzzyGreaterEqual(const T & var1,
+                          const T2 & var2,
+                          const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (MetaPhysicL::raw_value(var1) >=
+          (MetaPhysicL::raw_value(var2) - MetaPhysicL::raw_value(tol)));
+}
 
 /**
  * Function to check whether a variable is greater than another variable within an absolute
@@ -181,9 +284,20 @@ bool absoluteFuzzyGreaterEqual(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 > var2 and var1 != var2 within tol
  */
-bool absoluteFuzzyGreaterThan(const libMesh::Real & var1,
-                              const libMesh::Real & var2,
-                              const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+absoluteFuzzyGreaterThan(const T & var1,
+                         const T2 & var2,
+                         const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (MetaPhysicL::raw_value(var1) >
+          (MetaPhysicL::raw_value(var2) + MetaPhysicL::raw_value(tol)));
+}
 
 /**
  * Function to check whether a variable is less than or equal to another variable within an absolute
@@ -193,9 +307,20 @@ bool absoluteFuzzyGreaterThan(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 < var2 or var1 == var2 within tol
  */
-bool absoluteFuzzyLessEqual(const libMesh::Real & var1,
-                            const libMesh::Real & var2,
-                            const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+absoluteFuzzyLessEqual(const T & var1,
+                       const T2 & var2,
+                       const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (MetaPhysicL::raw_value(var1) <=
+          (MetaPhysicL::raw_value(var2) + MetaPhysicL::raw_value(tol)));
+}
 
 /**
  * Function to check whether a variable is less than another variable within an absolute tolerance
@@ -204,9 +329,20 @@ bool absoluteFuzzyLessEqual(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 < var2 and var1 != var2 within tol
  */
-bool absoluteFuzzyLessThan(const libMesh::Real & var1,
-                           const libMesh::Real & var2,
-                           const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+absoluteFuzzyLessThan(const T & var1,
+                      const T2 & var2,
+                      const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (MetaPhysicL::raw_value(var1) <
+          (MetaPhysicL::raw_value(var2) - MetaPhysicL::raw_value(tol)));
+}
 
 /**
  * Function to check whether two variables are equal within a relative tolerance
@@ -215,9 +351,22 @@ bool absoluteFuzzyLessThan(const libMesh::Real & var1,
  * @param tol The relative tolerance to be used
  * @return true if var1 and var2 are equal within relative tol
  */
-bool relativeFuzzyEqual(const libMesh::Real & var1,
-                        const libMesh::Real & var2,
-                        const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+relativeFuzzyEqual(const T & var1,
+                   const T2 & var2,
+                   const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (absoluteFuzzyEqual(
+      var1,
+      var2,
+      tol * (std::abs(MetaPhysicL::raw_value(var1)) + std::abs(MetaPhysicL::raw_value(var2)))));
+}
 
 /**
  * Function to check whether a variable is greater than or equal to another variable within a
@@ -227,9 +376,22 @@ bool relativeFuzzyEqual(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 > var2 or var1 == var2 within relative tol
  */
-bool relativeFuzzyGreaterEqual(const libMesh::Real & var1,
-                               const libMesh::Real & var2,
-                               const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+relativeFuzzyGreaterEqual(const T & var1,
+                          const T2 & var2,
+                          const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (absoluteFuzzyGreaterEqual(
+      var1,
+      var2,
+      tol * (std::abs(MetaPhysicL::raw_value(var1)) + std::abs(MetaPhysicL::raw_value(var2)))));
+}
 
 /**
  * Function to check whether a variable is greater than another variable within a relative tolerance
@@ -238,9 +400,22 @@ bool relativeFuzzyGreaterEqual(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 > var2 and var1 != var2 within relative tol
  */
-bool relativeFuzzyGreaterThan(const libMesh::Real & var1,
-                              const libMesh::Real & var2,
-                              const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+relativeFuzzyGreaterThan(const T & var1,
+                         const T2 & var2,
+                         const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (absoluteFuzzyGreaterThan(
+      var1,
+      var2,
+      tol * (std::abs(MetaPhysicL::raw_value(var1)) + std::abs(MetaPhysicL::raw_value(var2)))));
+}
 
 /**
  * Function to check whether a variable is less than or equal to another variable within a relative
@@ -250,9 +425,22 @@ bool relativeFuzzyGreaterThan(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 < var2 or var1 == var2 within relative tol
  */
-bool relativeFuzzyLessEqual(const libMesh::Real & var1,
-                            const libMesh::Real & var2,
-                            const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+relativeFuzzyLessEqual(const T & var1,
+                       const T2 & var2,
+                       const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (absoluteFuzzyLessEqual(
+      var1,
+      var2,
+      tol * (std::abs(MetaPhysicL::raw_value(var1)) + std::abs(MetaPhysicL::raw_value(var2)))));
+}
 
 /**
  * Function to check whether a variable is less than another variable within a relative tolerance
@@ -261,9 +449,22 @@ bool relativeFuzzyLessEqual(const libMesh::Real & var1,
  * @param tol The tolerance to be used
  * @return true if var1 < var2 and var1 != var2 within relative tol
  */
-bool relativeFuzzyLessThan(const libMesh::Real & var1,
-                           const libMesh::Real & var2,
-                           const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+relativeFuzzyLessThan(const T & var1,
+                      const T2 & var2,
+                      const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (absoluteFuzzyLessThan(
+      var1,
+      var2,
+      tol * (std::abs(MetaPhysicL::raw_value(var1)) + std::abs(MetaPhysicL::raw_value(var2)))));
+}
 
 /**
  * Function to dump the contents of MaterialPropertyStorage for debugging purposes
@@ -309,6 +510,10 @@ indentMessage(const std::string & prefix, std::string & message, const char * co
  */
 std::string & removeColor(std::string & msg);
 
+std::list<std::string> listDir(const std::string path, bool files_only = false);
+
+bool pathExists(const std::string & path);
+
 /**
  * Retrieves the names of all of the files contained within the list of directories passed into the
  * routine.
@@ -318,11 +523,13 @@ std::string & removeColor(std::string & msg);
 std::list<std::string> getFilesInDirs(const std::list<std::string> & directory_list);
 
 /**
- * Returns the most recent checkpoint file given a list of files.
+ * Returns the most recent checkpoint or mesh file given a list of files.
  * If a suitable file isn't found the empty string is returned
  * @param checkpoint_files the list of files to analyze
  */
-std::string getRecoveryFileBase(const std::list<std::string> & checkpoint_files);
+std::string getLatestMeshCheckpointFile(const std::list<std::string> & checkpoint_files);
+
+std::string getLatestAppCheckpointFileBase(const std::list<std::string> & checkpoint_files);
 
 /*
  * Checks to see if a string matches a search string
@@ -375,7 +582,7 @@ tokenizeAndConvert(const std::string & str,
   tokenized_vector.resize(tokens.size());
   for (unsigned int j = 0; j < tokens.size(); ++j)
   {
-    std::stringstream ss(tokens[j]);
+    std::stringstream ss(trim(tokens[j]));
     // we have to make sure that the conversion succeeded _and_ that the string
     // was fully read to avoid situations like [conversion to Real] 3.0abc to work
     if ((ss >> tokenized_vector[j]).fail() || !ss.eof())
@@ -383,6 +590,220 @@ tokenizeAndConvert(const std::string & str,
   }
   return true;
 }
+
+/**
+ * convert takes a string representation of a number type and converts it to the number.
+ * This method is here to get around deficiencies in the STL stoi and stod methods where they
+ * might successfully convert part of a string to a number when we'd like to throw an error.
+ */
+template <typename T>
+T
+convert(const std::string & str, bool throw_on_failure = false)
+{
+  std::stringstream ss(str);
+  T val;
+  if ((ss >> val).fail() || !ss.eof())
+  {
+    std::string msg =
+        std::string("Unable to convert '") + str + "' to type " + demangle(typeid(T).name());
+
+    if (throw_on_failure)
+      throw std::invalid_argument(msg);
+    else
+      mooseError(msg);
+  }
+
+  return val;
 }
 
-#endif // MOOSEUTILS_H
+template <>
+short int convert<short int>(const std::string & str, bool throw_on_failure);
+
+template <>
+unsigned short int convert<unsigned short int>(const std::string & str, bool throw_on_failure);
+
+template <>
+int convert<int>(const std::string & str, bool throw_on_failure);
+
+template <>
+unsigned int convert<unsigned int>(const std::string & str, bool throw_on_failure);
+
+template <>
+long int convert<long int>(const std::string & str, bool throw_on_failure);
+
+template <>
+unsigned long int convert<unsigned long int>(const std::string & str, bool throw_on_failure);
+
+template <>
+long long int convert<long long int>(const std::string & str, bool throw_on_failure);
+
+template <>
+unsigned long long int convert<unsigned long long int>(const std::string & str,
+                                                       bool throw_on_failure);
+
+/**
+ * Create a symbolic link, if the link already exists it is replaced.
+ */
+void createSymlink(const std::string & target, const std::string & link);
+
+/**
+ * Remove a symbolic link, if the given filename is a link.
+ */
+void clearSymlink(const std::string & link);
+
+/**
+ * Convert supplied string to upper case.
+ * @params name The string to convert upper case.
+ */
+std::string toUpper(const std::string & name);
+
+/**
+ * Convert supplied string to lower case.
+ * @params name The string to convert upper case.
+ */
+std::string toLower(const std::string & name);
+
+/**
+ * Returns a container that contains the content of second passed in container
+ * inserted into the first passed in container (set or map union).
+ */
+template <typename T>
+T
+concatenate(T c1, const T & c2)
+{
+  c1.insert(c2.begin(), c2.end());
+  return c1;
+}
+
+/**
+ * Returns a vector that contains is the concatenation of the two passed in vectors.
+ */
+template <typename T>
+std::vector<T>
+concatenate(std::vector<T> c1, const std::vector<T> & c2)
+{
+  c1.insert(c1.end(), c2.begin(), c2.end());
+  return c1;
+}
+
+/**
+ * Returns the passed in vector with the item appended to it.
+ */
+template <typename T>
+std::vector<T>
+concatenate(std::vector<T> c1, const T & item)
+{
+  c1.push_back(item);
+  return c1;
+}
+
+/**
+ * Return the number of digits for a number.
+ *
+ * This can foster quite a large discussion:
+ * https://stackoverflow.com/questions/1489830/efficient-way-to-determine-number-of-digits-in-an-integer
+ *
+ * For our purposes I like the following algorithm.
+ */
+template <typename T>
+int
+numDigits(const T & num)
+{
+  return num > 9 ? static_cast<int>(std::log10(static_cast<double>(num))) + 1 : 1;
+}
+
+/**
+ * Return the default ExecFlagEnum for MOOSE.
+ */
+ExecFlagEnum getDefaultExecFlagEnum();
+
+/**
+ * Robust string to integer conversion that fails for cases such at "1foo".
+ * @param input The string to convert.
+ * @param throw_on_failure Throw an invalid_argument exception instead of mooseError.
+ */
+int stringToInteger(const std::string & input, bool throw_on_failure = false);
+
+/**
+ * Linearly partition a number of items
+ *
+ * @param num_items The number of items to partition
+ * @param num_chunks The number of chunks to partition into
+ * @param chunk_id The ID of the chunk you are trying to get information about (typically the
+ * current MPI rank)
+ * @param num_local_items Output: The number of items for this chunk_id
+ * @param local_items_begin Output: The first item for this chunk_id
+ * @param local_items_end Output: One past the final item for this chunk_id
+ */
+void linearPartitionItems(dof_id_type num_items,
+                          dof_id_type num_chunks,
+                          dof_id_type chunk_id,
+                          dof_id_type & num_local_items,
+                          dof_id_type & local_items_begin,
+                          dof_id_type & local_items_end);
+
+/**
+ * Return the chunk_id that is assigned to handle item_id
+ *
+ * @param num_items Global number of items to partition
+ * @param num_chunks Total number of chunks to split into
+ * @param item_id The item to find the chunk_id for
+ * @return The chunk_id of the chunk that contains item_id
+ */
+processor_id_type
+linearPartitionChunk(dof_id_type num_items, dof_id_type num_chunks, dof_id_type item_id);
+
+/**
+ * Wrapper around PetscGetRealPath, which is a cross-platform replacement for realpath
+ */
+std::string realpath(const std::string & path);
+
+/**
+ * Like python's os.path.relpath
+ */
+std::string relativepath(const std::string & path, const std::string & start = ".");
+
+/**
+ * Custom type trait that has a ::value of true for types that cam be use interchangably
+ * with Real. Most notably it is false for complex numbers, which do not have a
+ * strict ordering (and therefore no <,>,<=,>= operators).
+ */
+template <typename T>
+struct IsLikeReal
+{
+  static constexpr bool value = false;
+};
+template <>
+struct IsLikeReal<Real>
+{
+  static constexpr bool value = true;
+};
+template <>
+struct IsLikeReal<DualReal>
+{
+  static constexpr bool value = true;
+};
+
+/**
+ * Construct a valid bounding box from 2 arbitrary points
+ *
+ * If you have 2 points in space and you wish to construct a bounding box, you should use
+ * this method to avoid unexpected behavior of the underlying BoundingBox class in libMesh.
+ * BoundingBox class expect 2 points whose coordinates are "sorted" (i.e., x-, y- and -z coordinates
+ * of the first point are smaller then the corresponding coordinates of the second point).
+ * If this "sorting" is not present, the BoundingBox class will build an empty box and any further
+ * testing of points inside the box will fail. This method will allow you to obtain the correct
+ * bounding box for any valid combination of 2 corner points of a box.
+ *
+ * @param p1 First corner of the constructed bounding box
+ * @param p2 Second corner of the constructed bounding box
+ * @return Valid bounding box
+ */
+BoundingBox buildBoundingBox(const Point & p1, const Point & p2);
+
+} // MooseUtils namespace
+
+/**
+ * find, erase, length algorithm for removing a substring from a string
+ */
+void removeSubstring(std::string & main, const std::string & sub);

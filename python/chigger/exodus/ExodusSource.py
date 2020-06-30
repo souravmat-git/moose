@@ -1,20 +1,16 @@
 #pylint: disable=missing-docstring
-#################################################################
-#                   DO NOT MODIFY THIS HEADER                   #
-#  MOOSE - Multiphysics Object Oriented Simulation Environment  #
-#                                                               #
-#            (c) 2010 Battelle Energy Alliance, LLC             #
-#                      ALL RIGHTS RESERVED                      #
-#                                                               #
-#           Prepared by Battelle Energy Alliance, LLC           #
-#             Under Contract No. DE-AC07-05ID14517              #
-#              With the U. S. Department of Energy              #
-#                                                               #
-#              See COPYRIGHT for full restrictions              #
-#################################################################
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import vtk
-from ExodusReader import ExodusReader
 import mooseutils
+from .ExodusReader import ExodusReader
 from .. import utils
 from .. import base
 from .. import filters
@@ -30,7 +26,7 @@ class ExodusSource(base.ChiggerSource):
         **kwargs: see ChiggerSource
     """
     FILTER_TYPES = [filters.ContourFilter, filters.ClipperFilterBase, filters.GeometryFilter,
-                    filters.TransformFilter, filters.TubeFilter]
+                    filters.TransformFilter, filters.TubeFilter, filters.RotationalExtrusionFilter]
 
     @staticmethod
     def getOptions():
@@ -49,14 +45,13 @@ class ExodusSource(base.ChiggerSource):
         opt.add('block', [], "A list of subdomain (block) ids or names to display, use [] to "
                              "dislpay all blocks.", vtype=list)
 
-        # Range
+        opt.add('representation', 'surface', "View volume representation.",
+                allow=['surface', 'wireframe', 'points'])
+
         opt.add('range', "The range of data to display on the volume and colorbar; range takes "
                          "precedence of min/max.", vtype=list)
         opt.add('min', "The minimum range.", vtype=float)
         opt.add('max', "The maximum range.", vtype=float)
-
-        opt.add('representation', 'surface', "View volume representation.",
-                allow=['surface', 'wireframe', 'points'])
 
         # Colormap
         opt += base.ColorMap.getOptions()
@@ -94,7 +89,7 @@ class ExodusSource(base.ChiggerSource):
 
     def getVTKSource(self):
         """
-        Returns the vtkExtractBlock object used for pulling subdomsin/sideset/nodeset data from the
+        Returns the vtkExtractBlock object used for pulling subdomain/sideset/nodeset data from the
         reader. (override)
 
         Returns:
@@ -111,42 +106,60 @@ class ExodusSource(base.ChiggerSource):
         bnds = []
         for i in range(self.__vtkextractblock.GetOutput().GetNumberOfBlocks()):
             current = self.__vtkextractblock.GetOutput().GetBlock(i)
-            if isinstance(current, vtk.vtkCommonDataModelPython.vtkUnstructuredGrid):
+            if isinstance(current, vtk.vtkUnstructuredGrid):
                 bnds.append(current.GetBounds())
 
-            elif isinstance(current, vtk.vtkCommonDataModelPython.vtkMultiBlockDataSet):
+            elif isinstance(current, vtk.vtkMultiBlockDataSet):
                 for j in range(current.GetNumberOfBlocks()):
                     bnds.append(current.GetBlock(j).GetBounds())
 
         return utils.get_bounds_min_max(*bnds)
 
-    def getRange(self):
+    def getRange(self, local=False):
         """
         Return range of the active variable and blocks.
         """
         self.checkUpdateState()
-        return self.__getRange()
+        if self.__current_variable is None:
+            return (None, None)
+        elif not local:
+            return self.__getRange()
+        else:
+            return self.__getLocalRange()
 
     def __getRange(self):
         """
-        Compute the range of visible objects for he supplied variable and component.
+        Private version of range for the update method.
         """
         component = self.getOption('component')
         pairs = []
         for i in range(self.__vtkextractblock.GetOutput().GetNumberOfBlocks()):
             current = self.__vtkextractblock.GetOutput().GetBlock(i)
-            if isinstance(current, vtk.vtkCommonDataModelPython.vtkUnstructuredGrid):
+            if isinstance(current, vtk.vtkUnstructuredGrid):
                 array = self.__getActiveArray(current)
                 if array:
                     pairs.append(array.GetRange(component))
 
-            elif isinstance(current, vtk.vtkCommonDataModelPython.vtkMultiBlockDataSet):
+            elif isinstance(current, vtk.vtkMultiBlockDataSet):
                 for j in range(current.GetNumberOfBlocks()):
                     array = self.__getActiveArray(current.GetBlock(j))
                     if array:
                         pairs.append(array.GetRange(component))
 
         return utils.get_min_max(*pairs)
+
+    def __getLocalRange(self):
+        """
+        Determine the range of visible items.
+        """
+        component = self.getOption('component')
+        self.getVTKMapper().Update() # required to have up-to-date ranges
+        data = self.getVTKMapper().GetInput()
+        out = self.__getActiveArray(data)
+        if out is not None:
+            return out.GetRange(component)
+        else:
+            return [None, None]
 
     def __getActiveArray(self, data):
         """
@@ -204,7 +217,7 @@ class ExodusSource(base.ChiggerSource):
         for item in ['block', 'boundary', 'nodeset']:
             if self.isOptionValid(item) and self.getOption(item) == []:
                 self.setOption(item, [item.name for item in \
-                                      block_info[getattr(ExodusReader, item.upper())].itervalues()])
+                                      block_info[getattr(ExodusReader, item.upper())].values()])
         self.setNeedsUpdate(False) # this function does not need to update again
 
         def get_indices(option, vtk_type):
@@ -214,7 +227,7 @@ class ExodusSource(base.ChiggerSource):
             indices = []
             if self.isOptionValid(option):
                 blocks = self.getOption(option)
-                for vtkid, item in block_info[vtk_type].iteritems():
+                for vtkid, item in block_info[vtk_type].items():
                     for name in blocks:
                         if (item.name == str(name)) or (str(name) == vtkid):
                             indices.append(item.multiblock_index)
@@ -271,7 +284,7 @@ class ExodusSource(base.ChiggerSource):
         if not available:
             return
 
-        default = available[available.keys()[0]]
+        default = available[list(available.keys())[0]]
         if not self.isOptionValid('variable'):
             varinfo = default
         else:
@@ -322,7 +335,8 @@ class ExodusSource(base.ChiggerSource):
                                   '"range" option, the "range" is being utilized, the others are '
                                   'ignored.')
 
-        rng = list(self.__getRange())
+        # Range
+        rng = list(self.__getRange()) # Use range from all sources as the default
         if self.isOptionValid('range'):
             rng = self.getOption('range')
         else:
@@ -336,4 +350,20 @@ class ExodusSource(base.ChiggerSource):
                                   ", the range/min/max settings are being ignored.")
             rng = list(self.__getRange())
 
-        self._vtkmapper.SetScalarRange(rng)
+        self.getVTKMapper().SetScalarRange(rng)
+
+        # Handle Elemental variables that are not everywhere on the domain
+        varname = self.__current_variable.name
+        block = self.getOption('block')
+        if (self.__current_variable.object_type == ExodusReader.ELEMENTAL) and (block is not None):
+            for i in range(self.__vtkextractblock.GetOutput().GetNumberOfBlocks()):
+                if not hasattr(self.__vtkextractblock.GetOutput().GetBlock(i), 'GetNumberOfBlocks'):
+                    continue
+                for j in range(self.__vtkextractblock.GetOutput().GetBlock(i).GetNumberOfBlocks()):
+                    blk = self.__vtkextractblock.GetOutput().GetBlock(i).GetBlock(j)
+                    if not blk.GetCellData().HasArray(varname):
+                        data = vtk.vtkDoubleArray()
+                        data.SetName(varname)
+                        data.SetNumberOfTuples(blk.GetCellData().GetArray(0).GetNumberOfTuples())
+                        data.FillComponent(0, vtk.vtkMath.Nan())
+                        blk.GetCellData().AddArray(data)

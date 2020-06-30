@@ -1,36 +1,31 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "Indicator.h"
 #include "Assembly.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 #include "Problem.h"
 #include "SubProblem.h"
 #include "SystemBase.h"
 
-// libmesh includes
 #include "libmesh/threads.h"
 
-template <>
+defineLegacyParams(Indicator);
+
 InputParameters
-validParams<Indicator>()
+Indicator::validParams()
 {
-  InputParameters params = validParams<MooseObject>();
-  params += validParams<BlockRestrictable>();
-  params += validParams<OutputInterface>();
-  params += validParams<MaterialPropertyInterface>();
+  InputParameters params = MooseObject::validParams();
+  params += BlockRestrictable::validParams();
+  params += OutputInterface::validParams();
+  params += MaterialPropertyInterface::validParams();
 
   params.addParam<bool>("use_displaced_mesh",
                         false,
@@ -48,16 +43,16 @@ validParams<Indicator>()
 
 Indicator::Indicator(const InputParameters & parameters)
   : MooseObject(parameters),
-    BlockRestrictable(parameters),
+    BlockRestrictable(this),
     SetupInterface(this),
     FunctionInterface(this),
     UserObjectInterface(this),
-    Restartable(parameters, "Indicators"),
+    Restartable(this, "Indicators"),
     OutputInterface(parameters),
-    MaterialPropertyInterface(this, blockIDs()),
-    _subproblem(*parameters.get<SubProblem *>("_subproblem")),
-    _fe_problem(*parameters.get<FEProblemBase *>("_fe_problem_base")),
-    _sys(*parameters.get<SystemBase *>("_sys")),
+    MaterialPropertyInterface(this, blockIDs(), Moose::EMPTY_BOUNDARY_IDS),
+    _subproblem(*getCheckedPointerParam<SubProblem *>("_subproblem")),
+    _fe_problem(*getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
+    _sys(*getCheckedPointerParam<SystemBase *>("_sys")),
     _solution(_sys.solution()),
     _tid(parameters.get<THREAD_ID>("_tid")),
     _assembly(_subproblem.assembly(_tid)),

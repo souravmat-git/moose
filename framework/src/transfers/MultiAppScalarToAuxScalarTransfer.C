@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiAppScalarToAuxScalarTransfer.h"
 
@@ -21,16 +16,20 @@
 #include "MultiApp.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/meshfree_interpolation.h"
 #include "libmesh/system.h"
 
 // Define the input parameters
-template <>
+registerMooseObject("MooseApp", MultiAppScalarToAuxScalarTransfer);
+
+defineLegacyParams(MultiAppScalarToAuxScalarTransfer);
+
 InputParameters
-validParams<MultiAppScalarToAuxScalarTransfer>()
+MultiAppScalarToAuxScalarTransfer::validParams()
 {
-  InputParameters params = validParams<MultiAppTransfer>();
+  InputParameters params = MultiAppTransfer::validParams();
+  params.addClassDescription(
+      "Transfers data between a scalar non-linear variable and a scalar auxiliary variable.");
   params.addRequiredParam<VariableName>("source_variable",
                                         "The name of the scalar variable in the MultiApp to "
                                         "transfer the value from.");
@@ -46,6 +45,8 @@ MultiAppScalarToAuxScalarTransfer::MultiAppScalarToAuxScalarTransfer(
     _from_variable_name(getParam<VariableName>("source_variable")),
     _to_aux_name(getParam<VariableName>("to_aux_scalar"))
 {
+  if (_directions.size() != 1)
+    paramError("direction", "This transfer is only unidirectional");
 }
 
 void
@@ -54,7 +55,7 @@ MultiAppScalarToAuxScalarTransfer::execute()
   _console << "Beginning ScalarToAuxScalarTransfer " << name() << std::endl;
 
   // Perform action based on the transfer direction
-  switch (_direction)
+  switch (_current_direction)
   {
     // MasterApp -> SubApp
     case TO_MULTIAPP:
@@ -75,7 +76,7 @@ MultiAppScalarToAuxScalarTransfer::execute()
           to_variable->reinit();
 
           // Determine number of DOFs that we're going to read and write
-          std::vector<dof_id_type> & to_dof = to_variable->dofIndices();
+          auto && to_dof = to_variable->dofIndices();
           auto & from_values = from_variable->sln();
 
           // Check that the DOF matches
@@ -84,7 +85,7 @@ MultiAppScalarToAuxScalarTransfer::execute()
                        "receiving data for the "
                        "MultiAppScalarToAuxScalarTransfer!");
 
-          for (auto j = beginIndex(from_values); j < from_values.size(); ++j)
+          for (MooseIndex(from_values) j = 0; j < from_values.size(); ++j)
             to_variable->sys().solution().set(to_dof[j], from_values[j]);
 
           to_variable->sys().solution().close();
@@ -103,7 +104,7 @@ MultiAppScalarToAuxScalarTransfer::execute()
       to_variable->reinit();
 
       // The dof indices for the scalar variable of interest
-      std::vector<dof_id_type> & to_dof = to_variable->dofIndices();
+      auto && to_dof = to_variable->dofIndices();
 
       // Loop over each sub-app and populate the AuxVariable values
       for (unsigned int i = 0; i < _multi_app->numGlobalApps(); i++)
@@ -124,7 +125,7 @@ MultiAppScalarToAuxScalarTransfer::execute()
                        "receiving data for the "
                        "MultiAppScalarToAuxScalarTransfer!");
 
-          for (auto j = beginIndex(from_values); j < from_values.size(); ++j)
+          for (MooseIndex(from_values) j = 0; j < from_values.size(); ++j)
             to_variable->sys().solution().set(to_dof[j], from_values[j]);
         }
       }

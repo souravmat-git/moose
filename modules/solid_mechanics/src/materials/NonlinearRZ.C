@@ -1,16 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "NonlinearRZ.h"
 #include "SolidModel.h"
 #include "Problem.h"
 #include "SymmIsotropicElasticityTensor.h"
 
-// libmesh includes
 #include "libmesh/quadrature.h"
 
 namespace SolidMechanics
@@ -83,7 +84,13 @@ NonlinearRZ::computeIncrementalDeformationGradient(std::vector<ColumnMajorMatrix
 
   if (_volumetric_locking_correction)
   {
-    Fhat_average /= volume;
+    // Check for the case when Materials are being reinit by a SideIntegralPP
+    // active on the axis of rotation on a solid axisymmetric model
+    // where the r coordinate will be zero
+    if (volume != 0.0)
+      Fhat_average /= volume;
+    else
+      Fhat_average *= 0.0;
     const Real det_Fhat_average(detMatrix(Fhat_average));
 
     // Finalize volumetric locking correction

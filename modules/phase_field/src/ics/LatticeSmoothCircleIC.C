@@ -1,18 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LatticeSmoothCircleIC.h"
 #include "MooseMesh.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", LatticeSmoothCircleIC);
+
 InputParameters
-validParams<LatticeSmoothCircleIC>()
+LatticeSmoothCircleIC::validParams()
 {
-  InputParameters params = validParams<SmoothCircleBaseIC>();
+  InputParameters params = SmoothCircleBaseIC::validParams();
   params.addClassDescription("Perturbed square lattice of smooth circles");
   params.addDeprecatedParam<Real>("Rnd_variation",
                                   "Variation from central lattice position",
@@ -21,7 +24,7 @@ validParams<LatticeSmoothCircleIC>()
   params.addRequiredParam<std::vector<unsigned int>>(
       "circles_per_side", "Vector containing the number of bubbles along each side");
   params.addParam<unsigned int>("rand_seed", 2000, "random seed");
-  params.addRequiredParam<Real>("radius", "Mean radius value for the circels");
+  params.addRequiredParam<Real>("radius", "Mean radius value for the circles");
   params.addParam<Real>(
       "radius_variation", 0.0, "Plus or minus fraction of random variation in the bubble radius");
   MooseEnum rand_options("uniform normal none", "none");

@@ -1,24 +1,17 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef ARBITRARYQUADRATURE_H
-#define ARBITRARYQUADRATURE_H
+#pragma once
 
 // MOOSE includes
 #include "Moose.h" // using namespace libMesh
 
-// libMesh includes
 #include "libmesh/quadrature.h"
 
 /**
@@ -34,7 +27,15 @@ public:
 
   QuadratureType type() const override;
 
+  /**
+   * Set the quadrature points. Note that this also sets the quadrature weights to unity
+   */
   void setPoints(const std::vector<Point> & points);
+
+  /**
+   * Set the quadrature weights
+   */
+  void setWeights(const std::vector<Real> & weights);
 
   virtual bool shapes_need_reinit() override { return true; }
 
@@ -48,5 +49,3 @@ private:
   void init_2D(const ElemType _type = INVALID_ELEM, unsigned int p_level = 0) override;
   void init_3D(const ElemType _type = INVALID_ELEM, unsigned int p_level = 0) override;
 };
-
-#endif // ARBITRARYQUADRATURE_H

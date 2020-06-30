@@ -1,21 +1,19 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef FUNCTIONINTERFACE_H
-#define FUNCTIONINTERFACE_H
+#pragma once
 
 #include "MooseTypes.h"
+
+#define usingFunctionInterfaceMembers                                                              \
+  using FunctionInterface::getFunction;                                                            \
+  using FunctionInterface::getFunctionByName
 
 // Forward declarations
 class Function;
@@ -48,19 +46,21 @@ public:
    */
   FunctionInterface(const MooseObject * moose_object);
 
+  static InputParameters validParams();
+
   /**
    * Get a function with a given name
    * @param name The name of the parameter key of the function to retrieve
    * @return The function with name associated with the parameter 'name'
    */
-  Function & getFunction(const std::string & name);
+  const Function & getFunction(const std::string & name) const;
 
   /**
    * Get a function with a given name
    * @param name The name of the function to retrieve
    * @return The function with name 'name'
    */
-  Function & getFunctionByName(const FunctionName & name);
+  const Function & getFunctionByName(const FunctionName & name) const;
 
 private:
   /// Parameters of the object with this interface
@@ -70,7 +70,5 @@ private:
   FEProblemBase & _fni_feproblem;
 
   /// Thread ID
-  THREAD_ID _fni_tid;
+  const THREAD_ID _fni_tid;
 };
-
-#endif // FUNCTIONINTERFACE_H

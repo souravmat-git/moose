@@ -1,16 +1,29 @@
-#!/usr/bin/env python
-from JsonData import JsonData
-from peacock.utils.FileCache import FileCache
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import os
-import cStringIO
-from BlockInfo import BlockInfo
-from ParameterInfo import ParameterInfo
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from io import StringIO
+from peacock.utils.FileCache import FileCache
+from .JsonData import JsonData
+from .BlockInfo import BlockInfo
+from .ParameterInfo import ParameterInfo
 
 class ExecutableInfo(object):
     """
     Holds the Json of an executable.
     """
     SETTINGS_KEY = "ExecutableInfo"
+    SETTINGS_KEY_TEST_OBJS = "ExecutableWithTestObjectsInfo"
     CACHE_VERSION = 4
     def __init__(self, **kwds):
         super(ExecutableInfo, self).__init__(**kwds)
@@ -19,7 +32,7 @@ class ExecutableInfo(object):
         self.path_map = {}
         self.type_to_block_map = {}
 
-    def setPath(self, new_path):
+    def setPath(self, new_path, use_test_objects=False):
         """
         Executable path set property.
         Will try to generate the json data of the executable.
@@ -27,7 +40,13 @@ class ExecutableInfo(object):
         if not new_path:
             return
 
-        fc = FileCache(self.SETTINGS_KEY, new_path, self.CACHE_VERSION)
+        setting_key = self.SETTINGS_KEY
+        extra_args = []
+        if use_test_objects:
+            setting_key = self.SETTINGS_KEY_TEST_OBJS
+            extra_args = ["--allow-test-objects"]
+
+        fc = FileCache(setting_key, new_path, self.CACHE_VERSION)
         if fc.path == self.path:
             # If we are setting the path again, we need to make sure the executable itself hasn't changed
             if not fc.dirty:
@@ -44,7 +63,7 @@ class ExecutableInfo(object):
                 self.path = fc.path
                 return
 
-        json_data = JsonData(fc.path)
+        json_data = JsonData(fc.path, extra_args)
         if json_data.app_path:
             self.json_data = json_data
             self.path = fc.path
@@ -63,6 +82,7 @@ class ExecutableInfo(object):
     @staticmethod
     def clearCache():
         FileCache.clearAll(ExecutableInfo.SETTINGS_KEY)
+        FileCache.clearAll(ExecutableInfo.SETTINGS_KEY_TEST_OBJS)
 
     def toPickle(self):
         return {"json_data": self.json_data.toPickle(),
@@ -92,19 +112,19 @@ class ExecutableInfo(object):
     def _getCommonParameters(self, block):
         actions = block.get("actions", {})
         all_params = {}
-        for name, data in actions.iteritems():
+        for name, data in actions.items():
             all_params.update(self.getDict(data, "parameters"))
         return all_params
 
     def _processChild(self, parent, jdata, is_hard):
         info = self._createBasicInfo(parent, jdata, is_hard)
-        for name, child in self.getDict(jdata, "subblocks").iteritems():
+        for name, child in self.getDict(jdata, "subblocks").items():
             child["name"] = name
             child_info = self._processChild(info, child, True & is_hard)
             info.addChildBlock(child_info)
             self.path_map[child_info.path] = child_info
 
-        for name, child in self.getDict(jdata, "types").iteritems():
+        for name, child in self.getDict(jdata, "types").items():
             child["name"] = name
             child_info = self._processChild(info, child, False)
             info.types[name] = child_info
@@ -114,18 +134,18 @@ class ExecutableInfo(object):
             star_node = self._processChild(info, jdata["star"], False)
             info.setStarInfo(star_node)
 
-        for name, child in self.getDict(jdata, "subblock_types").iteritems():
+        for name, child in self.getDict(jdata, "subblock_types").items():
             child["name"] = name
             child_info = self._processChild(info, child, False)
             info.types[name] = child_info
 
         common_params = self._getCommonParameters(jdata)
-        for name, param in common_params.iteritems():
+        for name, param in common_params.items():
             param_info = ParameterInfo(info, name)
             param_info.setFromData(param)
             info.addParameter(param_info)
 
-        for name, param in self.getDict(jdata, "parameters").iteritems():
+        for name, param in self.getDict(jdata, "parameters").items():
             param_info = ParameterInfo(info, name)
             param_info.setFromData(param)
             info.addParameter(param_info)
@@ -146,7 +166,7 @@ class ExecutableInfo(object):
     def _createPathMap(self):
         self.path_map = {}
         self.root_info = BlockInfo(None, "/", False, "root node")
-        for name, block in self.json_data.json_data["blocks"].iteritems():
+        for name, block in self.json_data.json_data["blocks"].items():
             block["name"] = name
             block_info = self._processChild(self.root_info, block, True)
             self.root_info.addChildBlock(block_info)
@@ -166,7 +186,7 @@ class ExecutableInfo(object):
                 self._dumpNode(output, entry.children[c], level+1, prefix, only_hard=only_hard)
 
     def dumpDefaultTree(self, hard_only=False):
-        output = cStringIO.StringIO()
+        output = StringIO()
         for c in sorted(self.path_map.keys()):
             if c == "/":
                 continue

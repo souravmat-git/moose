@@ -1,26 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "DifferencePostprocessor.h"
 
-template <>
+registerMooseObject("MooseApp", DifferencePostprocessor);
+
+defineLegacyParams(DifferencePostprocessor);
+
 InputParameters
-validParams<DifferencePostprocessor>()
+DifferencePostprocessor::validParams()
 {
-  InputParameters params = validParams<GeneralPostprocessor>();
+  InputParameters params = GeneralPostprocessor::validParams();
   params.addRequiredParam<PostprocessorName>("value1", "First value");
   params.addRequiredParam<PostprocessorName>("value2", "Second value");
-
+  params.addClassDescription("Computes the difference between two postprocessors");
   return params;
 }
 

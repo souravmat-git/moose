@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "Split.h"
@@ -20,11 +15,14 @@
 #include "Conversion.h"
 #include "NonlinearSystem.h"
 
-template <>
+registerMooseObject("MooseApp", Split);
+
+defineLegacyParams(Split);
+
 InputParameters
-validParams<Split>()
+Split::validParams()
 {
-  InputParameters params = validParams<MooseObject>();
+  InputParameters params = MooseObject::validParams();
   params.addParam<std::vector<NonlinearVariableName>>(
       "vars", "Variables Split operates on (omitting this implies \"all variables\"");
   params.addParam<std::vector<SubdomainName>>(
@@ -74,8 +72,8 @@ validParams<Split>()
 
 Split::Split(const InputParameters & parameters)
   : MooseObject(parameters),
-    Restartable(parameters, "Splits"),
-    _fe_problem(*parameters.getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
+    Restartable(this, "Splits"),
+    _fe_problem(*getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
     _vars(getParam<std::vector<NonlinearVariableName>>("vars")),
     _blocks(getParam<std::vector<SubdomainName>>("blocks")),
     _sides(getParam<std::vector<BoundaryName>>("sides")),
@@ -198,9 +196,10 @@ Split::setup(const std::string & prefix)
 
   // Now we set the user-specified petsc options for this split, possibly overriding the above
   // settings.
-  for (const auto & op : _petsc_options.flags)
+  for (const auto & item : _petsc_options.flags)
   {
     // Need to prepend the prefix and strip off the leading '-' on the option name.
+    std::string op(item);
     if (op[0] != '-')
       mooseError("Invalid PETSc option name ", op, " for Split ", _name);
 

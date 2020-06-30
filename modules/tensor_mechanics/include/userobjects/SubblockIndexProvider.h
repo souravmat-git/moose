@@ -1,26 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SUBBLOCKINDEXPROVIDER_H
-#define SUBBLOCKINDEXPROVIDER_H
+#pragma once
 
 #include "GeneralUserObject.h"
-
-class SubblockIndexProvider;
-
-template <>
-InputParameters validParams<SubblockIndexProvider>();
 
 /**
  * Abstract base class for user objects that provide an index for a given element that is
@@ -30,6 +19,8 @@ InputParameters validParams<SubblockIndexProvider>();
 class SubblockIndexProvider : public GeneralUserObject
 {
 public:
+  static InputParameters validParams();
+
   SubblockIndexProvider(const InputParameters & params) : GeneralUserObject(params) {}
 
   /**
@@ -42,5 +33,3 @@ public:
    */
   virtual unsigned int getMaxSubblockIndex() const = 0;
 };
-
-#endif /* SCALARVARIABLEINDEXPROVIDER_H */

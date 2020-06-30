@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef FUNCTIONPERIODICBOUNDARY_H
-#define FUNCTIONPERIODICBOUNDARY_H
+#pragma once
 
 #include "Moose.h"
 
@@ -62,18 +56,16 @@ protected:
   unsigned int _dim;
 
   /// Pointer to Function for x-component of the boundary
-  Function * _tr_x;
+  const Function * const _tr_x;
 
   /// Pointer to Function for y-component of the boundary
-  Function * _tr_y;
+  const Function * const _tr_y;
 
   /// Pointer to Function for z-component of the boundary
-  Function * _tr_z;
+  const Function * const _tr_z;
 
   /**
-   * An initialization method to make certain that intialSetup() of a function prior to value()
+   * An initialization method to make certain that initialSetup() of a function prior to value()
    */
   void init();
 };
-
-#endif // FUNCTIONPERIODICBOUNDARY_H

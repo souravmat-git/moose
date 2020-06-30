@@ -1,10 +1,20 @@
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "PolynomialFreeEnergy.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", PolynomialFreeEnergy);
+
 InputParameters
-validParams<PolynomialFreeEnergy>()
+PolynomialFreeEnergy::validParams()
 {
-  InputParameters params = validParams<DerivativeParsedMaterialHelper>();
+  InputParameters params = DerivativeParsedMaterialHelper::validParams();
   params.addClassDescription("Polynomial free energy for single component systems");
   MooseEnum poly_order("4 6 8");
   params.addRequiredParam<MooseEnum>(
@@ -33,12 +43,12 @@ PolynomialFreeEnergy::PolynomialFreeEnergy(const InputParameters & parameters)
       free_energy(_c, _W, _a) = pow(2.0, 4.0) * _W * pow(_c - _a, 2) * pow(1 - _c - _a, 2);
       break;
     case 1: // 6th order
-      free_energy(_c, _W, _a) =
-          pow(2.0, 6.0) * _W * (2.0 * pow(_c, 6) - 6.0 * pow(_c, 5) +
-                                (3.0 * _a + 27.0 / 4.0 - 3.0 * _a * _a) * pow(_c, 4) +
-                                (-6.0 * _a - 7.0 / 2.0 + 6.0 * _a * _a) * pow(_c, 3) +
-                                (9.0 / 2.0 * _a - 9.0 / 2.0 * _a * _a + 3.0 / 4.0) * pow(_c, 2) +
-                                (3.0 / 2.0 * _a * _a - 3.0 / 2.0 * _a) * _c);
+      free_energy(_c, _W, _a) = pow(2.0, 6.0) * _W *
+                                (2.0 * pow(_c, 6) - 6.0 * pow(_c, 5) +
+                                 (3.0 * _a + 27.0 / 4.0 - 3.0 * _a * _a) * pow(_c, 4) +
+                                 (-6.0 * _a - 7.0 / 2.0 + 6.0 * _a * _a) * pow(_c, 3) +
+                                 (9.0 / 2.0 * _a - 9.0 / 2.0 * _a * _a + 3.0 / 4.0) * pow(_c, 2) +
+                                 (3.0 / 2.0 * _a * _a - 3.0 / 2.0 * _a) * _c);
       break;
     case 2: // 8th order
       free_energy(_c, _W, _a) =

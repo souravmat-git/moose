@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MATERIALTENSORCALCULATORTOOLS_H
-#define MATERIALTENSORCALCULATORTOOLS_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "libmesh/vector_value.h"
 #include "MooseTypes.h"
@@ -51,13 +53,15 @@ Real hydrostatic(const SymmTensor & symm_tensor);
  * The volumentric strain is the change in volume over the original volume. In
  * this method the squared and cubic terms are included so that the calculation
  * is valid for both small and finite strains.
+ * @param strain Total logarithmic strain
+ * @return volumetric strain (delta V / V)
  */
 Real volumetricStrain(const SymmTensor & symm_strain);
 
 /*
-* The first invariant of a tensor is the sum of the diagonal component; defined
-* in L. Malvern, Introduction to the Mechanics of a Continuous Mediam (1969) pg 89.
-*/
+ * The first invariant of a tensor is the sum of the diagonal component; defined
+ * in L. Malvern, Introduction to the Mechanics of a Continuous Mediam (1969) pg 89.
+ */
 Real firstInvariant(const SymmTensor & symm_tensor);
 
 /*
@@ -66,7 +70,7 @@ Real firstInvariant(const SymmTensor & symm_tensor);
  * Note that the Hjelmstad version of the second invariant is the negative of
  * the second invariant given in L. Malvern, Introduction to the Mechanics of a
  * Continuous Medium (1969) pg 89.
-*/
+ */
 Real secondInvariant(const SymmTensor & symm_tensor);
 
 /*
@@ -142,7 +146,7 @@ Real hoopStress(const SymmTensor & symm_stress,
  * @param point2 The end point of the rotation axis
  * @param curr_point The reference corresponding to the stress (pass in _q_point[_qp])
  * @param direction The direction vector in which the scalar stress value is calculated.
-*/
+ */
 Real radialStress(const SymmTensor & symm_stress,
                   const Point & point1,
                   const Point & point2,
@@ -174,5 +178,3 @@ Real directionValueTensor(const SymmTensor & symm_tensor, const RealVectorValue 
  */
 Real triaxialityStress(const SymmTensor & symm_stress);
 }
-
-#endif // MATERIALTENSORCALCULATORTOOLS_H

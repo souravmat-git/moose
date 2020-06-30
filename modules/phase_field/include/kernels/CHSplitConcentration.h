@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CHSPLITCONCENTRATION_H
-#define CHSPLITCONCENTRATION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "DerivativeMaterialInterface.h"
-
-class CHSplitConcentration;
-
-template <>
-InputParameters validParams<CHSplitConcentration>();
 
 /**
  * Solves Cahn-Hilliard equation using
@@ -22,6 +19,8 @@ InputParameters validParams<CHSplitConcentration>();
 class CHSplitConcentration : public DerivativeMaterialInterface<Kernel>
 {
 public:
+  static InputParameters validParams();
+
   CHSplitConcentration(const InputParameters & parameters);
 
 protected:
@@ -39,5 +38,3 @@ protected:
   const unsigned int _mu_var;
   const VariableGradient & _grad_mu;
 };
-
-#endif

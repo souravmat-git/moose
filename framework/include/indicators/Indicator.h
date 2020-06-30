@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef INDICATOR_H
-#define INDICATOR_H
+#pragma once
 
 #include "MooseObject.h"
 #include "BlockRestrictable.h"
@@ -45,7 +39,10 @@ class Indicator : public MooseObject,
                   public MaterialPropertyInterface
 {
 public:
+  static InputParameters validParams();
+
   Indicator(const InputParameters & parameters);
+
   virtual ~Indicator(){};
 
   /**
@@ -81,4 +78,3 @@ protected:
 
   MooseMesh & _mesh;
 };
-#endif /* INDICATOR_H */

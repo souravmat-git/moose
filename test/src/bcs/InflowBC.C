@@ -1,10 +1,20 @@
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "InflowBC.h"
 
-template <>
+registerMooseObject("MooseTestApp", InflowBC);
+
 InputParameters
-validParams<InflowBC>()
+InflowBC::validParams()
 {
-  InputParameters params = validParams<IntegratedBC>();
+  InputParameters params = IntegratedBC::validParams();
   params.addRequiredParam<RealVectorValue>("velocity", "The velocity vector");
   params.addRequiredParam<Real>("inlet_conc", "The inlet concentration");
   return params;

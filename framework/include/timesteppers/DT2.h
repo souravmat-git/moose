@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef DT2_H
-#define DT2_H
+#pragma once
 
 // MOOSE includes
 #include "TimeStepper.h"
@@ -38,6 +32,8 @@ InputParameters validParams<DT2>();
 class DT2 : public TimeStepper
 {
 public:
+  static InputParameters validParams();
+
   DT2(const InputParameters & parameters);
 
   virtual void preExecute() override;
@@ -45,7 +41,7 @@ public:
   virtual void step() override;
 
   virtual void rejectStep() override;
-  virtual bool converged() override;
+  virtual bool converged() const override;
 
 protected:
   virtual Real computeInitialDT() override;
@@ -66,4 +62,3 @@ protected:
   Real _max_increase;
 };
 
-#endif /* DT2_H */

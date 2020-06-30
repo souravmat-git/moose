@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeFiniteStrainElasticStress.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeFiniteStrainElasticStress);
+
 InputParameters
-validParams<ComputeFiniteStrainElasticStress>()
+ComputeFiniteStrainElasticStress::validParams()
 {
-  InputParameters params = validParams<ComputeStressBase>();
+  InputParameters params = ComputeStressBase::validParams();
   params.addClassDescription("Compute stress using elasticity for finite strains");
   return params;
 }
@@ -19,10 +23,12 @@ ComputeFiniteStrainElasticStress::ComputeFiniteStrainElasticStress(
     const InputParameters & parameters)
   : ComputeStressBase(parameters),
     GuaranteeConsumer(this),
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _strain_increment(getMaterialPropertyByName<RankTwoTensor>(_base_name + "strain_increment")),
     _rotation_increment(
         getMaterialPropertyByName<RankTwoTensor>(_base_name + "rotation_increment")),
-    _stress_old(getMaterialPropertyOld<RankTwoTensor>(_base_name + "stress")),
+    _stress_old(getMaterialPropertyOldByName<RankTwoTensor>(_base_name + "stress")),
     _elastic_strain_old(getMaterialPropertyOldByName<RankTwoTensor>(_base_name + "elastic_strain"))
 {
 }
@@ -33,20 +39,6 @@ ComputeFiniteStrainElasticStress::initialSetup()
   if (!hasGuaranteedMaterialProperty(_elasticity_tensor_name, Guarantee::ISOTROPIC))
     mooseError("ComputeFiniteStrainElasticStress can only be used with elasticity tensor materials "
                "that guarantee isotropic tensors.");
-
-  _is_elasticity_tensor_guaranteed_constant_in_time =
-      hasGuaranteedMaterialProperty(_elasticity_tensor_name, Guarantee::CONSTANT_IN_TIME);
-  if ((isParamValid("initial_stress")) && !_is_elasticity_tensor_guaranteed_constant_in_time)
-    mooseError("A finite stress material cannot both have an initial stress and an elasticity "
-               "tensor with varying values; please use a defined constant elasticity tensor, "
-               "such as ComputeIsotropicElasticityTensor, if your model defines an initial "
-               "stress, or apply an initial strain instead.");
-}
-
-void
-ComputeFiniteStrainElasticStress::initQpStatefulProperties()
-{
-  ComputeStressBase::initQpStatefulProperties();
 }
 
 void
@@ -55,12 +47,8 @@ ComputeFiniteStrainElasticStress::computeQpStress()
   // Calculate the stress in the intermediate configuration
   RankTwoTensor intermediate_stress;
 
-  // Check if the elasticity tensor has changed values
-  if (!_is_elasticity_tensor_guaranteed_constant_in_time)
-    intermediate_stress =
-        _elasticity_tensor[_qp] * (_elastic_strain_old[_qp] + _strain_increment[_qp]);
-  else
-    intermediate_stress = _stress_old[_qp] + _elasticity_tensor[_qp] * _strain_increment[_qp];
+  intermediate_stress =
+      _elasticity_tensor[_qp] * (_elastic_strain_old[_qp] + _strain_increment[_qp]);
 
   // Rotate the stress state to the current configuration
   _stress[_qp] =

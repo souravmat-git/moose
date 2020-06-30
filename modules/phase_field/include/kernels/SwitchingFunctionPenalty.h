@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SWITCHINGFUNCTIONPENALTY_H
-#define SWITCHINGFUNCTIONPENALTY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "DerivativeMaterialInterface.h"
-
-// Forward Declarations
-class SwitchingFunctionPenalty;
-
-template <>
-InputParameters validParams<SwitchingFunctionPenalty>();
 
 /**
  * SwitchingFunctionPenalty is a constraint kernel adds a penalty
@@ -24,6 +20,8 @@ InputParameters validParams<SwitchingFunctionPenalty>();
 class SwitchingFunctionPenalty : public DerivativeMaterialInterface<Kernel>
 {
 public:
+  static InputParameters validParams();
+
   SwitchingFunctionPenalty(const InputParameters & parameters);
 
 protected:
@@ -51,5 +49,3 @@ protected:
   /// Index of the eta this kernel is operating on
   int _a;
 };
-
-#endif // SWITCHINGFUNCTIONPENALTY_H

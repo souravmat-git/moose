@@ -1,26 +1,26 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GBDEPENDENTTENSORBASE_H
-#define GBDEPENDENTTENSORBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "DerivativeMaterialInterface.h"
 #include "RankTwoTensor.h"
 
-class GBDependentTensorBase;
-
-template <>
-InputParameters validParams<GBDependentTensorBase>();
 /**
  * Base class to define GB dependent properties
  */
 class GBDependentTensorBase : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   GBDependentTensorBase(const InputParameters & parameters);
 
 protected:
@@ -34,5 +34,3 @@ protected:
   const MaterialProperty<RankTwoTensor> & _gb_normal_tensor;
   MaterialProperty<RealTensorValue> & _gb_dependent_tensor;
 };
-
-#endif

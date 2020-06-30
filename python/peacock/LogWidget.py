@@ -1,3 +1,12 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 from PyQt5.QtWidgets import QWidget, QTextBrowser
 from PyQt5.QtCore import pyqtSlot
 from peacock.utils import WidgetUtils
@@ -45,7 +54,7 @@ class LogWidget(QWidget, MooseWidget):
         if not msg:
             return
 
-        msg = msg.encode('utf-8') # make sure if there are bad characters in the message that we can show them.
+        msg = msg.encode('utf-8').decode() # make sure if there are bad characters in the message that we can show them.
 
         if not color or color == "None":
             color = "white"

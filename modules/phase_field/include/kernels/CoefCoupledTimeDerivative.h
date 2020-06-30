@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COEFCOUPLEDTIMEDERIVATIVE_H
-#define COEFCOUPLEDTIMEDERIVATIVE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "CoupledTimeDerivative.h"
-
-// Forward Declaration
-class CoefCoupledTimeDerivative;
-
-template <>
-InputParameters validParams<CoefCoupledTimeDerivative>();
 
 /**
  * This calculates the time derivative for a coupled variable multiplied by a
@@ -22,6 +18,8 @@ InputParameters validParams<CoefCoupledTimeDerivative>();
 class CoefCoupledTimeDerivative : public CoupledTimeDerivative
 {
 public:
+  static InputParameters validParams();
+
   CoefCoupledTimeDerivative(const InputParameters & parameters);
 
 protected:
@@ -30,5 +28,3 @@ protected:
 
   const Real _coef;
 };
-
-#endif // COEFCOUPLEDTIMEDERIVATIVE_H

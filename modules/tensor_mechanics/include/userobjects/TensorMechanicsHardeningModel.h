@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSHARDENINGMODEL_H
-#define TENSORMECHANICSHARDENINGMODEL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GeneralUserObject.h"
-
-class TensorMechanicsHardeningModel;
-
-template <>
-InputParameters validParams<TensorMechanicsHardeningModel>();
 
 /**
  * Hardening Model base class.  The derived classes will provide
@@ -25,6 +22,8 @@ InputParameters validParams<TensorMechanicsHardeningModel>();
 class TensorMechanicsHardeningModel : public GeneralUserObject
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsHardeningModel(const InputParameters & parameters);
 
   void initialize();
@@ -48,5 +47,3 @@ public:
    */
   virtual std::string modelName() const = 0;
 };
-
-#endif // TENSORMECHANICSHARDENINGMODEL_H

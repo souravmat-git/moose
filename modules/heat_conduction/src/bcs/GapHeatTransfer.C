@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "GapHeatTransfer.h"
 
 // MOOSE includes
@@ -14,20 +17,24 @@
 #include "PenetrationLocator.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseObject("HeatConductionApp", GapHeatTransfer);
+
 InputParameters
-validParams<GapHeatTransfer>()
+GapHeatTransfer::validParams()
 {
-  InputParameters params = validParams<IntegratedBC>();
+  InputParameters params = IntegratedBC::validParams();
+  params.addClassDescription("Transfers heat across a gap between two "
+                             "surfaces dependent on the gap geometry specified.");
   params.addParam<std::string>(
       "appended_property_name", "", "Name appended to material properties to make them unique");
 
   // Common
   params.addParam<Real>("min_gap", 1.0e-6, "A minimum gap size");
   params.addParam<Real>("max_gap", 1.0e6, "A maximum gap size");
+  params.addRangeCheckedParam<unsigned int>(
+      "min_gap_order", 0, "min_gap_order<=1", "Order of the Taylor expansion below min_gap");
 
   // Deprecated parameter
   MooseEnum coord_types("default XYZ cyl", "default");
@@ -80,8 +87,8 @@ validParams<GapHeatTransfer>()
 
 GapHeatTransfer::GapHeatTransfer(const InputParameters & parameters)
   : IntegratedBC(parameters),
-    _gap_geometry_params_set(false),
-    _gap_geometry_type(GapConductance::PLATE),
+    _gap_geometry_type(declareRestartableData<GapConductance::GAP_GEOMETRY>("gap_geometry_type",
+                                                                            GapConductance::PLATE)),
     _quadrature(getParam<bool>("quadrature")),
     _slave_flux(!_quadrature ? &_sys.getVector("slave_flux") : NULL),
     _gap_conductance(getMaterialProperty<Real>("gap_conductance" +
@@ -89,6 +96,7 @@ GapHeatTransfer::GapHeatTransfer(const InputParameters & parameters)
     _gap_conductance_dT(getMaterialProperty<Real>(
         "gap_conductance" + getParam<std::string>("appended_property_name") + "_dT")),
     _min_gap(getParam<Real>("min_gap")),
+    _min_gap_order(getParam<unsigned int>("min_gap_order")),
     _max_gap(getParam<Real>("max_gap")),
     _gap_temp(0),
     _gap_distance(std::numeric_limits<Real>::max()),
@@ -103,7 +111,13 @@ GapHeatTransfer::GapHeatTransfer(const InputParameters & parameters)
                            parameters.get<BoundaryName>("paired_boundary"),
                            getParam<std::vector<BoundaryName>>("boundary")[0],
                            Utility::string_to_enum<Order>(parameters.get<MooseEnum>("order")))),
-    _warnings(getParam<bool>("warnings"))
+    _warnings(getParam<bool>("warnings")),
+    _p1(declareRestartableData<Point>("cylinder_axis_point_1", Point(0, 1, 0))),
+    _p2(declareRestartableData<Point>("cylinder_axis_point_2", Point(0, 0, 0))),
+    _pinfo(nullptr),
+    _slave_side_phi(nullptr),
+    _slave_side(nullptr),
+    _slave_j(0)
 {
   if (isParamValid("displacements"))
   {
@@ -142,8 +156,12 @@ GapHeatTransfer::GapHeatTransfer(const InputParameters & parameters)
 void
 GapHeatTransfer::initialSetup()
 {
-  GapConductance::setGapGeometryParameters(
-      _pars, _assembly.coordSystem(), _gap_geometry_type, _p1, _p2);
+  GapConductance::setGapGeometryParameters(_pars,
+                                           _assembly.coordSystem(),
+                                           _fe_problem.getAxisymmetricRadialCoord(),
+                                           _gap_geometry_type,
+                                           _p1,
+                                           _p2);
 }
 
 Real
@@ -174,24 +192,132 @@ GapHeatTransfer::computeSlaveFluxContribution(Real grad_t)
   return _coord[_qp] * _JxW[_qp] * _test[_i][_qp] * grad_t;
 }
 
+void
+GapHeatTransfer::computeJacobian()
+{
+  prepareMatrixTag(_assembly, _var.number(), _var.number());
+
+  for (_qp = 0; _qp < _qrule->n_points(); _qp++)
+  {
+    // compute this up front because it only depends on the quadrature point
+    computeGapValues();
+
+    for (_i = 0; _i < _test.size(); _i++)
+      for (_j = 0; _j < _phi.size(); _j++)
+        _local_ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpJacobian();
+
+    // Ok now do the contribution from the slave side
+    if (_quadrature && _has_info)
+    {
+      std::vector<dof_id_type> slave_side_dof_indices;
+
+      _sys.dofMap().dof_indices(_slave_side, slave_side_dof_indices, _var.number());
+
+      DenseMatrix<Number> K_slave(_var.dofIndices().size(), slave_side_dof_indices.size());
+
+      mooseAssert(
+          _slave_side_phi->size() == slave_side_dof_indices.size(),
+          "The number of shapes does not match the number of dof indices on the slave elem");
+
+      for (_i = 0; _i < _test.size(); _i++)
+        for (_slave_j = 0; _slave_j < static_cast<unsigned int>(slave_side_dof_indices.size());
+             ++_slave_j)
+          K_slave(_i, _slave_j) += _JxW[_qp] * _coord[_qp] * computeSlaveQpJacobian();
+
+      _subproblem.assembly(_tid).cacheJacobianBlock(
+          K_slave, _var.dofIndices(), slave_side_dof_indices, _var.scalingFactor());
+    }
+  }
+
+  accumulateTaggedLocalMatrix();
+
+  if (_has_diag_save_in)
+  {
+    unsigned int rows = _local_ke.m();
+    DenseVector<Number> diag(rows);
+    for (unsigned int i = 0; i < rows; i++)
+      diag(i) = _local_ke(i, i);
+
+    Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
+    for (unsigned int i = 0; i < _diag_save_in.size(); i++)
+      _diag_save_in[i]->sys().solution().add_vector(diag, _diag_save_in[i]->dofIndices());
+  }
+}
+
+void
+GapHeatTransfer::computeJacobianBlock(unsigned int jvar)
+{
+  if (jvar == _var.number())
+  {
+    computeJacobian();
+    return;
+  }
+
+  prepareMatrixTag(_assembly, _var.number(), jvar);
+
+  // This (undisplaced) jvar could potentially yield the wrong phi size if this object is acting
+  // on the displaced mesh
+  auto phi_size = _sys.getVariable(_tid, jvar).dofIndices().size();
+
+  for (_qp = 0; _qp < _qrule->n_points(); _qp++)
+  {
+    // compute this up front because it only depends on the quadrature point
+    computeGapValues();
+
+    for (_i = 0; _i < _test.size(); _i++)
+      for (_j = 0; _j < phi_size; _j++)
+        _local_ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(jvar);
+
+    // Ok now do the contribution from the slave side
+    if (_quadrature && _has_info)
+    {
+      std::vector<dof_id_type> slave_side_dof_indices;
+
+      _sys.dofMap().dof_indices(_slave_side, slave_side_dof_indices, jvar);
+
+      DenseMatrix<Number> K_slave(_var.dofIndices().size(), slave_side_dof_indices.size());
+
+      mooseAssert(
+          _slave_side_phi->size() == slave_side_dof_indices.size(),
+          "The number of shapes does not match the number of dof indices on the slave elem");
+
+      for (_i = 0; _i < _test.size(); _i++)
+        for (_slave_j = 0; _slave_j < static_cast<unsigned int>(slave_side_dof_indices.size());
+             ++_slave_j)
+          K_slave(_i, _slave_j) += _JxW[_qp] * _coord[_qp] * computeSlaveQpOffDiagJacobian(jvar);
+
+      _subproblem.assembly(_tid).cacheJacobianBlock(
+          K_slave, _var.dofIndices(), slave_side_dof_indices, _var.scalingFactor());
+    }
+  }
+
+  accumulateTaggedLocalMatrix();
+}
+
 Real
 GapHeatTransfer::computeQpJacobian()
 {
-  computeGapValues();
-
   if (!_has_info)
     return 0.0;
 
-  return _test[_i][_qp] * ((_u[_qp] - _gap_temp) * _edge_multiplier * _gap_conductance_dT[_qp] +
-                           _edge_multiplier * _gap_conductance[_qp]) *
+  return _test[_i][_qp] *
+         ((_u[_qp] - _gap_temp) * _edge_multiplier * _gap_conductance_dT[_qp] +
+          _edge_multiplier * _gap_conductance[_qp]) *
          _phi[_j][_qp];
+}
+
+Real
+GapHeatTransfer::computeSlaveQpJacobian()
+{
+  return _test[_i][_qp] *
+         ((_u[_qp] - _gap_temp) * _edge_multiplier * _gap_conductance_dT[_qp] -
+          _edge_multiplier * _gap_conductance[_qp]) *
+         (*_slave_side_phi)[_slave_j][0];
 }
 
 Real
 GapHeatTransfer::computeQpOffDiagJacobian(unsigned jvar)
 {
-  computeGapValues();
-
   if (!_has_info)
     return 0.0;
 
@@ -221,7 +347,8 @@ GapHeatTransfer::computeQpOffDiagJacobian(unsigned jvar)
     // Given
     //   gapLength = ((u_x-m_x)^2+(u_y-m_y)^2+(u_z-m_z)^2)^1/2
     // where m_[xyz] is the master coordinate, then
-    //   dGapLength/du_[xyz] = 1/2*((u_x-m_x)^2+(u_y-m_y)^2+(u_z-m_z)^2)^(-1/2)*2*(u_[xyz]-m_[xyz])
+    //   dGapLength/du_[xyz] =
+    //   1/2*((u_x-m_x)^2+(u_y-m_y)^2+(u_z-m_z)^2)^(-1/2)*2*(u_[xyz]-m_[xyz])
     //                       = (u_[xyz]-m_[xyz])/gapLength
     // This is the normal vector.
 
@@ -240,16 +367,48 @@ GapHeatTransfer::computeQpOffDiagJacobian(unsigned jvar)
     const Point & normal(_normals[_qp]);
 
     const Real dgap = dgapLength(-normal(coupled_component));
-    dRdx = -(_u[_qp] - _gap_temp) * _edge_multiplier * _gap_conductance[_qp] / gapL * dgap;
+    dRdx = -(_u[_qp] - _gap_temp) * _edge_multiplier * _gap_conductance[_qp] *
+           GapConductance::gapAttenuation(gapL, _min_gap, _min_gap_order) * dgap;
   }
   return _test[_i][_qp] * dRdx * _phi[_j][_qp];
+}
+
+Real
+GapHeatTransfer::computeSlaveQpOffDiagJacobian(unsigned jvar)
+{
+  if (!_has_info)
+    return 0.0;
+
+  unsigned int coupled_component;
+  bool active = false;
+  for (coupled_component = 0; coupled_component < _disp_vars.size(); ++coupled_component)
+    if (jvar == _disp_vars[coupled_component])
+    {
+      active = true;
+      break;
+    }
+
+  Real dRdx = 0.0;
+  if (active)
+  {
+    const Real gapL = gapLength();
+
+    const Point & normal(_normals[_qp]);
+
+    const Real dgap = dgapLength(-normal(coupled_component));
+
+    // The sign of the slave side should presumably be opposite that of the master side
+    dRdx = (_u[_qp] - _gap_temp) * _edge_multiplier * _gap_conductance[_qp] *
+           GapConductance::gapAttenuation(gapL, _min_gap, _min_gap_order) * dgap;
+  }
+  return _test[_i][_qp] * dRdx * (*_slave_side_phi)[_slave_j][0];
 }
 
 Real
 GapHeatTransfer::gapLength() const
 {
   if (_has_info)
-    return GapConductance::gapLength(_gap_geometry_type, _radius, _r1, _r2, _min_gap, _max_gap);
+    return GapConductance::gapLength(_gap_geometry_type, _radius, _r1, _r2, _max_gap);
 
   return 1.0;
 }
@@ -278,26 +437,26 @@ GapHeatTransfer::computeGapValues()
   else
   {
     Node * qnode = _mesh.getQuadratureNode(_current_elem, _current_side, _qp);
-    PenetrationInfo * pinfo = _penetration_locator->_penetration_info[qnode->id()];
+    _pinfo = _penetration_locator->_penetration_info[qnode->id()];
 
     _gap_temp = 0.0;
     _gap_distance = std::numeric_limits<Real>::max();
     _has_info = false;
     _edge_multiplier = 1.0;
 
-    if (pinfo)
+    if (_pinfo)
     {
-      _gap_distance = pinfo->_distance;
+      _gap_distance = _pinfo->_distance;
       _has_info = true;
 
-      Elem * slave_side = pinfo->_side;
-      std::vector<std::vector<Real>> & slave_side_phi = pinfo->_side_phi;
-      _gap_temp = _variable->getValue(slave_side, slave_side_phi);
+      _slave_side = _pinfo->_side;
+      _slave_side_phi = &_pinfo->_side_phi;
+      _gap_temp = _variable->getValue(_slave_side, *_slave_side_phi);
 
       Real tangential_tolerance = _penetration_locator->getTangentialTolerance();
       if (tangential_tolerance != 0.0)
       {
-        _edge_multiplier = 1.0 - pinfo->_tangential_distance / tangential_tolerance;
+        _edge_multiplier = 1.0 - _pinfo->_tangential_distance / tangential_tolerance;
         if (_edge_multiplier < 0.0)
           _edge_multiplier = 0.0;
       }

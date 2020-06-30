@@ -1,74 +1,84 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MATERIALAUXBASE_H
-#define MATERIALAUXBASE_H
+#pragma once
 
 // MOOSE includes
 #include "AuxKernel.h"
 
 // Forward declarations
-template <typename T = Real>
-class MaterialAuxBase;
+template <typename T = Real, bool is_ad = false, typename RT = Real>
+class MaterialAuxBaseTempl;
 
 template <>
-InputParameters validParams<MaterialAuxBase<>>();
+InputParameters validParams<MaterialAuxBaseTempl<>>();
 
 /**
- * A base class for the various Material related AuxKernal objects
+ * A base class for the various Material related AuxKernal objects.
+ * \p RT is short for return type
  */
-template <typename T>
-class MaterialAuxBase : public AuxKernel
+template <typename T, bool is_ad, typename RT>
+class MaterialAuxBaseTempl : public AuxKernelTempl<RT>
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Class constructor
    * @param parameters The input parameters for this object
    */
-  MaterialAuxBase(const InputParameters & parameters);
+  MaterialAuxBaseTempl(const InputParameters & parameters);
 
 protected:
-  virtual Real computeValue() override;
+  virtual RT computeValue() override;
 
   /// Returns material property values at quadrature points
-  virtual Real getRealValue() = 0;
+  virtual RT getRealValue() = 0;
 
   /// Reference to the material property for this AuxKernel
-  const MaterialProperty<T> & _prop;
+  const GenericMaterialProperty<T, is_ad> & _prop;
 
 private:
   /// Multiplier for the material property
   const Real _factor;
 
   /// Value to be added to the material property
-  const Real _offset;
+  const RT _offset;
 };
 
-template <typename T>
-MaterialAuxBase<T>::MaterialAuxBase(const InputParameters & parameters)
-  : AuxKernel(parameters),
-    _prop(getMaterialProperty<T>("property")),
-    _factor(getParam<Real>("factor")),
-    _offset(getParam<Real>("offset"))
+template <typename T, bool is_ad, typename RT>
+InputParameters
+MaterialAuxBaseTempl<T, is_ad, RT>::validParams()
+{
+  InputParameters params = AuxKernelTempl<RT>::validParams();
+  params.addRequiredParam<MaterialPropertyName>("property", "The scalar material property name");
+  params.addParam<Real>(
+      "factor", 1, "The factor by which to multiply your material property for visualization");
+  params.addParam<RT>("offset", 0, "The offset to add to your material property for visualization");
+  return params;
+}
+
+template <typename T, bool is_ad, typename RT>
+MaterialAuxBaseTempl<T, is_ad, RT>::MaterialAuxBaseTempl(const InputParameters & parameters)
+  : AuxKernelTempl<RT>(parameters),
+    _prop(this->template getGenericMaterialProperty<T, is_ad>("property")),
+    _factor(this->template getParam<Real>("factor")),
+    _offset(this->template getParam<RT>("offset"))
 {
 }
 
-template <typename T>
-Real
-MaterialAuxBase<T>::computeValue()
+template <typename T, bool is_ad, typename RT>
+RT
+MaterialAuxBaseTempl<T, is_ad, RT>::computeValue()
 {
   return _factor * getRealValue() + _offset;
 }
 
-#endif // MATERIALAUXBASE_H
+template <typename T = Real>
+using MaterialAuxBase = MaterialAuxBaseTempl<T, false, Real>;

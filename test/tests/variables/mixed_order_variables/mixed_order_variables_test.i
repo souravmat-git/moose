@@ -43,7 +43,7 @@
     variable = u
   [../]
   [./ffn]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = force_fn
   [../]
@@ -53,6 +53,7 @@
   [./all]
     type = FunctionDirichletBC
     variable = u
+    preset = false
     boundary = '0 1 2 3'
     function = exact_fn
   [../]
@@ -77,7 +78,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

@@ -1,19 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "PolycrystalRandomICAction.h"
 #include "Factory.h"
 #include "FEProblem.h"
 #include "Conversion.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", PolycrystalRandomICAction, "add_ic");
+
 InputParameters
-validParams<PolycrystalRandomICAction>()
+PolycrystalRandomICAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addRequiredParam<unsigned int>("op_num", "number of order parameters to create");
   params.addRequiredParam<std::string>("var_name_base", "specifies the base name of the variables");
   MooseEnum typ_options("continuous discrete");
@@ -49,7 +53,7 @@ PolycrystalRandomICAction::act()
     poly_params.set<VariableName>("variable") = _var_name_base + Moose::stringify(op);
     poly_params.set<unsigned int>("op_num") = _op_num;
     poly_params.set<unsigned int>("op_index") = op;
-    poly_params.set<unsigned int>("typ") = _random_type;
+    poly_params.set<unsigned int>("random_type") = _random_type;
 
     // Add initial condition
     _problem->addInitialCondition("PolycrystalRandomIC",

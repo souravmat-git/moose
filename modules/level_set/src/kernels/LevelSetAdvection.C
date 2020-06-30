@@ -1,40 +1,34 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-// MOOSE includes
 #include "LevelSetAdvection.h"
 
-template <>
+registerMooseObject("LevelSetApp", LevelSetAdvection);
+
 InputParameters
-validParams<LevelSetAdvection>()
+LevelSetAdvection::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = ADKernelValue::validParams();
   params.addClassDescription("Implements the level set advection equation: $\\vec{v}\\cdot\\nabla "
                              "u = 0$, where the weak form is $(\\psi_i, \\vec{v}\\cdot\\nabla u) = "
                              "0$.");
-  params += validParams<LevelSetVelocityInterface<>>();
+  params.addRequiredCoupledVar("velocity", "Velocity vector variable.");
   return params;
 }
 
 LevelSetAdvection::LevelSetAdvection(const InputParameters & parameters)
-  : LevelSetVelocityInterface<Kernel>(parameters)
+  : ADKernelValue(parameters), _velocity(adCoupledVectorValue("velocity"))
 {
 }
 
-Real
-LevelSetAdvection::computeQpResidual()
+ADReal
+LevelSetAdvection::precomputeQpResidual()
 {
-  computeQpVelocity();
-  return _test[_i][_qp] * (_velocity * _grad_u[_qp]);
-}
-
-Real
-LevelSetAdvection::computeQpJacobian()
-{
-  computeQpVelocity();
-  return _test[_i][_qp] * (_velocity * _grad_phi[_j][_qp]);
+  return _velocity[_qp] * _grad_u[_qp];
 }

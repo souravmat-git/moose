@@ -7,32 +7,47 @@
 []
 
 [Variables]
-  [./u]
+  [u]
     family = LAGRANGE
     order = FIRST
-  [../]
+  []
 []
 
 [Kernels]
-  [./diff]
+  [diff]
     type = Diffusion
     variable = u
-  [../]
+  []
+[]
+
+[AuxVariables]
+  [u_elemental]
+    family = MONOMIAL
+    order = CONSTANT
+  []
+[]
+
+[AuxKernels]
+  [fun_aux]
+    type = FunctionAux
+    function = 'x + y'
+    variable = u_elemental
+  []
 []
 
 [BCs]
-  [./left]
+  [left]
     type = DirichletBC
     variable = u
     boundary = left
     value = 0
-  [../]
-  [./right]
+  []
+  [right]
     type = DirichletBC
     variable = u
     boundary = right
     value = 1
-  [../]
+  []
 []
 
 [Executioner]
@@ -40,7 +55,6 @@
   num_steps = 1
   dt = 1
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 
   petsc_options_iname = '-pc_type -pc_hypre_type'
@@ -52,28 +66,42 @@
 []
 
 [MultiApps]
-  [./sub]
+  [sub]
     type = TransientMultiApp
     app_type = MooseTestApp
     execute_on = timestep_end
-    positions = '0.48 0 0'
+    positions = '0.48 0.01 0'
     input_files = tosub_sub.i
-  [../]
+  []
 []
 
 [Transfers]
-  [./to_sub]
+  [to_sub_nodal_to_nodal]
     type = MultiAppNearestNodeTransfer
     direction = to_multiapp
     multi_app = sub
     source_variable = u
-    variable = from_master
-  [../]
-  [./elemental_to_sub]
+    variable = nodal_source_from_master_nodal
+  []
+  [to_sub_nodal_to_elemental]
     type = MultiAppNearestNodeTransfer
     direction = to_multiapp
     multi_app = sub
     source_variable = u
-    variable = elemental_from_master
-  [../]
+    variable = nodal_source_from_master_elemental
+  []
+  [to_sub_elemental_to_nodal]
+    type = MultiAppNearestNodeTransfer
+    direction = to_multiapp
+    multi_app = sub
+    source_variable = u_elemental
+    variable = elemental_source_from_master_nodal
+  []
+  [to_sub_elemental_to_elemental]
+    type = MultiAppNearestNodeTransfer
+    direction = to_multiapp
+    multi_app = sub
+    source_variable = u_elemental
+    variable = elemental_source_from_master_elemental
+  []
 []

@@ -43,7 +43,6 @@
 []
 
 [Executioner]
-  # Preconditioned JFNK (default)
   type = Steady
   solve_type = PJFNK
 []
@@ -52,6 +51,7 @@
   [./Markers]
     [./marker]
       type = QPointMarker
+      variable = u
     [../]
   [../]
 []
@@ -59,4 +59,3 @@
 [Outputs]
   exodus = true
 []
-

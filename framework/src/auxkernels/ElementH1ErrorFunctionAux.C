@@ -1,29 +1,29 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "ElementH1ErrorFunctionAux.h"
 #include "Function.h"
 
-// libmesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("MooseApp", ElementH1ErrorFunctionAux);
+
+defineLegacyParams(ElementH1ErrorFunctionAux);
+
 InputParameters
-validParams<ElementH1ErrorFunctionAux>()
+ElementH1ErrorFunctionAux::validParams()
 {
-  InputParameters params = validParams<ElementL2ErrorFunctionAux>();
+  InputParameters params = ElementL2ErrorFunctionAux::validParams();
+  params.addClassDescription(
+      "Computes the H1 or W^{1,p} error between an exact function and a coupled variable.");
+
   return params;
 }
 

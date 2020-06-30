@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SMOOTHSUPERELLIPSOIDIC_H
-#define SMOOTHSUPERELLIPSOIDIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "SmoothSuperellipsoidBaseIC.h"
 
 // Forward Declarations
-class SmoothSuperellipsoidIC;
-
-template <>
-InputParameters validParams<SmoothSuperellipsoidIC>();
 
 /**
  * SmoothSuperellipsoidIC creates a Superellipsoid of given semiaxes a,b,c and exponent n
@@ -24,6 +22,8 @@ InputParameters validParams<SmoothSuperellipsoidIC>();
 class SmoothSuperellipsoidIC : public SmoothSuperellipsoidBaseIC
 {
 public:
+  static InputParameters validParams();
+
   SmoothSuperellipsoidIC(const InputParameters & parameters);
 
 protected:
@@ -40,5 +40,3 @@ protected:
   const Real _n;
   const Point _center;
 };
-
-#endif // SMOOTHSUPERELLIPSOIDIC_H

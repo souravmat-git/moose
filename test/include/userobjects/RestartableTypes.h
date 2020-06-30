@@ -1,26 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RESTARTABLETYPES_H
-#define RESTARTABLETYPES_H
+#pragma once
 
 #include "GeneralUserObject.h"
-
-class RestartableTypes;
-
-template <>
-InputParameters validParams<RestartableTypes>();
 
 class Dummy
 {
@@ -92,6 +81,8 @@ dataLoad(std::istream & stream, DummyNeedingContext & v, void * context)
 class RestartableTypes : public GeneralUserObject
 {
 public:
+  static InputParameters validParams();
+
   RestartableTypes(const InputParameters & params);
   virtual ~RestartableTypes();
 
@@ -114,6 +105,5 @@ protected:
   std::map<unsigned int, Real> & _map_data;
   DenseVector<Real> & _dense_vector_data;
   DenseMatrix<Real> & _dense_matrix_data;
+  Parameters & _raw_parameters;
 };
-
-#endif /* RESTARTABLETYPES_H */

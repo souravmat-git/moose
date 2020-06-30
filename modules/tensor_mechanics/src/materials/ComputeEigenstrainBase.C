@@ -1,18 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeEigenstrainBase.h"
 
 #include "RankTwoTensor.h"
 
-template <>
 InputParameters
-validParams<ComputeEigenstrainBase>()
+ComputeEigenstrainBase::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params.addParam<std::string>("base_name",
                                "Optional parameter that allows the user to define "
                                "multiple mechanics material systems on the same "
@@ -21,9 +23,6 @@ validParams<ComputeEigenstrainBase>()
                                        "Material property name for the eigenstrain tensor computed "
                                        "by this model. IMPORTANT: The name of this property must "
                                        "also be provided to the strain calculator.");
-  params.addParam<bool>("incremental_form",
-                        false,
-                        "Should the eigenstrain be in incremental form (for incremental models)?");
   return params;
 }
 
@@ -31,10 +30,7 @@ ComputeEigenstrainBase::ComputeEigenstrainBase(const InputParameters & parameter
   : Material(parameters),
     _base_name(isParamValid("base_name") ? getParam<std::string>("base_name") + "_" : ""),
     _eigenstrain_name(_base_name + getParam<std::string>("eigenstrain_name")),
-    _incremental_form(getParam<bool>("incremental_form")),
     _eigenstrain(declareProperty<RankTwoTensor>(_eigenstrain_name)),
-    _eigenstrain_old(_incremental_form ? &getMaterialPropertyOld<RankTwoTensor>(_eigenstrain_name)
-                                       : NULL),
     _step_zero(declareRestartableData<bool>("step_zero", true))
 {
 }
@@ -42,8 +38,9 @@ ComputeEigenstrainBase::ComputeEigenstrainBase(const InputParameters & parameter
 void
 ComputeEigenstrainBase::initQpStatefulProperties()
 {
-  if (_incremental_form)
-    _eigenstrain[_qp].zero();
+  // This property can be promoted to be stateful by other models that use it,
+  // so it needs to be initalized.
+  _eigenstrain[_qp].zero();
 }
 
 void
@@ -62,12 +59,17 @@ ComputeEigenstrainBase::computeQpProperties()
 Real
 ComputeEigenstrainBase::computeVolumetricStrainComponent(const Real volumetric_strain) const
 {
+  // The engineering strain in a given direction is:
+  // epsilon_eng = cbrt(volumetric_strain + 1.0) - 1.0
+  //
+  // We need to provide this as a logarithmic strain to be consistent with the strain measure
+  // used for finite strain:
+  // epsilon_log = log(1.0 + epsilon_eng)
+  //
+  // This can be simplified down to a more direct form:
+  // epsilon_log = log(cbrt(volumetric_strain + 1.0))
+  // or:
+  // epsilon_log = (1/3) log(volumetric_strain + 1.0)
 
-  Real volumetric_strain_comp = std::cbrt(volumetric_strain + 1.0) - 1.0;
-
-  // Convert to logarithmic strain to compute strains to exactly recover
-  // volumetric strain in finite strain models
-  volumetric_strain_comp = std::log(1.0 + volumetric_strain_comp);
-
-  return volumetric_strain_comp;
+  return std::log(volumetric_strain + 1.0) / 3.0;
 }

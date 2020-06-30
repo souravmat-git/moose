@@ -1,31 +1,28 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "TiedValueConstraint.h"
 
 // MOOSE includes
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/sparse_matrix.h"
 
-template <>
+registerMooseObject("MooseApp", TiedValueConstraint);
+
+defineLegacyParams(TiedValueConstraint);
+
 InputParameters
-validParams<TiedValueConstraint>()
+TiedValueConstraint::validParams()
 {
-  InputParameters params = validParams<NodeFaceConstraint>();
+  InputParameters params = NodeFaceConstraint::validParams();
   params.addParam<Real>("scaling", 1, "scaling factor to be applied to constraint equations");
   params.set<bool>("use_displaced_mesh") = true;
   return params;
@@ -86,6 +83,9 @@ TiedValueConstraint::computeQpJacobian(Moose::ConstraintJacobianType type)
       break;
     case Moose::MasterMaster:
       retVal = 0;
+      break;
+    default:
+      mooseError("Unsupported type");
       break;
   }
   return retVal;

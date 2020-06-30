@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CAHNHILLIARDBASE_H
-#define CAHNHILLIARDBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "CHBulk.h"
 
@@ -40,6 +42,8 @@ protected:
   using CHBulk<T>::_grad_phi;
   using CHBulk<T>::_grad_test;
   using CHBulk<T>::_coupled_moose_vars;
+  using CHBulk<T>::_subproblem;
+  using CHBulk<T>::_tid;
 
 private:
   const unsigned int _nvar;
@@ -85,7 +89,8 @@ CahnHilliardBase<T>::CahnHilliardBase(const InputParameters & parameters)
   {
     const VariableName iname = _coupled_moose_vars[i]->name();
     if (iname == _var.name())
-      mooseError("The kernel variable should not be specified in the coupled `args` parameter.");
+      this->paramError(
+          "args", "The kernel variable should not be specified in the coupled `args` parameter.");
 
     _second_derivatives[i + 1] =
         &this->template getMaterialPropertyDerivative<Real>("f_name", _var.name(), iname);
@@ -100,7 +105,7 @@ CahnHilliardBase<T>::CahnHilliardBase(const InputParameters & parameters)
           &this->template getMaterialPropertyDerivative<Real>("f_name", _var.name(), iname, jname);
     }
 
-    _grad_vars[i + 1] = &(_coupled_moose_vars[i]->gradSln());
+    _grad_vars[i + 1] = &_subproblem.getStandardVariable(_tid, iname).gradSln();
   }
 }
 
@@ -155,5 +160,3 @@ CahnHilliardBase<T>::computeQpOffDiagJacobian(unsigned int jvar)
 
   return CHBulk<T>::computeQpOffDiagJacobian(jvar) + _M[_qp] * _grad_test[_i][_qp] * J;
 }
-
-#endif // CAHNHILLIARDBASE_H

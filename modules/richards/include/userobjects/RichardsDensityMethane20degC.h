@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSDENSITYMETHANE20DEGC_H
-#define RICHARDSDENSITYMETHANE20DEGC_H
+#pragma once
 
 #include "RichardsDensity.h"
-
-class RichardsDensityMethane20degC;
-
-template <>
-InputParameters validParams<RichardsDensityMethane20degC>();
 
 /**
  * Methane density - a quadratic fit to expressions in:
@@ -29,6 +25,8 @@ InputParameters validParams<RichardsDensityMethane20degC>();
 class RichardsDensityMethane20degC : public RichardsDensity
 {
 public:
+  static InputParameters validParams();
+
   RichardsDensityMethane20degC(const InputParameters & parameters);
 
   /**
@@ -53,5 +51,3 @@ private:
   /// Unit of measurement for pressure (should be 1 for pressure in Pa, 1E6 for pressure in MPa, etc)
   Real _p_unit;
 };
-
-#endif // RICHARDSDENSITYMETHANE20DEGC_H

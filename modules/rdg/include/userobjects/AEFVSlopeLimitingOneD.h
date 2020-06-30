@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef AEFVSLOPELIMITINGONED_H
-#define AEFVSLOPELIMITINGONED_H
+#pragma once
 
 #include "SlopeLimitingBase.h"
 
 // Forward Declarations
-class AEFVSlopeLimitingOneD;
-
-template <>
-InputParameters validParams<AEFVSlopeLimitingOneD>();
 
 /**
  * One-dimensional slope limiting to get
@@ -25,6 +22,8 @@ InputParameters validParams<AEFVSlopeLimitingOneD>();
 class AEFVSlopeLimitingOneD : public SlopeLimitingBase
 {
 public:
+  static InputParameters validParams();
+
   AEFVSlopeLimitingOneD(const InputParameters & parameters);
 
   /// compute the limited slope of the cell
@@ -37,5 +36,3 @@ protected:
   /// One-D slope limiting scheme
   MooseEnum _scheme;
 };
-
-#endif

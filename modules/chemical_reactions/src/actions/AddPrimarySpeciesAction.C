@@ -1,50 +1,44 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "AddPrimarySpeciesAction.h"
-#include "Parser.h"
 #include "FEProblem.h"
-#include "Factory.h"
 
-#include <sstream>
-#include <stdexcept>
+registerMooseAction("ChemicalReactionsApp", AddPrimarySpeciesAction, "add_variable");
 
-// libMesh includes
-#include "libmesh/libmesh.h"
-#include "libmesh/exodusII_io.h"
-#include "libmesh/equation_systems.h"
-#include "libmesh/nonlinear_implicit_system.h"
-#include "libmesh/explicit_system.h"
-#include "libmesh/string_to_enum.h"
-#include "libmesh/fe.h"
-
-template <>
 InputParameters
-validParams<AddPrimarySpeciesAction>()
+AddPrimarySpeciesAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = AddVariableAction::validParams();
   params.addRequiredParam<std::vector<NonlinearVariableName>>(
       "primary_species", "The list of primary variables to add");
+  params.addClassDescription("Adds Variables for all primary species");
   return params;
 }
 
 AddPrimarySpeciesAction::AddPrimarySpeciesAction(const InputParameters & params)
-  : Action(params), _vars(getParam<std::vector<NonlinearVariableName>>("primary_species"))
+  : AddVariableAction(params),
+    _vars(getParam<std::vector<NonlinearVariableName>>("primary_species")),
+    _scaling(isParamValid("scaling") ? getParam<std::vector<Real>>("scaling")
+                                     : std::vector<Real>(1, 1.0))
 {
 }
 
 void
 AddPrimarySpeciesAction::act()
 {
-  for (unsigned int i = 0; i < _vars.size(); ++i)
-  {
-    FEType fe_type(Utility::string_to_enum<Order>("first"),
-                   Utility::string_to_enum<FEFamily>("lagrange"));
+  auto fe_type = AddVariableAction::feType(_pars);
+  auto type = AddVariableAction::determineType(fe_type, 1);
+  auto var_params = _factory.getValidParams(type);
 
-    Real scale_factor = 1.0;
-    _problem->addVariable(_vars[i], fe_type, scale_factor);
-  }
+  var_params.applySpecificParameters(_pars, {"family", "order", "scaling"});
+
+  for (auto & var : _vars)
+    _problem->addVariable(type, var, var_params);
 }

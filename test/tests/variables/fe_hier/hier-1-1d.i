@@ -58,7 +58,7 @@
   [../]
 
   [./forcing]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn
   [../]
@@ -86,7 +86,6 @@
 
   [./h]
     type = AverageElementSize
-    variable = u
   [../]
 
   [./L2error]
@@ -110,7 +109,6 @@
   type = Steady
   nl_rel_tol = 1e-11
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

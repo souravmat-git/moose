@@ -6,40 +6,50 @@
 []
 
 [Variables]
-  [./pressure]
-  [../]
+  [pressure]
+  []
 []
 
 [AuxVariables]
-  [./velocity_x]
+  [velocity_x]
     order = CONSTANT
     family = MONOMIAL
-  [../]
+  []
+  [velocity]
+    order = CONSTANT
+    family = MONOMIAL_VEC
+  []
 []
 
 [AuxKernels]
-  [./velocity_x]
+  [velocity]
     type = DarcyVelocity
+    variable = velocity
+    execute_on = timestep_end
+    pressure = pressure
+  []
+  [velocity_x]
+    type = VectorVariableComponentAux
     variable = velocity_x
     component = x
     execute_on = timestep_end
-    darcy_pressure = pressure
-  [../]
+    vector_variable = velocity
+  []
 []
 
 [Functions]
-  [./pressure_ic_func]
+  [pressure_ic_func]
     type = ParsedFunction
     value = 2000*x*y*x*y
-  [../]
+  []
 []
 
 [ICs]
-  [./pressure_ic]
+  [pressure_ic]
     type = FunctionIC
     variable = pressure
     function = pressure_ic_func
-  [../]
+  []
 []
 
 [Problem]
@@ -50,11 +60,11 @@
 []
 
 [Materials]
-  [./pressure]
-    type = GenericConstantMaterial
+  [pressure]
+    type = ADGenericConstantMaterial
     prop_values = '0.8451e-9 7.98e-4'
     prop_names = 'permeability viscosity'
-  [../]
+  []
 []
 
 [Executioner]

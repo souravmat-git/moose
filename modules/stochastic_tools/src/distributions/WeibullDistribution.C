@@ -1,32 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "WeibullDistribution.h"
 
-template <>
+registerMooseObjectReplaced("StochasticToolsApp", WeibullDistribution, "07/01/2020 00:00", Weibull);
+
 InputParameters
-validParams<WeibullDistribution>()
+WeibullDistribution::validParams()
 {
-  InputParameters params = validParams<Distribution>();
-  params.addClassDescription("Boost Weibull distribution.");
-  params.addRequiredParam<Real>("shape", "The Weibull shape parameter.");
-  params.addParam<Real>("scale", 1, "The Weibull scale parameter.");
-  return params;
+  return Weibull::validParams();
 }
 
-WeibullDistribution::WeibullDistribution(const InputParameters & parameters)
-#ifdef LIBMESH_HAVE_EXTERNAL_BOOST
-  : BoostDistribution<boost::math::weibull_distribution<Real>>(parameters)
-#else
-  : BoostDistribution<>(parameters)
-#endif
+WeibullDistribution::WeibullDistribution(const InputParameters & parameters) : Weibull(parameters)
 {
-#ifdef LIBMESH_HAVE_EXTERNAL_BOOST
-  _distribution_unique_ptr = libmesh_make_unique<boost::math::weibull_distribution<Real>>(
-      getParam<Real>("shape"), getParam<Real>("scale"));
-#endif
 }

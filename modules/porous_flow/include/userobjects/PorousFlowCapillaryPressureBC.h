@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWCAPILLARYPRESSUREBC_H
-#define POROUSFLOWCAPILLARYPRESSUREBC_H
+#pragma once
 
 #include "PorousFlowCapillaryPressure.h"
-
-class PorousFlowCapillaryPressureBC;
-
-template <>
-InputParameters validParams<PorousFlowCapillaryPressureBC>();
 
 /**
  * Brooks-Corey effective saturation, capillary pressure and relative
@@ -25,15 +21,17 @@ InputParameters validParams<PorousFlowCapillaryPressureBC>();
 class PorousFlowCapillaryPressureBC : public PorousFlowCapillaryPressure
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowCapillaryPressureBC(const InputParameters & parameters);
 
-  virtual Real capillaryPressureCurve(Real saturation) const override;
-  virtual Real dCapillaryPressureCurve(Real saturation) const override;
-  virtual Real d2CapillaryPressureCurve(Real saturation) const override;
+  virtual Real capillaryPressureCurve(Real saturation, unsigned qp = 0) const override;
+  virtual Real dCapillaryPressureCurve(Real saturation, unsigned qp = 0) const override;
+  virtual Real d2CapillaryPressureCurve(Real saturation, unsigned qp = 0) const override;
 
-  virtual Real effectiveSaturation(Real pc) const override;
-  virtual Real dEffectiveSaturation(Real pc) const override;
-  virtual Real d2EffectiveSaturation(Real pc) const override;
+  virtual Real effectiveSaturation(Real pc, unsigned qp = 0) const override;
+  virtual Real dEffectiveSaturation(Real pc, unsigned qp = 0) const override;
+  virtual Real d2EffectiveSaturation(Real pc, unsigned qp = 0) const override;
 
 protected:
   /// Brooks-Corey exponent lambda
@@ -41,5 +39,3 @@ protected:
   /// Threshold entry pressure
   const Real _pe;
 };
-
-#endif // POROUSFLOWCAPILLARYPRESSUREBC_H

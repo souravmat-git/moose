@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef CONSTRAINTWAREHOUSE_H
-#define CONSTRAINTWAREHOUSE_H
+#pragma once
 
 // MOOSE includes
 #include "MooseObjectWarehouse.h"
@@ -22,8 +16,9 @@
 class Constraint;
 class NodalConstraint;
 class NodeFaceConstraint;
-class FaceFaceConstraint;
 class ElemElemConstraint;
+class NodeElemConstraint;
+class MortarConstraintBase;
 
 /**
  * Warehouse for storing constraints
@@ -38,19 +33,23 @@ public:
    * @param object A std::shared_ptr of the object
    * @param tid Not used.
    */
-  void addObject(std::shared_ptr<Constraint> object, THREAD_ID tid = 0);
+  void
+  addObject(std::shared_ptr<Constraint> object, THREAD_ID tid = 0, bool recurse = true) override;
 
   ///@{
   /**
    * Access methods for active objects.
    */
   const std::vector<std::shared_ptr<NodalConstraint>> & getActiveNodalConstraints() const;
-  const std::vector<std::shared_ptr<FaceFaceConstraint>> &
-  getActiveFaceFaceConstraints(const std::string & interface) const;
+  const std::vector<std::shared_ptr<MortarConstraintBase>> &
+  getActiveMortarConstraints(const std::pair<BoundaryID, BoundaryID> & mortar_interface_key,
+                             bool displaced) const;
   const std::vector<std::shared_ptr<ElemElemConstraint>> &
-  getActiveElemElemConstraints(InterfaceID interface_id) const;
+  getActiveElemElemConstraints(InterfaceID interface_id, bool displaced) const;
   const std::vector<std::shared_ptr<NodeFaceConstraint>> &
-  getActiveNodeFaceConstraints(BoundaryID boundary_id, bool displaced);
+  getActiveNodeFaceConstraints(BoundaryID boundary_id, bool displaced) const;
+  const std::vector<std::shared_ptr<NodeElemConstraint>> &
+  getActiveNodeElemConstraints(SubdomainID slave_id, SubdomainID master_id, bool displaced) const;
   ///@}
 
   ///@{
@@ -58,9 +57,10 @@ public:
    * Deterimine if active objects exist.
    */
   bool hasActiveNodalConstraints() const;
-  bool hasActiveFaceFaceConstraints(const std::string & interface) const;
-  bool hasActiveElemElemConstraints(const InterfaceID interface_id) const;
+  bool hasActiveElemElemConstraints(const InterfaceID interface_id, bool displaced) const;
   bool hasActiveNodeFaceConstraints(BoundaryID boundary_id, bool displaced) const;
+  bool
+  hasActiveNodeElemConstraints(SubdomainID slave_id, SubdomainID master_id, bool displaced) const;
   ///@}
 
   /**
@@ -73,7 +73,9 @@ public:
   /**
    * Update the various active lists.
    */
-  void updateActive(THREAD_ID tid = 0);
+  void updateActive(THREAD_ID tid = 0) override;
+
+  virtual void residualEnd(THREAD_ID tid = 0) const;
 
 protected:
   /// NodalConstraint objects
@@ -85,11 +87,26 @@ protected:
   /// NodeFaceConstraint objects (displaced)
   std::map<BoundaryID, MooseObjectWarehouse<NodeFaceConstraint>> _displaced_node_face_constraints;
 
-  /// FaceFaceConstraints
-  std::map<std::string, MooseObjectWarehouse<FaceFaceConstraint>> _face_face_constraints;
+  /// Undisplaced MortarConstraints
+  std::map<std::pair<BoundaryID, BoundaryID>, MooseObjectWarehouse<MortarConstraintBase>>
+      _mortar_constraints;
 
-  /// ElemElemConstraints
+  /// Displaced MortarConstraints
+  std::map<std::pair<BoundaryID, BoundaryID>, MooseObjectWarehouse<MortarConstraintBase>>
+      _displaced_mortar_constraints;
+
+  /// ElemElemConstraints (non-displaced)
   std::map<unsigned int, MooseObjectWarehouse<ElemElemConstraint>> _element_constraints;
+
+  /// ElemElemConstraints (displaced)
+  std::map<unsigned int, MooseObjectWarehouse<ElemElemConstraint>> _displaced_element_constraints;
+
+  /// NodeElemConstraint objects
+  std::map<std::pair<SubdomainID, SubdomainID>, MooseObjectWarehouse<NodeElemConstraint>>
+      _node_elem_constraints;
+
+  /// NodeElemConstraint objects
+  std::map<std::pair<SubdomainID, SubdomainID>, MooseObjectWarehouse<NodeElemConstraint>>
+      _displaced_node_elem_constraints;
 };
 
-#endif // CONSTRAINTWAREHOUSE_H

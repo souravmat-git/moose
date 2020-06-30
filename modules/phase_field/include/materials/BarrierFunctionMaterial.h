@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef BARRIERFUNCTIONMATERIAL_H
-#define BARRIERFUNCTIONMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "OrderParameterFunctionMaterial.h"
 
 // Forward Declarations
-class BarrierFunctionMaterial;
-
-template <>
-InputParameters validParams<BarrierFunctionMaterial>();
 
 /**
  * Material class to provide the double well function \f$ g(\eta) \f$ for
@@ -25,6 +23,8 @@ InputParameters validParams<BarrierFunctionMaterial>();
 class BarrierFunctionMaterial : public OrderParameterFunctionMaterial
 {
 public:
+  static InputParameters validParams();
+
   BarrierFunctionMaterial(const InputParameters & parameters);
 
 protected:
@@ -36,5 +36,3 @@ protected:
   /// zero out g contribution in the eta interval [0:1]
   bool _well_only;
 };
-
-#endif // BARRIERFUNCTIONMATERIAL_H

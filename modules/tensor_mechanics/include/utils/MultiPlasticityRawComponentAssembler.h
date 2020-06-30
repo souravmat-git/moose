@@ -1,18 +1,21 @@
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 /* MOOSE - Multiphysics Object Oriented Simulation Environment  */
 /*                                                              */
 /*          All contents are licensed under LGPL V2.1           */
 /*             See LICENSE for full restrictions                */
 /****************************************************************/
-#ifndef MULTIPLASTICITYRAWCOMPONENTASSEMBLER_H
-#define MULTIPLASTICITYRAWCOMPONENTASSEMBLER_H
 
 #include "TensorMechanicsPlasticModel.h"
 #include "UserObjectInterface.h"
-
-class MultiPlasticityRawComponentAssembler;
-
-template <>
-InputParameters validParams<MultiPlasticityRawComponentAssembler>();
 
 /**
  * MultiPlasticityRawComponentAssembler holds and computes yield functions,
@@ -36,6 +39,8 @@ InputParameters validParams<MultiPlasticityRawComponentAssembler>();
 class MultiPlasticityRawComponentAssembler : public UserObjectInterface
 {
 public:
+  static InputParameters validParams();
+
   MultiPlasticityRawComponentAssembler(const MooseObject * moose_object);
 
   virtual ~MultiPlasticityRawComponentAssembler() {}
@@ -321,5 +326,3 @@ private:
                                    const RankFourTensor & Eijkl,
                                    std::vector<bool> & act);
 };
-
-#endif // MULTIPLASTICITYRAWCOMPONENTASSEMBLER_H

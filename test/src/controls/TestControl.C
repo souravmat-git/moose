@@ -1,28 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "TestControl.h"
 #include "FEProblem.h"
+#include "InputParameterWarehouse.h"
 
-template <>
+registerMooseObject("MooseTestApp", TestControl);
+
 InputParameters
-validParams<TestControl>()
+TestControl::validParams()
 {
-  InputParameters params = validParams<Control>();
+  InputParameters params = Control::validParams();
 
-  MooseEnum test_type(
-      "real variable point tid_warehouse_error disable_executioner connection alias mult");
+  MooseEnum test_type("real variable point tid_warehouse_error disable_executioner connection "
+                      "alias mult execflag_error");
   params.addRequiredParam<MooseEnum>(
       "test_type", test_type, "Indicates the type of test to perform");
   params.addParam<std::string>(
@@ -58,13 +55,13 @@ TestControl::TestControl(const InputParameters & parameters)
   else if (_test_type == "alias")
   {
     MooseObjectParameterName slave(MooseObjectName("BCs", "left"), "value");
-    _app.getInputParameterWarehouse().addControllableParameterConnection(_alias, slave);
+    _app.getInputParameterWarehouse().addControllableParameterAlias(_alias, slave);
   }
 
   else if (_test_type == "mult")
     getControllableValue<Real>("parameter");
 
-  else if (_test_type != "point")
+  else if (_test_type != "point" && _test_type != "execflag_error")
     mooseError("Unknown test type.");
 }
 
@@ -74,15 +71,19 @@ TestControl::execute()
   if (_test_type == "point")
     setControllableValue<Point>("parameter", Point(0.25, 0.25));
 
-  if (_test_type == "connection")
+  else if (_test_type == "connection")
     setControllableValue<Real>("parameter", 0.2);
 
-  if (_test_type == "alias")
+  else if (_test_type == "alias")
     setControllableValueByName<Real>(_alias, 0.42);
 
-  if (_test_type == "mult")
+  else if (_test_type == "mult")
   {
     const Real & val = getControllableValue<Real>("parameter");
     setControllableValue<Real>("parameter", val * 3);
   }
+
+  else if (_test_type == "execflag_error")
+    setControllableValueByName<std::vector<std::string>>(
+        "MultiApps", "sub", "cli_args", {"Mesh/nx=2"});
 }

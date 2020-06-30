@@ -1,27 +1,26 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GBEVOLUTION_H
-#define GBEVOLUTION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GBEvolutionBase.h"
-
-// Forward Declarations
-class GBEvolution;
-
-template <>
-InputParameters validParams<GBEvolution>();
 
 /**
  * Grain boundary energy parameters for isotropic uniform grain boundary energies
  */
-class GBEvolution : public GBEvolutionBase
+template <bool is_ad>
+class GBEvolutionTempl : public GBEvolutionBaseTempl<is_ad>
 {
 public:
-  GBEvolution(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  GBEvolutionTempl(const InputParameters & parameters);
 
 protected:
   virtual void computeQpProperties();
@@ -29,4 +28,5 @@ protected:
   Real _GBEnergy;
 };
 
-#endif // GBEVOLUTION_H
+typedef GBEvolutionTempl<false> GBEvolution;
+typedef GBEvolutionTempl<true> ADGBEvolution;

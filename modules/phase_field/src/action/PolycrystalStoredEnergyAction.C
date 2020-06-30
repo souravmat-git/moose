@@ -1,19 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "PolycrystalStoredEnergyAction.h"
 #include "Factory.h"
 #include "Conversion.h"
 #include "FEProblem.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", PolycrystalStoredEnergyAction, "add_kernel");
+
 InputParameters
-validParams<PolycrystalStoredEnergyAction>()
+PolycrystalStoredEnergyAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription("Action that adds the contribution of stored energy associated with "
                              "dislocations to grain growth models");
   params.addRequiredParam<unsigned int>("op_num",

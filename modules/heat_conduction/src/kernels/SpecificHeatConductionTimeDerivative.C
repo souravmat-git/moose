@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "SpecificHeatConductionTimeDerivative.h"
 
-template <>
+registerMooseObject("HeatConductionApp", SpecificHeatConductionTimeDerivative);
+
 InputParameters
-validParams<SpecificHeatConductionTimeDerivative>()
+SpecificHeatConductionTimeDerivative::validParams()
 {
-  InputParameters params = validParams<TimeDerivative>();
+  InputParameters params = JvarMapKernelInterface<TimeDerivative>::validParams();
   params.addClassDescription(
       "Time derivative term $\\rho c_p \\frac{\\partial T}{\\partial t}$ of "
       "the heat equation with the specific heat $c_p$ and the density $\\rho$ as arguments.");
@@ -23,7 +27,6 @@ validParams<SpecificHeatConductionTimeDerivative>()
       "specific_heat", "specific_heat", "Property name of the specific heat material property");
   params.addParam<MaterialPropertyName>(
       "density", "density", "Property name of the density material property");
-  params.addCoupledVar("args", "Vector of additional arguments of the specific heat and density");
   return params;
 }
 

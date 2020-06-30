@@ -1,27 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef NUMSHAPESIDEUSEROBJECT_H
-#define NUMSHAPESIDEUSEROBJECT_H
+#pragma once
 
 #include "ShapeSideUserObject.h"
-
-// Forward Declarations
-class NumShapeSideUserObject;
-
-template <>
-InputParameters validParams<NumShapeSideUserObject>();
 
 /**
  * Test and proof of concept class for computing UserObject Jacobians using the
@@ -34,6 +22,8 @@ InputParameters validParams<NumShapeSideUserObject>();
 class NumShapeSideUserObject : public ShapeSideUserObject
 {
 public:
+  static InputParameters validParams();
+
   NumShapeSideUserObject(const InputParameters & parameters);
 
   virtual ~NumShapeSideUserObject() {}
@@ -57,5 +47,3 @@ protected:
   unsigned int _u_var;
   const VariableGradient & _grad_u;
 };
-
-#endif

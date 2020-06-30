@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "Linear.h"
 #include "SolidModel.h"
@@ -79,17 +81,20 @@ Linear::computeStrain(const unsigned qp,
 
       if (_large_strain)
       {
-        volumetric_strain += 0.5 * (_grad_disp_x[qp_loop](0) * _grad_disp_x[qp_loop](0) +
-                                    _grad_disp_y[qp_loop](0) * _grad_disp_y[qp_loop](0) +
-                                    _grad_disp_z[qp_loop](0) * _grad_disp_z[qp_loop](0)) /
+        volumetric_strain += 0.5 *
+                             (_grad_disp_x[qp_loop](0) * _grad_disp_x[qp_loop](0) +
+                              _grad_disp_y[qp_loop](0) * _grad_disp_y[qp_loop](0) +
+                              _grad_disp_z[qp_loop](0) * _grad_disp_z[qp_loop](0)) /
                              3.0 * _solid_model.JxW(qp_loop);
-        volumetric_strain += 0.5 * (_grad_disp_x[qp_loop](1) * _grad_disp_x[qp_loop](1) +
-                                    _grad_disp_y[qp_loop](1) * _grad_disp_y[qp_loop](1) +
-                                    _grad_disp_z[qp_loop](1) * _grad_disp_z[qp_loop](1)) /
+        volumetric_strain += 0.5 *
+                             (_grad_disp_x[qp_loop](1) * _grad_disp_x[qp_loop](1) +
+                              _grad_disp_y[qp_loop](1) * _grad_disp_y[qp_loop](1) +
+                              _grad_disp_z[qp_loop](1) * _grad_disp_z[qp_loop](1)) /
                              3.0 * _solid_model.JxW(qp_loop);
-        volumetric_strain += 0.5 * (_grad_disp_x[qp_loop](2) * _grad_disp_x[qp_loop](2) +
-                                    _grad_disp_y[qp_loop](2) * _grad_disp_y[qp_loop](2) +
-                                    _grad_disp_z[qp_loop](2) * _grad_disp_z[qp_loop](2)) /
+        volumetric_strain += 0.5 *
+                             (_grad_disp_x[qp_loop](2) * _grad_disp_x[qp_loop](2) +
+                              _grad_disp_y[qp_loop](2) * _grad_disp_y[qp_loop](2) +
+                              _grad_disp_z[qp_loop](2) * _grad_disp_z[qp_loop](2)) /
                              3.0 * _solid_model.JxW(qp_loop);
       }
     }

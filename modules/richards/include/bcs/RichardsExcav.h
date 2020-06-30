@@ -1,21 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSEXCAV
-#define RICHARDSEXCAV
+#pragma once
 
 #include "NodalBC.h"
 
 // Forward Declarations
-class RichardsExcav;
 class Function;
-
-template <>
-InputParameters validParams<RichardsExcav>();
 
 /**
  * Allows specification of Dirichlet BCs on an evolving boundary
@@ -26,6 +23,8 @@ InputParameters validParams<RichardsExcav>();
 class RichardsExcav : public NodalBC
 {
 public:
+  static InputParameters validParams();
+
   RichardsExcav(const InputParameters & parameters);
 
 protected:
@@ -49,7 +48,5 @@ protected:
    * these points the Dirichlet condition variable = _p_excav
    * will be applied
    */
-  Function & _func;
+  const Function & _func;
 };
-
-#endif // RICHARDSEXCAV

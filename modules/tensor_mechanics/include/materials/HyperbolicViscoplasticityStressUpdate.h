@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RECOMPUTERADIALRETURNHYPERBOLICVISCOPLASTICITY_H
-#define RECOMPUTERADIALRETURNHYPERBOLICVISCOPLASTICITY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "RadialReturnStressUpdate.h"
 
@@ -23,14 +25,16 @@
  * Petrinic's Introduction to Computational Plasticity (2004) Oxford University
  * Press, pg. 162 - 163.
  */
-
 class HyperbolicViscoplasticityStressUpdate : public RadialReturnStressUpdate
 {
 public:
+  static InputParameters validParams();
+
   HyperbolicViscoplasticityStressUpdate(const InputParameters & parameters);
 
 protected:
   virtual void initQpStatefulProperties() override;
+  virtual void propagateQpStatefulProperties() override;
 
   virtual void computeStressInitialize(const Real effective_trial_stress,
                                        const RankFourTensor & elasticity_tensor) override;
@@ -38,6 +42,7 @@ protected:
   virtual Real computeDerivative(const Real effective_trial_stress, const Real scalar) override;
   virtual void iterationFinalize(Real scalar) override;
   virtual void computeStressFinalize(const RankTwoTensor & plasticStrainIncrement) override;
+  virtual Real computeHardeningValue(Real scalar);
 
   /// a string to prepend to the plastic strain Material Property name
   const std::string _plastic_prepend;
@@ -69,8 +74,3 @@ protected:
   /// old value of plastic strain
   const MaterialProperty<RankTwoTensor> & _plastic_strain_old;
 };
-
-template <>
-InputParameters validParams<HyperbolicViscoplasticityStressUpdate>();
-
-#endif // RECOMPUTERADIALRETURNHYPERBOLICVISCOPLASTICITY_H

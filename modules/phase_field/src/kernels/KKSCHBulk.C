@@ -1,14 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "KKSCHBulk.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", KKSCHBulk);
+
 InputParameters
-validParams<KKSCHBulk>()
+KKSCHBulk::validParams()
 {
   InputParameters params = CHBulk<Real>::validParams();
   params.addClassDescription("KKS model kernel for the Bulk Cahn-Hilliard term. This operates on "
@@ -34,8 +38,6 @@ validParams<KKSCHBulk>()
 
 KKSCHBulk::KKSCHBulk(const InputParameters & parameters)
   : CHBulk<Real>(parameters),
-    // number of coupled variables (ca, args_a[])
-    _nvar(_coupled_moose_vars.size()),
     _ca_var(coupled("ca")),
     _ca_name(getVar("ca", 0)->name()),
     _cb_var(coupled("cb")),
@@ -45,29 +47,28 @@ KKSCHBulk::KKSCHBulk(const InputParameters & parameters)
     _second_derivative_Fb(getMaterialPropertyDerivative<Real>("fb_name", _cb_name, _cb_name))
 {
   // reserve space for derivatives
-  _second_derivatives.resize(_nvar);
-  _third_derivatives.resize(_nvar);
-  _third_derivatives_ca.resize(_nvar);
-  _grad_args.resize(_nvar);
+  _second_derivatives.resize(_n_args);
+  _third_derivatives.resize(_n_args);
+  _third_derivatives_ca.resize(_n_args);
+  _grad_args.resize(_n_args);
 
   // Iterate over all coupled variables
-  for (unsigned int i = 0; i < _nvar; ++i)
+  for (unsigned int i = 0; i < _n_args; ++i)
   {
-    MooseVariable * cvar = _coupled_moose_vars[i];
 
     // get the second derivative material property (TODO:warn)
-    _second_derivatives[i] =
-        &getMaterialPropertyDerivative<Real>("fa_name", _ca_name, cvar->name());
+    _second_derivatives[i] = &getMaterialPropertyDerivative<Real>("fa_name", _ca_name, i);
 
     // get the third derivative material properties
-    _third_derivatives[i].resize(_nvar);
-    for (unsigned int j = 0; j < _nvar; ++j)
-      _third_derivatives[i][j] = &getMaterialPropertyDerivative<Real>(
-          "fa_name", _ca_name, cvar->name(), _coupled_moose_vars[j]->name());
+    _third_derivatives[i].resize(_n_args);
+    for (unsigned int j = 0; j < _n_args; ++j)
+      _third_derivatives[i][j] = &getMaterialPropertyDerivative<Real>("fa_name", _ca_name, i, j);
+
+    MooseVariable * cvar = _coupled_standard_moose_vars[i];
 
     // third derivative for the on-diagonal jacobian
     _third_derivatives_ca[i] =
-        &getMaterialPropertyDerivative<Real>("fa_name", _ca_name, cvar->name(), _ca_name);
+        &getMaterialPropertyDerivative<Real>("fa_name", _ca_name, _ca_name, cvar->name());
 
     // get the gradient
     _grad_args[i] = &(cvar->gradSln());
@@ -89,7 +90,7 @@ KKSCHBulk::computeGradDFDCons(PFFunctionType type)
   switch (type)
   {
     case Residual:
-      for (unsigned int i = 0; i < _nvar; ++i)
+      for (unsigned int i = 0; i < _n_args; ++i)
         res += (*_second_derivatives[i])[_qp] * (*_grad_args[i])[_qp];
 
       return res;
@@ -105,7 +106,7 @@ KKSCHBulk::computeGradDFDCons(PFFunctionType type)
 
       res = _second_derivative_Fa[_qp] * _grad_phi[_j][_qp];
 
-      for (unsigned int i = 0; i < _nvar; ++i)
+      for (unsigned int i = 0; i < _n_args; ++i)
         res += (*_third_derivatives_ca[i])[_qp] * (*_grad_args[i])[_qp] * _phi[_j][_qp];
 
       // convergence improves if we return 0.0 here
@@ -123,9 +124,9 @@ KKSCHBulk::computeQpOffDiagJacobian(unsigned int jvar)
 
   RealGradient res = (*_second_derivatives[cvar])[_qp] * _grad_phi[_j][_qp];
 
-  for (unsigned int i = 0; i < _nvar; ++i)
+  for (unsigned int i = 0; i < _n_args; ++i)
     res += (*_third_derivatives[i][cvar])[_qp] * (*_grad_args[i])[_qp] * _phi[_j][_qp];
 
   // keeping this term seems to improve the solution.
-  return res * _grad_test[_j][_qp];
+  return res * _grad_test[_i][_qp];
 }

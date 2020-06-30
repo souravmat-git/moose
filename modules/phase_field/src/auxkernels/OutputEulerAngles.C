@@ -1,19 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "OutputEulerAngles.h"
 #include "GrainTracker.h"
 #include "EulerAngleProvider.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", OutputEulerAngles);
+
 InputParameters
-validParams<OutputEulerAngles>()
+OutputEulerAngles::validParams()
 {
-  InputParameters params = validParams<AuxKernel>();
-  params.addClassDescription("Output euler angles from user object to an AuxVariable.");
+  InputParameters params = AuxKernel::validParams();
+  params.addClassDescription("Output Euler angles from user object to an AuxVariable.");
   params.addRequiredParam<UserObjectName>("euler_angle_provider",
                                           "Name of Euler angle provider user object");
   params.addRequiredParam<UserObjectName>("grain_tracker",

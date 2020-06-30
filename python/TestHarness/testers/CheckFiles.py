@@ -1,5 +1,14 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 from FileTester import FileTester
-import util
+from TestHarness import util
 import os
 
 class CheckFiles(FileTester):
@@ -22,21 +31,22 @@ class CheckFiles(FileTester):
     def getOutputFiles(self):
         return self.specs['check_files'] + self.specs['check_not_exists']
 
-    def processResults(self, moose_dir, retcode, options, output):
-        output = FileTester.processResults(self, moose_dir, retcode, options, output)
+    def processResults(self, moose_dir, options, output):
+        output += FileTester.processResults(self, moose_dir, options, output)
 
         specs = self.specs
-        if self.getStatus() == self.bucket_fail or specs['skip_checks']:
+
+        if self.isFail() or specs['skip_checks']:
             return output
         else:
             reason = ''
             # if still no errors, check other files (just for existence)
             for file in self.specs['check_files']:
-                if not os.path.isfile(os.path.join(self.specs['test_dir'], file)):
+                if not os.path.isfile(os.path.join(self.getTestDir(), file)):
                     reason = 'MISSING FILES'
                     break
             for file in self.specs['check_not_exists']:
-                if os.path.isfile(os.path.join(self.specs['test_dir'], file)):
+                if os.path.isfile(os.path.join(self.getTestDir(), file)):
                     reason = 'UNEXPECTED FILES'
                     break
 
@@ -44,7 +54,7 @@ class CheckFiles(FileTester):
             if reason == '':
                 if self.specs.isValid('file_expect_out'):
                     for file in self.specs['check_files']:
-                        fid = open(os.path.join(self.specs['test_dir'], file), 'r')
+                        fid = open(os.path.join(self.getTestDir(), file), 'r')
                         contents = fid.read()
                         fid.close()
                         if not util.checkOutputForPattern(contents, self.specs['file_expect_out']):
@@ -53,8 +63,6 @@ class CheckFiles(FileTester):
 
         # populate status bucket
         if reason != '':
-            self.setStatus(reason, self.bucket_fail)
-        else:
-            self.setStatus(self.success_message, self.bucket_success)
+            self.setStatus(self.fail, reason)
 
         return output

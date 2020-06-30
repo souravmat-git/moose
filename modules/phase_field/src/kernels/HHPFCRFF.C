@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "HHPFCRFF.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", HHPFCRFF);
+
 InputParameters
-validParams<HHPFCRFF>()
+HHPFCRFF::validParams()
 {
-  InputParameters params = validParams<KernelValue>();
+  InputParameters params = KernelValue::validParams();
   params.addClassDescription("Reaction type kernel for the RFF phase fit crystal model");
   params.addCoupledVar("coupled_var",
                        "The name of the coupled variable, if one is used in the kernel");

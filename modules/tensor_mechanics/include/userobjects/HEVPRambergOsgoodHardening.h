@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef HEVPRAMBERGOSGOODHARDENING_H
-#define HEVPRAMBERGOSGOODHARDENING_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "HEVPStrengthUOBase.h"
-
-class HEVPRambergOsgoodHardening;
-
-template <>
-InputParameters validParams<HEVPRambergOsgoodHardening>();
 
 /**
  * This user object classs
@@ -21,6 +18,8 @@ InputParameters validParams<HEVPRambergOsgoodHardening>();
 class HEVPRambergOsgoodHardening : public HEVPStrengthUOBase
 {
 public:
+  static InputParameters validParams();
+
   HEVPRambergOsgoodHardening(const InputParameters & parameters);
 
   virtual bool computeValue(unsigned int, Real &) const;
@@ -31,5 +30,3 @@ protected:
   Real _peeq0;
   Real _exponent;
 };
-
-#endif

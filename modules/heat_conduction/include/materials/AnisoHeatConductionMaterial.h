@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ANISOHEATCONDUCTIONMATERIAL_H
-#define ANISOHEATCONDUCTIONMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 
@@ -18,6 +20,8 @@ class Function;
 class AnisoHeatConductionMaterial : public Material
 {
 public:
+  static InputParameters validParams();
+
   AnisoHeatConductionMaterial(const InputParameters & parameters);
 
 protected:
@@ -42,10 +46,5 @@ protected:
   MaterialProperty<Real> * const _thermal_conductivity_z_dT;
 
   MaterialProperty<Real> & _specific_heat;
-  Function * const _specific_heat_temperature_function;
+  const Function * const _specific_heat_temperature_function;
 };
-
-template <>
-InputParameters validParams<AnisoHeatConductionMaterial>();
-
-#endif // ANISOHEATCONDUCTIONMATERIAL_H

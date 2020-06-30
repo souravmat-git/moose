@@ -1,24 +1,22 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LinearCombinationFunction.h"
 
-template <>
+registerMooseObject("MooseApp", LinearCombinationFunction);
+
+defineLegacyParams(LinearCombinationFunction);
+
 InputParameters
-validParams<LinearCombinationFunction>()
+LinearCombinationFunction::validParams()
 {
-  InputParameters params = validParams<Function>();
+  InputParameters params = Function::validParams();
   params.addRequiredParam<std::vector<FunctionName>>(
       "functions", "This function will return Sum_over_i(w_i * functions_i)");
   params.addRequiredParam<std::vector<Real>>(
@@ -42,7 +40,7 @@ LinearCombinationFunction::LinearCombinationFunction(const InputParameters & par
   {
     if (name() == names[i])
       mooseError("A LinearCombinationFunction must not reference itself");
-    Function * const f = &getFunctionByName(names[i]);
+    const Function * const f = &getFunctionByName(names[i]);
     if (!f)
       mooseError("LinearCombinationFunction: The function ",
                  names[i],
@@ -54,7 +52,7 @@ LinearCombinationFunction::LinearCombinationFunction(const InputParameters & par
 }
 
 Real
-LinearCombinationFunction::value(Real t, const Point & p)
+LinearCombinationFunction::value(Real t, const Point & p) const
 {
   Real val = 0;
   for (unsigned i = 0; i < _f.size(); ++i)
@@ -63,7 +61,7 @@ LinearCombinationFunction::value(Real t, const Point & p)
 }
 
 RealGradient
-LinearCombinationFunction::gradient(Real t, const Point & p)
+LinearCombinationFunction::gradient(Real t, const Point & p) const
 {
   RealGradient g;
   for (unsigned i = 0; i < _f.size(); ++i)
@@ -72,7 +70,7 @@ LinearCombinationFunction::gradient(Real t, const Point & p)
 }
 
 RealVectorValue
-LinearCombinationFunction::vectorValue(Real t, const Point & p)
+LinearCombinationFunction::vectorValue(Real t, const Point & p) const
 {
   RealVectorValue v;
   for (unsigned i = 0; i < _f.size(); ++i)

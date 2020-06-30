@@ -18,7 +18,7 @@
   [./function_force]
     function = pp_func
     variable = u
-    type = UserForcingFunction
+    type = BodyForce
   [../]
 []
 
@@ -41,7 +41,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

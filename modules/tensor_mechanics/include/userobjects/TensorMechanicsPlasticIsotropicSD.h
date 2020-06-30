@@ -1,18 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICISOTROPICSD_H
-#define TENSORMECHANICSPLASTICISOTROPICSD_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticJ2.h"
-
-class TensorMechanicsPlasticIsotropicSD;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticIsotropicSD>();
+#include "RankFourTensor.h"
 
 /**
  * IsotropicSD plasticity model from Yoon (2013)
@@ -28,6 +26,8 @@ InputParameters validParams<TensorMechanicsPlasticIsotropicSD>();
 class TensorMechanicsPlasticIsotropicSD : public TensorMechanicsPlasticJ2
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticIsotropicSD(const InputParameters & parameters);
 
 protected:
@@ -82,5 +82,3 @@ protected:
   /// Receives the flag for associative or non-associative and calculates the flow potential accordingly
   RankTwoTensor flowPotential(const RankTwoTensor & stress, Real intnl) const override;
 };
-
-#endif // TENSORMECHANICSPLASTICISOTROPICSD_H

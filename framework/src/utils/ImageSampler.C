@@ -1,29 +1,27 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "ImageSampler.h"
 #include "MooseApp.h"
 #include "ImageMesh.h"
 
-template <>
+#include "libmesh/mesh_tools.h"
+
+defineLegacyParams(ImageSampler);
+
 InputParameters
-validParams<ImageSampler>()
+ImageSampler::validParams()
 {
   // Define the general parameters
   InputParameters params = emptyInputParameters();
-  params += validParams<FileRangeBuilder>();
+  params += FileRangeBuilder::validParams();
 
   params.addParam<Point>("origin", "Origin of the image (defaults to mesh origin)");
   params.addParam<Point>("dimensions",
@@ -83,7 +81,7 @@ ImageSampler::setupImageSampler(MooseMesh & mesh)
 
 #ifdef LIBMESH_HAVE_VTK
   // Get access to the Mesh object
-  MeshTools::BoundingBox bbox = MeshTools::bounding_box(mesh.getMesh());
+  BoundingBox bbox = MeshTools::create_bounding_box(mesh.getMesh());
 
   // Set the dimensions from the Mesh if not set by the User
   if (_is_pars.isParamValid("dimensions"))
@@ -214,7 +212,7 @@ ImageSampler::setupImageSampler(MooseMesh & mesh)
 }
 
 Real
-ImageSampler::sample(const Point & p)
+ImageSampler::sample(const Point & p) const
 {
 #ifdef LIBMESH_HAVE_VTK
 

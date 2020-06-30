@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GRAVITY_H
-#define GRAVITY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 
 class Function;
-class Gravity;
-
-template <>
-InputParameters validParams<Gravity>();
 
 /**
  * Gravity computes the body force (force/volume) given the acceleration of gravity (value) and the
@@ -22,19 +20,17 @@ InputParameters validParams<Gravity>();
 class Gravity : public Kernel
 {
 public:
-  Gravity(const InputParameters & parameters);
+  static InputParameters validParams();
 
-  virtual ~Gravity() {}
+  Gravity(const InputParameters & parameters);
 
 protected:
   virtual Real computeQpResidual();
 
   const MaterialProperty<Real> & _density;
+  const Real _value;
+  const Function & _function;
 
-  Real _value;
-  Function & _function;
   // _alpha parameter for HHT time integration scheme
   const Real _alpha;
 };
-
-#endif // GRAVITY_H

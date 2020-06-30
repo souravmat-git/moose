@@ -1,20 +1,24 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "IsotropicTempDepHardening.h"
 
 #include "SymmIsotropicElasticityTensor.h"
 
 #include "PiecewiseLinear.h"
 
-template <>
+registerMooseObject("SolidMechanicsApp", IsotropicTempDepHardening);
+
 InputParameters
-validParams<IsotropicTempDepHardening>()
+IsotropicTempDepHardening::validParams()
 {
-  InputParameters params = validParams<IsotropicPlasticity>();
+  InputParameters params = IsotropicPlasticity::validParams();
 
   params.set<Real>("yield_stress") = 1.0;
   params.set<Real>("hardening_constant") = 1.0;
@@ -60,8 +64,8 @@ IsotropicTempDepHardening::IsotropicTempDepHardening(const InputParameters & par
   std::vector<Real> yield_stress_vec;
   for (unsigned int i = 0; i < len; ++i)
   {
-    PiecewiseLinear * const f =
-        dynamic_cast<PiecewiseLinear *>(&getFunctionByName(_hardening_functions_names[i]));
+    const PiecewiseLinear * const f =
+        dynamic_cast<const PiecewiseLinear *>(&getFunctionByName(_hardening_functions_names[i]));
     if (!f)
       mooseError("Function ", _hardening_functions_names[i], " not found in ", name());
 

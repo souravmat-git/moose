@@ -45,7 +45,7 @@
   [../]
 
   [./forcing_fn]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = ffn
   [../]
@@ -63,7 +63,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 
   [./Adaptivity]

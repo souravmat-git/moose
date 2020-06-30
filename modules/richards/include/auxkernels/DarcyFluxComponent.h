@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef DARCYFLUXCOMPONENT_H
-#define DARCYFLUXCOMPONENT_H
+#pragma once
 
 #include "AuxKernel.h"
 
 // Forward Declarations
-class DarcyFluxComponent;
-
-template <>
-InputParameters validParams<DarcyFluxComponent>();
 
 /**
  * Computes a component of the Darcy flux:
@@ -34,6 +31,8 @@ InputParameters validParams<DarcyFluxComponent>();
 class DarcyFluxComponent : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   DarcyFluxComponent(const InputParameters & parameters);
 
 protected:
@@ -57,5 +56,3 @@ protected:
   /// Desired component
   unsigned int _component;
 };
-
-#endif // DARCYFLUXCOMPONENT_H

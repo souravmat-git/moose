@@ -1,16 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#include "TensorMechanicsPlasticMeanCap.h"
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-template <>
+#include "TensorMechanicsPlasticMeanCap.h"
+#include "RankFourTensor.h"
+
+registerMooseObject("TensorMechanicsApp", TensorMechanicsPlasticMeanCap);
+
 InputParameters
-validParams<TensorMechanicsPlasticMeanCap>()
+TensorMechanicsPlasticMeanCap::validParams()
 {
-  InputParameters params = validParams<TensorMechanicsPlasticModel>();
+  InputParameters params = TensorMechanicsPlasticModel::validParams();
   params.addParam<Real>("a", 1.0, "Yield function = a*mean_stress - strength");
   params.addRequiredParam<UserObjectName>("strength", "Yield function = a*mean_stress - strength");
   params.addClassDescription("Class that limits the mean stress.  Yield function = a*mean_stress - "

@@ -1,31 +1,28 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "StitchedMesh.h"
 #include "Parser.h"
 #include "InputParameters.h"
 
-// libMesh includes
 #include "libmesh/mesh_modification.h"
 #include "libmesh/serial_mesh.h"
 #include "libmesh/exodusII_io.h"
 
-template <>
+registerMooseObject("MooseApp", StitchedMesh);
+
+defineLegacyParams(StitchedMesh);
+
 InputParameters
-validParams<StitchedMesh>()
+StitchedMesh::validParams()
 {
-  InputParameters params = validParams<MooseMesh>();
+  InputParameters params = MooseMesh::validParams();
   params.addRequiredParam<std::vector<MeshFileName>>(
       "files",
       "The name of the mesh files to read.  These mesh files will be 'stitched' into the "
@@ -58,18 +55,13 @@ StitchedMesh::StitchedMesh(const InputParameters & parameters)
   // The StitchedMesh class only works with ReplicatedMesh
   errorIfDistributedMesh("StitchedMesh");
 
-  // Get the original mesh
-  _original_mesh = dynamic_cast<ReplicatedMesh *>(&getMesh());
-  if (!_original_mesh)
-    mooseError("StitchedMesh does not support DistributedMesh");
-
   if (_stitch_boundaries.size() % 2 != 0)
     mooseError("There must be an even amount of stitch_boundaries in ", name());
 
   _stitch_boundaries_pairs.reserve(_stitch_boundaries.size() / 2);
 
   // Make pairs out of the boundary names
-  for (auto i = beginIndex(_stitch_boundaries); i < _stitch_boundaries.size(); i += 2)
+  for (MooseIndex(_stitch_boundaries) i = 0; i < _stitch_boundaries.size(); i += 2)
     _stitch_boundaries_pairs.emplace_back(_stitch_boundaries[i], _stitch_boundaries[i + 1]);
 }
 
@@ -81,24 +73,25 @@ StitchedMesh::StitchedMesh(const StitchedMesh & other_mesh)
 {
 }
 
-StitchedMesh::~StitchedMesh() {}
-
-MooseMesh &
-StitchedMesh::clone() const
+std::unique_ptr<MooseMesh>
+StitchedMesh::safeClone() const
 {
-  return *(new StitchedMesh(*this));
+  return libmesh_make_unique<StitchedMesh>(*this);
 }
 
 void
 StitchedMesh::buildMesh()
 {
+  // Get the original mesh
+  _original_mesh = static_cast<ReplicatedMesh *>(&getMesh());
+
   // Read the first mesh into the original mesh... then we'll stitch all of the others into that
   _original_mesh->read(_files[0]);
 
   _meshes.reserve(_files.size() - 1);
 
   // Read in all of the other meshes
-  for (auto i = beginIndex(_files, 1); i < _files.size(); ++i)
+  for (MooseIndex(_files) i = 1; i < _files.size(); ++i)
   {
     _meshes.emplace_back(libmesh_make_unique<ReplicatedMesh>(_communicator));
     auto & mesh = _meshes.back();
@@ -107,7 +100,7 @@ StitchedMesh::buildMesh()
   }
 
   // Stich 'em
-  for (auto i = beginIndex(_meshes); i < _meshes.size(); i++)
+  for (MooseIndex(_meshes) i = 0; i < _meshes.size(); i++)
   {
     auto & boundary_pair = _stitch_boundaries_pairs[i];
 

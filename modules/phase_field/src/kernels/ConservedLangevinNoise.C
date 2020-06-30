@@ -1,24 +1,33 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ConservedLangevinNoise.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", ConservedLangevinNoise);
+
 InputParameters
-validParams<ConservedLangevinNoise>()
+ConservedLangevinNoise::validParams()
 {
-  InputParameters params = validParams<LangevinNoise>();
-  params.addClassDescription("Source term for noise from a ConservativeNoise userobject");
+  InputParameters params = LangevinNoise::validParams();
+  params.addClassDescription("Source term for noise from a ConservedNoise userobject");
   params.addRequiredParam<UserObjectName>(
-      "noise", "ConservativeNoise userobject that produces the random numbers");
+      "noise", "ConservedNoise userobject that produces the random numbers");
   return params;
 }
 ConservedLangevinNoise::ConservedLangevinNoise(const InputParameters & parameters)
   : LangevinNoise(parameters), _noise(getUserObject<ConservedNoiseInterface>("noise"))
 {
+  if (parameters.isParamSetByUser("seed"))
+    paramError(
+        "seed",
+        "This parameter has no effect in this kernel. The noise is generated in the user object "
+        "specified in the 'noise' parameter. Specify a seed in that user object instead.");
 }
 
 Real

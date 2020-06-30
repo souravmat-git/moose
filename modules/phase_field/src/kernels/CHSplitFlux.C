@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CHSplitFlux.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", CHSplitFlux);
+
 InputParameters
-validParams<CHSplitFlux>()
+CHSplitFlux::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addClassDescription("Computes flux $j$ as nodal variable $j = -M\\nabla\\mu$");
   params.addRequiredParam<unsigned int>("component", "Flux component");
   params.addRequiredParam<MaterialPropertyName>("mobility_name", "Mobility property name");
@@ -27,10 +31,9 @@ CHSplitFlux::CHSplitFlux(const InputParameters & parameters)
     _mobility(getMaterialProperty<RealTensorValue>("mobility_name")),
     _has_coupled_c(isCoupled("c")),
     _c_var(_has_coupled_c ? coupled("c") : 0),
-    _dmobility_dc(_has_coupled_c
-                      ? &getMaterialPropertyDerivative<RealTensorValue>("mobility_name",
-                                                                        getVar("c", 0)->name())
-                      : NULL)
+    _dmobility_dc(_has_coupled_c ? &getMaterialPropertyDerivative<RealTensorValue>(
+                                       "mobility_name", getVar("c", 0)->name())
+                                 : NULL)
 {
 }
 

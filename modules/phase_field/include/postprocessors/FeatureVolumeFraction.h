@@ -1,23 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef FEATUREVOLUMEFRACTION_H
-#define FEATUREVOLUMEFRACTION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GeneralPostprocessor.h"
 
 // Forward Declarations
-class FeatureVolumeFraction;
-
-template <>
-InputParameters validParams<FeatureVolumeFraction>();
 
 class FeatureVolumeFraction : public GeneralPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   FeatureVolumeFraction(const InputParameters & parameters);
 
   virtual void initialize() override;
@@ -41,5 +41,3 @@ protected:
   Real _equil_fraction;
   Real _avrami_value;
 };
-
-#endif // FEATUREVOLUMEFRACTION_H

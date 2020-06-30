@@ -1,4 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import sys
 import subprocess
 import datetime
@@ -8,8 +17,16 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import argparse
 import itertools
+import math
 import os
 
+##############################
+# Favorite plots
+# $ ./git_commit_history.py --open-source --moose-dev --unique --output=contributors.pdf
+# $ ./git_commit_history.py --additions --moose-dev --days=7 --open-source --output=additions.pdf
+##############################
+
+from matplotlib import rc
 
 # A helper function for running git commands
 def run(*args, **kwargs):
@@ -24,9 +41,9 @@ def run(*args, **kwargs):
             loc = os.path.join(loc, 'modules')
         args += ('--', loc)
 
-    output, _ = subprocess.Popen(args, stdout = subprocess.PIPE).communicate()
-    if kwargs.pop('split',True):
-        return filter(None, output.split('\n'))
+    output = subprocess.check_output(args, encoding='utf8').strip()
+    if kwargs.pop('split', True):
+        return output.split('\n')
     else:
         return output
 
@@ -51,7 +68,7 @@ def getContributors(options, **kwargs):
     # Limit to the supplied number of authors
     n = len(contributors)
     if num_authors == 'moose':
-        contributors = ['Derek Gaston', 'Cody Permann', 'David Andrs', 'John W. Peterson', 'Andrew E. Slaughter', 'Brain Alger', 'Fande Kong']
+        contributors = ['Derek Gaston', 'Cody Permann', 'David Andrs', 'John W. Peterson', 'Andrew E. Slaughter', 'Brain Alger', 'Fande Kong', 'Robert Carlsen', 'Alex Lindsay', 'Jason M. Miller']
         contributors += ['Other (' + str(n-len(contributors)) + ')']
 
     elif num_authors:
@@ -91,11 +108,11 @@ def getData(options):
 
     # Get the additions/deletions
     commits = run('git', 'log', '--format=%H\n%ad\n%aN', '--date=short', '--no-merges', '--reverse', '--shortstat', split=False, options=options)
-    commits = filter(None, re.split(r'[0-9a-z]{40}', commits))
+    commits = [x for x in re.split(r'[0-9a-z]{40}', commits) if x]
 
     # Loop over commits
     for commit in commits:
-        c = filter(None, commit.split('\n'))
+        c = commit.strip().split('\n')
         date = datetime.datetime.strptime(c[0], '%Y-%m-%d')
         author = c[1]
 
@@ -106,20 +123,20 @@ def getData(options):
 
         i = contributors.index(author) # author index
 
-        d = filter(lambda x: x > date, dates)
+        d = [x for x in dates if x > date]
         if d:
             j = dates.index(d[0])
         else:
             j = dates.index(dates[-1])
         data['commits'][i,j] += 1
 
-        if options.additions and len(c) == 3:
-            a = c[2].split()
+        if options.additions:
+            a = c[3].split()
             n = len(a)
             files = int(a[0])
 
             if n == 5:
-                if a[4].startswith('insertion'):
+                if 'insertion' in a[4]:
                     plus = int(a[3])
                     minus = 0
                 else:
@@ -159,14 +176,13 @@ if __name__ == '__main__':
     parser.add_argument('--unique', '-u', action='store_true', help='Show unique contributor on secondary axis')
     parser.add_argument('--unique-label', default='legend', choices=['none', 'arrow', 'legend'], help='Control how the unique contributor line is labeled.')
     parser.add_argument('--open-source', '-r', action='store_true', help='Show shaded region for open sourcing of MOOSE')
-    parser.add_argument('--pdf', '--file', '-f', action='store_true', help='Write the plot to a pdf file (see --output)')
-    parser.add_argument('--output', '-o', type=str, default='commit_history.pdf', help='The filename for writting the plot to a file')
+    parser.add_argument('--output', '-o', type=str, default='commit_history.pdf', help='The filename for writing the plot to a file')
     parser.add_argument('--authors', default=None, help='Limit the graph to the given number of entries authors, or use "moose" to limit to MOOSE developers')
     parser.add_argument('--moose-dev', action='store_true', help='Create two categories: MOOSE developers and other (this overrides --authors)')
     parser.add_argument('--framework', action='store_true', help='Limit the analysis to framework directory')
     parser.add_argument('--modules', action='store_true', help='Limit the analysis to modules directory')
     parser.add_argument('--font', default=12, help='The font-size, in points')
-    parser.parse_args('-surf'.split())
+    parser.parse_args('-sur'.split())
     options = parser.parse_args()
 
     # Markers/colors
@@ -197,7 +213,7 @@ if __name__ == '__main__':
     # Show unique contributors
     if options.unique:
         ax2 = ax1.twinx()
-        ax2.plot(dates, contrib, linewidth=4, linestyle='-', color='k', label='Unique Contributors')
+        ax2.plot(dates, contrib, linewidth=2, linestyle='-', color='k', label='Unique Contributors')
         ax2.set_ylabel('Unique Contributors', color='k', fontsize=options.font)
         for tick in ax2.yaxis.get_ticklabels():
             tick.set_fontsize(options.font)
@@ -220,29 +236,39 @@ if __name__ == '__main__':
             handles[i].set_label(contributors[i])
 
     elif options.additions: #additions/deletions plot
-        factor = 1000.
-        y_label = 'Additions / Deletions (x1000)'
+        y_label = 'Additions / Deletions'
         n = len(contributors)
-        for i in range(n):
+        for i in reversed(range(n)):
             x = numpy.array(dates)
-            y = numpy.array(data['in'][i,:])/factor
+            y = numpy.log10(numpy.array(data['in'][i,:]))
 
             if n == 1:
                 label = 'Additions'
             else:
                 label = contributors[i] + '(Additions)'
 
-            clr = color.next()
-            ax1.fill_between(x, 0, y, label=label, linewidth=2, edgecolor=clr, facecolor=clr, alpha=1.0)
+            clr = next(color)
+            ax1.fill_between(x, 0, y, label=label, alpha=0.4)
 
-            y = -numpy.array(data['out'][i,:])/factor
+            y = -numpy.log10(numpy.array(data['out'][i,:]))
 
             if n == 1:
                 label = 'Deletions'
             else:
                 label = contributors[i] + '(Deletions)'
-            clr = color.next()
-            ax1.fill_between(x, 0, y, label=label, linewidth=2, edgecolor=clr, facecolor=clr, alpha=1.0)
+            clr = next(color)
+            ax1.fill_between(x, 0, y, label=label, alpha=0.4)
+
+        fig.canvas.draw()
+
+        labels = []
+        for value in ax1.get_yticks():
+            if value < 0:
+                labels.append('$-10^{}$'.format(numpy.abs(int(value))))
+            else:
+                labels.append('$10^{}$'.format(int(value)))
+
+        ax1.set_yticklabels(labels)
 
         if not options.disable_legend:
             handles, labels = ax1.get_legend_handles_labels()
@@ -261,7 +287,7 @@ if __name__ == '__main__':
             x = numpy.array(dates)
             y = data['commits'][i,:]
             idx = y>0
-            h = ax1.plot(x[idx], y[idx], label=contributors[i], linewidth=2, markevery=60, marker=marker.next(), color=color.next())
+            h = ax1.plot(x[idx], y[idx], label=contributors[i], linewidth=2, markevery=60, marker=next(marker), color=next(color))
             handles.append(h[0])
 
         if not options.disable_legend:
@@ -280,16 +306,15 @@ if __name__ == '__main__':
     # Show open-source region
     if options.open_source:
         os = datetime.date(2014,3,10)
-        x_lim = ax2.get_xlim()
-        y_lim = ax1.get_ylim()
+        x_lim = ax1.get_xlim()
+        if options.unique:
+            y_lim = ax2.get_ylim()
+        else:
+            y_lim = ax1.get_ylim()
+
         delta = x_lim[1] - os.toordinal()
-        plt.gca().add_patch(plt.Rectangle((os.toordinal(), y_lim[0]), delta, y_lim[1]-y_lim[0], facecolor='green', alpha=0.2))
+        plt.gca().add_patch(plt.Rectangle((os.toordinal(), y_lim[0]), delta, y_lim[1]-y_lim[0], facecolor='green', alpha=0.1))
         ax1.annotate('Open-source ', xy=(x_lim[1] - (delta/2.), y_lim[0]), ha='center', va='bottom', size=options.font)
 
-
-    # Write to a file
-    if options.pdf:
-        fig.savefig(options.output)
-
     plt.tight_layout()
-    plt.show()
+    plt.savefig(options.output, format='pdf')

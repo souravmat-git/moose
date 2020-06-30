@@ -1,23 +1,27 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "InterfaceOrientationMaterial.h"
 #include "MooseMesh.h"
 #include "MathUtils.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", InterfaceOrientationMaterial);
+
 InputParameters
-validParams<InterfaceOrientationMaterial>()
+InterfaceOrientationMaterial::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params.addParam<Real>(
       "anisotropy_strength", 0.04, "Strength of the anisotropy (typically < 0.05)");
   params.addParam<unsigned int>("mode_number", 6, "Mode number for anisotropy");
-  params.addParam<Real>("reference_angle", 90, "Reference angle for defining anistropy in degrees");
+  params.addParam<Real>(
+      "reference_angle", 90, "Reference angle for defining anisotropy in degrees");
   params.addParam<Real>("eps_bar", 0.01, "Average value of the interface parameter epsilon");
   params.addRequiredCoupledVar("op", "Order parameter defining the solid phase");
   return params;

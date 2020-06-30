@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeCosseratLinearElasticStress.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeCosseratLinearElasticStress);
+
 InputParameters
-validParams<ComputeCosseratLinearElasticStress>()
+ComputeCosseratLinearElasticStress::validParams()
 {
-  InputParameters params = validParams<ComputeCosseratStressBase>();
+  InputParameters params = ComputeCosseratStressBase::validParams();
   params.addClassDescription(
       "Compute Cosserat stress and couple-stress elasticity for small strains");
   return params;
@@ -18,7 +22,9 @@ validParams<ComputeCosseratLinearElasticStress>()
 
 ComputeCosseratLinearElasticStress::ComputeCosseratLinearElasticStress(
     const InputParameters & parameters)
-  : ComputeCosseratStressBase(parameters)
+  : ComputeCosseratStressBase(parameters),
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name))
 {
 }
 

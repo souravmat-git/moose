@@ -1,26 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef TIMESEQUENCESTEPPERFAILTEST_H
-#define TIMESEQUENCESTEPPERFAILTEST_H
+#pragma once
 
 #include "TimeSequenceStepper.h"
-
-class TimeSequenceStepperFailTest;
-
-template <>
-InputParameters validParams<TimeSequenceStepperFailTest>();
 
 /**
  * Exactly the same as TimeSequenceStepper, but fails at predetermined
@@ -29,13 +18,13 @@ InputParameters validParams<TimeSequenceStepperFailTest>();
 class TimeSequenceStepperFailTest : public TimeSequenceStepper
 {
 public:
+  static InputParameters validParams();
+
   TimeSequenceStepperFailTest(const InputParameters & parameters);
 
-  virtual bool converged() override;
+  virtual void step() override;
 
 protected:
   /// stores a copy of the original sequence of time points, is not updated due to failures.
   std::vector<Real> _original_time_sequence;
 };
-
-#endif

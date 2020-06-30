@@ -20,8 +20,6 @@
 []
 
 [Kernels]
-  active = 'diff'
-
   [./diff]
     type = AnisotropicDiffusion
     variable = u
@@ -58,7 +56,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

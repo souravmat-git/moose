@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 //  This post processor returns the mass due to a half-gaussian sink flux from the boundary of a
 //  volume.
@@ -11,11 +13,12 @@
 #include "RichardsHalfGaussianSinkFlux.h"
 #include "Function.h"
 
-template <>
+registerMooseObject("RichardsApp", RichardsHalfGaussianSinkFlux);
+
 InputParameters
-validParams<RichardsHalfGaussianSinkFlux>()
+RichardsHalfGaussianSinkFlux::validParams()
 {
-  InputParameters params = validParams<SideIntegralVariablePostprocessor>();
+  InputParameters params = SideIntegralVariablePostprocessor::validParams();
   params.addRequiredParam<Real>("max",
                                 "Maximum of the flux (measured in kg.m^-2.s^-1).  Flux out "
                                 "= max*exp((-0.5*(p - centre)/sd)^2) for p<centre, and Flux "

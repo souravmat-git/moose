@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef Q2PSATURATIONFLUX
-#define Q2PSATURATIONFLUX
+#pragma once
 
 #include "Kernel.h"
 #include "RichardsDensity.h"
@@ -14,10 +15,6 @@
 #include "Material.h"
 
 // Forward Declarations
-class Q2PSaturationFlux;
-
-template <>
-InputParameters validParams<Q2PSaturationFlux>();
 
 /**
  * This is a fully upwinded flux Kernel
@@ -45,6 +42,8 @@ InputParameters validParams<Q2PSaturationFlux>();
 class Q2PSaturationFlux : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   Q2PSaturationFlux(const InputParameters & parameters);
 
 protected:
@@ -53,16 +52,17 @@ protected:
    * In computeResidual we sum over the quadpoints and then add
    * the upwind mobility parts
    */
-  virtual Real computeQpResidual();
+  virtual Real computeQpResidual() override;
 
   /// This simply calls upwind
-  virtual void computeResidual();
+  virtual void computeResidual() override;
 
   /// this simply calls upwind
-  virtual void computeOffDiagJacobian(unsigned int jvar);
+  virtual void computeOffDiagJacobian(MooseVariableFEBase & jvar) override;
+  using Kernel::computeOffDiagJacobian;
 
   /// this simply calls upwind
-  virtual void computeJacobian();
+  virtual void computeJacobian() override;
 
   /// the derivative of the flux without the upstream mobility terms
   Real computeQpJac(unsigned int dvar);
@@ -127,5 +127,3 @@ protected:
    */
   std::vector<Real> _dmobility_ds;
 };
-
-#endif // Q2PSATURATIONFLUX

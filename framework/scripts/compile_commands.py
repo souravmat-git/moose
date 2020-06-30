@@ -1,4 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
 
 # This script is used by the `make compile_commands.json` build command.
 # It reformats the raw dump of current directory, compiler command, compiler
@@ -18,4 +26,4 @@ for file in lines[3].split() :
     'file' : file
   })
 
-print json.dumps(commands, indent=2)
+print(json.dumps(commands, indent=2))

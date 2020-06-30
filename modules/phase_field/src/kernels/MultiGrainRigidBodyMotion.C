@@ -1,21 +1,25 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MultiGrainRigidBodyMotion.h"
 
 // MOOSE includes
 #include "GrainTrackerInterface.h"
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", MultiGrainRigidBodyMotion);
+
 InputParameters
-validParams<MultiGrainRigidBodyMotion>()
+MultiGrainRigidBodyMotion::validParams()
 {
-  InputParameters params = validParams<GrainRigidBodyMotionBase>();
-  params.addClassDescription("Adds rigid mody motion to grains");
+  InputParameters params = GrainRigidBodyMotionBase::validParams();
+  params.addClassDescription("Adds rigid body motion to grains");
   return params;
 }
 
@@ -70,7 +74,7 @@ MultiGrainRigidBodyMotion::getUserObjectJacobian(unsigned int jvar, dof_id_type 
 {
   _velocity_advection_jacobian = 0.0;
 
-  for (auto i = beginIndex(_grain_ids); i < _grain_ids.size(); ++i)
+  for (MooseIndex(_grain_ids) i = 0; i < _grain_ids.size(); ++i)
   {
     auto grain_id = _grain_ids[i];
     if (grain_id != FeatureFloodCount::invalid_id)
@@ -123,7 +127,7 @@ MultiGrainRigidBodyMotion::calculateAdvectionVelocity()
   _velocity_advection = 0.0;
   _grain_ids = _grain_tracker.getVarToFeatureVector(_current_elem->id());
 
-  for (auto i = beginIndex(_grain_ids); i < _grain_ids.size(); ++i)
+  for (MooseIndex(_grain_ids) i = 0; i < _grain_ids.size(); ++i)
   {
     auto grain_id = _grain_ids[i];
     if (grain_id != FeatureFloodCount::invalid_id)

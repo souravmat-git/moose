@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MULTIBARRIERFUNCTION_H
-#define MULTIBARRIERFUNCTION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class MultiBarrierFunctionMaterial;
-
-template <>
-InputParameters validParams<MultiBarrierFunctionMaterial>();
 
 /**
  * Double well phase transformation barrier free energy contribution.
@@ -23,6 +21,8 @@ InputParameters validParams<MultiBarrierFunctionMaterial>();
 class MultiBarrierFunctionMaterial : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   MultiBarrierFunctionMaterial(const InputParameters & parameters);
 
 protected:
@@ -45,5 +45,3 @@ protected:
   MaterialProperty<Real> & _prop_g;
   std::vector<MaterialProperty<Real> *> _prop_dg, _prop_d2g;
 };
-
-#endif // MULTIBARRIERFUNCTION_H

@@ -1,18 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LevelSetOlssonTerminator.h"
 #include "NonlinearSystem.h"
 
-template <>
+registerMooseObject("LevelSetApp", LevelSetOlssonTerminator);
+
 InputParameters
-validParams<LevelSetOlssonTerminator>()
+LevelSetOlssonTerminator::validParams()
 {
-  InputParameters params = validParams<GeneralUserObject>();
+  InputParameters params = GeneralUserObject::validParams();
   params.addClassDescription("Tool for terminating the reinitialization of the level set equation "
                              "based on the criteria defined by Olsson et. al. (2007).");
   params.addRequiredParam<Real>(

@@ -1,29 +1,29 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COUPLEDSUSCEPTIBILITYTIMEDERIVATIVE_H
-#define COUPLEDSUSCEPTIBILITYTIMEDERIVATIVE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "CoupledTimeDerivative.h"
 #include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
 // Forward Declaration
-class CoupledSusceptibilityTimeDerivative;
-
-template <>
-InputParameters validParams<CoupledSusceptibilityTimeDerivative>();
 
 /**
  * This calculates a modified coupled time derivative that multiplies the time derivative of a
  * coupled variable by a function of the variables
  */
 class CoupledSusceptibilityTimeDerivative
-    : public DerivativeMaterialInterface<JvarMapKernelInterface<CoupledTimeDerivative>>
+  : public DerivativeMaterialInterface<JvarMapKernelInterface<CoupledTimeDerivative>>
 {
 public:
+  static InputParameters validParams();
+
   CoupledSusceptibilityTimeDerivative(const InputParameters & parameters);
   virtual void initialSetup();
 
@@ -41,5 +41,3 @@ protected:
   /// function derivatives w.r.t. coupled variables
   std::vector<const MaterialProperty<Real> *> _dFdarg;
 };
-
-#endif // COUPLEDSUSCEPTIBILITYTIMEDERIVATIVE_H

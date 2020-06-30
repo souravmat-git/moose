@@ -1,29 +1,19 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SAMPLERRECEIVER_H
-#define SAMPLERRECEIVER_H
+#pragma once
 
 // MOOSE includes
 #include "Control.h"
 
 // Forward declarations
-class SamplerReceiver;
 class Function;
-
-template <>
-InputParameters validParams<SamplerReceiver>();
 
 /**
  * A Control object for receiving data from a master application Sampler object.
@@ -31,26 +21,24 @@ InputParameters validParams<SamplerReceiver>();
 class SamplerReceiver : public Control
 {
 public:
+  static InputParameters validParams();
+
   SamplerReceiver(const InputParameters & parameters);
   virtual void execute() override;
 
 protected:
   /**
-   * Clears the list of parameters to modify
+   * Update the parameter names and associated values.
    */
-  void reset();
+  void transfer(const std::vector<std::string> & names, const std::vector<Real> & values);
 
-  /**
-   * Appends the list of parameters to modify
-   */
-  void addControlParameter(const std::string & name, const Real & value);
+  /// Parameter names to modify
+  std::vector<std::string> _parameters;
 
-  /// Storage for the parameters to control
-  std::map<std::string, Real> _parameters;
+  /// Values to use when modifying parameters
+  std::vector<Real> _values;
 
-  /// Allows the SamplerTransfer to call the reset and addControlParameter methods, which
-  /// should only be called by that object so making the public is dangerous.
-  friend class SamplerTransfer;
+  /// Allows the SamplerParameterTransfer to call the transfer method, which
+  /// should only be called by that object so making it public is dangerous.
+  friend class SamplerParameterTransfer;
 };
-
-#endif

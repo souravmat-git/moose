@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef LAPLACIANSPLIT_H
-#define LAPLACIANSPLIT_H
+#pragma once
 
 #include "KernelGrad.h"
 
 // Forward Declarations
-class LaplacianSplit;
-
-template <>
-InputParameters validParams<LaplacianSplit>();
 
 /**
  * Split with a variable that holds the Laplacian of the phase field.
@@ -22,6 +19,8 @@ InputParameters validParams<LaplacianSplit>();
 class LaplacianSplit : public KernelGrad
 {
 public:
+  static InputParameters validParams();
+
   LaplacianSplit(const InputParameters & parameters);
 
 protected:
@@ -33,5 +32,3 @@ private:
   const unsigned int _var_c;
   const VariableGradient & _grad_c;
 };
-
-#endif // LAPLACIANSPLIT_H

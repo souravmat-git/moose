@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef CHPFCRFF_H
-#define CHPFCRFF_H
+#pragma once
 
 #include "Kernel.h"
-
-// Forward Declarations
-class CHPFCRFF;
-
-template <>
-InputParameters validParams<CHPFCRFF>();
 
 /**
  * This kernel calculates the main portion of the cahn-hilliard residual for the
@@ -23,6 +18,8 @@ InputParameters validParams<CHPFCRFF>();
 class CHPFCRFF : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   CHPFCRFF(const InputParameters & parameters);
 
 protected:
@@ -33,7 +30,7 @@ protected:
 private:
   const MaterialProperty<Real> & _M;
   const bool _has_MJac;
-  const MaterialProperty<Real> * _DM;
+  const MaterialProperty<Real> * const _DM;
 
   const MooseEnum _log_approach;
   const Real _tol;
@@ -47,5 +44,3 @@ private:
   const Real _b;
   const Real _c;
 };
-
-#endif // CHPFCRFF_H

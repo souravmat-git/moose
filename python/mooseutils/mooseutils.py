@@ -1,9 +1,25 @@
-from __future__ import print_function
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+import sys
 import os
 import re
-import math
-import errno
+import collections
+import difflib
 import multiprocessing
+import subprocess
+import time
+import cProfile as profile
+import pstats
+try:
+    from io import StringIO
+except ImportError:
+    from io import StringIO
 
 def colorText(string, color, **kwargs):
     """
@@ -23,13 +39,28 @@ def colorText(string, color, **kwargs):
     colored = kwargs.pop('colored', True)
 
     # ANSI color codes for colored terminal output
-    color_codes = dict(RESET='\033[0m', BOLD='\033[1m',RED='\033[31m', MAGENTA='\033[32m', YELLOW='\033[33m', BLUE='\033[34m', GREEN='\033[35m', CYAN='\033[36m')
+    color_codes = dict(RESET='\033[0m',
+                       BOLD='\033[1m',
+                       RED='\033[31m',
+                       GREEN='\033[32m',
+                       YELLOW='\033[33m',
+                       BLUE='\033[34m',
+                       MAGENTA='\033[35m',
+                       CYAN='\033[36m',
+                       GREY='\033[90m',
+                       LIGHT_RED='\033[91m',
+                       LIGHT_GREEN='\033[92m',
+                       LIGHT_YELLOW='\033[93m',
+                       LIGHT_BLUE='\033[94m',
+                       LIGHT_MAGENTA='\033[95m',
+                       LIGHT_CYAN='\033[96m',
+                       LIGHT_GREY='\033[37m')
     if code:
         color_codes['GREEN'] = '\033[32m'
         color_codes['CYAN']  = '\033[36m'
         color_codes['MAGENTA'] = '\033[35m'
 
-    if colored and not (os.environ.has_key('BITTEN_NOCOLOR') and os.environ['BITTEN_NOCOLOR'] == 'true'):
+    if colored and not ('BITTEN_NOCOLOR' in os.environ and os.environ['BITTEN_NOCOLOR'] == 'true'):
         if html:
             string = string.replace('<r>', color_codes['BOLD']+color_codes['RED'])
             string = string.replace('<c>', color_codes['BOLD']+color_codes['CYAN'])
@@ -52,7 +83,7 @@ def str2bool(string):
         string[str]: The text to convert (e.g., 'true' or '1')
     """
     string = string.lower()
-    if string is 'true' or string is '1':
+    if string == 'true' or string == '1':
         return True
     else:
         return False
@@ -65,12 +96,34 @@ def find_moose_executable(loc, **kwargs):
 
     Kwargs:
         methods[list]: (Default: ['opt', 'oprof', 'dbg', 'devel']) The list of build types to consider.
-        name[str]: (Default: opt.path.basename(loc)) The name of the executable to locate.
+        name[str]: The name of the executable to locate, if not provided it will infer it from
+                   a Makefile or the supplied directory
+        show_error[bool]: (Default: True) Display error messages.
     """
 
-    # Set the methods and name local varaiables
-    methods = kwargs.pop('methods', ['opt', 'oprof', 'dbg', 'devel'])
-    name = kwargs.pop('name', os.path.basename(loc))
+    # Set the methods and name local variables
+    if 'METHOD' in os.environ:
+        methods = [os.environ['METHOD']]
+    else:
+        methods = ['opt', 'oprof', 'dbg', 'devel']
+    methods = kwargs.pop('methods', methods)
+    name = kwargs.pop('name', None)
+
+    # If the 'name' is not provided first look for a Makefile with 'APPLICATION_NAME...' if
+    # that is not found use the name of the directory
+    if name is None:
+        makefile = os.path.join(loc, 'Makefile')
+        if os.path.isfile(makefile):
+            with open(makefile, 'r') as fid:
+                content = fid.read()
+            matches = re.findall(r'APPLICATION_NAME\s*[:=]+\s*(?P<name>.+)$', content, flags=re.MULTILINE)
+            name = matches[-1] if matches else None
+
+        if name is None:
+            name = os.path.basename(loc)
+
+
+    show_error = kwargs.pop('show_error', True)
 
     # Handle 'combined' and 'tests'
     if os.path.isdir(loc):
@@ -78,26 +131,58 @@ def find_moose_executable(loc, **kwargs):
             name = 'moose_test'
 
     # Check that the location exists and that it is a directory
+    exe = None
     loc = os.path.abspath(loc)
     if not os.path.isdir(loc):
-        print('ERROR: The supplied path must be a valid directory:', loc)
-        return errno.ENOTDIR
+        if show_error:
+            print('ERROR: The supplied path must be a valid directory:', loc)
 
     # Search for executable with the given name
-    exe = errno.ENOENT
-    for method in methods:
-        exe = os.path.join(loc, name + '-' + method)
-        if os.path.isfile(exe):
+    else:
+        for method in methods:
+            exe_name = os.path.join(loc, name + '-' + method)
+            if os.path.isfile(exe_name):
+                exe = exe_name
             break
 
     # Returns the executable or error code
-    if not errno.ENOENT:
-        print('ERROR: Unable to locate a valid MOOSE executable in directory')
+    if (exe is None) and show_error:
+        print('ERROR: Unable to locate a valid MOOSE executable in directory:', loc)
     return exe
+
+def find_moose_executable_recursive(loc=os.getcwd(), **kwargs):
+    """
+    Locate a moose executable in the current directory or any parent directory.
+
+    Inputs: see 'find_moose_executable'
+    """
+    loc = loc.split(os.path.sep)
+    for i in range(len(loc), 0, -1):
+        current = os.path.sep + os.path.join(*loc[0:i])
+        executable = find_moose_executable(current, show_error=False)
+        if executable is not None:
+            break
+    return executable
+
+def run_executable(app_path, args, mpi=None, suppress_output=False):
+    """
+    A function for running an application.
+    """
+    import subprocess
+    if mpi and isinstance(mpi, int):
+        cmd = ['mpiexec', '-n', str(mpi), app_path]
+    else:
+        cmd = [app_path]
+    cmd += args
+
+    if suppress_output:
+        return subprocess.check_output(cmd)
+    else:
+        return subprocess.call(cmd)
 
 def runExe(app_path, args):
     """
-    A function for running an application.
+    A function for running an application (w/o output).
 
     Args:
         app_path[str]: The application to execute.
@@ -116,12 +201,12 @@ def runExe(app_path, args):
     stdout_data = data[0].decode("utf-8")
     return stdout_data
 
-def check_configuration(packages):
+def check_configuration(packages, message=True):
     """
     Check that the supplied packages exist.
 
     Return:
-        [int]: 0 = Success; 1 = Missing package(s)
+        [list]: A list of missing packages.
     """
     missing = []
     for package in packages:
@@ -130,16 +215,14 @@ def check_configuration(packages):
         except ImportError:
             missing.append(package)
 
-    if missing:
-        print("The following packages are missing but required:")
-        for m in missing:
-            print(' '*4, '-', m)
-        print('It may be possible to install them using "pip", but you likely need to ' \
-              'the MOOSE environment package on your system.\n')
-        print('Using pip:\n    pip install package-name-here --user')
-        return 1
+    if missing and message:
+        msg = "The following packages are missing but required: {0}\n"
+        msg += "These packages are included in the MOOSE environment package, but it may also\n"
+        msg += "to install them using 'pip':\n"
+        msg += "    pip install {0} --user')"
+        print(msg.format(', '.join(missing)))
 
-    return 0
+    return missing
 
 def touch(fname):
     """
@@ -148,11 +231,13 @@ def touch(fname):
     with open(fname, 'a'):
         os.utime(fname, None)
 
-
 def gold(filename):
     """
     Get the gold filename corresponding to a filename.
     """
+    if not filename:
+        return None
+
     if not os.path.exists(filename):
         return None
 
@@ -179,6 +264,197 @@ def make_chunks(local, num=multiprocessing.cpu_count()):
         local[list]: A list of objects to break into chunks.
         num[int]: The number of chunks (defaults to number of threads available)
     """
-    num = int(math.ceil(len(local)/float(num)))
-    for i in range(0, len(local), num):
-        yield local[i:i + num]
+    k, m = divmod(len(local), num)
+    return (local[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(num))
+
+def camel_to_space(text):
+    """
+    Converts the supplied camel case text to space separated words.
+    """
+    out = []
+    index = 0
+    for match in re.finditer(r'(?<=[a-z])(?=[A-Z])', text):
+        out.append(text[index:match.start(0)])
+        index = match.start(0)
+    out.append(text[index:])
+    return ' '.join(out)
+
+def text_diff(text, gold):
+    """
+    Helper for creating nicely formatted text diff message.
+
+    Inputs:
+        text[list|str]: A list of strings or single string to compare.
+        gold[list|str]: The "gold" standard to which the first arguments is to be compared against.
+    """
+
+    # Convert to line
+    if isinstance(text, str):
+        text = text.splitlines(True)
+    if isinstance(gold, str):
+        gold = gold.splitlines(True)
+
+    # Perform diff
+    result = list(difflib.ndiff(gold, text))
+    n = len(max(result, key=len))
+    msg = "\nThe supplied text differs from the gold as follows:\n{0}\n{1}\n{0}" \
+         .format('~'*n, '\n'.join(result).encode('utf-8'))
+    return msg
+
+def unidiff(out, gold, **kwargs):
+    """
+    Perform a 'unified' style diff between the two supplied files.
+
+    Inputs:
+        out[str]: The name of the file in question.
+        gold[str]: The "gold" standard for the supplied file.
+        color[bool]: When True color is applied to the diff.
+        num_lines[int]: The number of lines to include with the diff (default: 3).
+    """
+
+    with open(out, 'r') as fid:
+        out_content = fid.read()
+    with open(gold, 'r') as fid:
+        gold_content = fid.read()
+
+    return text_unidiff(out_content, gold_content, out_fname=out, gold_fname=gold, **kwargs)
+
+def text_unidiff(out_content, gold_content, out_fname=None, gold_fname=None, color=True, num_lines=3):
+    """
+    Perform a 'unified' style diff between the two supplied files.
+
+    Inputs:
+        out_content[str]: The content in question.
+        gold_content[str]: The "gold" standard for the supplied content.
+        color[bool]: When True color is applied to the diff.
+        num_lines[int]: The number of lines to include with the diff (default: 3).
+
+    """
+
+    lines = difflib.unified_diff(gold_content.splitlines(True),
+                                 out_content.splitlines(True),
+                                 fromfile=gold_fname,
+                                 tofile=out_fname, n=num_lines)
+
+    diff = []
+    for line in list(lines):
+        if color:
+            if line.startswith('-'):
+                line = colorText(line, 'RED')
+            elif line.startswith('+'):
+                line = colorText(line, 'GREEN')
+            elif line.startswith('@'):
+                line = colorText(line, 'CYAN')
+        diff.append(line)
+
+    return ''.join(diff)
+
+def is_git_repo(working_dir=os.getcwd()):
+    """
+    Return true if the repository is a git repo.
+    """
+    return os.path.isdir(os.path.join(working_dir, '.git'))
+
+def git_commit(working_dir=os.getcwd()):
+    """
+    Return the current SHA from git.
+    """
+    out = check_output(['git', 'rev-parse', 'HEAD'], cwd=working_dir)
+    return out.strip(' \n')
+
+def git_commit_message(sha, working_dir=os.getcwd()):
+    """
+    Return the the commit message for the supplied SHA
+    """
+    out = check_output(['git', 'show', '-s', '--format=%B', sha], cwd=working_dir)
+    return out.strip(' \n')
+
+def git_merge_commits(working_dir=os.getcwd()):
+    """
+    Return the current SHAs for a merge.
+    """
+    out = check_output(['git', 'log', '-1', '--merges', '--pretty=format:%P'], cwd=working_dir)
+    return out.strip(' \n').split(' ')
+
+def git_ls_files(working_dir=os.getcwd()):
+    """
+    Return a list of files via 'git ls-files'.
+    """
+    out = set()
+    for fname in check_output(['git', 'ls-files'], cwd=working_dir).split('\n'):
+            out.add(os.path.abspath(os.path.join(working_dir, fname)))
+    return out
+
+def list_files(working_dir=os.getcwd()):
+    """
+    Return a set of files, recursively, for the supplied directory.
+    """
+    out = set()
+    for root, dirs, filenames in os.walk(working_dir):
+        for fname in filenames:
+            out.add(os.path.join(root, fname))
+    return out
+
+def git_root_dir(working_dir=os.getcwd()):
+    """
+    Return the top-level git directory by running 'git rev-parse --show-toplevel'.
+    """
+    try:
+        return check_output(['git', 'rev-parse', '--show-toplevel'],
+                            cwd=working_dir, stderr=subprocess.STDOUT).strip('\n')
+    except subprocess.CalledProcessError:
+        print("The supplied directory is not a git repository: {}".format(working_dir))
+    except OSError:
+        print("The supplied directory does not exist: {}".format(working_dir))
+
+def run_time(function, *args, **kwargs):
+    """Run supplied function with duration timing."""
+    start = time.time()
+    out = function(*args, **kwargs)
+    return time.time() - start
+
+def run_profile(function, *args, **kwargs):
+    """Run supplied function with python profiler."""
+    pr = profile.Profile()
+    start = time.time()
+    out = pr.runcall(function, *args, **kwargs)
+    print('Total Time:', time.time() - start)
+    s = StringIO()
+    ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
+    ps.print_stats()
+    print(s.getvalue())
+    return out
+
+def shellCommand(command, cwd=None):
+    """
+    Run a command in the shell.
+    We can ignore anything on stderr as that can potentially mess up the output
+    of an otherwise successful command.
+    """
+    with open(os.devnull, 'w') as devnull:
+        p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=devnull, cwd=cwd)
+        p.wait()
+        retcode = p.returncode
+        if retcode != 0:
+            raise Exception("Exception raised while running the command: %s in directory %s" % (command, cwd))
+
+        return p.communicate()[0].decode()
+
+def check_output(cmd, **kwargs):
+    """Get output from a process"""
+    return subprocess.check_output(cmd, encoding='utf-8', **kwargs)
+
+def generate_filebase(string, replace='_', lowercase=True):
+    """
+    Convert the supplied string to a valid filename without spaces.
+    """
+    if lowercase:
+        string = string.lower()
+    string = re.sub(r'([\/\\\?%\*:\|\"<>\. ]+)', replace, string)
+    return string
+
+def recursive_update(d, u):
+    """Recursive update nested dict(), see https://stackoverflow.com/a/3233356/1088076"""
+    for k, v in u.items():
+        d[k] = recursive_update(d.get(k, dict()), v) if isinstance(v, dict) else v
+    return d

@@ -1,24 +1,18 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SHAPEUSEROBJECT_H
-#define SHAPEUSEROBJECT_H
+#pragma once
 
 #include "Assembly.h"
 #include "Coupleable.h"
 #include "InputParameters.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 #include "MooseObject.h"
 
 /**
@@ -47,6 +41,8 @@ template <typename T>
 class ShapeUserObject : public T
 {
 public:
+  static InputParameters validParams();
+
   ShapeUserObject(const InputParameters & parameters, ShapeType type);
 
   /// check if jacobian is to be computed in user objects
@@ -55,7 +51,7 @@ public:
   /**
    * Returns the set of variables a Jacobian has been requested for
    */
-  const std::set<MooseVariable *> & jacobianMooseVariables() const
+  const std::set<const MooseVariableFEBase *> & jacobianMooseVariables() const
   {
     return _jacobian_moose_variables;
   }
@@ -66,8 +62,6 @@ public:
    */
   virtual void executeJacobianWrapper(unsigned int jvar,
                                       const std::vector<dof_id_type> & dof_indices);
-
-  static InputParameters validParams();
 
 protected:
   /**
@@ -82,7 +76,7 @@ protected:
    * of a Jacobian w.r.t. to this variable i.e. the call to executeJacobian() with
    * shapefunctions initialized for this variable.
    */
-  virtual unsigned int coupled(const std::string & var_name, unsigned int comp = 0);
+  virtual unsigned int coupled(const std::string & var_name, unsigned int comp = 0) const override;
 
   /// shape function values
   const VariablePhiValue & _phi;
@@ -98,7 +92,7 @@ protected:
 
 private:
   const bool _compute_jacobians;
-  std::set<MooseVariable *> _jacobian_moose_variables;
+  mutable std::set<const MooseVariableFEBase *> _jacobian_moose_variables;
 };
 
 template <typename T>
@@ -125,9 +119,9 @@ ShapeUserObject<T>::validParams()
 
 template <typename T>
 unsigned int
-ShapeUserObject<T>::coupled(const std::string & var_name, unsigned int comp)
+ShapeUserObject<T>::coupled(const std::string & var_name, unsigned int comp) const
 {
-  MooseVariable * var = Coupleable::getVar(var_name, comp);
+  const auto * var = Coupleable::getVar(var_name, comp);
 
   // add to the set of variables for which executeJacobian will be called
   if (_compute_jacobians && var->kind() == Moose::VAR_NONLINEAR)
@@ -148,5 +142,3 @@ ShapeUserObject<T>::executeJacobianWrapper(unsigned int jvar,
     executeJacobian(jvar);
   }
 }
-
-#endif // SHAPEUSEROBJECT_H

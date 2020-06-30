@@ -1,9 +1,18 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import sys
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5 import QtCore, QtWidgets
 
-from PostprocessorPlugin import PostprocessorPlugin
+from .PostprocessorPlugin import PostprocessorPlugin
 
 class FigurePlugin(QtWidgets.QWidget, PostprocessorPlugin):
     """
@@ -121,6 +130,10 @@ def main():
     """
     from peacock.PostprocessorViewer.PostprocessorViewer import PostprocessorViewer
     import mooseutils
+
+    import matplotlib
+    matplotlib.rcParams["figure.figsize"] = (3.75, 3.75)
+    matplotlib.rcParams["figure.dpi"] = (100)
 
     widget = PostprocessorViewer(mooseutils.VectorPostprocessorReader, plugins=[FigurePlugin])
     widget.onSetFilenames([])

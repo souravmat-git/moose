@@ -10,10 +10,6 @@
   # We are testing geometric ghosted functors
   # so we have to use distributed mesh
   parallel_type = distributed
-
-  # We are testing these two parameters
-  num_ghosted_layers = 1
-  ghost_point_neighbors = false
 []
 
 [Variables]
@@ -25,16 +21,19 @@
 
 [ICs]
   [./ghost_ic]
-    type = GhostUserObjectIC
+    type = ElementUOIC
     variable = ghost
-    ghost_uo = ghost_uo
+    element_user_object = ghost_uo
+    field_name = "ghosted"
+    field_type = long
   [../]
 []
 
 [UserObjects]
   [./ghost_uo]
-    type = GhostUserObject
+    type = ElemSideNeighborLayersTester
     execute_on = initial
+    element_side_neighbor_layers = 1
   [../]
 []
 

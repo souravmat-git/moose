@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWHEATADVECTION_H
-#define POROUSFLOWHEATADVECTION_H
+#pragma once
 
 #include "PorousFlowDarcyBase.h"
-
-class PorousFlowHeatAdvection;
-
-template <>
-InputParameters validParams<PorousFlowHeatAdvection>();
 
 /**
  * Advection of heat via flux of component k in fluid phase alpha.
@@ -23,6 +19,8 @@ InputParameters validParams<PorousFlowHeatAdvection>();
 class PorousFlowHeatAdvection : public PorousFlowDarcyBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowHeatAdvection(const InputParameters & parameters);
 
 protected:
@@ -41,5 +39,3 @@ protected:
   /// Derivative of relative permeability of each phase wrt PorousFlow variables
   const MaterialProperty<std::vector<std::vector<Real>>> & _drelative_permeability_dvar;
 };
-
-#endif // POROUSFLOWHEATADVECTION_H

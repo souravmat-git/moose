@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "BimodalInverseSuperellipsoidsIC.h"
 
@@ -11,11 +13,12 @@
 #include "MooseMesh.h"
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", BimodalInverseSuperellipsoidsIC);
+
 InputParameters
-validParams<BimodalInverseSuperellipsoidsIC>()
+BimodalInverseSuperellipsoidsIC::validParams()
 {
-  InputParameters params = validParams<BimodalSuperellipsoidsIC>();
+  InputParameters params = BimodalSuperellipsoidsIC::validParams();
   params.addClassDescription("Bimodal size distribution of large particles (specified in input "
                              "file, value invalue) and small particles (placed randomly inside the "
                              "larger particles, value outvalue)");
@@ -31,7 +34,8 @@ void
 BimodalInverseSuperellipsoidsIC::initialSetup()
 {
   if (_size_variation_type == 2 && _size_variation > 0.0)
-    mooseError("If size_variation > 0.0, you must pass in a size_variation_type in "
+    paramError("size_variation",
+               "If size_variation > 0.0, you must pass in a size_variation_type in "
                "BimodalInverseSuperellipsoidsIC");
 
   BimodalSuperellipsoidsIC::initialSetup();

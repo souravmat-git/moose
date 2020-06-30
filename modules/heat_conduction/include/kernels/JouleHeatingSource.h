@@ -1,15 +1,19 @@
-#ifndef JOULEHEATINGSOURCE_H
-#define JOULEHEATINGSOURCE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "HeatSource.h"
 #include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class JouleHeatingSource;
-
-template <>
-InputParameters validParams<JouleHeatingSource>();
 
 /**
  * This kernel calculates the heat source term corresponding to joule heating,
@@ -18,6 +22,8 @@ InputParameters validParams<JouleHeatingSource>();
 class JouleHeatingSource : public DerivativeMaterialInterface<JvarMapKernelInterface<HeatSource>>
 {
 public:
+  static InputParameters validParams();
+
   JouleHeatingSource(const InputParameters & parameters);
   virtual void initialSetup();
 
@@ -34,5 +40,3 @@ private:
   const MaterialProperty<Real> & _delec_cond_dT;
   std::vector<const MaterialProperty<Real> *> _delec_cond_darg;
 };
-
-#endif // JOULEHEATINGSOURCE_H

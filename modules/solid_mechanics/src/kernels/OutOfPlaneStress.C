@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "OutOfPlaneStress.h"
 
 #include "Material.h"
 #include "SymmElasticityTensor.h"
 
-template <>
+registerMooseObjectDeprecated("SolidMechanicsApp", OutOfPlaneStress, "07/30/2020 24:00");
+
 InputParameters
-validParams<OutOfPlaneStress>()
+OutOfPlaneStress::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addCoupledVar("disp_x", "The x displacement");
   params.addCoupledVar("disp_y", "The y displacement");
   params.addCoupledVar("temp", "The temperature");
@@ -41,6 +44,12 @@ OutOfPlaneStress::OutOfPlaneStress(const InputParameters & parameters)
     _ydisp_var(_ydisp_coupled ? coupled("disp_y") : 0),
     _temp_var(_temp_coupled ? coupled("temp") : 0)
 {
+  mooseDeprecated(name(), ": OutOfPlaneStress is deprecated. \
+                  The solid_mechanics module will be removed from MOOSE on July 31, 2020. \
+                  Please update your input files to utilize the tensor_mechanics equivalents of \
+                  models based on solid_mechanics. A detailed migration guide that was developed \
+                  for BISON, but which is generally applicable to any MOOSE model is available at: \
+                  https://mooseframework.org/bison/tutorials/mechanics_conversion/overview.html");
 }
 
 Real

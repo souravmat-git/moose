@@ -1,7 +1,19 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 from peacock.utils import Testing
 from peacock.Input.ParameterInfo import ParameterInfo
-import cStringIO
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from io import StringIO
 from PyQt5 import QtWidgets
 
 class Tests(Testing.PeacockTester):
@@ -63,7 +75,7 @@ class Tests(Testing.PeacockTester):
 
     def testDump(self):
         p = ParameterInfo(None, "p0")
-        o = cStringIO.StringIO()
+        o = StringIO()
         p.dump(o)
         val = o.getvalue()
         self.assertIn("Name", val)

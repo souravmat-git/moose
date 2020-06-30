@@ -58,7 +58,7 @@
     variable = u
   [../]
   [./uff]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = f_fn
   [../]
@@ -132,7 +132,6 @@
   dt = 0.01
   num_steps = 100
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

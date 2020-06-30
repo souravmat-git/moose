@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INSCHORINCORRECTOR_H
-#define INSCHORINCORRECTOR_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 
 // Forward Declarations
-class INSChorinCorrector;
-
-template <>
-InputParameters validParams<INSChorinCorrector>();
 
 /**
  * This class computes the "Chorin" Corrector equation in fully-discrete
@@ -22,6 +20,8 @@ InputParameters validParams<INSChorinCorrector>();
 class INSChorinCorrector : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   INSChorinCorrector(const InputParameters & parameters);
 
   virtual ~INSChorinCorrector() {}
@@ -51,5 +51,3 @@ protected:
   // Material properties
   const MaterialProperty<Real> & _rho;
 };
-
-#endif // INSCHORINCORRECTOR_H

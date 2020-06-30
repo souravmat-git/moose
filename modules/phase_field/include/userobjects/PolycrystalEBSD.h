@@ -1,24 +1,24 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef POLYCRYSTALEBSD_H
-#define POLYCRYSTALEBSD_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "PolycrystalUserObjectBase.h"
 
 // Forward Declarations
-class PolycrystalEBSD;
 class EBSDReader;
-
-template <>
-InputParameters validParams<PolycrystalEBSD>();
 
 class PolycrystalEBSD : public PolycrystalUserObjectBase
 {
 public:
+  static InputParameters validParams();
+
   PolycrystalEBSD(const InputParameters & parameters);
 
   virtual void getGrainsBasedOnPoint(const Point & point,
@@ -32,5 +32,3 @@ protected:
   const EBSDReader & _ebsd_reader;
   const std::map<dof_id_type, std::vector<Real>> & _node_to_grain_weight_map;
 };
-
-#endif // POLYCRYSTALEBSD_H

@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef C1ICBASE_H
-#define C1ICBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 // Portions of this code Copyright 2007-2009 Roy Stogner
 //
@@ -32,10 +34,6 @@
 #include <string>
 
 // Forward Declarations
-class C1ICBase;
-
-template <>
-InputParameters validParams<C1ICBase>();
 
 /**
  * C1ICBase is used by the CrossIC.
@@ -43,6 +41,8 @@ InputParameters validParams<C1ICBase>();
 class C1ICBase : public InitialCondition
 {
 public:
+  static InputParameters validParams();
+
   C1ICBase(const InputParameters & parameters);
 
 protected:
@@ -56,5 +56,3 @@ protected:
   Number interfaceValue(Real r);
   Number interfaceDerivative(Real r);
 };
-
-#endif // C1ICBASE_H

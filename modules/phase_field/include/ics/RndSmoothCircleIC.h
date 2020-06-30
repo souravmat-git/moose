@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RNDSMOOTHCIRCLEIC_H
-#define RNDSMOOTHCIRCLEIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "SmoothCircleIC.h"
 
 // Forward Declarations
-class RndSmoothCircleIC;
-
-template <>
-InputParameters validParams<RndSmoothCircleIC>();
 
 /**
  * RndSmoothcircleIC creates a smooth circle with a random distribution
@@ -22,6 +20,8 @@ InputParameters validParams<RndSmoothCircleIC>();
 class RndSmoothCircleIC : public SmoothCircleIC
 {
 public:
+  static InputParameters validParams();
+
   RndSmoothCircleIC(const InputParameters & parameters);
 
 private:
@@ -30,5 +30,3 @@ private:
   const Real _variation_invalue;
   const Real _variation_outvalue;
 };
-
-#endif // RNDSMOOTHCIRCLEIC_H

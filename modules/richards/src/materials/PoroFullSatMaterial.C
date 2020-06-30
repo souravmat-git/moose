@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PoroFullSatMaterial.h"
 
-template <>
+registerMooseObject("RichardsApp", PoroFullSatMaterial);
+
 InputParameters
-validParams<PoroFullSatMaterial>()
+PoroFullSatMaterial::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
 
   params.addRequiredParam<Real>(
       "porosity0",
@@ -99,9 +102,9 @@ PoroFullSatMaterial::computeQpProperties()
   }
   else
   {
-    _porosity[_qp] = _alpha +
-                     (_phi0 - _alpha) * std::exp(-(1 - _alpha) * _one_over_K * _porepressure[_qp] -
-                                                 _vol_strain[_qp]);
+    _porosity[_qp] =
+        _alpha + (_phi0 - _alpha) *
+                     std::exp(-(1 - _alpha) * _one_over_K * _porepressure[_qp] - _vol_strain[_qp]);
     _dporosity_dP[_qp] =
         (_phi0 - _alpha) * (_alpha - 1) * _one_over_K *
         std::exp(-(1 - _alpha) * _one_over_K * _porepressure[_qp] - _vol_strain[_qp]);

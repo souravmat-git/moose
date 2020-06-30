@@ -59,7 +59,7 @@
   [../]
 
   [./ffn]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn
   [../]
@@ -121,8 +121,6 @@
   [./refine_2]
     type = Exodus
     file_base = oversample_2
-    oversample = true
-    append_oversample = true
     refinements = 2
   [../]
 []

@@ -1,27 +1,27 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SUSCEPTIBILITYTIMEDERIVATIVE_H
-#define SUSCEPTIBILITYTIMEDERIVATIVE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TimeDerivative.h"
 #include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
-// Forward Declaration
-class SusceptibilityTimeDerivative;
 
-template <>
-InputParameters validParams<SusceptibilityTimeDerivative>();
 /**
  * This calculates the time derivative for a variable multiplied by a generalized susceptibility
- **/
+ */
 class SusceptibilityTimeDerivative
-    : public DerivativeMaterialInterface<JvarMapKernelInterface<TimeDerivative>>
+  : public DerivativeMaterialInterface<JvarMapKernelInterface<TimeDerivative>>
 {
 public:
+  static InputParameters validParams();
+
   SusceptibilityTimeDerivative(const InputParameters & parameters);
   virtual void initialSetup();
 
@@ -39,5 +39,3 @@ protected:
   /// susceptibility derivatives w.r.t. coupled variables
   std::vector<const MaterialProperty<Real> *> _dChidarg;
 };
-
-#endif // SUSCEPTIBILITYTIMEDERIVATIVE_H

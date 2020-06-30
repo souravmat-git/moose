@@ -1,14 +1,23 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
+import os
 from PyQt5.QtWidgets import QWidget, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
-from BlockTree import BlockTree
-from BlockEditor import BlockEditor
 from peacock.utils import WidgetUtils
 from peacock.base.MooseWidget import MooseWidget
 import mooseutils
-from InputTree import InputTree
-from ExecutableInfo import ExecutableInfo
-import os
+from .BlockTree import BlockTree
+from .BlockEditor import BlockEditor
+from .InputTree import InputTree
+from .ExecutableInfo import ExecutableInfo
 
 class InputFileEditor(QWidget, MooseWidget):
     """
@@ -59,12 +68,17 @@ class InputFileEditor(QWidget, MooseWidget):
         self.block_editor.cloneBlock.connect(self.block_tree.copyBlock)
         self.block_editor.removeBlock.connect(self.block_tree.removeBlock)
         self.block_editor.editingFinished.connect(self.onEditingFinished)
+        self.block_editor.appliedAndClosed.connect(self.onEditorAppliedAndClosed)
         self.block_editor.setWindowFlags(Qt.Window)
         self.block_editor.resize(640, 480)
         self.block_tree.blockSignals(False)
         self.block_editor.updateWatchers()
         self.block_editor.show()
         self.block_editor.raise_()
+
+    def onEditorAppliedAndClosed(self, block):
+        if block:
+            self.block_tree.includeBlock(block, True)
 
     def onEditingFinished(self):
         """
@@ -111,10 +125,13 @@ class InputFileEditor(QWidget, MooseWidget):
             app_info[ExecutableInfo]: The new information
         """
         if app_info.valid():
-            input_filename = self.tree.input_filename
-            input_tree = InputTree(app_info)
-            self.tree = input_tree
-            self.tree.setInputFile(input_filename)
+            self._closeBlockEditor()
+            old_tree = self.tree
+            self.tree = InputTree(app_info)
+            if old_tree.root:
+                self.tree.setInputFileData(old_tree.getInputFileString(), old_tree.input_filename)
+            else:
+                self.tree.setInputFile(old_tree.input_filename)
             self.block_tree.setInputTree(self.tree)
 
     def setInputFile(self, input_file):
@@ -157,14 +174,14 @@ class InputFileEditor(QWidget, MooseWidget):
         Input:
             filename: Where to write the file.
         """
-        if not self.tree.app_info.valid():
+        if not self.tree.app_info.valid() or not filename:
             return
         content = self.tree.getInputFileString()
         try:
-          with open(filename, "w") as f:
-              f.write(content)
+            with open(filename, "w") as f:
+                f.write(content)
         except IOError as e:
-          mooseutils.mooseWarning("Failed to write input file %s: %s" % (filename, e))
+            mooseutils.mooseWarning("Failed to write input file %s: %s" % (filename, e))
 
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication, QMainWindow

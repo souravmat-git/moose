@@ -11,23 +11,16 @@
 MODULE_DIR         ?= $(shell dirname `pwd`)
 MOOSE_DIR          ?= $(shell dirname $(MODULE_DIR))
 FRAMEWORK_DIR      ?= $(MOOSE_DIR)/framework
+ADDITIONAL_CPPFLAGS += -Wall -Wextra
 ###############################################################################
 
 # framework
 include $(FRAMEWORK_DIR)/build.mk
 include $(FRAMEWORK_DIR)/moose.mk
 
-# dependency on tensor_mechanics
-TENSOR_MECHANICS := yes
-SKIP_LOADER      := yes
+# Module
+MODULE_NAME := phase_field
 include $(MODULE_DIR)/modules.mk
-
-# dep apps
-APPLICATION_DIR    := $(MODULE_DIR)/phase_field
-APPLICATION_NAME   := phase_field
-BUILD_EXEC         := yes
-DEP_APPS           := $(shell $(FRAMEWORK_DIR)/scripts/find_dep_apps.py $(APPLICATION_NAME))
-include            $(FRAMEWORK_DIR)/app.mk
 
 ###############################################################################
 # Additional special case targets should be added here

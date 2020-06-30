@@ -1,25 +1,22 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SIDEFLUXINTEGRAL_H
-#define SIDEFLUXINTEGRAL_H
+#pragma once
 
 // MOOSE includes
 #include "SideIntegralVariablePostprocessor.h"
 
 // Forward Declarations
-class SideFluxIntegral;
+template <bool>
+class SideFluxIntegralTempl;
+typedef SideFluxIntegralTempl<false> SideFluxIntegral;
+typedef SideFluxIntegralTempl<true> ADSideFluxIntegral;
 
 template <>
 InputParameters validParams<SideFluxIntegral>();
@@ -27,16 +24,17 @@ InputParameters validParams<SideFluxIntegral>();
 /**
  * This postprocessor computes a side integral of the mass flux.
  */
-class SideFluxIntegral : public SideIntegralVariablePostprocessor
+template <bool is_ad>
+class SideFluxIntegralTempl : public SideIntegralVariablePostprocessor
 {
 public:
-  SideFluxIntegral(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  SideFluxIntegralTempl(const InputParameters & parameters);
 
 protected:
   virtual Real computeQpIntegral() override;
 
-  std::string _diffusivity;
-  const MaterialProperty<Real> & _diffusion_coef;
+  MaterialPropertyName _diffusivity;
+  const GenericMaterialProperty<Real, is_ad> & _diffusion_coef;
 };
-
-#endif // SIDEFLUXINTEGRAL_H

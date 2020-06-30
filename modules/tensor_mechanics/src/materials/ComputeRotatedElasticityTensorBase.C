@@ -1,28 +1,35 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeRotatedElasticityTensorBase.h"
 #include "RotationTensor.h"
 
-template <>
+template <bool is_ad>
 InputParameters
-validParams<ComputeRotatedElasticityTensorBase>()
+ComputeRotatedElasticityTensorBaseTempl<is_ad>::validParams()
 {
-  InputParameters params = validParams<ComputeElasticityTensorBase>();
+  InputParameters params = ComputeElasticityTensorBaseTempl<is_ad>::validParams();
   params.addParam<Real>("euler_angle_1", 0.0, "Euler angle in direction 1");
   params.addParam<Real>("euler_angle_2", 0.0, "Euler angle in direction 2");
   params.addParam<Real>("euler_angle_3", 0.0, "Euler angle in direction 3");
   return params;
 }
 
-ComputeRotatedElasticityTensorBase::ComputeRotatedElasticityTensorBase(
+template <bool is_ad>
+ComputeRotatedElasticityTensorBaseTempl<is_ad>::ComputeRotatedElasticityTensorBaseTempl(
     const InputParameters & parameters)
-  : ComputeElasticityTensorBase(parameters),
-    _Euler_angles(getParam<Real>("euler_angle_1"),
-                  getParam<Real>("euler_angle_2"),
-                  getParam<Real>("euler_angle_3"))
+  : ComputeElasticityTensorBaseTempl<is_ad>(parameters),
+    _Euler_angles(this->template getParam<Real>("euler_angle_1"),
+                  this->template getParam<Real>("euler_angle_2"),
+                  this->template getParam<Real>("euler_angle_3"))
 {
 }
+
+template class ComputeRotatedElasticityTensorBaseTempl<false>;
+template class ComputeRotatedElasticityTensorBaseTempl<true>;

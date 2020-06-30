@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWDIFFUSIVITYMILLINGTONQUIRK_H
-#define POROUSFLOWDIFFUSIVITYMILLINGTONQUIRK_H
+#pragma once
 
 #include "PorousFlowDiffusivityBase.h"
-
-class PorousFlowDiffusivityMillingtonQuirk;
-
-template <>
-InputParameters validParams<PorousFlowDiffusivityMillingtonQuirk>();
 
 /**
  * Material to provide saturation dependent diffusivity using the model of
@@ -24,6 +20,8 @@ InputParameters validParams<PorousFlowDiffusivityMillingtonQuirk>();
 class PorousFlowDiffusivityMillingtonQuirk : public PorousFlowDiffusivityBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowDiffusivityMillingtonQuirk(const InputParameters & parameters);
 
 protected:
@@ -38,5 +36,3 @@ protected:
   /// Derivative of saturation of each phase wrt PorousFlow variables (at the qps)
   const MaterialProperty<std::vector<std::vector<Real>>> & _dsaturation_qp_dvar;
 };
-
-#endif // POROUSFLOWDIFFUSIVITYMILLINGTONQUIRK_H

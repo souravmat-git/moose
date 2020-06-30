@@ -1,20 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "GrainRigidBodyMotionBase.h"
 
 // MOOSE includes
 #include "GrainTrackerInterface.h"
 #include "MooseVariable.h"
 
-template <>
 InputParameters
-validParams<GrainRigidBodyMotionBase>()
+GrainRigidBodyMotionBase::validParams()
 {
-  InputParameters params = validParams<NonlocalKernel>();
+  InputParameters params = NonlocalKernel::validParams();
   params.addClassDescription("Base class for adding rigid body motion to grains");
   params.addRequiredCoupledVar("c", "Concentration");
   params.addRequiredCoupledVarWithAutoBuild(
@@ -72,7 +74,7 @@ GrainRigidBodyMotionBase::timestepSetup()
 }
 
 bool
-GrainRigidBodyMotionBase::globalDoFEnabled(MooseVariable & /*var*/, dof_id_type /*dof_index*/)
+GrainRigidBodyMotionBase::globalDoFEnabled(MooseVariableFEBase & /*var*/, dof_id_type /*dof_index*/)
 {
   if (_velocity_advection_jacobian(0) == 0 && _velocity_advection_jacobian(1) == 0 &&
       _velocity_advection_jacobian(2) == 0)

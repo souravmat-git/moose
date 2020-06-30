@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICTENSILEMULTI_H
-#define TENSORMECHANICSPLASTICTENSILEMULTI_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticModel.h"
 #include "TensorMechanicsHardeningModel.h"
-
-class TensorMechanicsPlasticTensileMulti;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticTensileMulti>();
 
 /**
  * FiniteStrainTensileMulti implements rate-independent associative tensile failure
@@ -22,6 +19,8 @@ InputParameters validParams<TensorMechanicsPlasticTensileMulti>();
 class TensorMechanicsPlasticTensileMulti : public TensorMechanicsPlasticModel
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticTensileMulti(const InputParameters & parameters);
 
   virtual unsigned int numberSurfaces() const override;
@@ -219,5 +218,3 @@ private:
     plane = 2
   };
 };
-
-#endif // TENSORMECHANICSPLASTICTENSILEMULTI_H

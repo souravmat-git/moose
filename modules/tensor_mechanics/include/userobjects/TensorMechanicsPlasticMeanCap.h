@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICMEANCAP_H
-#define TENSORMECHANICSPLASTICMEANCAP_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticModel.h"
 #include "TensorMechanicsHardeningModel.h"
-
-class TensorMechanicsPlasticMeanCap;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticMeanCap>();
 
 /**
  * Class that limits the mean stress
@@ -25,6 +22,8 @@ InputParameters validParams<TensorMechanicsPlasticMeanCap>();
 class TensorMechanicsPlasticMeanCap : public TensorMechanicsPlasticModel
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticMeanCap(const InputParameters & parameters);
 
   virtual std::string modelName() const override;
@@ -48,5 +47,3 @@ protected:
   /// strength
   const TensorMechanicsHardeningModel & _strength;
 };
-
-#endif // TENSORMECHANICSPLASTICMEANCAP_H

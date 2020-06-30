@@ -1,9 +1,9 @@
 [Mesh]
-  file = two_step_solve_master_out_full_solve0_cp/0002_mesh.cpr
+  file = two_step_solve_master_full_solve0_checkpoint_cp/0002_mesh.cpr
 []
 
 [Problem]
-  restart_file_base = two_step_solve_master_out_full_solve0_cp/LATEST
+  restart_file_base = two_step_solve_master_full_solve0_checkpoint_cp/LATEST
   force_restart = true
 []
 
@@ -40,7 +40,7 @@
   [../]
 
   [./ffn]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn
   [../]
@@ -64,7 +64,6 @@
 
 [Executioner]
   type = Transient
-  start_time = 0.0
   end_time = 2.0
   dt = 1.0
 []

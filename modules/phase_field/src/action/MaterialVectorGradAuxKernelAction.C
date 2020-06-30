@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MaterialVectorGradAuxKernelAction.h"
 #include "Factory.h"
 #include "Parser.h"
@@ -11,11 +14,12 @@
 #include "FEProblem.h"
 #include "MooseMesh.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", MaterialVectorGradAuxKernelAction, "add_aux_kernel");
+
 InputParameters
-validParams<MaterialVectorGradAuxKernelAction>()
+MaterialVectorGradAuxKernelAction::validParams()
 {
-  InputParameters params = validParams<MaterialVectorAuxKernelAction>();
+  InputParameters params = MaterialVectorAuxKernelAction::validParams();
   return params;
 }
 
@@ -28,7 +32,7 @@ void
 MaterialVectorGradAuxKernelAction::act()
 {
   if (_num_prop != _num_var)
-    mooseError("variable_base and property must be vectors of the same size");
+    paramError("property", "variable_base and property must be vectors of the same size");
 
   // mesh dimension required for gradient variables
   unsigned int dim = _mesh->dimension();

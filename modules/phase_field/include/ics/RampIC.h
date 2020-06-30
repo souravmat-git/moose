@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RAMPIC_H
-#define RAMPIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "InitialCondition.h"
 
 // Forward Declarations
-class RampIC;
-
-template <>
-InputParameters validParams<RampIC>();
 
 /**
  * Makes initial condition which creates a linear ramp of the given variable
@@ -22,6 +20,8 @@ InputParameters validParams<RampIC>();
 class RampIC : public InitialCondition
 {
 public:
+  static InputParameters validParams();
+
   RampIC(const InputParameters & parameters);
 
 protected:
@@ -40,5 +40,3 @@ protected:
   const Real _value_left;
   const Real _value_right;
 };
-
-#endif // RAMPIC_H

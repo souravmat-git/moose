@@ -1,21 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CAPPEDWEAKPLANESTRESSUPDATE_H
-#define CAPPEDWEAKPLANESTRESSUPDATE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TwoParameterPlasticityStressUpdate.h"
 #include "TensorMechanicsHardeningModel.h"
 
 #include <array>
-
-class CappedWeakPlaneStressUpdate;
-
-template <>
-InputParameters validParams<CappedWeakPlaneStressUpdate>();
 
 /**
  * CappedWeakPlaneStressUpdate performs the return-map
@@ -29,6 +26,8 @@ InputParameters validParams<CappedWeakPlaneStressUpdate>();
 class CappedWeakPlaneStressUpdate : public TwoParameterPlasticityStressUpdate
 {
 public:
+  static InputParameters validParams();
+
   CappedWeakPlaneStressUpdate(const InputParameters & parameters);
 
   /**
@@ -55,7 +54,7 @@ protected:
   /// The cone vertex is smoothed by this amount
   const Real _small_smoother2;
 
-  /// Initialise the NR proceedure from a guess coming from perfect plasticity
+  /// Initialize the NR proceedure from a guess coming from perfect plasticity
   const bool _perfect_guess;
 
   /**
@@ -125,7 +124,7 @@ protected:
                             const std::vector<Real> & yf,
                             const RankFourTensor & Eijkl) override;
 
-  virtual void initialiseVars(Real p_trial,
+  virtual void initializeVars(Real p_trial,
                               Real q_trial,
                               const std::vector<Real> & intnl_old,
                               Real & p,
@@ -149,7 +148,7 @@ protected:
 
   virtual void computePQ(const RankTwoTensor & stress, Real & p, Real & q) const override;
 
-  virtual void initialiseReturnProcess() override;
+  virtual void initializeReturnProcess() override;
 
   virtual void finalizeReturnProcess(const RankTwoTensor & rotation_increment) override;
 
@@ -163,5 +162,3 @@ protected:
 
   virtual RankFourTensor d2qdstress2(const RankTwoTensor & stress) const override;
 };
-
-#endif // CAPPEDWEAKPLANESTRESSUPDATE_H

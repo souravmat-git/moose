@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CRYSTALPLASTICITYSTATEVARIABLE_H
-#define CRYSTALPLASTICITYSTATEVARIABLE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "CrystalPlasticityUOBase.h"
-
-class CrystalPlasticityStateVariable;
-
-template <>
-InputParameters validParams<CrystalPlasticityStateVariable>();
 
 /**
  * Crystal plasticity state variable userobject class.
@@ -20,9 +17,14 @@ InputParameters validParams<CrystalPlasticityStateVariable>();
 class CrystalPlasticityStateVariable : public CrystalPlasticityUOBase
 {
 public:
+  static InputParameters validParams();
+
   CrystalPlasticityStateVariable(const InputParameters & parameters);
 
-  virtual bool updateStateVariable(unsigned int qp, Real dt, std::vector<Real> & val) const;
+  virtual bool updateStateVariable(unsigned int qp,
+                                   Real dt,
+                                   std::vector<Real> & val,
+                                   std::vector<Real> & val_old) const;
   virtual void initSlipSysProps(std::vector<Real> & val, const Point & q_point) const;
 
 protected:
@@ -38,7 +40,6 @@ protected:
   std::vector<const MaterialProperty<std::vector<Real>> *> _mat_prop_state_var_evol_rate_comps;
 
   const MaterialProperty<std::vector<Real>> & _mat_prop_state_var;
-  const MaterialProperty<std::vector<Real>> & _mat_prop_state_var_old;
 
   /// File should contain initial values of the state variable.
   FileName _state_variable_file_name;
@@ -65,5 +66,3 @@ protected:
   /// Scale factor of individual component
   std::vector<Real> _scale_factor;
 };
-
-#endif // CRYSTALPLASTICITYSTATEVARIABLE_H

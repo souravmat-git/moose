@@ -1,20 +1,16 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MooseEnum.h"
 #include "MooseUtils.h"
 #include "MooseError.h"
+#include "Conversion.h"
 
 #include <sstream>
 #include <algorithm>
@@ -24,68 +20,73 @@
 #include <iostream>
 
 MooseEnum::MooseEnum(std::string names, std::string default_name, bool allow_out_of_range)
-  : MooseEnumBase(names, allow_out_of_range)
+  : MooseEnumBase(names, allow_out_of_range), _current("", MooseEnumItem::INVALID_ID)
 {
   *this = default_name;
 }
 
 MooseEnum::MooseEnum(const MooseEnum & other_enum)
-  : MooseEnumBase(other_enum),
-    _current_id(other_enum._current_id),
-    _current_name(other_enum._current_name),
-    _current_name_preserved(other_enum._current_name_preserved)
+  : MooseEnumBase(other_enum), _current(other_enum._current)
 {
-}
-
-MooseEnum
-MooseEnum::withNamesFrom(const MooseEnumBase & other_enum)
-{
-  return MooseEnum(other_enum);
 }
 
 /**
  * Private constuctor for use by libmesh::Parameters
  */
-MooseEnum::MooseEnum() : _current_id(INVALID_ID) {}
-
-MooseEnum::MooseEnum(const MooseEnumBase & other_enum) : MooseEnumBase(other_enum) {}
+MooseEnum::MooseEnum() : _current("", MooseEnumItem::INVALID_ID) {}
 
 MooseEnum &
 MooseEnum::operator=(const std::string & name)
 {
   if (name == "")
   {
-    _current_id = INVALID_ID;
-    _current_name = "";
-    _current_name_preserved = "";
+    _current = MooseEnumItem("", MooseEnumItem::INVALID_ID);
     return *this;
   }
 
-  std::string upper(name);
-  std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
-
-  _current_name = upper;
-  _current_name_preserved = name;
-
-  checkDeprecatedBase(upper);
-
-  if (std::find(_names.begin(), _names.end(), upper) == _names.end())
+  std::set<MooseEnumItem>::const_iterator iter = find(name);
+  if (iter == _items.end())
   {
-    if (_out_of_range_index == 0) // Are out of range values allowed?
-      mooseError(std::string("Invalid option \"") + upper +
-                 "\" in MooseEnum.  Valid options (not case-sensitive) are \"" + _raw_names +
+    if (!_allow_out_of_range) // Are out of range values allowed?
+      mooseError("Invalid option \"",
+                 name,
+                 "\" in MooseEnum.  Valid options (not case-sensitive) are \"",
+                 getRawNames(),
                  "\".");
     else
     {
-      // Allow values assigned outside of the enumeration range
-      _names.push_back(upper);
-
-      _current_id = _out_of_range_index++;
-      _name_to_id[upper] = _current_id;
+      _current = MooseEnumItem(name, getNextValidID());
+      _items.insert(_current);
     }
   }
   else
-    _current_id = _name_to_id[upper];
+    _current = *iter;
+
+  checkDeprecated();
+
+  return *this;
+}
+
+MooseEnum &
+MooseEnum::operator=(int value)
+{
+  if (value == MooseEnumItem::INVALID_ID)
+  {
+    _current = MooseEnumItem("", MooseEnumItem::INVALID_ID);
+    return *this;
+  }
+
+  std::set<MooseEnumItem>::const_iterator iter = find(value);
+  if (iter == _items.end())
+    mooseError("Invalid id \"",
+               value,
+               "\" in MooseEnum. Valid ids are \"",
+               Moose::stringify(getIDs()),
+               "\".");
+  else
+    _current = *iter;
+
+  checkDeprecated();
 
   return *this;
 }
@@ -93,15 +94,14 @@ MooseEnum::operator=(const std::string & name)
 bool
 MooseEnum::operator==(const char * name) const
 {
-  std::string upper(name);
-  std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+  std::string upper(MooseUtils::toUpper(name));
 
-  mooseAssert(
-      _out_of_range_index != 0 || std::find(_names.begin(), _names.end(), upper) != _names.end(),
-      std::string("Invalid string comparison \"") + upper +
-          "\" in MooseEnum.  Valid options (not case-sensitive) are \"" + _raw_names + "\".");
+  mooseAssert(_allow_out_of_range || find(upper) != _items.end(),
+              "Invalid string comparison \"" + upper +
+                  "\" in MooseEnum.  Valid options (not case-sensitive) are \"" + getRawNames() +
+                  "\".");
 
-  return _current_name == upper;
+  return _current == upper;
 }
 
 bool
@@ -113,41 +113,60 @@ MooseEnum::operator!=(const char * name) const
 bool
 MooseEnum::operator==(int value) const
 {
-  return value == _current_id;
+  return value == _current;
 }
 
 bool
 MooseEnum::operator!=(int value) const
 {
-  return value != _current_id;
+  return value != _current;
 }
 
 bool
 MooseEnum::operator==(unsigned short value) const
 {
-  return value == _current_id;
+  return value == _current;
 }
 
 bool
 MooseEnum::operator!=(unsigned short value) const
 {
-  return value != _current_id;
+  return value != _current;
+}
+
+bool
+MooseEnum::compareCurrent(const MooseEnum & other, CompareMode mode) const
+{
+  switch (mode)
+  {
+    case CompareMode::COMPARE_BOTH:
+      return (_current.id() == other._current.id()) && (_current.name() == other._current.name());
+    case CompareMode::COMPARE_NAME:
+      return _current.name() == other._current.name();
+    case CompareMode::COMPARE_ID:
+      return _current.id() == other._current.id();
+  }
+  return false;
 }
 
 bool
 MooseEnum::operator==(const MooseEnum & value) const
 {
-  return value._current_name == _current_name;
+  mooseDeprecated("This method will be removed because the meaning is not well defined, please use "
+                  "the 'compareCurrent' method instead.");
+  return value._current.name() == _current.name();
 }
 
 bool
 MooseEnum::operator!=(const MooseEnum & value) const
 {
-  return value._current_name != _current_name;
+  mooseDeprecated("This method will be removed because the meaning is not well defined, please use "
+                  "the 'compareCurrent' method instead.");
+  return value._current.name() != _current.name();
 }
 
 void
 MooseEnum::checkDeprecated() const
 {
-  checkDeprecatedBase(_current_name);
+  MooseEnumBase::checkDeprecated(_current);
 }

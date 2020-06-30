@@ -1,16 +1,28 @@
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "JouleHeatingSource.h"
 
-template <>
+registerMooseObject("HeatConductionApp", JouleHeatingSource);
+
 InputParameters
-validParams<JouleHeatingSource>()
+JouleHeatingSource::validParams()
 {
-  InputParameters params = validParams<HeatSource>();
+  InputParameters params =
+      DerivativeMaterialInterface<JvarMapKernelInterface<HeatSource>>::validParams();
   params.addCoupledVar("elec", "Electric potential for joule heating.");
-  params.addCoupledVar("args", "Vector of arguments of the diffusivity");
   params.addParam<MaterialPropertyName>(
       "electrical_conductivity",
       "electrical_conductivity",
       "Material property providing electrical conductivity of the material.");
+  params.addClassDescription("Calculates the heat source term corresponding to electrostatic Joule "
+                             "heating.");
   return params;
 }
 

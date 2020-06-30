@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "SymmAnisotropicElasticityTensor.h"
 #include <cmath>
 #include <ostream>
@@ -391,34 +394,28 @@ SymmAnisotropicElasticityTensor::calculateEntries(unsigned int /*qp*/)
 void
 SymmAnisotropicElasticityTensor::show_dt_matrix()
 {
-  printf("\nSymmAnisotropicElasticityTensor::show_dt_matrix()\n");
+  Moose::out << "\nSymmAnisotropicElasticityTensor::show_dt_matrix()\n";
 
   for (int j = 0; j < 6; ++j)
   {
-    printf("  ");
+    Moose::out << "  ";
     for (int i = 0; i < 6; ++i)
-    {
-      printf("%12.4f  ", _dt(i, j));
-    }
-    printf("\n");
+      Moose::out << _dt(i, j);
+    Moose::out << '\n';
   }
 }
 
 void
 SymmAnisotropicElasticityTensor::show_r_matrix()
 {
-  printf("\nSymmAnisotropicElasticityTensor::show_r_matrix()  Euler angles are (%f, %f, %f)\n",
-         _euler_angle[0],
-         _euler_angle[1],
-         _euler_angle[2]);
+  Moose::out << "\nSymmAnisotropicElasticityTensor::show_r_matrix()  Euler angles are ("
+             << _euler_angle[0] << ", " << _euler_angle[1] << ", " << _euler_angle[2] << ")\n";
 
   for (int j = 0; j < 3; ++j)
   {
-    printf("  ");
+    Moose::out << "  ";
     for (int i = 0; i < 3; ++i)
-    {
-      printf("%8.4f  ", _r(i, j));
-    }
-    printf("\n");
+      Moose::out << _r(i, j);
+    Moose::out << '\n';
   }
 }

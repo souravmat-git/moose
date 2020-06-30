@@ -1,29 +1,26 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ADDSECONDARYSPECIESACTION_H
-#define ADDSECONDARYSPECIESACTION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#include "Action.h"
+#pragma once
 
-class AddSecondarySpeciesAction;
+#include "AddAuxVariableAction.h"
 
-template <>
-InputParameters validParams<AddSecondarySpeciesAction>();
-
-class AddSecondarySpeciesAction : public Action
+class AddSecondarySpeciesAction : public AddAuxVariableAction
 {
 public:
+  static InputParameters validParams();
+
   AddSecondarySpeciesAction(const InputParameters & params);
 
-  virtual void act();
+  virtual void act() override;
 
 private:
-  const std::vector<AuxVariableName> _vars;
-  const std::vector<std::string> _reactions;
+  /// Secondary species to add
+  const std::vector<AuxVariableName> _secondary_species;
 };
-
-#endif // ADDSECONDARYSPECIESACTION_H

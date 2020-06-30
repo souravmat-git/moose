@@ -1,44 +1,42 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "DistributionInterface.h"
 #include "Distribution.h"
 #include "SubProblem.h"
 #include "MooseTypes.h"
 
-template <>
+defineLegacyParams(DistributionInterface);
+
 InputParameters
-validParams<DistributionInterface>()
+DistributionInterface::validParams()
 {
-  return emptyInputParameters();
+  InputParameters params = emptyInputParameters();
+  return params;
 }
 
 DistributionInterface::DistributionInterface(const MooseObject * moose_object)
   : _dni_params(moose_object->parameters()),
-    _dni_feproblem(*_dni_params.get<FEProblemBase *>("_fe_problem_base"))
+    _dni_feproblem(*_dni_params.getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
+    _dni_moose_object_ptr(moose_object)
 {
 }
 
-Distribution &
-DistributionInterface::getDistribution(const std::string & name)
+const Distribution &
+DistributionInterface::getDistribution(const std::string & name) const
 {
   DistributionName dist_name = _dni_params.get<DistributionName>(name);
   return _dni_feproblem.getDistribution(dist_name);
 }
 
-Distribution &
-DistributionInterface::getDistributionByName(const DistributionName & name)
+const Distribution &
+DistributionInterface::getDistributionByName(const DistributionName & name) const
 {
   return _dni_feproblem.getDistribution(name);
 }

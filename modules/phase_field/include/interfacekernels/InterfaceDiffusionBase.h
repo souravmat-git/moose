@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INTERFACEDIFFUSIONBASE_H
-#define INTERFACEDIFFUSIONBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "InterfaceKernel.h"
-
-class InterfaceDiffusionBase;
-
-template <>
-InputParameters validParams<InterfaceDiffusionBase>();
 
 /**
  * Base class for Diffusion equation terms coupling two different
@@ -21,6 +18,8 @@ InputParameters validParams<InterfaceDiffusionBase>();
 class InterfaceDiffusionBase : public InterfaceKernel
 {
 public:
+  static InputParameters validParams();
+
   InterfaceDiffusionBase(const InputParameters & parameters);
 
 protected:
@@ -30,5 +29,3 @@ protected:
   /// neighbor diffusion coefficient
   const Real _D_neighbor;
 };
-
-#endif // INTERFACEDIFFUSIONBASE_H

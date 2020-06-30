@@ -58,7 +58,7 @@
   [../]
 
   [./forcing]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn
   [../]
@@ -81,7 +81,7 @@
   [./all]
     type = DGFunctionDiffusionDirichletBC
     variable = u
-    boundary = '0 1 2 3'
+    boundary = '0 1 2 3 4 5'
     function = exact_fn
     epsilon = -1
     sigma = 6
@@ -91,7 +91,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 
@@ -100,7 +99,6 @@
 
   [./h]
     type = AverageElementSize
-    variable = u
     execute_on = 'initial timestep_end'
   [../]
 

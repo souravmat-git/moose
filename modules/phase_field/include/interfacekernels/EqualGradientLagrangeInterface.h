@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef EQUALGRADIENTLAGRANGEINTERFACE_H
-#define EQUALGRADIENTLAGRANGEINTERFACE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "InterfaceKernel.h"
-
-class EqualGradientLagrangeInterface;
-
-template <>
-InputParameters validParams<EqualGradientLagrangeInterface>();
 
 /**
  * InterfaceKernel to enforce a Lagrange-Multiplier based componentwise
@@ -21,6 +18,8 @@ InputParameters validParams<EqualGradientLagrangeInterface>();
 class EqualGradientLagrangeInterface : public InterfaceKernel
 {
 public:
+  static InputParameters validParams();
+
   EqualGradientLagrangeInterface(const InputParameters & parameters);
 
 protected:
@@ -35,5 +34,3 @@ protected:
 
   const unsigned int _lambda_jvar;
 };
-
-#endif // EQUALGRADIENTLAGRANGEINTERFACE_H

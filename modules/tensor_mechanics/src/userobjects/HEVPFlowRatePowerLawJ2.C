@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "HEVPFlowRatePowerLawJ2.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", HEVPFlowRatePowerLawJ2);
+
 InputParameters
-validParams<HEVPFlowRatePowerLawJ2>()
+HEVPFlowRatePowerLawJ2::validParams()
 {
-  InputParameters params = validParams<HEVPFlowRateUOBase>();
+  InputParameters params = HEVPFlowRateUOBase::validParams();
   params.addParam<Real>(
       "reference_flow_rate", 0.001, "Reference flow rate for rate dependent flow");
   params.addParam<Real>("flow_rate_exponent", 10.0, "Power law exponent in flow rate equation");

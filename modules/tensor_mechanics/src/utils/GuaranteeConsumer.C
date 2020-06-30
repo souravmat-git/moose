@@ -1,15 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "GuaranteeConsumer.h"
 #include "GuaranteeProvider.h"
 
 #include "MooseObject.h"
-#include "Material.h"
+#include "MaterialBase.h"
 #include "MooseMesh.h"
 #include "FEProblemBase.h"
 #include "InputParameters.h"
@@ -43,7 +45,7 @@ GuaranteeConsumer::hasGuaranteedMaterialProperty(const MaterialPropertyName & pr
     // If block materials exist, look if any issue the required guarantee
     if (warehouse.hasActiveBlockObjects(id))
     {
-      const std::vector<std::shared_ptr<Material>> & mats = warehouse.getActiveBlockObjects(id);
+      const std::vector<std::shared_ptr<MaterialBase>> & mats = warehouse.getActiveBlockObjects(id);
       for (const auto & mat : mats)
       {
         const auto & mat_props = mat->getSuppliedItems();

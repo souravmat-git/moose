@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef EXPRESSIONBUILDER_H
-#define EXPRESSIONBUILDER_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include <vector>
 #include <ostream>
@@ -323,6 +325,7 @@ public:
   public:
     EBTermSubstitution(const EBTerm & find, const EBTerm & replace);
     virtual ~EBTermSubstitution() { delete _replace; }
+
   protected:
     virtual EBTermNode * substitute(const EBSymbolNode &) const;
     std::string _find;
@@ -341,6 +344,7 @@ public:
       mooseAssert(_epsilon != NULL, "Epsilon must not be an empty term in EBLogPlogSubstitution");
     }
     virtual ~EBLogPlogSubstitution() { delete _epsilon; }
+
   protected:
     virtual EBTermNode * substitute(const EBUnaryFuncTermNode &) const;
     EBTermNode * _epsilon;
@@ -358,7 +362,7 @@ public:
     // the default constructor assigns a temporary id node to root we use the address of the
     // current EBTerm object as the ID. This could be problematic if we create and destroy terms,
     // but then we should not expect the substitution to do sane things anyways.
-    EBTerm() : _root(new EBTempIDNode(reinterpret_cast<unsigned long>(this))){};
+    EBTerm() : _root(new EBTempIDNode(reinterpret_cast<unsigned long long>(this))){};
 
     EBTerm(const EBTerm & term) : _root(term.cloneRoot()){};
     ~EBTerm() { delete _root; };
@@ -409,7 +413,7 @@ public:
  * Unary operators
  */
 #define UNARY_OP_IMPLEMENT(op, OP)                                                                 \
-  EBTerm operator op()                                                                             \
+  EBTerm operator op() const                                                                       \
   {                                                                                                \
     mooseAssert(_root != NULL, "Empty term provided for unary operator " #op);                     \
     return EBTerm(new EBUnaryOpTermNode(cloneRoot(), EBUnaryOpTermNode::OP));                      \
@@ -435,7 +439,7 @@ public:
  * Binary operators (including number,term operations)
  */
 #define BINARY_OP_IMPLEMENT(op, OP)                                                                \
-  EBTerm operator op(const EBTerm & term)                                                          \
+  EBTerm operator op(const EBTerm & term) const                                                    \
   {                                                                                                \
     mooseAssert(_root != NULL, "Empty term provided on left side of operator " #op);               \
     mooseAssert(term._root != NULL, "Empty term provided on right side of operator " #op);         \
@@ -495,7 +499,7 @@ public:
     BINARYCOMP_OP_IMPLEMENT(%=, MOD)
 
     /**
-    * @{
+     * @{
      * Binary functions
      */
     friend EBTerm min(const EBTerm &, const EBTerm &);
@@ -697,5 +701,3 @@ ExpressionBuilder::EBSubstitutionRuleTyped<Node_T>::apply(
   else
     return substitute(*match_node);
 }
-
-#endif // EXPRESSIONBUILDER_H

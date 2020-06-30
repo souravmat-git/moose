@@ -1,18 +1,14 @@
 #pylint: disable=missing-docstring
-#################################################################
-#                   DO NOT MODIFY THIS HEADER                   #
-#  MOOSE - Multiphysics Object Oriented Simulation Environment  #
-#                                                               #
-#            (c) 2010 Battelle Energy Alliance, LLC             #
-#                      ALL RIGHTS RESERVED                      #
-#                                                               #
-#           Prepared by Battelle Energy Alliance, LLC           #
-#             Under Contract No. DE-AC07-05ID14517              #
-#              With the U. S. Department of Energy              #
-#                                                               #
-#              See COPYRIGHT for full restrictions              #
-#################################################################
-from Options import Options
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
+from .Options import Options
 
 def get_options():
     """
@@ -28,6 +24,9 @@ def get_options():
     opt.add('text_opacity', 1, "The text opacity.", vtype=float)
     opt.add('text', None, "The text to display.", vtype=str)
     opt.add('font_size', 24, "The text font size.", vtype=int)
+    opt.add('font_family', None, "The font family.", vtype=str)
+    opt.add('bold', False, "Enable/disable text bolding.", vtype=bool)
+    opt.add('italic', False, "Enable/disable text italic.", vtype=bool)
     return opt
 
 
@@ -57,5 +56,14 @@ def set_options(tprop, options):
     if options.isOptionValid('text_opacity'):
         tprop.SetOpacity(options['text_opacity'])
 
+    if options.isOptionValid('font_family'):
+        tprop.SetFontFamilyAsString(options['font_family'])
+
     if options.isOptionValid('font_size'):
         tprop.SetFontSize(options['font_size'])
+
+    if options.isOptionValid('bold'):
+        tprop.SetBold(options['bold'])
+
+    if options.isOptionValid('italic'):
+        tprop.SetItalic(options['italic'])

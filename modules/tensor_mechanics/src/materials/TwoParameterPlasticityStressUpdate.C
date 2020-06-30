@@ -1,19 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "TwoParameterPlasticityStressUpdate.h"
 
 #include "Conversion.h"      // for stringify
 #include "libmesh/utility.h" // for Utility::pow
 
-template <>
 InputParameters
-validParams<TwoParameterPlasticityStressUpdate>()
+TwoParameterPlasticityStressUpdate::validParams()
 {
-  InputParameters params = validParams<MultiParameterPlasticityStressUpdate>();
+  InputParameters params = MultiParameterPlasticityStressUpdate::validParams();
   params.addClassDescription("Return-map and Jacobian algorithms for (P, Q) plastic models");
   return params;
 }
@@ -81,7 +83,7 @@ TwoParameterPlasticityStressUpdate::preReturnMap(Real /*p_trial*/,
 }
 
 void
-TwoParameterPlasticityStressUpdate::initialiseVars(Real p_trial,
+TwoParameterPlasticityStressUpdate::initializeVars(Real p_trial,
                                                    Real q_trial,
                                                    const std::vector<Real> & intnl_old,
                                                    Real & p,
@@ -106,7 +108,7 @@ TwoParameterPlasticityStressUpdate::computeAllQV(const std::vector<Real> & stres
 }
 
 void
-TwoParameterPlasticityStressUpdate::initialiseVarsV(const std::vector<Real> & trial_stress_params,
+TwoParameterPlasticityStressUpdate::initializeVarsV(const std::vector<Real> & trial_stress_params,
                                                     const std::vector<Real> & intnl_old,
                                                     std::vector<Real> & stress_params,
                                                     Real & gaE,
@@ -116,7 +118,7 @@ TwoParameterPlasticityStressUpdate::initialiseVarsV(const std::vector<Real> & tr
   const Real q_trial = trial_stress_params[1];
   Real p;
   Real q;
-  initialiseVars(p_trial, q_trial, intnl_old, p, q, gaE, intnl);
+  initializeVars(p_trial, q_trial, intnl_old, p, q, gaE, intnl);
   stress_params[0] = p;
   stress_params[1] = q;
 }
@@ -209,9 +211,6 @@ TwoParameterPlasticityStressUpdate::consistentTangentOperator(
     bool compute_full_tangent_operator,
     RankFourTensor & cto) const
 {
-  if (!_fe_problem.currentlyComputingJacobian())
-    return;
-
   cto = elasticity_tensor;
   if (!compute_full_tangent_operator)
     return;
@@ -272,20 +271,6 @@ TwoParameterPlasticityStressUpdate::setStressAfterReturnV(const RankTwoTensor & 
   const Real p_ok = stress_params[0];
   const Real q_ok = stress_params[1];
   setStressAfterReturn(stress_trial, p_ok, q_ok, gaE, intnl, smoothed_q, Eijkl, stress);
-}
-void
-TwoParameterPlasticityStressUpdate::setStressAfterReturn(const RankTwoTensor & stress_trial,
-                                                         Real /*p_ok*/,
-                                                         Real /*q_ok*/,
-                                                         Real gaE,
-                                                         const std::vector<Real> & /*intnl*/,
-                                                         const yieldAndFlow & smoothed_q,
-                                                         const RankFourTensor & elasticity_tensor,
-                                                         RankTwoTensor & stress) const
-{
-  const RankTwoTensor correction = elasticity_tensor * (smoothed_q.dg[0] * dpdstress(stress) +
-                                                        smoothed_q.dg[1] * dqdstress(stress));
-  stress = stress_trial - gaE / _Epp * correction;
 }
 
 void

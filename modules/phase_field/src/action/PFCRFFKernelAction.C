@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PFCRFFKernelAction.h"
 #include "Factory.h"
 #include "FEProblem.h"
 #include "Conversion.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", PFCRFFKernelAction, "add_kernel");
+
 InputParameters
-validParams<PFCRFFKernelAction>()
+PFCRFFKernelAction::validParams()
 {
-  InputParameters params = validParams<HHPFCRFFSplitKernelAction>();
+  InputParameters params = HHPFCRFFSplitKernelAction::validParams();
   params.addParam<Real>("a", 1.0, "Parameter in the Taylor series expansion");
   params.addParam<Real>("b", 1.0, "Parameter in the Taylor series expansion");
   params.addParam<Real>("c", 1.0, "Parameter in the Taylor series expansion");

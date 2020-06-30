@@ -1,49 +1,57 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MortarPeriodicAction.h"
-#include "MortarPeriodicMesh.h"
+#include "MooseMesh.h"
 #include "Conversion.h"
 #include "FEProblem.h"
 #include "Factory.h"
 
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", MortarPeriodicAction, "add_constraint");
+
+registerMooseAction("PhaseFieldApp", MortarPeriodicAction, "add_mesh_modifier");
+
+registerMooseAction("PhaseFieldApp", MortarPeriodicAction, "add_variable");
+
 InputParameters
-validParams<MortarPeriodicAction>()
+MortarPeriodicAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription("Add mortar interfaces, Lagrange multiplier variables, and "
                              "constraints to implement mortar based periodicity of values or "
                              "gradients on a MortarPeriodicMesh");
   params.addParam<std::vector<VariableName>>("variable", "Periodic variables");
   MooseEnum periodicity_type("gradient value", "gradient");
   params.addParam<MooseEnum>("periodicity", periodicity_type, "Periodicity type");
+  MultiMooseEnum periodic_dirs("x=0 y=1 z=2");
+  params.addRequiredParam<MultiMooseEnum>(
+      "periodic_directions",
+      periodic_dirs,
+      "Directions along which additional Mortar meshes are generated");
   return params;
 }
 
 MortarPeriodicAction::MortarPeriodicAction(const InputParameters & parameters)
   : Action(parameters),
     _variables(getParam<std::vector<VariableName>>("variable")),
-    _periodicity(getParam<MooseEnum>("periodicity"))
+    _periodicity(getParam<MooseEnum>("periodicity")),
+    _periodic_directions(getParam<MultiMooseEnum>("periodic_directions"))
 {
 }
 
 void
 MortarPeriodicAction::act()
 {
-  // get the mesh
-  MooseSharedPointer<MortarPeriodicMesh> mesh =
-      MooseSharedNamespace::dynamic_pointer_cast<MortarPeriodicMesh>(_mesh);
-  if (!mesh)
-    mooseError("Please use a MortarPeriodicMesh in your simulation.");
-
   // mesh dimension
-  const unsigned short dim = mesh->dimension();
+  const unsigned short dim = _mesh->dimension();
 
   // periodicity subblock name
   std::string periodicity_name = name();
@@ -56,22 +64,52 @@ MortarPeriodicAction::act()
   // opposite boundaries
   const std::vector<BoundaryName> opposite_boundary_names = {"right", "top", "front"};
 
-  // mortar subdomains
-  const std::vector<SubdomainID> & mortar_subdomains = mesh->getMortarSubdomains();
+  // Get the current subdomain ids
+  std::set<SubdomainID> current_subdomain_ids;
+  _mesh->getMesh().subdomain_ids(current_subdomain_ids);
+
+  SubdomainID new_subdomain_id =
+      *std::max_element(current_subdomain_ids.begin(), current_subdomain_ids.end()) + 1;
 
   // iterate over the periodic directions
   for (unsigned short i = 0; i < dim; ++i)
-    if (mesh->getPeriodicDirections().contains(i))
+  {
+    if (_periodic_directions.contains(i))
     {
-      // initialize subdomain restriction set
-      std::set<SubdomainID> subdomain_restriction = {mortar_subdomains[i]};
+      //
+      // Add Mortar interfaces. I am only going to add these to the reference
+      // mesh because this action currently has no machinery to add constraints
+      // on the displaced problem (e.g. see the add_constraint block)
+      //
+      if (_current_task == "add_mesh_modifier")
+      {
+        // Don't do mesh modifiers when recovering!
+        if (!_app.isRecovering())
+        {
+          auto slave_params = _factory.getValidParams("LowerDBlockFromSideset");
+          auto master_params = _factory.getValidParams("LowerDBlockFromSideset");
+
+          auto slave_boundary_id = _mesh->getBoundaryID(boundary_names[i]);
+          auto master_boundary_id = _mesh->getBoundaryID(opposite_boundary_names[i]);
+
+          slave_params.set<SubdomainID>("new_block_id") = new_subdomain_id++;
+          slave_params.set<SubdomainName>("new_block_name") = "slave_" + axis[i];
+          slave_params.set<std::vector<BoundaryID>>("sidesets") = {slave_boundary_id};
+          slave_params.set<MooseMesh *>("_mesh") = _mesh.get();
+
+          master_params.set<SubdomainID>("new_block_id") = new_subdomain_id++;
+          master_params.set<SubdomainName>("new_block_name") = "master_" + axis[i];
+          master_params.set<std::vector<BoundaryID>>("sidesets") = {master_boundary_id};
+          master_params.set<MooseMesh *>("_mesh") = _mesh.get();
+
+          _app.addMeshModifier("LowerDBlockFromSideset", axis[i] + "_slave_lower_d", slave_params);
+          _app.addMeshModifier(
+              "LowerDBlockFromSideset", axis[i] + "_master_lower_d", master_params);
+        }
+      }
 
       // Lagrange multiplier variable base name
       const std::string lm_base = "lm_" + periodicity_name + "_" + boundary_names[i];
-
-      // mortar interface name
-      const std::string mi_name =
-          "mi_" + periodicity_name + "_" + boundary_names[i] + '_' + opposite_boundary_names[i];
 
       //
       // Add Lagrange multiplier variables
@@ -79,48 +117,38 @@ MortarPeriodicAction::act()
 
       if (_current_task == "add_variable")
       {
+        std::set<SubdomainID> sub_ids = {_mesh->getSubdomainID("slave_" + axis[i])};
         for (auto & var : _variables)
         {
           switch (_periodicity)
           {
             case 0: // gradient
+            {
               for (unsigned short j = 0; j < dim; ++j)
+              {
                 _problem->addVariable(lm_base + "_" + var + "_d" + axis[j],
                                       FEType(Utility::string_to_enum<Order>("FIRST"),
                                              Utility::string_to_enum<FEFamily>("LAGRANGE")),
                                       1.0,
-                                      &subdomain_restriction);
+                                      &sub_ids);
+              }
               break;
+            }
 
             case 1: // value
+            {
               _problem->addVariable(lm_base + "_" + var,
                                     FEType(Utility::string_to_enum<Order>("FIRST"),
                                            Utility::string_to_enum<FEFamily>("LAGRANGE")),
                                     1.0,
-                                    &subdomain_restriction);
+                                    &sub_ids);
               break;
+            }
 
             default:
-              mooseError("Periodicity type not implemented");
+              paramError("periodicity", "Periodicity type not implemented");
           }
         }
-      }
-
-      //
-      // Add Mortar interfaces
-      //
-
-      if (_current_task == "add_mortar_interface")
-      {
-        _mesh->addMortarInterface(mi_name,
-                                  boundary_names[i],
-                                  opposite_boundary_names[i],
-                                  Moose::stringify(mortar_subdomains[i]));
-        if (_displaced_mesh)
-          _displaced_mesh->addMortarInterface(mi_name,
-                                              boundary_names[i],
-                                              opposite_boundary_names[i],
-                                              Moose::stringify(mortar_subdomains[i]));
       }
 
       //
@@ -136,28 +164,39 @@ MortarPeriodicAction::act()
           switch (_periodicity)
           {
             case 0: // gradient
+            {
               for (unsigned short j = 0; j < dim; ++j)
               {
                 InputParameters params = _factory.getValidParams("EqualGradientConstraint");
                 params.set<NonlinearVariableName>("variable") =
                     lm_base + "_" + var + "_d" + axis[j];
                 params.set<VariableName>("master_variable") = var;
-                params.set<std::string>("interface") = mi_name;
+                params.set<BoundaryName>("slave_boundary_name") = boundary_names[i];
+                params.set<BoundaryName>("master_boundary_name") = opposite_boundary_names[i];
+                params.set<SubdomainName>("slave_subdomain_name") = "slave_" + axis[i];
+                params.set<SubdomainName>("master_subdomain_name") = "master_" + axis[i];
                 params.set<unsigned int>("component") = j;
+                params.set<bool>("periodic") = true;
                 _problem->addConstraint(
                     "EqualGradientConstraint", ct_base + "_d" + axis[j], params);
               }
               break;
+            }
 
             case 1: // value
             {
               InputParameters params = _factory.getValidParams("EqualValueConstraint");
               params.set<NonlinearVariableName>("variable") = lm_base + "_" + var;
               params.set<VariableName>("master_variable") = var;
-              params.set<std::string>("interface") = mi_name;
+              params.set<BoundaryName>("slave_boundary_name") = boundary_names[i];
+              params.set<BoundaryName>("master_boundary_name") = opposite_boundary_names[i];
+              params.set<SubdomainName>("slave_subdomain_name") = "slave_" + axis[i];
+              params.set<SubdomainName>("master_subdomain_name") = "master_" + axis[i];
+              params.set<bool>("periodic") = true;
               _problem->addConstraint("EqualValueConstraint", ct_base, params);
+
+              break;
             }
-            break;
 
             default:
               mooseError("Periodicity type not implemented");
@@ -165,4 +204,5 @@ MortarPeriodicAction::act()
         }
       }
     }
+  }
 }

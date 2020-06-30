@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INSCOURANT_H
-#define INSCOURANT_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxKernel.h"
 
 // Forward Declarations
-class INSCourant;
-
-template <>
-InputParameters validParams<INSCourant>();
 
 /**
  * Computes h_min / |u|
@@ -21,6 +19,8 @@ InputParameters validParams<INSCourant>();
 class INSCourant : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   INSCourant(const InputParameters & parameters);
 
 protected:
@@ -31,5 +31,3 @@ protected:
   const VariableValue & _v_vel;
   const VariableValue & _w_vel;
 };
-
-#endif // INSCOURANT_H

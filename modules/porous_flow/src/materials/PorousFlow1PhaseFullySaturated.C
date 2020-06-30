@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlow1PhaseFullySaturated.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlow1PhaseFullySaturated);
+
 InputParameters
-validParams<PorousFlow1PhaseFullySaturated>()
+PorousFlow1PhaseFullySaturated::validParams()
 {
-  InputParameters params = validParams<PorousFlowVariableBase>();
+  InputParameters params = PorousFlowVariableBase::validParams();
   params.addRequiredCoupledVar("porepressure",
                                "Variable that represents the porepressure of the single phase");
   params.addClassDescription("This Material is used for the fully saturated single-phase situation "
@@ -22,7 +25,7 @@ validParams<PorousFlow1PhaseFullySaturated>()
 PorousFlow1PhaseFullySaturated::PorousFlow1PhaseFullySaturated(const InputParameters & parameters)
   : PorousFlowVariableBase(parameters),
 
-    _porepressure_var(_nodal_material ? coupledNodalValue("porepressure")
+    _porepressure_var(_nodal_material ? coupledDofValues("porepressure")
                                       : coupledValue("porepressure")),
     _gradp_qp_var(coupledGradient("porepressure")),
     _porepressure_varnum(coupled("porepressure")),

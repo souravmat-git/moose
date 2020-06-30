@@ -1,18 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CappedWeakPlaneStressUpdate.h"
 
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", CappedWeakPlaneStressUpdate);
+
 InputParameters
-validParams<CappedWeakPlaneStressUpdate>()
+CappedWeakPlaneStressUpdate::validParams()
 {
-  InputParameters params = validParams<TwoParameterPlasticityStressUpdate>();
+  InputParameters params = TwoParameterPlasticityStressUpdate::validParams();
   params.addClassDescription("Capped weak-plane plasticity stress calculator");
   params.addRequiredParam<UserObjectName>(
       "cohesion",
@@ -43,7 +47,7 @@ validParams<CappedWeakPlaneStressUpdate>()
       "the given amount.  Typical value is 0.1*cohesion");
   params.addParam<bool>("perfect_guess",
                         true,
-                        "Provide a guess to the Newton-Raphson proceedure "
+                        "Provide a guess to the Newton-Raphson procedure "
                         "that is the result from perfect plasticity.  With "
                         "severe hardening/softening this may be "
                         "suboptimal.");
@@ -80,7 +84,7 @@ CappedWeakPlaneStressUpdate::CappedWeakPlaneStressUpdate(const InputParameters &
 }
 
 void
-CappedWeakPlaneStressUpdate::initialiseReturnProcess()
+CappedWeakPlaneStressUpdate::initializeReturnProcess()
 {
   _stress_return_type = StressReturnType::nothing_special;
 }
@@ -180,9 +184,6 @@ CappedWeakPlaneStressUpdate::consistentTangentOperator(const RankTwoTensor & /*s
                                                        bool compute_full_tangent_operator,
                                                        RankFourTensor & cto) const
 {
-  if (!_fe_problem.currentlyComputingJacobian())
-    return;
-
   cto = Eijkl;
   if (!compute_full_tangent_operator)
     return;
@@ -372,7 +373,7 @@ CappedWeakPlaneStressUpdate::computeAllQ(Real p,
 }
 
 void
-CappedWeakPlaneStressUpdate::initialiseVars(Real p_trial,
+CappedWeakPlaneStressUpdate::initializeVars(Real p_trial,
                                             Real q_trial,
                                             const std::vector<Real> & intnl_old,
                                             Real & p,

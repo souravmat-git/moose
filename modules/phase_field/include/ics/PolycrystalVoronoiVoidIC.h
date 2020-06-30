@@ -1,21 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef POLYCRYSTALVORONOIVOIDIC_H
-#define POLYCRYSTALVORONOIVOIDIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "MultiSmoothCircleIC.h"
 #include "MooseRandom.h"
 #include "PolycrystalICTools.h"
 
 // Forward Declarationsc
-class PolycrystalVoronoiVoidIC;
-
-template <>
-InputParameters validParams<PolycrystalVoronoiVoidIC>();
+class GrainTrackerInterface;
+class PolycrystalVoronoi;
 
 /**
  * PolycrystalVoronoiVoidIC initializes either grain or void values for a
@@ -24,6 +24,8 @@ InputParameters validParams<PolycrystalVoronoiVoidIC>();
 class PolycrystalVoronoiVoidIC : public MultiSmoothCircleIC
 {
 public:
+  static InputParameters validParams();
+
   PolycrystalVoronoiVoidIC(const InputParameters & parameters);
 
   virtual void initialSetup() override;
@@ -34,23 +36,21 @@ protected:
   const MooseEnum _structure_type;
 
   const unsigned int _op_num;
-  const unsigned int _grain_num;
   const unsigned int _op_index;
 
-  const unsigned int _rand_seed;
-
   const bool _columnar_3D;
+
+  const PolycrystalVoronoi & _poly_ic_uo;
+
+  const FileName _file_name;
 
   virtual void computeCircleCenters() override;
 
   virtual Real value(const Point & p) override;
   virtual RealGradient gradient(const Point & p) override;
 
-  virtual Real grainValueCalc(const Point & p);
-  virtual void computeGrainCenters();
-
+  unsigned int _grain_num;
   std::vector<Point> _centerpoints;
-  std::vector<unsigned int> _assigned_op;
 
   /// Type for distance and point
   struct DistancePoint
@@ -65,5 +65,3 @@ protected:
     bool operator()(const DistancePoint & a, const DistancePoint & b) { return a.d < b.d; }
   } _customLess;
 };
-
-#endif // POLYCRYSTALVORONOIVOIDIC_H

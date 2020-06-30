@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef IMPLICITNEUMANNBC_H
-#define IMPLICITNEUMANNBC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "IntegratedBC.h"
 
 // Forward Declarations
-class ImplicitNeumannBC;
-
-template <>
-InputParameters validParams<ImplicitNeumannBC>();
 
 /**
  * This class implements a form of the Neumann boundary condition in
@@ -23,6 +21,8 @@ InputParameters validParams<ImplicitNeumannBC>();
 class ImplicitNeumannBC : public IntegratedBC
 {
 public:
+  static InputParameters validParams();
+
   ImplicitNeumannBC(const InputParameters & parameters);
 
   virtual ~ImplicitNeumannBC() {}
@@ -32,5 +32,3 @@ protected:
   virtual Real computeQpJacobian();
   virtual Real computeQpOffDiagJacobian(unsigned jvar);
 };
-
-#endif // IMPLICITNEUMANNBC_H

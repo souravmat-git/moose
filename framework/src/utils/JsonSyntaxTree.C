@@ -1,30 +1,57 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "JsonSyntaxTree.h"
 
 // MOOSE includes
 #include "MooseEnum.h"
 #include "MultiMooseEnum.h"
+#include "ExecFlagEnum.h"
 #include "Parser.h"
 #include "pcrecpp.h"
+#include "Action.h"
+#include "AppFactory.h"
+#include "Registry.h"
+
+#include "libmesh/vector_value.h"
 
 // C++ includes
 #include <algorithm>
 #include <cctype>
 
-JsonSyntaxTree::JsonSyntaxTree(const std::string & search_string) : _search(search_string) {}
+JsonSyntaxTree::JsonSyntaxTree(const std::string & search_string) : _search(search_string)
+{
+  // Registry holds a map with labels (ie MooseApp) as keys and a vector of RegistryEntry
+  // as values. We need the reverse map: given an action or object name then get the label.
+  auto & actmap = Registry::allActions();
+  for (auto & entry : actmap)
+    for (auto & act : entry.second)
+      _action_label_map[act._classname] = std::make_pair(entry.first, act._file);
+
+  auto & objmap = Registry::allObjects();
+  for (auto & entry : objmap)
+    for (auto & obj : entry.second)
+    {
+      std::string name = obj._name;
+      if (name.empty())
+        name = obj._alias;
+      if (name.empty())
+        name = obj._classname;
+
+      // Skip <JACOBIAN> instances and remove <RESIDUAL> from name
+      if (name.find("<JACOBIAN>") == std::string::npos)
+      {
+        name = name.substr(0, name.find("<RESIDUAL>"));
+        _object_label_map[name] = std::make_pair(entry.first, obj._file);
+      }
+    }
+}
 
 std::vector<std::string>
 JsonSyntaxTree::splitPath(const std::string & path)
@@ -104,7 +131,10 @@ JsonSyntaxTree::setParams(InputParameters * params,
     else if (params->hasDefaultCoupledValue(iter.first))
       param_json["default"] = params->defaultCoupledValue(iter.first);
 
-    param_json["options"] = buildOptions(iter);
+    bool out_of_range_allowed = false;
+    param_json["options"] = buildOptions(iter, out_of_range_allowed);
+    if (!param_json["options"].asString().empty())
+      param_json["out_of_range_allowed"] = out_of_range_allowed;
     auto reserved_values = params->reservedValues(iter.first);
     for (const auto & reserved : reserved_values)
       param_json["reserved_values"].append(reserved);
@@ -118,6 +148,7 @@ JsonSyntaxTree::setParams(InputParameters * params,
     std::string doc = params->getDocString(iter.first);
     MooseUtils::escape(doc);
     param_json["description"] = doc;
+    param_json["deprecated"] = params->isParamDeprecated(iter.first);
     all_params[iter.first] = param_json;
   }
   return count;
@@ -133,6 +164,14 @@ JsonSyntaxTree::addGlobal()
     moosecontrib::Json::Value jparams;
     setParams(&params, true, jparams);
     _root["global"]["parameters"] = jparams;
+
+    // Just create a list of registered app names
+    moosecontrib::Json::Value apps;
+    auto factory = AppFactory::instance();
+    for (auto app = factory.registeredObjectsBegin(); app != factory.registeredObjectsEnd(); ++app)
+      apps.append(app->first);
+
+    _root["global"]["registered_apps"] = apps;
   }
 }
 
@@ -165,6 +204,9 @@ JsonSyntaxTree::addParameters(const std::string & parent,
     json[action]["parameters"] = all_params;
     json[action]["description"] = params->getClassDescription();
     json[action]["action_path"] = path;
+    auto label_pair = getActionLabel(action);
+    json[action]["label"] = label_pair.first;
+    json[action]["register_file"] = label_pair.second;
     if (lineinfo.isValid())
       json[action]["file_info"][lineinfo.file()] = lineinfo.line();
   }
@@ -177,6 +219,9 @@ JsonSyntaxTree::addParameters(const std::string & parent,
     json["syntax_path"] = path;
     json["parent_syntax"] = parent;
     json["description"] = params->getClassDescription();
+    auto label_pair = getObjectLabel(path);
+    json["label"] = label_pair.first;
+    json["register_file"] = label_pair.second;
     if (lineinfo.isValid())
     {
       json["file_info"][lineinfo.file()] = lineinfo.line();
@@ -188,26 +233,45 @@ JsonSyntaxTree::addParameters(const std::string & parent,
 }
 
 std::string
-JsonSyntaxTree::buildOptions(const std::iterator_traits<InputParameters::iterator>::value_type & p)
+JsonSyntaxTree::buildOptions(const std::iterator_traits<InputParameters::iterator>::value_type & p,
+                             bool & out_of_range_allowed)
 {
   std::string options;
   {
     InputParameters::Parameter<MooseEnum> * enum_type =
         dynamic_cast<InputParameters::Parameter<MooseEnum> *>(p.second);
     if (enum_type)
+    {
+      out_of_range_allowed = enum_type->get().isOutOfRangeAllowed();
       options = enum_type->get().getRawNames();
+    }
   }
   {
     InputParameters::Parameter<MultiMooseEnum> * enum_type =
         dynamic_cast<InputParameters::Parameter<MultiMooseEnum> *>(p.second);
     if (enum_type)
+    {
+      out_of_range_allowed = enum_type->get().isOutOfRangeAllowed();
       options = enum_type->get().getRawNames();
+    }
+  }
+  {
+    InputParameters::Parameter<ExecFlagEnum> * enum_type =
+        dynamic_cast<InputParameters::Parameter<ExecFlagEnum> *>(p.second);
+    if (enum_type)
+    {
+      out_of_range_allowed = enum_type->get().isOutOfRangeAllowed();
+      options = enum_type->get().getRawNames();
+    }
   }
   {
     InputParameters::Parameter<std::vector<MooseEnum>> * enum_type =
         dynamic_cast<InputParameters::Parameter<std::vector<MooseEnum>> *>(p.second);
     if (enum_type)
+    {
+      out_of_range_allowed = (enum_type->get())[0].isOutOfRangeAllowed();
       options = (enum_type->get())[0].getRawNames();
+    }
   }
   return options;
 }
@@ -244,7 +308,8 @@ JsonSyntaxTree::buildOutputString(
   for (auto & ch : tmp_str)
     if (ch == '\n')
       ch = ' ';
-  return tmp_str;
+
+  return tmp_str.substr(0, tmp_str.find("<RESIDUAL>"));
 }
 
 void
@@ -254,6 +319,11 @@ JsonSyntaxTree::addSyntaxType(const std::string & path, const std::string type)
   {
     auto & j = getJson(path);
     j["associated_types"].append(type);
+  }
+  // If they are doing a search they probably don't want to see this
+  if (_search.empty())
+  {
+    _root["global"]["associated_types"][type].append(path);
   }
 }
 
@@ -283,6 +353,7 @@ JsonSyntaxTree::basicCppType(const std::string & cpp_type)
     s = "Array:" + basicCppType(t);
   }
   else if (cpp_type.find("MultiMooseEnum") != std::string::npos ||
+           cpp_type.find("ExecFlagEnum") != std::string::npos ||
            cpp_type.find("VectorPostprocessorName") != std::string::npos)
     s = "Array:String";
   else if (cpp_type.find("libMesh::Point") != std::string::npos)
@@ -315,4 +386,25 @@ JsonSyntaxTree::prettyCppType(const std::string & cpp_type)
   // Do it again for nested vectors
   r.GlobalReplace("std::vector<\\1>", &s);
   return s;
+}
+
+std::pair<std::string, std::string>
+JsonSyntaxTree::getObjectLabel(const std::string & obj) const
+{
+  auto paths = splitPath(obj);
+  auto it = _object_label_map.find(paths.back());
+  if (it != _object_label_map.end())
+    return it->second;
+  else
+    return std::make_pair("", "");
+}
+
+std::pair<std::string, std::string>
+JsonSyntaxTree::getActionLabel(const std::string & action) const
+{
+  auto it = _action_label_map.find(action);
+  if (it != _action_label_map.end())
+    return it->second;
+  else
+    return std::make_pair("", "");
 }

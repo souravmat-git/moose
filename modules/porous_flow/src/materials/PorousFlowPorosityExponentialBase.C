@@ -1,17 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowPorosityExponentialBase.h"
 
-template <>
 InputParameters
-validParams<PorousFlowPorosityExponentialBase>()
+PorousFlowPorosityExponentialBase::validParams()
 {
-  InputParameters params = validParams<PorousFlowPorosityBase>();
+  InputParameters params = PorousFlowPorosityBase::validParams();
   params.addParam<bool>("strain_at_nearest_qp",
                         false,
                         "When calculating nodal porosity that depends on strain, use the strain at "
@@ -26,7 +27,7 @@ validParams<PorousFlowPorosityExponentialBase>()
                         "positive");
   params.addClassDescription("Base class Material for porosity that is computed via an exponential "
                              "relationship with coupled variables (strain, porepressure, "
-                             "temperature)");
+                             "temperature, chemistry)");
   return params;
 }
 
@@ -38,40 +39,22 @@ PorousFlowPorosityExponentialBase::PorousFlowPorosityExponentialBase(
 {
 }
 
-Real
-PorousFlowPorosityExponentialBase::atNegInfinityQp() const
-{
-  return 1.0;
-}
-
-Real
-PorousFlowPorosityExponentialBase::atZeroQp() const
-{
-  return 1.0;
-}
-
-Real
-PorousFlowPorosityExponentialBase::decayQp() const
-{
-  return 0.0;
-}
-
-Real
-PorousFlowPorosityExponentialBase::ddecayQp_dvar(unsigned /*pvar*/) const
-{
-  return 0.0;
-}
-
-RealGradient
-PorousFlowPorosityExponentialBase::ddecayQp_dgradvar(unsigned /*pvar*/) const
-{
-  return RealGradient();
-}
-
 void
 PorousFlowPorosityExponentialBase::initQpStatefulProperties()
 {
-  _porosity[_qp] = atZeroQp();
+  const Real a = atNegInfinityQp();
+  const Real b = atZeroQp();
+  mooseAssert(a > b, "PorousFlowPorosityExponentialBase a must be larger than b");
+  const Real decay = decayQp();
+
+  if (decay <= 0.0 || !_ensure_positive)
+    _porosity[_qp] = a + (b - a) * std::exp(decay);
+  else
+  {
+    const Real c = std::log(a / (a - b));
+    const Real expx = std::exp(-decay / c);
+    _porosity[_qp] = a + (b - a) * std::exp(c * (1.0 - expx));
+  }
 }
 
 void
@@ -79,13 +62,14 @@ PorousFlowPorosityExponentialBase::computeQpProperties()
 {
   const Real a = atNegInfinityQp();
   const Real b = atZeroQp();
-  mooseAssert(a > b, "PorousFlowPorosityExponentialBase a must be larger than b");
   const Real decay = decayQp();
+  Real exp_term = 1.0; // set appropriately below
 
   Real deriv = 0.0; // = d(porosity)/d(decay)
   if (decay <= 0.0 || !_ensure_positive)
   {
-    _porosity[_qp] = a + (b - a) * std::exp(decay);
+    exp_term = std::exp(decay);
+    _porosity[_qp] = a + (b - a) * exp_term;
     deriv = _porosity[_qp] - a;
   }
   else
@@ -94,7 +78,8 @@ PorousFlowPorosityExponentialBase::computeQpProperties()
     const Real expx = std::exp(-decay / c);
     // note that at decay = 0, we have expx = 1, so porosity = a + b - a = b
     // and at decay = infinity, expx = 0, so porosity = a + (b - a) * a / (a - b) = 0
-    _porosity[_qp] = a + (b - a) * std::exp(c * (1.0 - expx));
+    exp_term = std::exp(c * (1.0 - expx));
+    _porosity[_qp] = a + (b - a) * exp_term;
     deriv = (_porosity[_qp] - a) * expx;
   }
 
@@ -104,5 +89,17 @@ PorousFlowPorosityExponentialBase::computeQpProperties()
   {
     _dporosity_dvar[_qp][v] = ddecayQp_dvar(v) * deriv;
     _dporosity_dgradvar[_qp][v] = ddecayQp_dgradvar(v) * deriv;
+
+    const Real da = datNegInfinityQp(v);
+    const Real db = datZeroQp(v);
+    _dporosity_dvar[_qp][v] += da * (1 - exp_term) + db * exp_term;
+
+    if (!(decay <= 0.0 || !_ensure_positive))
+    {
+      const Real c = std::log(a / (a - b));
+      const Real expx = std::exp(-decay / c);
+      const Real dc = (a - b) * (da * b / a - db) / std::pow(a, 2);
+      _dporosity_dvar[_qp][v] += (b - a) * exp_term * dc * (1 - expx - expx / c);
+    }
   }
 }

@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef DASHPOTBC_H
-#define DASHPOTBC_H
+#pragma once
 
 #include "IntegratedBC.h"
 
 // Forward Declarations
-class DashpotBC;
-
-template <>
-InputParameters validParams<DashpotBC>();
 
 /**
  * Implements a simple constant Dashpot BC where grad(u)=value on the boundary.
@@ -23,6 +20,8 @@ InputParameters validParams<DashpotBC>();
 class DashpotBC : public IntegratedBC
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Factory constructor, takes parameters so that all derived classes can be built using the same
    * constructor.
@@ -35,6 +34,7 @@ protected:
   virtual Real computeQpOffDiagJacobian(unsigned int jvar);
 
 private:
+  /// Component of the velocity vector
   unsigned int _component;
   Real _coefficient;
 
@@ -46,5 +46,3 @@ private:
   const VariableValue & _disp_y_dot;
   const VariableValue & _disp_z_dot;
 };
-
-#endif // DASHPOTBC_H

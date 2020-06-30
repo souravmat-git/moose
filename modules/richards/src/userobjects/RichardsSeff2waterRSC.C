@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 //  Rogers-Stallybrass-Clements version of effective saturation of water phase.
 //  valid for residual saturations = 0, and viscosityOil = 2*viscosityWater.  (the "2" is important
@@ -14,11 +16,12 @@
 //
 #include "RichardsSeff2waterRSC.h"
 
-template <>
+registerMooseObject("RichardsApp", RichardsSeff2waterRSC);
+
 InputParameters
-validParams<RichardsSeff2waterRSC>()
+RichardsSeff2waterRSC::validParams()
 {
-  InputParameters params = validParams<RichardsSeff>();
+  InputParameters params = RichardsSeff::validParams();
   params.addRequiredParam<Real>(
       "oil_viscosity",
       "Viscosity of oil (gas) phase.  It is assumed this is double the water-phase viscosity");

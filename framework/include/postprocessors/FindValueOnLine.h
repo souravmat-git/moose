@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef FINDVALUEONLINE_H
-#define FINDVALUEONLINE_H
+#pragma once
 
 #include "GeneralPostprocessor.h"
 #include "Coupleable.h"
@@ -33,6 +27,8 @@ InputParameters validParams<FindValueOnLine>();
 class FindValueOnLine : public GeneralPostprocessor, public Coupleable
 {
 public:
+  static InputParameters validParams();
+
   FindValueOnLine(const InputParameters & parameters);
 
   virtual void initialize() override;
@@ -52,6 +48,12 @@ protected:
   /// value to find along the line
   const Real _target;
 
+  /// boolean indicating whether to stop with an error if value is not found on the line
+  const bool & _error_if_not_found;
+
+  /// value to return if target value is not found on the line and _error_if_not_found is false
+  const Real & _default_value;
+
   /// search depth
   const unsigned int _depth;
 
@@ -59,7 +61,7 @@ protected:
   const Real _tol;
 
   /// coupled variable
-  MooseVariable * _coupled_var;
+  MooseVariable & _coupled_var;
 
   /// detected interface location
   Real _position;
@@ -73,5 +75,3 @@ protected:
   /// helper object to locate elements containing points
   std::unique_ptr<PointLocatorBase> _pl;
 };
-
-#endif // FINDVALUEONLINE_H

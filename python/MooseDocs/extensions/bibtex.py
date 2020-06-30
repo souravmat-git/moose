@@ -1,195 +1,199 @@
-#pylint: disable=missing-docstring
-####################################################################################################
-#                                    DO NOT MODIFY THIS HEADER                                     #
-#                   MOOSE - Multiphysics Object Oriented Simulation Environment                    #
-#                                                                                                  #
-#                              (c) 2010 Battelle Energy Alliance, LLC                              #
-#                                       ALL RIGHTS RESERVED                                        #
-#                                                                                                  #
-#                            Prepared by Battelle Energy Alliance, LLC                             #
-#                               Under Contract No. DE-AC07-05ID14517                               #
-#                               With the U. S. Department of Energy                                #
-#                                                                                                  #
-#                               See COPYRIGHT for full restrictions                                #
-####################################################################################################
-#pylint: enable=missing-docstring
-
-import shutil
-import os
-import re
-import io
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+import sys
+import uuid
 import logging
 
 from pybtex.plugin import find_plugin, PluginNotFound
 from pybtex.database import BibliographyData, parse_file
 from pybtex.database.input.bibtex import UndefinedMacro, Person
+from pylatexenc.latex2text import LatexNodes2Text
 
-import MooseDocs
-from MooseMarkdownExtension import MooseMarkdownExtension
-from MooseMarkdownCommon import MooseMarkdownCommon
-from markdown.preprocessors import Preprocessor
+import moosetree
 
-LOG = logging.getLogger(__name__)
+from ..common import exceptions
+from ..base import components, LatexRenderer, MarkdownReader
+from ..tree import tokens, html, latex
+from . import core, command
 
-class BibtexExtension(MooseMarkdownExtension):
+LOG = logging.getLogger('MooseDocs.extensions.bibtex')
+
+def make_extension(**kwargs):
+    return BibtexExtension(**kwargs)
+
+BibtexCite = tokens.newToken('BibtexCite', keys=[])
+BibtexBibliography = tokens.newToken('BibtexBibliography', bib_style='')
+BibtexList = tokens.newToken('BibtexList', BibtexBibliography, bib_files=None)
+
+class BibtexExtension(command.CommandExtension):
     """
-    Extension for adding bibtex style references and bibliographies to MOOSE flavored markdown.
+    Extension for BibTeX citations and bibliography.
     """
 
     @staticmethod
     def defaultConfig():
-        """BibtexExtension default configure options."""
-        config = MooseMarkdownExtension.defaultConfig()
-        config['macro_files'] = ['', "List of paths to files that contain macros to be used in " \
-                                     " bibtex parsing."]
+        config = command.CommandExtension.defaultConfig()
+        config['duplicate_warning'] = (True, "Show a warning when duplicate entries detected.")
+        config['duplicates'] = (list(), "A list of duplicates that are allowed.")
         return config
 
-    def extendMarkdown(self, md, md_globals):
-        """
-        Adds Bibtex support for MOOSE flavored markdown.
-        """
-        md.registerExtension(self)
-        config = self.getConfigs()
-        md.preprocessors.add('moose_bibtex',
-                             BibtexPreprocessor(markdown_instance=md, **config), '_end')
+    def __init__(self, *args, **kwargs):
+        command.CommandExtension.__init__(self, *args, **kwargs)
 
-def makeExtension(*args, **kwargs): #pylint: disable=invalid-name
-    """Create BibtexExtension"""
-    return BibtexExtension(*args, **kwargs)
+        self.__database = None
+        self.__bib_files = list()
+        self.__bib_file_database = dict()
 
-class BibtexPreprocessor(MooseMarkdownCommon, Preprocessor):
-    """
-    Creates per-page bibliographies using latex syntax.
-    """
+    def preExecute(self):
 
-    RE_BIBLIOGRAPHY = r'(?<!`)\\bibliography\{(.*?)\}'
-    RE_STYLE = r'(?<!`)\\bibliographystyle\{(.*?)\}'
-    RE_CITE = r'(?<!`)\\(?P<cmd>cite|citet|citep)\{(?P<keys>.*?)\}'
+        duplicates = self.get('duplicates', list())
+        self.__database = BibliographyData()
+
+        self.__bib_files = []
+        for node in self.translator.getPages():
+            if node.source.endswith('.bib'):
+                self.__bib_files.append(node.source)
+
+        for bfile in self.__bib_files:
+            try:
+                db = parse_file(bfile)
+                self.__bib_file_database[bfile] = db
+            except UndefinedMacro as e:
+                msg = "The BibTeX file %s has an undefined macro:\n%s"
+                LOG.warning(msg, bfile, e)
+
+            #TODO: https://bitbucket.org/pybtex-devs/pybtex/issues/93/
+            #      databaseadd_entries-method-not-considering
+            warn = self.get('duplicate_warning')
+            for key in db.entries:
+                duplicate_key = key in self.__database.entries
+                duplicate_key_allowed = key in duplicates
+                if duplicate_key and (not duplicate_key_allowed):
+                    if warn:
+                        msg = "The BibTeX entry '%s' defined in %s already exists."
+                        LOG.warning(msg, key, bfile)
+                elif not duplicate_key:
+                    self.__database.add_entry(key, db.entries[key])
+
+    def preTokenize(self, page, ast):
+        page['citations'] = list()
+
+    def postTokenize(self, page, ast):
+        if page['citations']:
+            has_bib = False
+            for node in moosetree.iterate(ast):
+                if node.name == 'BibtexBibliography':
+                    has_bib = True
+                    break
+
+            if not has_bib:
+                core.Heading(ast, level=2, string='References')
+                BibtexBibliography(ast, bib_style='plain')
+
+    def database(self, bibfile=None):
+        if bibfile is None:
+            return self.__database
+        else:
+            return self.__bib_file_database[bibfile]
+
+    def bibfiles(self):
+        return self.__bib_files
+
+    def extend(self, reader, renderer):
+        self.requires(core, command)
+
+        self.addCommand(reader, BibtexCommand())
+        self.addCommand(reader, BibtexListCommand())
+        self.addCommand(reader, BibtexReferenceComponent())
+
+        renderer.add('BibtexCite', RenderBibtexCite())
+        renderer.add('BibtexList', RenderBibtexList())
+        renderer.add('BibtexBibliography', RenderBibtexBibliography())
+
+        if isinstance(renderer, LatexRenderer):
+            renderer.addPackage('natbib', 'round')
+
+class BibtexReferenceComponent(command.CommandComponent):
+    COMMAND = ('cite', 'citet', 'citep', 'nocite')
+    SUBCOMMAND = None
+
+    def createToken(self, parent, info, page):
+        keys = [key.strip() for key in info['inline'].split(',')]
+        BibtexCite(parent, keys=keys, cite=info['command'])
+        page['citations'].extend(keys)
+        return parent
+
+class BibtexCommand(command.CommandComponent):
+    COMMAND = 'bibtex'
+    SUBCOMMAND = 'bibliography'
 
     @staticmethod
     def defaultSettings():
-        """BibtexPreprocessor configure options."""
-        return dict() # this extension doesn't have settings
+        config = command.CommandComponent.defaultSettings()
+        config['style'] = ('plain', "The BibTeX style (plain, unsrt, alpha, unsrtalpha).")
+        config['title'] = ('References', "The section title for the references.")
+        config['title-level'] = (2, "The heading level for the section title for the references.")
+        return config
 
-    def __init__(self, markdown_instance=None, **kwargs):
-        MooseMarkdownCommon.__init__(self, **kwargs)
-        Preprocessor.__init__(self, markdown_instance)
-        self._macro_files = kwargs.pop('macro_files', None)
-        self._bibtex = None
-        self._citations = []
+    def createToken(self, parent, token, page):
+        if self.settings['title']:
+            h = core.Heading(parent, level=int(self.settings['title-level']))
+            self.reader.tokenize(h, self.settings['title'], page, MarkdownReader.INLINE)
+        BibtexBibliography(parent, bib_style=self.settings['style'])
+        return parent
 
-    def parseBibtexFile(self, bibfile):
-        """
-        Returns parsed bibtex file.  If "macro_files" are supplied in the configuration
-        file, then a temporary file will be made that contains the supplied macros
-        above the original bib file.  This temporary combined file can then be
-        parsed by pybtex.
-        """
+class BibtexListCommand(command.CommandComponent):
+    COMMAND = 'bibtex'
+    SUBCOMMAND = 'list'
 
-        if self._macro_files:
-            t_bib_path = os.path.join(MooseDocs.ROOT_DIR, "tBib.bib")
-            with open(t_bib_path, "wb") as t_bib:
-                for t_file in self._macro_files:
-                    with open(os.path.join(MooseDocs.ROOT_DIR, t_file.strip()), "rb") as in_file:
-                        shutil.copyfileobj(in_file, t_bib)
-                with open(bibfile, "rb") as in_file:
-                    shutil.copyfileobj(in_file, t_bib)
-            data = parse_file(t_bib_path)
-            if os.path.isfile(t_bib_path):
-                os.remove(t_bib_path)
+    @staticmethod
+    def defaultSettings():
+        config = command.CommandComponent.defaultSettings()
+        config['bib_files'] = (None, "The list of *.bib files to use for a complete citation list.")
+        return config
+
+    def createToken(self, parent, token, page):
+        bfiles = self.settings['bib_files']
+        bib_files = list()
+        if bfiles is None:
+            bib_files = self.extension.bibfiles()
         else:
-            data = parse_file(bibfile)
+            for bfile in bfiles.split():
+                for key in self.extension.bibfiles():
+                    if key.endswith(bfile):
+                        bib_files.append(key)
 
-        return data
+        BibtexList(parent, bib_files=bib_files)
+        return parent
 
-    def run(self, lines):
-        """
-        Create a bibliography from cite commands.
-        """
+class RenderBibtexCite(components.RenderComponent):
 
-        # Join the content to enable regex searches throughout entire text
-        content = '\n'.join(lines)
+    def createHTML(self, parent, token, page):
 
-        # Build the database of bibtex data
-        self._citations = []              # member b/c it is used in substitution function
-        self._bibtex = BibliographyData() # ""
-        bibfiles = []
-        match = re.search(self.RE_BIBLIOGRAPHY, content)
-        if match:
-            for bfile in match.group(1).split(','):
-                try:
-                    filename, _ = self.getFilename(bfile.strip())
-                    bibfiles.append(filename)
-                    data = self.parseBibtexFile(bibfiles[-1])
-                except UndefinedMacro:
-                    LOG.error('Undefined macro in bibtex file: %s, specify macro_files arguments ' \
-                              'in configuration file (e.g. website.yml)', bfile.strip())
-                self._bibtex.add_entries(data.entries.iteritems())
-        else:
-            return lines
+        cite = token['cite']
+        if cite == 'nocite':
+            return parent
 
-        # Determine the style
-        match = re.search(self.RE_STYLE, content)
-        if match:
-            content = content.replace(match.group(0), '')
-            try:
-                style = find_plugin('pybtex.style.formatting', match.group(1))
-            except PluginNotFound:
-                LOG.error('Unknown bibliography style "%s"', match.group(1))
-                return lines
+        citep = cite == 'citep'
+        if citep:
+            html.String(parent, content='(')
 
-        else:
-            style = find_plugin('pybtex.style.formatting', 'plain')
+        num_keys = len(token['keys'])
+        for i, key in enumerate(token['keys']):
 
-        # Replace citations with author date, as an anchor
-        content = re.sub(self.RE_CITE, self.authors, content)
-
-        # Create html bibliography
-        if self._citations:
-
-            # Generate formatted html using pybtex
-            formatted_bibliography = style().format_bibliography(self._bibtex, self._citations)
-            backend = find_plugin('pybtex.backends', 'html')
-            stream = io.StringIO()
-            backend().write_to_stream(formatted_bibliography, stream)
-
-            # Strip the bib items from the formatted html
-            html = re.findall(r'\<dd\>(.*?)\</dd\>', stream.getvalue(),
-                              flags=re.MULTILINE|re.DOTALL)
-
-            # Produces an ordered list with anchors to the citations
-            output = u'<ol class="moose-bibliography" data-moose-bibfiles="{}">\n'
-            output = output.format(str(bibfiles))
-            for i, item in enumerate(html):
-                output += u'<li name="{}">{}</li>\n'.format(self._citations[i], item)
-            output += u'</ol>\n'
-            content = re.sub(self.RE_BIBLIOGRAPHY,
-                             self.markdown.htmlStash.store(output, safe=True),
-                             content)
-
-        return content.split('\n')
-
-    def authors(self, match):
-        """
-        Return the author(s) citation for text, linked to bibliography.
-        """
-        cmd = match.group('cmd')
-        keys = match.group('keys')
-        tex = '\\%s{%s}' % (cmd, keys)
-
-        cite_list = []
-
-        # Loop over all keys in the cite command
-        for key in [k.strip() for k in keys.split(',')]:
-
-            # Error if the key is not found and move on
-            if key not in self._bibtex.entries:
-                LOG.error('Unknown bibtext key: %s', key)
+            if key not in self.extension.database().entries:
+                LOG.error('Unknown BibTeX key: %s', key)
+                html.Tag(parent, 'span', string=key, style='color:red;')
                 continue
 
-            # Build the author list
-            self._citations.append(key)
-            entry = self._bibtex.entries[key]
+
+            entry = self.extension.database().entries[key]
             author_found = True
             if not 'author' in entry.persons.keys() and not 'Author' in entry.persons.keys():
                 author_found = False
@@ -204,7 +208,8 @@ class BibtexPreprocessor(MooseMarkdownCommon, Preprocessor):
                         entry.persons['author'] = [Person(name)]
 
             if not author_found:
-                LOG.error('No author, institution, or organization for %s', key)
+                msg = 'No author, institution, or organization for {}'
+                raise exceptions.MooseDocsException(msg, key)
 
             a = entry.persons['author']
             n = len(a)
@@ -217,35 +222,90 @@ class BibtexPreprocessor(MooseMarkdownCommon, Preprocessor):
             else:
                 author = ' '.join(a[0].last_names)
 
-            if cmd == 'citep':
-                a = '<a href="#{}">{}, {}</a>'.format(key, author, entry.fields['year'])
+            author = LatexNodes2Text().latex_to_text(author)
+
+            form = '{}, {}' if citep else '{} ({})'
+            html.Tag(parent, 'a', href='#{}'.format(key),
+                     string=form.format(author, entry.fields['year']))
+
+            if citep:
+                if num_keys > 1 and i != num_keys - 1:
+                    html.String(parent, content='; ')
             else:
-                a = '<a href="#{}">{} ({})</a>'.format(key, author, entry.fields['year'])
+                if num_keys == 2 and i == 0:
+                    html.String(parent, content=' and ')
+                elif num_keys > 2 and i == num_keys - 2:
+                    html.String(parent, content=', and ')
+                elif num_keys > 2 and i != num_keys - 1:
+                    html.String(parent, content=', ')
 
-            cite_list.append(a)
+        if citep:
+            html.String(parent, content=')')
 
-        # Create the correct text for list of keys in the cite command
-        if len(cite_list) == 2:
-            cite_list = [' and '.join(cite_list)]
-        elif len(cite_list) > 2:
-            cite_list[-1] = 'and ' + cite_list[-1]
+        return parent
 
-        # Write the html
-        if cmd == 'citep':
-            html = '(<span data-moose-cite="{}">{}</span>)'.format(tex, '; '.join(cite_list))
-        else:
-            html = '<span data-moose-cite="{}">{}</span>'.format(tex, ', '.join(cite_list))
+    def createMaterialize(self, parent, token, page):
+        self.createHTML(parent, token, page)
 
-        # substitute Umlauts
-        umlaut_re = re.compile(r"\{\\\"([aouAOU])\}")
-        html = umlaut_re.sub('&\\1uml;', html)
+    def createLatex(self, parent, token, page):
+        latex.Command(parent, token['cite'], string=','.join(token['keys']), escape=False)
+        return parent
 
-        # substitute acutes
-        acute_re = re.compile(r"\{\\\'([aeiouyAEIOUY])\}")
-        html = acute_re.sub('&\\1acute;', html)
+class RenderBibtexBibliography(components.RenderComponent):
 
-        # substitute graves
-        grave_re = re.compile(r"\{\\\`([aeiouAEIOU])\}")
-        html = grave_re.sub('&\\1grave;', html)
+    def getCitations(self, parent, token, page):
+        return page.get('citations', list())
 
-        return self.markdown.htmlStash.store(html, safe=True)
+    def createHTML(self, parent, token, page):
+
+        try:
+            style = find_plugin('pybtex.style.formatting', token['bib_style'])
+        except PluginNotFound:
+            msg = 'Unknown bibliography style "{}".'
+            raise exceptions.MooseDocsException(msg, token['bib_style'])
+
+        citations = self.getCitations(parent, token, page)
+        formatted_bibliography = style().format_bibliography(self.extension.database(), citations)
+        html_backend = find_plugin('pybtex.backends', 'html')
+
+        div = html.Tag(parent, 'div', class_='moose-bibliography')
+        ol = html.Tag(div, 'ol')
+
+        backend = html_backend(encoding='utf-8')
+        for entry in formatted_bibliography:
+            text = entry.text.render(backend)
+            html.Tag(ol, 'li', id_=entry.key, string=text)
+
+        return ol
+
+    def createMaterialize(self, parent, token, page):
+        ol = self.createHTML(parent, token, page)
+        for child in ol.children:
+            key = child['id']
+            db = BibliographyData()
+            db.add_entry(key, self.extension.database().entries[key])
+            btex = db.to_string("bibtex")
+
+            m_id = uuid.uuid4()
+            html.Tag(child, 'a',
+                     style="padding-left:10px;",
+                     class_='modal-trigger moose-bibtex-modal',
+                     href="#{}".format(m_id),
+                     string='[BibTeX]')
+
+            modal = html.Tag(child, 'div', class_='modal', id_=m_id)
+            content = html.Tag(modal, 'div', class_='modal-content')
+            pre = html.Tag(content, 'pre', style="line-height:1.25;")
+            html.Tag(pre, 'code', class_='language-latex', string=btex)
+
+        return ol
+
+    def createLatex(self, parent, token, page):
+        pass
+
+class RenderBibtexList(RenderBibtexBibliography):
+    def getCitations(self, parent, token, page):
+        citations = list()
+        for bfile in token['bib_files']:
+            citations += self.extension.database(bfile).entries.keys()
+        return citations

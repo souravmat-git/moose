@@ -1,5 +1,15 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import os
 import glob
+import platform
 
 def recursiveFindFile(current_path, glob_pattern, problems_dir="problems"):
     """
@@ -49,7 +59,10 @@ def searchForExe(start_dir=None, methods=None):
             methods = [method]
 
     for method in methods:
-        glob_pattern = "*-%s" % method
+        if platform.system() == 'Windows':
+            glob_pattern = "*-%s.exe" % method
+        else:
+            glob_pattern = "*-%s" % method
 
         if not start_dir:
             start_dir = os.getcwd()

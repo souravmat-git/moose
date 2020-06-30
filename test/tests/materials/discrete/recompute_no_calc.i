@@ -1,13 +1,13 @@
 [Mesh]
-  type = GeneratedMesh
-  dim = 2
-  nx = 10
-  ny = 1
-[]
-
-[MeshModifiers]
+  [gen]
+    type = GeneratedMeshGenerator
+    dim = 2
+    nx = 10
+    ny = 1
+  []
   [./left_domain]
-    type = SubdomainBoundingBox
+    input = gen
+    type = SubdomainBoundingBoxGenerator
     bottom_left = '0 0 0'
     top_right = '0.5 1 0'
     block_id = 10
@@ -23,7 +23,7 @@
 
 [Kernels]
   [./diff]
-    type = MatDiffusion
+    type = MatDiffusionTest
     variable = u
     prop_name = 'p'
   [../]
@@ -87,5 +87,5 @@
 [Outputs]
   exodus = true
   print_linear_residuals = true
-  print_perf_log = true
+  perf_graph = true
 []

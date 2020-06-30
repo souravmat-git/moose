@@ -1,26 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef DYNAMICTENSORMECHANICSACTION_H
-#define DYNAMICTENSORMECHANICSACTION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsAction.h"
-
-class DynamicTensorMechanicsAction;
-
-template <>
-InputParameters validParams<DynamicTensorMechanicsAction>();
 
 class DynamicTensorMechanicsAction : public TensorMechanicsAction
 {
 public:
+  static InputParameters validParams();
+
   DynamicTensorMechanicsAction(const InputParameters & params);
 
 protected:
   virtual std::string getKernelType();
 };
-
-#endif // DYNAMICTENSORMECHANICSACTION_H

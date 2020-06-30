@@ -3,41 +3,56 @@
 #
 
 [Mesh]
-  type = MortarPeriodicMesh
-  dim = 2
-  nx = 50
-  ny = 50
-  xmin = -0.5
-  xmax = 0.5
-  ymin = -0.5
-  ymax = 0.5
-  periodic_directions = 'x y'
-
-  [./MortarInterfaces]
-    [./left_right]
-      master = 1
-      slave = 3
-      subdomain = 10
-    [../]
-    [./up_down]
-      master = 0
-      slave = 2
-      subdomain = 11
-    [../]
-  [../]
-[]
-
-[MeshModifiers]
+  [gen]
+    type = GeneratedMeshGenerator
+    dim = 2
+    nx = 50
+    ny = 50
+    xmin = -0.5
+    xmax = 0.5
+    ymin = -0.5
+    ymax = 0.5
+  []
   [./cnode]
-    type = AddExtraNodeset
+    input = gen
+    type = ExtraNodesetGenerator
     coord = '0.0 0.0'
     new_boundary = 100
   [../]
   [./anode]
-    type = AddExtraNodeset
+    input = cnode
+    type = ExtraNodesetGenerator
     coord = '0.0 0.5'
     new_boundary = 101
   [../]
+  [slave_x]
+    input = anode
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '3'
+    new_block_id = 10
+    new_block_name = "slave_x"
+  []
+  [master_x]
+    input = slave_x
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '1'
+    new_block_id = 12
+    new_block_name = "master_x"
+  []
+  [slave_y]
+    input = master_x
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '0'
+    new_block_id = 11
+    new_block_name = "slave_y"
+  []
+  [master_y]
+    input = slave_y
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '2'
+    new_block_id = 13
+    new_block_name = "master_y"
+  []
 []
 
 [GlobalParams]
@@ -91,43 +106,43 @@
   [./lm_left_right_xx]
     order = FIRST
     family = LAGRANGE
-    block = 10
+    block = slave_x
   [../]
   [./lm_left_right_xy]
     order = FIRST
     family = LAGRANGE
-    block = 10
+    block = slave_x
   [../]
   [./lm_left_right_yx]
     order = FIRST
     family = LAGRANGE
-    block = 10
+    block = slave_x
   [../]
   [./lm_left_right_yy]
     order = FIRST
     family = LAGRANGE
-    block = 10
+    block = slave_x
   [../]
 
   [./lm_up_down_xx]
     order = FIRST
     family = LAGRANGE
-    block = 11
+    block = slave_y
   [../]
   [./lm_up_down_xy]
     order = FIRST
     family = LAGRANGE
-    block = 11
+    block = slave_y
   [../]
   [./lm_up_down_yx]
     order = FIRST
     family = LAGRANGE
-    block = 11
+    block = slave_y
   [../]
   [./lm_up_down_yy]
     order = FIRST
     family = LAGRANGE
-    block = 11
+    block = slave_y
   [../]
 []
 
@@ -135,65 +150,98 @@
   [./ud_disp_x_grad_x]
     type = EqualGradientConstraint
     variable = lm_up_down_xx
-    interface = up_down
     component = 0
-    master_variable = disp_x
+    slave_variable = disp_x
+    slave_boundary = bottom
+    master_boundary = top
+    slave_subdomain = slave_y
+    master_subdomain = master_y
+    periodic = true
   [../]
   [./ud_disp_x_grad_y]
     type = EqualGradientConstraint
     variable = lm_up_down_xy
-    interface = up_down
     component = 1
-    master_variable = disp_x
+    slave_variable = disp_x
+    slave_boundary = bottom
+    master_boundary = top
+    slave_subdomain = slave_y
+    master_subdomain = master_y
+    periodic = true
   [../]
   [./ud_disp_y_grad_x]
     type = EqualGradientConstraint
     variable = lm_up_down_yx
-    interface = up_down
     component = 0
-    master_variable = disp_y
+    slave_variable = disp_y
+    slave_boundary = bottom
+    master_boundary = top
+    slave_subdomain = slave_y
+    master_subdomain = master_y
+    periodic = true
   [../]
   [./ud_disp_y_grad_y]
     type = EqualGradientConstraint
     variable = lm_up_down_yy
-    interface = up_down
     component = 1
-    master_variable = disp_y
+    slave_variable = disp_y
+    slave_boundary = bottom
+    master_boundary = top
+    slave_subdomain = slave_y
+    master_subdomain = master_y
+    periodic = true
   [../]
 
   [./lr_disp_x_grad_x]
     type = EqualGradientConstraint
     variable = lm_left_right_xx
-    interface = left_right
     component = 0
-    master_variable = disp_x
+    slave_variable = disp_x
+    slave_boundary = left
+    master_boundary = right
+    slave_subdomain = slave_x
+    master_subdomain = master_x
+    periodic = true
   [../]
   [./lr_disp_x_grad_y]
     type = EqualGradientConstraint
     variable = lm_left_right_xy
-    interface = left_right
     component = 1
-    master_variable = disp_x
+    slave_variable = disp_x
+    slave_boundary = left
+    master_boundary = right
+    slave_subdomain = slave_x
+    master_subdomain = master_x
+    periodic = true
   [../]
   [./lr_disp_y_grad_x]
     type = EqualGradientConstraint
     variable = lm_left_right_yx
-    interface = left_right
     component = 0
-    master_variable = disp_y
+    slave_variable = disp_y
+    slave_boundary = left
+    master_boundary = right
+    slave_subdomain = slave_x
+    master_subdomain = master_x
+    periodic = true
   [../]
   [./lr_disp_y_grad_y]
     type = EqualGradientConstraint
     variable = lm_left_right_yy
-    interface = left_right
     component = 1
-    master_variable = disp_y
+    slave_variable = disp_y
+    slave_boundary = left
+    master_boundary = right
+    slave_subdomain = slave_x
+    master_subdomain = master_x
+    periodic = true
   [../]
 []
 
 [Kernels]
   # Set up stress divergence kernels
   [./TensorMechanics]
+    block = 0
   [../]
 
   # Cahn-Hilliard kernels
@@ -201,6 +249,7 @@
     type = CoupledTimeDerivative
     variable = w
     v = c
+    block = 0
   [../]
   [./c_res]
     type = SplitCHParsed
@@ -208,11 +257,13 @@
     f_name = F
     kappa_name = kappa_c
     w = w
+    block = 0
   [../]
   [./w_res]
     type = SplitCHWRes
     variable = w
     mob_name = M
+    block = 0
   [../]
 []
 
@@ -343,13 +394,13 @@
 
   # fix center point location
   [./centerfix_x]
-    type = PresetBC
+    type = DirichletBC
     boundary = 100
     variable = disp_x
     value = 0
   [../]
   [./centerfix_y]
-    type = PresetBC
+    type = DirichletBC
     boundary = 100
     variable = disp_y
     value = 0
@@ -357,7 +408,7 @@
 
   # fix side point x coordinate to inhibit rotation
   [./angularfix]
-    type = PresetBC
+    type = DirichletBC
     boundary = 101
     variable = disp_x
     value = 0

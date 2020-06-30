@@ -1,28 +1,23 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef AUXNODALSCALARKERNEL_H
-#define AUXNODALSCALARKERNEL_H
+#pragma once
 
 #include "AuxScalarKernel.h"
 #include "Coupleable.h"
 #include "MooseVariableDependencyInterface.h"
 
 class NodalScalarKernel;
+class AuxNodalScalarKernel;
 
 template <>
-InputParameters validParams<NodalScalarKernel>();
+InputParameters validParams<AuxNodalScalarKernel>();
 
 /**
  *
@@ -32,6 +27,8 @@ class AuxNodalScalarKernel : public AuxScalarKernel,
                              public MooseVariableDependencyInterface
 {
 public:
+  static InputParameters validParams();
+
   AuxNodalScalarKernel(const InputParameters & parameters);
 
   virtual void compute() override;
@@ -41,4 +38,3 @@ protected:
   std::vector<dof_id_type> _node_ids;
 };
 
-#endif /* AUXNODALSCALARKERNEL_H */

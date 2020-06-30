@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // Creates multiple superellipsoids that are positioned randomly throughout the domain
 // each semiaxis can be varied by a uniform or normal distribution
@@ -15,11 +17,12 @@
 #include "MooseUtils.h"
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", MultiSmoothSuperellipsoidIC);
+
 InputParameters
-validParams<MultiSmoothSuperellipsoidIC>()
+MultiSmoothSuperellipsoidIC::validParams()
 {
-  InputParameters params = validParams<SmoothSuperellipsoidBaseIC>();
+  InputParameters params = SmoothSuperellipsoidBaseIC::validParams();
   params.addClassDescription("Random distribution of smooth ellipse with given minimum spacing");
   params.addRequiredParam<std::vector<unsigned int>>("numbub",
                                                      "Vector of the number of bubbles to place");
@@ -31,9 +34,9 @@ validParams<MultiSmoothSuperellipsoidIC>()
       "semiaxis_a", "Vector of mean semiaxis values in the x direction for the ellipse");
   params.addRequiredParam<std::vector<Real>>(
       "semiaxis_b", "Vector of mean semiaxis values in the y direction for the ellipse");
-  params.addRequiredParam<std::vector<Real>>(
-      "semiaxis_c",
-      "Vector of mean semiaxis values in the z direction for the ellipse, must be set to 1 if 2D.");
+  params.addRequiredParam<std::vector<Real>>("semiaxis_c",
+                                             "Vector of mean semiaxis values in the z direction "
+                                             "for the ellipse, must be greater than 0 even if 2D.");
   params.addParam<std::vector<Real>>(
       "exponent",
       std::vector<Real>(),
@@ -60,7 +63,7 @@ validParams<MultiSmoothSuperellipsoidIC>()
                         "prevent_overlap set to True.");
   params.addParam<bool>("prevent_overlap",
                         false,
-                        "Check all Superellipsoid centers for overlap with other Superellipsoids.");
+                        "Check all Superellipsoid centers for overlap with other superellipsoids.");
   params.addParam<bool>("vary_axes_independently",
                         true,
                         "If true the length of each semiaxis is randomly chosen "
@@ -109,6 +112,13 @@ MultiSmoothSuperellipsoidIC::initialSetup()
     mooseError("Vectors for numbub, semiaxis_a_variation, semiaxis_b_variation, and "
                "semiaxis_c_variation must be the same size.");
 
+  if (_semiaxis_variation_type == 2 &&
+      (_semiaxis_a_variation.size() > 0 || _semiaxis_b_variation.size() > 0 ||
+       _semiaxis_c_variation.size() > 0))
+    mooseWarning(
+        "Values were provided for semiaxis_a/b/c_variation but semiaxis_variation_type is set "
+        "to 'none' in 'MultiSmoothSuperellipsoidIC'.");
+
   for (_gk = 0; _gk < nv; ++_gk)
   {
     // Set up domain bounds with mesh tools
@@ -118,16 +128,6 @@ MultiSmoothSuperellipsoidIC::initialSetup()
       _top_right(i) = _mesh.getMaxInDimension(i);
     }
     _range = _top_right - _bottom_left;
-
-    if (_semiaxis_a_variation[_gk] > 0.0 && _semiaxis_variation_type == 2)
-      mooseError("If Semiaxis_a_variation > 0.0, you must pass in a Semiaxis_variation_type in "
-                 "MultiSmoothSuperellipsoidIC");
-    if (_semiaxis_b_variation[_gk] > 0.0 && _semiaxis_variation_type == 2)
-      mooseError("If Semiaxis_b_variation > 0.0, you must pass in a Semiaxis_variation_type in "
-                 "MultiSmoothSuperellipsoidIC");
-    if (_semiaxis_c_variation[_gk] > 0.0 && _semiaxis_variation_type == 2)
-      mooseError("If Semiaxis_c_variation > 0.0, you must pass in a Semiaxis_variation_type in "
-                 "MultiSmoothSuperellipsoidIC");
 
     SmoothSuperellipsoidBaseIC::initialSetup();
   }
@@ -150,13 +150,11 @@ MultiSmoothSuperellipsoidIC::computeSuperellipsoidSemiaxes()
         randnum = _random.rand(_tid);
         _as[i] = _semiaxis_a[_gk] * (1.0 + (1.0 - 2.0 * randnum) * _semiaxis_a_variation[_gk]);
         _bs[i] = _semiaxis_b[_gk] *
-                 (1.0 +
-                  (1.0 - 2.0 * (_vary_axes_independently ? _random.rand(_tid) : randnum)) *
-                      _semiaxis_b_variation[_gk]);
+                 (1.0 + (1.0 - 2.0 * (_vary_axes_independently ? _random.rand(_tid) : randnum)) *
+                            _semiaxis_b_variation[_gk]);
         _cs[i] = _semiaxis_c[_gk] *
-                 (1.0 +
-                  (1.0 - 2.0 * (_vary_axes_independently ? _random.rand(_tid) : randnum)) *
-                      _semiaxis_c_variation[_gk]);
+                 (1.0 + (1.0 - 2.0 * (_vary_axes_independently ? _random.rand(_tid) : randnum)) *
+                            _semiaxis_c_variation[_gk]);
         break;
 
       case 1: // Normal distribution
@@ -217,7 +215,7 @@ MultiSmoothSuperellipsoidIC::computeSuperellipsoidCenters()
     }
 
     if (num_tries == _max_num_tries)
-      mooseError("Too many tries in MultiSmoothCircleIC");
+      mooseError("max_num_tries reached in 'MultiSmoothSuperellipsoidIC'.");
 
   accept:
     continue;

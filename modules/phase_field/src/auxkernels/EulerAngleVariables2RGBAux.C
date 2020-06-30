@@ -1,17 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "EulerAngleVariables2RGBAux.h"
 #include "Euler2RGB.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", EulerAngleVariables2RGBAux);
+
 InputParameters
-validParams<EulerAngleVariables2RGBAux>()
+EulerAngleVariables2RGBAux::validParams()
 {
-  InputParameters params = validParams<AuxKernel>();
+  InputParameters params = AuxKernel::validParams();
   MooseEnum sd_enum = MooseEnum("100=1 010=2 001=3", "001");
   params.addParam<MooseEnum>("sd", sd_enum, "Reference sample direction");
   MooseEnum output_types = MooseEnum("red green blue scalar", "scalar");
@@ -20,7 +24,7 @@ validParams<EulerAngleVariables2RGBAux>()
   params.addCoupledVar("phi", "Euler angle 2");
   params.addCoupledVar("phi2", "Euler angle 3");
   params.addCoupledVar("phase", "Grain phase index");
-  params.addCoupledVar("symmetry", "Grain symmetry indentifier");
+  params.addCoupledVar("symmetry", "Grain symmetry identifier");
   return params;
 }
 

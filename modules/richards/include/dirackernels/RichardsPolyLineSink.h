@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSPOLYLINESINK_H
-#define RICHARDSPOLYLINESINK_H
+#pragma once
 
 #include "DiracKernel.h"
 #include "LinearInterpolation.h"
@@ -14,10 +15,6 @@
 #include "RichardsVarNames.h"
 
 // Forward Declarations
-class RichardsPolyLineSink;
-
-template <>
-InputParameters validParams<RichardsPolyLineSink>();
 
 /**
  * Approximates a polyline by a sequence of Dirac Points
@@ -27,6 +24,8 @@ InputParameters validParams<RichardsPolyLineSink>();
 class RichardsPolyLineSink : public DiracKernel
 {
 public:
+  static InputParameters validParams();
+
   RichardsPolyLineSink(const InputParameters & parameters);
 
   virtual void addPoints();
@@ -83,5 +82,3 @@ protected:
    */
   bool parseNextLineReals(std::ifstream & ifs, std::vector<Real> & myvec);
 };
-
-#endif // RICHARDSPOLYLINESINK_H

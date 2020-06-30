@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef ADVANCEDOUTPUT_H
-#define ADVANCEDOUTPUT_H
+#pragma once
 
 // MOOSE includes
 #include "AdvancedOutputUtils.h" // OutputDataWarehouse
@@ -29,6 +23,11 @@ class PetscOutput;
 class Console;
 class TransientMultiApp;
 
+class AdvancedOutput;
+
+template <>
+InputParameters validParams<AdvancedOutput>();
+
 /**
  * Based class for output objects
  *
@@ -40,6 +39,8 @@ class TransientMultiApp;
 class AdvancedOutput : public FileOutput
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Class constructor
    *
@@ -254,6 +255,11 @@ protected:
    */
   virtual void outputSystemInformation();
 
+  /**
+   * Flags to control nodal output
+   */
+  bool _elemental_as_nodal, _scalar_as_nodal;
+
 private:
   /**
    * Initializes the available lists for each of the output types
@@ -264,9 +270,9 @@ private:
    * Initialize the possible execution types
    * @param name The name of the supplied MultiMoose enum from the _execute_on std::map (e.g.,
    * scalars)
-   * @param input The MultiMooseEnum for output type flags to initialize
+   * @param input The ExecFlagEnum for output type flags to initialize
    */
-  void initExecutionTypes(const std::string & name, MultiMooseEnum & input);
+  void initExecutionTypes(const std::string & name, ExecFlagEnum & input);
 
   /**
    * Parses the user-supplied input for hiding and showing variables and postprocessors into
@@ -304,9 +310,9 @@ private:
    *
    * Each output object may have a varying set of supported output types (e.g., elemental
    * variables may not be supported). This private, static method populates the InputParameters
-   * object with the correct parameters based on the items contained in the MultiMooseEnum.
+   * object with the correct parameters based on the items contained in the ExecFlagEnum.
    *
-   * This method is private, users should utlize the Output::enableOutputTypes method
+   * This method is private, users should utilize the Output::enableOutputTypes method
    *
    * @see Output::enableOutputTypes
    */
@@ -340,10 +346,6 @@ template <typename postprocessor_type>
 void
 AdvancedOutput::initPostprocessorOrVectorPostprocessorLists(const std::string & execute_data_name)
 {
-
-  // Get the UserObjectWarhouse
-  const ExecuteMooseObjectWarehouse<UserObject> & warehouse = _problem_ptr->getUserObjects();
-
   // Convenience reference to the OutputData being operated on (should used "postprocessors" or
   // "vector_postprocessors")
   OutputData & execute_data = _execute_data[execute_data_name];
@@ -357,12 +359,16 @@ AdvancedOutput::initPostprocessorOrVectorPostprocessorLists(const std::string & 
   // True if the postprocessors has been limited using 'outputs' parameter
   bool has_limited_pps = false;
 
-  // Loop through each of the execution flags
-  const auto & objects = warehouse.getActiveObjects();
-  for (const auto & object : objects)
+  std::vector<UserObject *> objs;
+  _problem_ptr->theWarehouse()
+      .query()
+      .condition<AttribSystem>("UserObject")
+      .condition<AttribThread>(0)
+      .queryInto(objs);
+
+  for (const auto & obj : objs)
   {
-    // Store the name in the available postprocessors, if it does not already exist in the list
-    std::shared_ptr<postprocessor_type> pps = std::dynamic_pointer_cast<postprocessor_type>(object);
+    auto pps = dynamic_cast<postprocessor_type *>(obj);
     if (!pps)
       continue;
 
@@ -398,8 +404,8 @@ AdvancedOutput::initPostprocessorOrVectorPostprocessorLists(const std::string & 
   // Produce the warning when 'outputs' is used, but postprocessor output is disabled
   if (has_limited_pps && isParamValid(execute_on_name))
   {
-    const MultiMooseEnum & pp_on = getParam<MultiMooseEnum>(execute_on_name);
-    if (pp_on.contains("none"))
+    const ExecFlagEnum & pp_on = getParam<ExecFlagEnum>(execute_on_name);
+    if (pp_on.contains(EXEC_NONE))
     {
       if (execute_on_name == "execute_postprocessors_on")
         mooseWarning("A Postprocessor utilizes the 'outputs' parameter; however, postprocessor "
@@ -414,5 +420,3 @@ AdvancedOutput::initPostprocessorOrVectorPostprocessorLists(const std::string & 
     }
   }
 }
-
-#endif /* ADVANCEDOUTPUT_H */

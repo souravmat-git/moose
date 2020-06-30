@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef PETSCOUTPUT_H
-#define PETSCOUTPUT_H
+#pragma once
 
 // MOOSE includes
 #include "Output.h"
@@ -30,6 +24,8 @@ InputParameters validParams<PetscOutput>();
 class PetscOutput : public Output
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Class constructor
    * @param parameters Outputter input file parameters
@@ -55,6 +51,12 @@ protected:
 
   /// Current linear iteration returned from PETSc
   PetscInt _linear_iter;
+
+  /// True if current output calls is on the linear residual (used by time())
+  bool _on_linear_residual;
+
+  /// True if current output call is on the non-linear residual (used by time())
+  bool _on_nonlinear_residual;
 
 private:
   /**
@@ -90,12 +92,6 @@ private:
   /// Psuedo linear time step
   Real _linear_dt;
 
-  /// True if current output calls is on the linear residual (used by time())
-  bool _on_linear_residual;
-
-  /// True if current output call is on the non-linear residual (used by time())
-  bool _on_nonlinear_residual;
-
   /// Pseudo non-linear timestep divisor
   Real _nonlinear_dt_divisor;
 
@@ -114,4 +110,3 @@ private:
   /// Linear residual output end time
   Real _linear_end_time;
 };
-#endif // PETSCOUTPUT_H

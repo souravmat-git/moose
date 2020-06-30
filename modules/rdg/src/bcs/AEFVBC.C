@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "AEFVBC.h"
 
-template <>
+registerMooseObject("RdgApp", AEFVBC);
+
 InputParameters
-validParams<AEFVBC>()
+AEFVBC::validParams()
 {
-  InputParameters params = validParams<IntegratedBC>();
+  InputParameters params = IntegratedBC::validParams();
   params.addClassDescription("A boundary condition kernel for the advection equation using a "
                              "cell-centered finite volume method.");
   MooseEnum component("concentration");
@@ -39,7 +42,7 @@ AEFVBC::computeQpResidual()
   std::vector<Real> uvec1 = {_u1[_qp]};
 
   // calculate the flux
-  const auto & flux = _flux.getFlux(_current_side, _current_elem->id(), uvec1, _normals[_qp], _tid);
+  const auto & flux = _flux.getFlux(_current_side, _current_elem->id(), uvec1, _normals[_qp]);
 
   // distribute the contribution to the current element
   return flux[_component] * _test[_i][_qp];
@@ -53,7 +56,7 @@ AEFVBC::computeQpJacobian()
   std::vector<Real> uvec1 = {_uc1[_qp]};
 
   // calculate the flux
-  auto & fjac1 = _flux.getJacobian(_current_side, _current_elem->id(), uvec1, _normals[_qp], _tid);
+  auto & fjac1 = _flux.getJacobian(_current_side, _current_elem->id(), uvec1, _normals[_qp]);
 
   // distribute the contribution to the current element
   return fjac1(_component, _component) * _phi[_j][_qp] * _test[_i][_qp];

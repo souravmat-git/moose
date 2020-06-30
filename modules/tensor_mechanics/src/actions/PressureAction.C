@@ -1,29 +1,33 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "PressureAction.h"
 #include "Factory.h"
 #include "FEProblem.h"
 #include "Conversion.h"
 
-template <>
+registerMooseAction("TensorMechanicsApp", PressureAction, "add_bc");
+
 InputParameters
-validParams<PressureAction>()
+PressureAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription("Set up Pressure boundary conditions");
 
   params.addRequiredParam<std::vector<BoundaryName>>(
       "boundary", "The list of boundary IDs from the mesh where the pressure will be applied");
 
-  params.addParam<NonlinearVariableName>("disp_x", "The x displacement");
-  params.addParam<NonlinearVariableName>("disp_y", "The y displacement");
-  params.addParam<NonlinearVariableName>("disp_z", "The z displacement");
+  params.addParam<VariableName>("disp_x", "The x displacement");
+  params.addParam<VariableName>("disp_y", "The y displacement");
+  params.addParam<VariableName>("disp_z", "The z displacement");
 
-  params.addParam<std::vector<NonlinearVariableName>>(
+  params.addParam<std::vector<VariableName>>(
       "displacements",
       "The displacements appropriate for the simulation geometry and coordinate system");
 
@@ -37,10 +41,14 @@ validParams<PressureAction>()
   params.addParam<Real>("factor", 1.0, "The factor to use in computing the pressure");
   params.addParam<Real>("alpha", 0.0, "alpha parameter for HHT time integration");
   params.addParam<FunctionName>("function", "The function that describes the pressure");
+  params.addParam<bool>("use_automatic_differentiation",
+                        false,
+                        "Flag to use automatic differentiation (AD) objects when possible");
   return params;
 }
 
-PressureAction::PressureAction(const InputParameters & params) : Action(params)
+PressureAction::PressureAction(const InputParameters & params)
+  : Action(params), _use_ad(getParam<bool>("use_automatic_differentiation"))
 {
   _save_in_vars.push_back(getParam<std::vector<AuxVariableName>>("save_in_disp_x"));
   _save_in_vars.push_back(getParam<std::vector<AuxVariableName>>("save_in_disp_y"));
@@ -54,23 +62,27 @@ PressureAction::PressureAction(const InputParameters & params) : Action(params)
 void
 PressureAction::act()
 {
-  const std::string kernel_name = "Pressure";
+  std::string ad_prepend = "";
+  if (_use_ad)
+    ad_prepend = "AD";
 
-  std::vector<NonlinearVariableName> displacements;
+  std::string kernel_name = ad_prepend + "Pressure";
+
+  std::vector<VariableName> displacements;
   if (isParamValid("displacements"))
-    displacements = getParam<std::vector<NonlinearVariableName>>("displacements");
+    displacements = getParam<std::vector<VariableName>>("displacements");
   else
   {
     // Legacy parameter scheme for displacements
     if (!isParamValid("disp_x"))
       mooseError("Specify displacement variables using the `displacements` parameter.");
-    displacements.push_back(getParam<NonlinearVariableName>("disp_x"));
+    displacements.push_back(getParam<VariableName>("disp_x"));
 
     if (isParamValid("disp_y"))
     {
-      displacements.push_back(getParam<NonlinearVariableName>("disp_y"));
+      displacements.push_back(getParam<VariableName>("disp_y"));
       if (isParamValid("disp_z"))
-        displacements.push_back(getParam<NonlinearVariableName>("disp_z"));
+        displacements.push_back(getParam<VariableName>("disp_z"));
     }
   }
 
@@ -81,7 +93,7 @@ PressureAction::act()
     std::string unique_kernel_name = kernel_name + "_" + _name + "_" + Moose::stringify(i);
 
     InputParameters params = _factory.getValidParams(kernel_name);
-    params.applyParameters(parameters());
+    params.applyParameters(parameters(), {"factor"});
     params.set<bool>("use_displaced_mesh") = true;
     params.set<unsigned int>("component") = i;
     params.set<NonlinearVariableName>("variable") = displacements[i];
@@ -89,6 +101,10 @@ PressureAction::act()
     if (_has_save_in_vars[i])
       params.set<std::vector<AuxVariableName>>("save_in") = _save_in_vars[i];
 
+    if (_use_ad)
+      params.set<Real>("constant") = getParam<Real>("factor");
+    else
+      params.set<Real>("factor") = getParam<Real>("factor");
     _problem->addBoundaryCondition(kernel_name, unique_kernel_name, params);
   }
 }

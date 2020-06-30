@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MULTIPARAMETERPLASTICITYSTRESSUPDATE_H
-#define MULTIPARAMETERPLASTICITYSTRESSUPDATE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "StressUpdateBase.h"
 
 #include <array>
-
-class MultiParameterPlasticityStressUpdate;
-
-template <>
-InputParameters validParams<MultiParameterPlasticityStressUpdate>();
 
 /**
  * MultiParameterPlasticityStressUpdate performs the return-map
@@ -76,6 +73,10 @@ InputParameters validParams<MultiParameterPlasticityStressUpdate>();
  * for the _num_sp stress_params S, and the single scalar ga
  * (actually I solve for gaE = ga * _En, where _En is a normalising
  * factor so that gaE is of similar magnitude to the S variables).
+ * In general E[a, b] = dS[a]/dstress(i, j) E(i, j, k, l) dS[b]/dstress(k, l),
+ * and in the code below it is assumed that the E[a, b] are independent
+ * of the stress_params, but adding a dependence would only require
+ * some Jacobian terms to be modified.
  * There are N+1 rhs equations to solve.  Here f is
  * the smoothed yield function, so the last equation is the admissibility
  * condition (the returned stress lies on the yield surface) and g
@@ -93,6 +94,8 @@ InputParameters validParams<MultiParameterPlasticityStressUpdate>();
 class MultiParameterPlasticityStressUpdate : public StressUpdateBase
 {
 public:
+  static InputParameters validParams();
+
   MultiParameterPlasticityStressUpdate(const InputParameters & parameters,
                                        unsigned num_sp,
                                        unsigned num_yf,
@@ -111,6 +114,11 @@ protected:
                            RankFourTensor & tangent_operator) override;
 
   virtual void propagateQpStatefulProperties() override;
+
+  virtual TangentCalculationMethod getTangentCalculationMethod() override
+  {
+    return TangentCalculationMethod::FULL;
+  }
 
   /// Internal dimensionality of tensors (currently this is 3 throughout tensor_mechanics)
   constexpr static unsigned _tensor_dimensionality = 3;
@@ -136,9 +144,6 @@ protected:
   /// Number of internal parameters
   const unsigned _num_intnl;
 
-  /// String prepended to various MaterialProperties that are defined by this class
-  const std::string _base_name;
-
   /// Maximum number of Newton-Raphson iterations allowed in the return-map process
   const unsigned _max_nr_its;
 
@@ -147,6 +152,9 @@ protected:
 
   /// Smoothing tolerance: edges of the yield surface get smoothed by this amount
   const Real _smoothing_tol;
+
+  /// Square of the smoothing tolerance
+  const Real _smoothing_tol2;
 
   /// The yield-function tolerance
   const Real _f_tol;
@@ -185,6 +193,12 @@ protected:
   /// Number of Newton-Raphson iterations used in the return-map
   MaterialProperty<Real> & _iter;
 
+  /// Maximum number of Newton-Raphson iterations used in the return-map during the course of the entire simulation
+  MaterialProperty<Real> & _max_iter_used;
+
+  /// Old value of maximum number of Newton-Raphson iterations used in the return-map during the course of the entire simulation
+  const MaterialProperty<Real> & _max_iter_used_old;
+
   /// Whether a line-search was needed in the latest Newton-Raphson process (1 if true, 0 otherwise)
   MaterialProperty<Real> & _linesearch_needed;
 
@@ -213,7 +227,7 @@ protected:
     {
     }
 
-    // this is involved in the smoothing of a group of yield functions
+    // this may be involved in the smoothing of a group of yield functions
     bool operator<(const yieldAndFlow & fd) const { return f < fd.f; }
   };
 
@@ -221,13 +235,28 @@ protected:
    * Computes the smoothed yield function
    * @param stress_params The stress parameters (eg stress_params[0] = stress_zz and
    * stress_params[1] = sqrt(stress_zx^2 + stress_zy^2))
-   * @param intnl The internal parameters (intnl[0] is shear, intnl[1] is tensile)
+   * @param intnl The internal parameters (eg intnl[0] is shear, intnl[1] is tensile)
    * @return The smoothed yield function value
    */
   Real yieldF(const std::vector<Real> & stress_params, const std::vector<Real> & intnl) const;
 
   /**
-   * Smooths yield functions
+   * Computes the smoothed yield function
+   * @param yfs The values of the individual yield functions
+   * @return The smoothed yield function value
+   */
+  Real yieldF(const std::vector<Real> & yfs) const;
+
+  /**
+   * Smooths yield functions.  The returned value must be zero if abs(f_diff) >= _smoothing_tol
+   * and otherwise must satisfy, over -_smoothing_tol <= f_diff <= _smoothing_tol:
+   * (1) C2
+   * (2) zero at f_diff = +/- _smoothing_tol
+   * (3) derivative is +/-0.5 at f_diff = +/- _smoothing_tol
+   * (4) derivative must be in [-0.5, 0.5]
+   * (5) second derivative is zero at f_diff = +/- _smoothing_tol
+   * (6) second derivative must be non-negative
+   * in order to ensure C2 differentiability and convexity of the smoothed yield surface.
    */
   Real ismoother(Real f_diff) const;
 
@@ -434,7 +463,7 @@ protected:
    * @param gaE[out] The "good guess" value of gaE
    * @param intnl[out] The "good guess" value of the internal parameters
    */
-  virtual void initialiseVarsV(const std::vector<Real> & trial_stress_params,
+  virtual void initializeVarsV(const std::vector<Real> & trial_stress_params,
                                const std::vector<Real> & intnl_old,
                                std::vector<Real> & stress_params,
                                Real & gaE,
@@ -457,7 +486,7 @@ protected:
 
   /**
    * Sets the derivatives of internal parameters, based on the trial values of
-   * stress_params, their current values, and the old values of the
+   * stress_params, their current values, and the current values of the
    * internal parameters.
    * Derived classes must override this.
    * @param trial_stress_params[in] The trial stress parameters
@@ -481,12 +510,12 @@ protected:
 
   /**
    * Derived classes may use this to perform calculations before
-   * any return-map process is performed, for instance, to initialise
+   * any return-map process is performed, for instance, to initialize
    * variables.
    * This is called at the very start of updateState, even before
    * any checking for admissible stresses, etc, is performed
    */
-  virtual void initialiseReturnProcess();
+  virtual void initializeReturnProcess();
 
   /**
    * Derived classes may use this to perform calculations after the
@@ -501,7 +530,7 @@ protected:
    * This is called after the return-map process has completed
    * successfully in stress_param space, just after finalizeReturnProcess
    * has been called.
-   * Derived classes may override this function
+   * Derived classes must override this function
    * @param stress_trial[in] The trial value of stress
    * @param stress_params[in] The value of the stress_params after the return-map process has
    * completed successfully
@@ -519,7 +548,7 @@ protected:
                                      const std::vector<Real> & intnl,
                                      const yieldAndFlow & smoothed_q,
                                      const RankFourTensor & Eijkl,
-                                     RankTwoTensor & stress) const;
+                                     RankTwoTensor & stress) const = 0;
 
   /**
    * Sets inelastic strain increment from the returned configuration
@@ -596,7 +625,11 @@ protected:
 
   /**
    * Calculates derivatives of the stress_params and gaE with repect to the
-   * trial values of the stress_params for the (sub)strain increment
+   * trial values of the stress_params for the (sub)strain increment.
+   * After the strain increment has been fully applied, dvar_dtrial will
+   * contain the result appropriate to the full strain increment.  Before
+   * that time (if applying in sub-strain increments) it will contain the
+   * result appropriate to the amount of strain increment applied successfully.
    * @param elastic_only[in] whether this was an elastic step: if so then the updates to dvar_dtrial
    * are fairly trivial
    * @param trial_stress_params[in] Trial values of stress_params for this (sub)strain increment
@@ -609,7 +642,7 @@ protected:
    * @param compute_full_tangent_operator[in] true if the full consistent tangent operator is
    * needed,
    * otherwise false
-   * @param dvar_dtrial[out] dvar_dtrial[i][j] = d({stress_param[i],gaE})/d(stress_param[j])
+   * @param dvar_dtrial[out] dvar_dtrial[i][j] = d({stress_param[i],gaE})/d(trial_stress_param[j])
    */
   void dVardTrial(bool elastic_only,
                   const std::vector<Real> & trial_stress_params,
@@ -634,7 +667,7 @@ protected:
 
 private:
   /**
-   * "Trial" value of stress_params that initialises the return-map process
+   * "Trial" value of stress_params that initializes the return-map process
    * This is derived from stress = stress_old + Eijkl * strain_increment.
    * However, since the return-map process can fail and be restarted by
    * applying strain_increment in multiple substeps, _trial_sp can vary
@@ -697,6 +730,16 @@ private:
    * The current values of the internal params during the Newton-Raphson
    */
   std::vector<Real> _current_intnl;
-};
 
-#endif // MULTIPARAMETERPLASTICITYSTRESSUPDATE_H
+private:
+  /**
+   * The type of smoother function
+   */
+  enum class SmootherFunctionType
+  {
+    cos,
+    poly1,
+    poly2,
+    poly3
+  } _smoother_function_type;
+};

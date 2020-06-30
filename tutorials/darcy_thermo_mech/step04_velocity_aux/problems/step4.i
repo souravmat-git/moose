@@ -7,77 +7,85 @@
   ymax = 0.0257 # Test chamber radius
 []
 
-[Variables]
-  [./pressure]
-  [../]
+[Variables/pressure]
 []
 
 [AuxVariables]
-  [./velocity_x]
+  [velocity_x]
     order = CONSTANT
     family = MONOMIAL
-  [../]
-  [./velocity_y]
+  []
+  [velocity_y]
     order = CONSTANT
     family = MONOMIAL
-  [../]
-  [./velocity_z]
+  []
+  [velocity_z]
     order = CONSTANT
     family = MONOMIAL
-  [../]
+  []
+  [velocity]
+    order = CONSTANT
+    family = MONOMIAL_VEC
+  []
 []
 
 [Kernels]
-  [./darcy_pressure]
+  [darcy_pressure]
     type = DarcyPressure
     variable = pressure
-  [../]
+  []
 []
 
 [AuxKernels]
-  [./velocity_x]
+  [velocity]
     type = DarcyVelocity
+    variable = velocity
+    execute_on = timestep_end
+    pressure = pressure
+  []
+  [velocity_x]
+    type = VectorVariableComponentAux
     variable = velocity_x
     component = x
     execute_on = timestep_end
-    darcy_pressure = pressure
-  [../]
-  [./velocity_y]
-    type = DarcyVelocity
+    vector_variable = velocity
+  []
+  [velocity_y]
+    type = VectorVariableComponentAux
     variable = velocity_y
     component = y
     execute_on = timestep_end
-    darcy_pressure = pressure
-  [../]
-  [./velocity_z]
-    type = DarcyVelocity
+    vector_variable = velocity
+  []
+  [velocity_z]
+    type = VectorVariableComponentAux
     variable = velocity_z
     component = z
     execute_on = timestep_end
-    darcy_pressure = pressure
-  [../]
+    vector_variable = velocity
+  []
 []
 
 [BCs]
-  [./inlet]
+  [inlet]
     type = DirichletBC
     variable = pressure
     boundary = left
     value = 4000 # (Pa) From Figure 2 from paper.  First data point for 1mm spheres.
-  [../]
-  [./outlet]
+  []
+  [outlet]
     type = DirichletBC
     variable = pressure
     boundary = right
     value = 0 # (Pa) Gives the correct pressure drop from Figure 2 for 1mm spheres
-  [../]
+  []
 []
 
 [Materials]
-  [./column]
+  [column]
     type = PackedColumn
-    sphere_radius = 1
-  [../]
+    radius = 1
+  []
 []
 
 [Problem]
@@ -89,6 +97,7 @@
 [Executioner]
   type = Steady
   solve_type = PJFNK
+  #nl_rel_tol = 1e-12
   petsc_options_iname = '-pc_type -pc_hypre_type'
   petsc_options_value = 'hypre boomeramg'
 []

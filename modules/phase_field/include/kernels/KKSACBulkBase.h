@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSACBULKBASE_H
-#define KKSACBULKBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ACBulk.h"
 
 // Forward Declarations
-class KKSACBulkBase;
-
-template <>
-InputParameters validParams<KKSACBulkBase>();
 
 /**
  * ACBulk child class that takes all the necessary data from a
@@ -24,14 +22,13 @@ InputParameters validParams<KKSACBulkBase>();
 class KKSACBulkBase : public ACBulk<Real>
 {
 public:
+  static InputParameters validParams();
+
   KKSACBulkBase(const InputParameters & parameters);
 
   virtual void initialSetup();
 
 protected:
-  /// Number of coupled variables
-  unsigned int _nvar;
-
   /// name of the order parameter (needed to retrieve the derivative material properties)
   VariableName _eta_name;
 
@@ -44,14 +41,8 @@ protected:
   /// Value of the free energy function \f$ F_a \f$
   const MaterialProperty<Real> & _prop_Fa;
 
-  /// Value of the free energy function \f$ F_b \f$
-  const MaterialProperty<Real> & _prop_Fb;
-
   /// Derivative of the free energy function \f$ \frac d{d\eta} F_a \f$
   const MaterialProperty<Real> & _prop_dFa;
-
-  /// Derivative of the free energy function \f$ \frac d{d\eta} F_b \f$
-  const MaterialProperty<Real> & _prop_dFb;
 
   /// Derivative of the switching function \f$ \frac d{d\eta} h(\eta) \f$
   const MaterialProperty<Real> & _prop_dh;
@@ -62,5 +53,3 @@ protected:
   /// Gradients for all coupled variables
   std::vector<const VariableGradient *> _grad_args;
 };
-
-#endif // KKSACBULKBASE_H

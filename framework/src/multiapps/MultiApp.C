@@ -1,22 +1,18 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "MultiApp.h"
 
 #include "AppFactory.h"
 #include "AuxiliarySystem.h"
+#include "DisplacedProblem.h"
 #include "Console.h"
 #include "Executioner.h"
 #include "FEProblem.h"
@@ -27,8 +23,9 @@
 #include "SetupInterface.h"
 #include "UserObject.h"
 #include "CommandLine.h"
+#include "Conversion.h"
+#include "NonlinearSystemBase.h"
 
-// libMesh includes
 #include "libmesh/mesh_tools.h"
 #include "libmesh/numeric_vector.h"
 
@@ -39,14 +36,17 @@
 #include <algorithm>
 
 // Call to "uname"
+#ifdef LIBMESH_HAVE_SYS_UTSNAME_H
 #include <sys/utsname.h>
+#endif
 
-template <>
+defineLegacyParams(MultiApp);
+
 InputParameters
-validParams<MultiApp>()
+MultiApp::validParams()
 {
-  InputParameters params = validParams<MooseObject>();
-  params += validParams<SetupInterface>();
+  InputParameters params = MooseObject::validParams();
+  params += SetupInterface::validParams();
 
   params.addParam<bool>("use_displaced_mesh",
                         false,
@@ -73,6 +73,10 @@ validParams<MultiApp>()
                                "Path to search for dynamic libraries (please "
                                "avoid committing absolute paths in addition to "
                                "MOOSE_LIBRARY_PATH)");
+  params.addParam<std::string>(
+      "library_name",
+      "",
+      "The file name of the library (*.la file) that will be dynamically loaded.");
   params.addParam<std::vector<Point>>(
       "positions",
       "The positions of the App locations.  Each set of 3 values will represent a "
@@ -91,11 +95,15 @@ validParams<MultiApp>()
   params.addParam<Real>("bounding_box_inflation",
                         0.01,
                         "Relative amount to 'inflate' the bounding box of this MultiApp.");
+  params.addParam<Point>("bounding_box_padding",
+                         RealVectorValue(),
+                         "Additional padding added to the dimensions of the bounding box. The "
+                         "values are added to the x, y and z dimension respectively.");
 
   params.addPrivateParam<MPI_Comm>("_mpi_comm");
 
   // Set the default execution time
-  params.set<MultiMooseEnum>("execute_on") = "timestep_begin";
+  params.set<ExecFlagEnum>("execute_on", true) = EXEC_TIMESTEP_BEGIN;
 
   params.addParam<unsigned int>("max_procs_per_app",
                                 std::numeric_limits<unsigned int>::max(),
@@ -108,6 +116,11 @@ validParams<MultiApp>()
       false,
       "If true this will cause the output from the MultiApp to be 'moved' by its position vector");
 
+  params.addParam<Real>("global_time_offset",
+                        0,
+                        "The time offset relative to the master application for the purpose of "
+                        "starting a subapp at different time from the master application. The "
+                        "global time will be ahead by the offset specified here.");
   params.addParam<Real>("reset_time",
                         std::numeric_limits<Real>::max(),
                         "The time at which to reset Apps given by the 'reset_apps' parameter.  "
@@ -134,8 +147,35 @@ validParams<MultiApp>()
   params.addParam<std::vector<Point>>("move_positions",
                                       "The positions corresponding to each move_app.");
 
+  params.addParam<std::vector<std::string>>(
+      "cli_args",
+      std::vector<std::string>(),
+      "Additional command line arguments to pass to the sub apps. If one set is provided the "
+      "arguments are applied to all, otherwise there must be a set for each sub app.");
+
+  params.addRangeCheckedParam<Real>("relaxation_factor",
+                                    1.0,
+                                    "relaxation_factor>0 & relaxation_factor<2",
+                                    "Fraction of newly computed value to keep."
+                                    "Set between 0 and 2.");
+  params.addParam<std::vector<std::string>>("relaxed_variables",
+                                            std::vector<std::string>(),
+                                            "List of variables to relax during Picard Iteration");
+
+  params.addParam<bool>(
+      "clone_master_mesh", false, "True to clone master mesh and use it for this MultiApp.");
+
+  params.addParam<bool>("keep_solution_during_restore",
+                        false,
+                        "This is useful when doing Picard.  It takes the "
+                        "final solution from the previous Picard iteration"
+                        "and re-uses it as the initial guess "
+                        "for the next picard iteration");
+
+  params.addPrivateParam<std::shared_ptr<CommandLine>>("_command_line");
   params.addPrivateParam<bool>("use_positions", true);
   params.declareControllable("enable");
+  params.declareControllable("cli_args", {EXEC_PRE_MULTIAPP_SETUP});
   params.registerBase("MultiApp");
 
   return params;
@@ -144,8 +184,9 @@ validParams<MultiApp>()
 MultiApp::MultiApp(const InputParameters & parameters)
   : MooseObject(parameters),
     SetupInterface(this),
-    Restartable(parameters, "MultiApps"),
-    _fe_problem(*parameters.getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
+    Restartable(this, "MultiApps"),
+    PerfGraphInterface(this),
+    _fe_problem(*getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
     _app_type(isParamValid("app_type") ? std::string(getParam<MooseEnum>("app_type"))
                                        : _fe_problem.getMooseApp().type()),
     _use_positions(getParam<bool>("use_positions")),
@@ -153,12 +194,15 @@ MultiApp::MultiApp(const InputParameters & parameters)
     _total_num_apps(0),
     _my_num_apps(0),
     _first_local_app(0),
-    _orig_comm(getParam<MPI_Comm>("_mpi_comm")),
-    _my_comm(MPI_COMM_SELF),
+    _orig_comm(_communicator.get()),
+    _my_communicator(),
+    _my_comm(_my_communicator.get()),
     _my_rank(0),
     _inflation(getParam<Real>("bounding_box_inflation")),
+    _bounding_box_padding(getParam<Point>("bounding_box_padding")),
     _max_procs_per_app(getParam<unsigned int>("max_procs_per_app")),
     _output_in_position(getParam<bool>("output_in_position")),
+    _global_time_offset(getParam<Real>("global_time_offset")),
     _reset_time(getParam<Real>("reset_time")),
     _reset_apps(getParam<std::vector<unsigned int>>("reset_apps")),
     _reset_happened(false),
@@ -167,24 +211,43 @@ MultiApp::MultiApp(const InputParameters & parameters)
     _move_positions(getParam<std::vector<Point>>("move_positions")),
     _move_happened(false),
     _has_an_app(true),
-    _backups(declareRestartableDataWithContext<SubAppBackups>("backups", this))
+    _backups(declareRestartableDataWithContext<SubAppBackups>("backups", this)),
+    _cli_args(getParam<std::vector<std::string>>("cli_args")),
+    _keep_solution_during_restore(getParam<bool>("keep_solution_during_restore")),
+    _perf_backup(registerTimedSection("backup", 3)),
+    _perf_restore(registerTimedSection("restore", 3)),
+    _perf_init(registerTimedSection("init", 3)),
+    _perf_reset_app(registerTimedSection("resetApp", 3))
 {
-  if (_use_positions)
-  {
-    // Fill in the _positions vector and initialize
-    fillPositions();
-    init(_positions.size());
-  }
 }
 
 void
 MultiApp::init(unsigned int num)
 {
+  TIME_SECTION(_perf_init);
+
   _total_num_apps = num;
   buildComm();
   _backups.reserve(_my_num_apps);
   for (unsigned int i = 0; i < _my_num_apps; i++)
     _backups.emplace_back(std::make_shared<Backup>());
+
+  _has_bounding_box.resize(_my_num_apps, false);
+  _bounding_box.resize(_my_num_apps);
+
+  if ((_cli_args.size() > 1) && (_total_num_apps != _cli_args.size()))
+    paramError("cli_args",
+               "The number of items supplied must be 1 or equal to the number of sub apps.");
+}
+
+void
+MultiApp::setupPositions()
+{
+  if (_use_positions)
+  {
+    fillPositions();
+    init(_positions.size());
+  }
 }
 
 void
@@ -193,19 +256,20 @@ MultiApp::initialSetup()
   if (!_has_an_app)
     return;
 
-  MPI_Comm swapped = Moose::swapLibMeshComm(_my_comm);
+  Moose::ScopedCommSwapper swapper(_my_comm);
 
   _apps.resize(_my_num_apps);
 
   // If the user provided an unregistered app type, see if we can load it dynamically
   if (!AppFactory::instance().isRegistered(_app_type))
-    _app.dynamicAppRegistration(_app_type, getParam<std::string>("library_path"));
+    _app.dynamicAppRegistration(
+        _app_type, getParam<std::string>("library_path"), getParam<std::string>("library_name"));
 
   for (unsigned int i = 0; i < _my_num_apps; i++)
-    createApp(i, _app.getGlobalTimeOffset());
-
-  // Swap back
-  Moose::swapLibMeshComm(swapped);
+  {
+    createApp(i, _global_time_offset);
+    _app.parser().hitCLIFilter(_apps[i]->name(), _app.commandLine()->getArguments());
+  }
 }
 
 void
@@ -332,42 +396,133 @@ MultiApp::getExecutioner(unsigned int app)
 }
 
 void
+MultiApp::finalize()
+{
+  for (const auto & app_ptr : _apps)
+  {
+    auto * executioner = app_ptr->getExecutioner();
+    mooseAssert(executioner, "Executioner is nullptr");
+
+    executioner->feProblem().execute(EXEC_FINAL);
+    executioner->feProblem().outputStep(EXEC_FINAL);
+  }
+}
+
+void
+MultiApp::postExecute()
+{
+  for (const auto & app_ptr : _apps)
+  {
+    auto * executioner = app_ptr->getExecutioner();
+    mooseAssert(executioner, "Executioner is nullptr");
+
+    executioner->postExecute();
+  }
+}
+
+void
 MultiApp::backup()
 {
+  TIME_SECTION(_perf_backup);
+
+  _console << "Beginning backing up MultiApp " << name() << std::endl;
   for (unsigned int i = 0; i < _my_num_apps; i++)
     _backups[i] = _apps[i]->backup();
+  _console << "Finished backing up MultiApp " << name() << std::endl;
 }
 
 void
 MultiApp::restore()
 {
+  TIME_SECTION(_perf_restore);
+
   // Must be restarting / recovering so hold off on restoring
   // Instead - the restore will happen in createApp()
   // Note that _backups was already populated by dataLoad()
   if (_apps.empty())
     return;
 
+  // We temporatily copy and store solutions for all subapps
+  if (_keep_solution_during_restore)
+  {
+    _end_solutions.resize(_my_num_apps);
+
+    for (unsigned int i = 0; i < _my_num_apps; i++)
+    {
+      _end_solutions[i] =
+          _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase().solution().clone();
+      auto & sub_multiapps =
+          _apps[i]->getExecutioner()->feProblem().getMultiAppWarehouse().getObjects();
+
+      // multiapps of each subapp should do the same things
+      // It is implemented recursively
+      for (auto & multi_app : sub_multiapps)
+        multi_app->keepSolutionDuringRestore(_keep_solution_during_restore);
+    }
+  }
+
+  _console << "Begining restoring MultiApp " << name() << std::endl;
   for (unsigned int i = 0; i < _my_num_apps; i++)
     _apps[i]->restore(_backups[i]);
+  _console << "Finished restoring MultiApp " << name() << std::endl;
+
+  // Now copy the latest solutions back for each subapp
+  if (_keep_solution_during_restore)
+  {
+    for (unsigned int i = 0; i < _my_num_apps; i++)
+    {
+      _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase().solution() =
+          *_end_solutions[i];
+
+      // We need to synchronize solution so that local_solution has the right values
+      _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase().update();
+    }
+
+    _end_solutions.clear();
+  }
 }
 
-MeshTools::BoundingBox
-MultiApp::getBoundingBox(unsigned int app)
+void
+MultiApp::keepSolutionDuringRestore(bool keep_solution_during_restore)
+{
+  if (_pars.isParamSetByUser("keep_solution_during_restore"))
+    paramError("keep_solution_during_restore",
+               "This parameter should be provided in only master app");
+
+  _keep_solution_during_restore = keep_solution_during_restore;
+}
+
+BoundingBox
+MultiApp::getBoundingBox(unsigned int app, bool displaced_mesh)
 {
   if (!_has_an_app)
     mooseError("No app for ", name(), " on processor ", _orig_rank);
 
-  FEProblemBase & problem = appProblemBase(app);
+  unsigned int local_app = globalAppToLocal(app);
+  FEProblemBase & fe_problem_base = _apps[local_app]->getExecutioner()->feProblem();
+  MooseMesh & mesh = (displaced_mesh && fe_problem_base.getDisplacedProblem().get() != NULL)
+                         ? fe_problem_base.getDisplacedProblem()->mesh()
+                         : fe_problem_base.mesh();
 
-  MPI_Comm swapped = Moose::swapLibMeshComm(_my_comm);
-
-  MooseMesh & mesh = problem.mesh();
-  MeshTools::BoundingBox bbox = MeshTools::bounding_box(mesh);
-
-  Moose::swapLibMeshComm(swapped);
+  {
+    Moose::ScopedCommSwapper swapper(_my_comm);
+    if (displaced_mesh)
+      _bounding_box[local_app] = MeshTools::create_bounding_box(mesh);
+    else
+    {
+      if (!_has_bounding_box[local_app])
+      {
+        _bounding_box[local_app] = MeshTools::create_bounding_box(mesh);
+        _has_bounding_box[local_app] = true;
+      }
+    }
+  }
+  BoundingBox bbox = _bounding_box[local_app];
 
   Point min = bbox.min();
+  min -= _bounding_box_padding;
   Point max = bbox.max();
+  max += _bounding_box_padding;
 
   Point inflation_amount = (max - min) * _inflation;
 
@@ -382,7 +537,7 @@ MultiApp::getBoundingBox(unsigned int app)
 
   // If the problem is RZ then we're going to invent a box that would cover the whole "3D" app
   // FIXME: Assuming all subdomains are the same coordinate system type!
-  if (problem.getCoordSystem(*(problem.mesh().meshSubdomains().begin())) == Moose::COORD_RZ)
+  if (fe_problem_base.getCoordSystem(*(mesh.meshSubdomains().begin())) == Moose::COORD_RZ)
   {
     shifted_min(0) = -inflated_max(0);
     shifted_min(1) = inflated_min(1);
@@ -397,7 +552,7 @@ MultiApp::getBoundingBox(unsigned int app)
   shifted_min += p;
   shifted_max += p;
 
-  return MeshTools::BoundingBox(shifted_min, shifted_max);
+  return BoundingBox(shifted_min, shifted_max);
 }
 
 FEProblemBase &
@@ -409,13 +564,6 @@ MultiApp::appProblemBase(unsigned int app)
   unsigned int local_app = globalAppToLocal(app);
 
   return _apps[local_app]->getExecutioner()->feProblem();
-}
-
-FEProblem &
-MultiApp::problem()
-{
-  mooseDeprecated("MultiApp::problem() is deprecated, call MultiApp::problemBase() instead.\n");
-  return dynamic_cast<FEProblem &>(_fe_problem);
 }
 
 FEProblem &
@@ -468,13 +616,16 @@ MultiApp::hasLocalApp(unsigned int global_app)
 MooseApp *
 MultiApp::localApp(unsigned int local_app)
 {
+  mooseAssert(local_app < _apps.size(), "Index out of range: " + Moose::stringify(local_app));
   return _apps[local_app].get();
 }
 
 void
 MultiApp::resetApp(unsigned int global_app, Real time)
 {
-  MPI_Comm swapped = Moose::swapLibMeshComm(_my_comm);
+  TIME_SECTION(_perf_reset_app);
+
+  Moose::ScopedCommSwapper swapper(_my_comm);
 
   if (hasLocalApp(global_app))
   {
@@ -488,9 +639,6 @@ MultiApp::resetApp(unsigned int global_app, Real time)
     // Reset the file numbers of the newly reset apps
     _apps[local_app]->getOutputWarehouse().setFileNumbers(m);
   }
-
-  // Swap back
-  Moose::swapLibMeshComm(swapped);
 }
 
 void
@@ -521,7 +669,6 @@ MultiApp::parentOutputPositionChanged()
 void
 MultiApp::createApp(unsigned int i, Real start_time)
 {
-
   // Define the app name
   std::ostringstream multiapp_name;
   std::string full_name;
@@ -536,12 +683,39 @@ MultiApp::createApp(unsigned int i, Real start_time)
 
   InputParameters app_params = AppFactory::instance().getValidParams(_app_type);
   app_params.set<FEProblemBase *>("_parent_fep") = &_fe_problem;
-  // prefix of command line could have been changed, so clear prefix for the current MultiApp
-  _app.commandLine()->clearPrefix();
-  app_params.set<std::shared_ptr<CommandLine>>("_command_line") = _app.commandLine();
+
+  // Set the command line parameters with a copy of the main application command line parameters,
+  // the copy is required so that the addArgument command below doesn't accumulate more and more
+  // of the same cli_args, which is important when running in batch mode.
+  std::shared_ptr<CommandLine> app_cli = std::make_shared<CommandLine>(*_app.commandLine());
+  app_cli->initForMultiApp(full_name);
+  app_params.set<std::shared_ptr<CommandLine>>("_command_line") = app_cli;
+
+  if (_cli_args.size() > 0)
+  {
+    for (const std::string & str : MooseUtils::split(getCommandLineArgsParamHelper(i), ";"))
+    {
+      std::ostringstream oss;
+      oss << full_name << ":" << str;
+      app_params.get<std::shared_ptr<CommandLine>>("_command_line")->addArgument(oss.str());
+    }
+  }
+
+  _console << COLOR_CYAN << "Creating MultiApp " << name() << " of type " << _app_type
+           << " of level " << _app.multiAppLevel() + 1 << " and number " << _first_local_app + i
+           << ":" << COLOR_DEFAULT << std::endl;
   app_params.set<unsigned int>("_multiapp_level") = _app.multiAppLevel() + 1;
   app_params.set<unsigned int>("_multiapp_number") = _first_local_app + i;
-  _apps[i].reset(AppFactory::instance().create(_app_type, full_name, app_params, _my_comm));
+  if (getParam<bool>("clone_master_mesh"))
+  {
+    _console << COLOR_CYAN << "Cloned master mesh will be used for subapp " << name()
+             << COLOR_DEFAULT << std::endl;
+    app_params.set<const MooseMesh *>("_master_mesh") = &_fe_problem.mesh();
+    auto displaced_problem = _fe_problem.getDisplacedProblem();
+    if (displaced_problem)
+      app_params.set<const MooseMesh *>("_master_displaced_mesh") = &displaced_problem->mesh();
+  }
+  _apps[i] = AppFactory::instance().createShared(_app_type, full_name, app_params, _my_comm);
   auto & app = _apps[i];
 
   std::string input_file = "";
@@ -550,24 +724,8 @@ MultiApp::createApp(unsigned int i, Real start_time)
   else
     input_file = _input_files[_first_local_app + i];
 
-  std::ostringstream output_base;
-
-  // Create an output base by taking the output base of the master problem and appending
-  // the name of the multiapp + a number to it
-  if (!_app.getOutputFileBase().empty())
-    output_base << _app.getOutputFileBase() + "_";
-  else
-  {
-    std::string base = _app.getFileName();
-    size_t pos = base.find_last_of('.');
-    output_base << base.substr(0, pos) + "_out_";
-  }
-
-  // Append the sub app name to the output file base
-  output_base << multiapp_name.str();
   app->setGlobalTimeOffset(start_time);
   app->setInputFileName(input_file);
-  app->setOutputFileBase(output_base.str());
   app->setOutputFileNumbers(_app.getOutputWarehouse().getFileNumbers());
   app->setRestart(_app.isRestarting());
   app->setRecover(_app.isRecovering());
@@ -577,15 +735,45 @@ MultiApp::createApp(unsigned int i, Real start_time)
   // will be cached by the MooseApp object so that it can be used
   // during FEProblemBase::initialSetup() during runInputFile()
   if (_app.isRestarting() || _app.isRecovering())
-    app->restore(_backups[i]);
+    app->setBackupObject(_backups[i]);
 
   if (_use_positions && getParam<bool>("output_in_position"))
     app->setOutputPosition(_app.getOutputPosition() + _positions[_first_local_app + i]);
 
   // Update the MultiApp level for the app that was just created
   app->setupOptions();
+  // if multiapp does not have file base in Outputs input block, output file base will
+  // be empty here since setupOptions() does not set the default file base with the multiapp
+  // input file name. Master will create the default file base for multiapp by taking the
+  // output base of the master problem and appending the name of the multiapp plus a number to it
+  if (app->getOutputFileBase().empty())
+    app->setOutputFileBase(_app.getOutputFileBase() + "_" + multiapp_name.str());
   preRunInputFile();
   app->runInputFile();
+
+  auto & picard_solve = _apps[i]->getExecutioner()->picardSolve();
+  picard_solve.setMultiAppRelaxationFactor(getParam<Real>("relaxation_factor"));
+  picard_solve.setMultiAppRelaxationVariables(
+      getParam<std::vector<std::string>>("relaxed_variables"));
+  if (getParam<Real>("relaxation_factor") != 1.0)
+  {
+    // Store a copy of the previous solution here
+    FEProblemBase & fe_problem_base = _apps[i]->getExecutioner()->feProblem();
+    fe_problem_base.getNonlinearSystemBase().addVector("self_relax_previous", false, PARALLEL);
+  }
+}
+
+std::string
+MultiApp::getCommandLineArgsParamHelper(unsigned int local_app)
+{
+
+  // Single set of "cli_args" to be applied to all sub apps
+  if (_cli_args.size() == 1)
+    return _cli_args[0];
+
+  // Unique set of "cli_args" to be applied to each sub apps
+  else
+    return _cli_args[local_app + _first_local_app];
 }
 
 void
@@ -593,15 +781,18 @@ MultiApp::buildComm()
 {
   int ierr;
 
-  ierr = MPI_Comm_size(_orig_comm, &_orig_num_procs);
+  ierr = MPI_Comm_size(_communicator.get(), &_orig_num_procs);
   mooseCheckMPIErr(ierr);
-  ierr = MPI_Comm_rank(_orig_comm, &_orig_rank);
+  ierr = MPI_Comm_rank(_communicator.get(), &_orig_rank);
   mooseCheckMPIErr(ierr);
 
+#ifdef LIBMESH_HAVE_SYS_UTSNAME_H
   struct utsname sysInfo;
   uname(&sysInfo);
-
   _node_name = sysInfo.nodename;
+#else
+  _node_name = "Unknown";
+#endif
 
   // If we have more apps than processors then we're just going to divide up the work
   if (_total_num_apps >= (unsigned)_orig_num_procs)
@@ -637,7 +828,7 @@ MultiApp::buildComm()
 
   // In this case we need to divide up the processors that are going to work on each app
   int rank;
-  ierr = MPI_Comm_rank(_orig_comm, &rank);
+  ierr = MPI_Comm_rank(_communicator.get(), &rank);
   mooseCheckMPIErr(ierr);
 
   unsigned int procs_per_app = _orig_num_procs / _total_num_apps;
@@ -671,15 +862,15 @@ MultiApp::buildComm()
 
   if (_has_an_app)
   {
-    ierr = MPI_Comm_split(_orig_comm, _first_local_app, rank, &_my_comm);
-    mooseCheckMPIErr(ierr);
+    _communicator.split(_first_local_app, rank, _my_communicator);
+
     ierr = MPI_Comm_rank(_my_comm, &_my_rank);
     mooseCheckMPIErr(ierr);
   }
   else
   {
-    ierr = MPI_Comm_split(_orig_comm, MPI_UNDEFINED, rank, &_my_comm);
-    mooseCheckMPIErr(ierr);
+    _communicator.split(MPI_UNDEFINED, rank, _my_communicator);
+
     _my_rank = 0;
   }
 }

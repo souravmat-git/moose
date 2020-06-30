@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ACSWITCHING_H
-#define ACSWITCHING_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ACBulk.h"
 
 // Forward Declarations
-class ACSwitching;
-
-template <>
-InputParameters validParams<ACSwitching>();
 
 /**
  * ACSwitching adds terms of the form
@@ -25,6 +23,8 @@ InputParameters validParams<ACSwitching>();
 class ACSwitching : public ACBulk<Real>
 {
 public:
+  static InputParameters validParams();
+
   ACSwitching(const InputParameters & parameters);
 
   virtual void initialSetup();
@@ -33,7 +33,6 @@ protected:
   virtual Real computeDFDOP(PFFunctionType type);
   virtual Real computeQpOffDiagJacobian(unsigned int jvar);
 
-  const unsigned int _nvar;
   /// name of order parameter that derivatives are taken wrt (needed to retrieve the derivative material properties)
   VariableName _etai_name;
 
@@ -59,5 +58,3 @@ protected:
   /// Second derivatives of the switching functions (needed for off-diagonal Jacobians)
   std::vector<std::vector<const MaterialProperty<Real> *>> _prop_d2hjdetaidarg;
 };
-
-#endif // ACSWITCHING_H

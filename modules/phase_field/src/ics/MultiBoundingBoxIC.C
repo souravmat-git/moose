@@ -1,18 +1,34 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiBoundingBoxIC.h"
 #include "MooseMesh.h"
 
-template <>
-InputParameters
-validParams<MultiBoundingBoxIC>()
+registerMooseObject("PhaseFieldApp", MultiBoundingBoxIC);
+
+namespace
 {
-  InputParameters params = validParams<InitialCondition>();
+// Convenience function for sizing a vector to "n" given a vector with size 1 or "n"
+std::vector<Real>
+sizeVector(std::vector<Real> v, std::size_t size)
+{
+  if (v.size() == 1)
+    return std::vector<Real>(size, v[0]);
+  else
+    return v;
+}
+}
+
+InputParameters
+MultiBoundingBoxIC::validParams()
+{
+  InputParameters params = InitialCondition::validParams();
   params.addClassDescription("Specify variable values inside and outside a list of box shaped "
                              "axis-aligned regions defined by pairs of opposing corners");
   params.addRequiredParam<std::vector<Point>>("corners", "The corner coordinates boxes");
@@ -23,6 +39,9 @@ validParams<MultiBoundingBoxIC>()
                                              "(one value per box or a single value for "
                                              "all boxes)");
   params.addParam<Real>("outside", 0.0, "The value of the variable outside the box");
+
+  params.addClassDescription("Allows setting the initial condition of a value of a field inside "
+                             "and outside multiple bounding boxes.");
   return params;
 }
 
@@ -32,13 +51,9 @@ MultiBoundingBoxIC::MultiBoundingBoxIC(const InputParameters & parameters)
     _c2(getParam<std::vector<Point>>("opposite_corners")),
     _nbox(_c1.size()),
     _dim(_fe_problem.mesh().dimension()),
-    _inside(getParam<std::vector<Real>>("inside")),
+    _inside(sizeVector(getParam<std::vector<Real>>("inside"), _nbox)),
     _outside(getParam<Real>("outside"))
 {
-  // we allow passing in a single value used on the inside of all boxes
-  if (_inside.size() == 1)
-    _inside.assign(_nbox, _inside[0]);
-
   // make sure inputs are the same length
   if (_c2.size() != _nbox || _inside.size() != _nbox)
     mooseError("vector inputs must all be the same size");

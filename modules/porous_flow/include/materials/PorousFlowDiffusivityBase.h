@@ -1,24 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWDIFFUSIVITYBASE_H
-#define POROUSFLOWDIFFUSIVITYBASE_H
+#pragma once
 
 #include "PorousFlowMaterialVectorBase.h"
-
-class PorousFlowDiffusivityBase;
-
-template <>
-InputParameters validParams<PorousFlowDiffusivityBase>();
 
 /// Base class Material designed to provide the tortuosity and diffusion coefficents
 class PorousFlowDiffusivityBase : public PorousFlowMaterialVectorBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowDiffusivityBase(const InputParameters & parameters);
 
 protected:
@@ -39,5 +37,3 @@ protected:
   /// Input diffusion coefficients
   const std::vector<Real> _input_diffusion_coeff;
 };
-
-#endif // POROUSFLOWDIFFUSIVITYBASE_H

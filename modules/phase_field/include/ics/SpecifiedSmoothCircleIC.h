@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SPECIFIEDSMOOTHCIRCLEIC_H
-#define SPECIFIEDSMOOTHCIRCLEIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "SmoothCircleBaseIC.h"
 
 // Forward Declarations
-class SpecifiedSmoothCircleIC;
-
-template <>
-InputParameters validParams<SpecifiedSmoothCircleIC>();
 
 /**
  * SpecifiedsmoothCircleIC creates multiple SmoothCircles (number = size of x_positions) that are
@@ -24,6 +22,8 @@ InputParameters validParams<SpecifiedSmoothCircleIC>();
 class SpecifiedSmoothCircleIC : public SmoothCircleBaseIC
 {
 public:
+  static InputParameters validParams();
+
   SpecifiedSmoothCircleIC(const InputParameters & parameters);
 
 protected:
@@ -35,5 +35,3 @@ protected:
   std::vector<Real> _z_positions;
   std::vector<Real> _input_radii;
 };
-
-#endif // SPECIFIEDSMOOTHCIRCLEIC_H

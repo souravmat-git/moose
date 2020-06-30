@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICJ2_H
-#define TENSORMECHANICSPLASTICJ2_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticModel.h"
 #include "TensorMechanicsHardeningModel.h"
-
-class TensorMechanicsPlasticJ2;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticJ2>();
 
 /**
  * J2 plasticity, associative, with hardning.
@@ -22,6 +19,8 @@ InputParameters validParams<TensorMechanicsPlasticJ2>();
 class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticJ2(const InputParameters & parameters);
 
   virtual std::string modelName() const override;
@@ -87,5 +86,3 @@ private:
   /// Whether to use the custom consistent tangent operator calculation
   const bool _use_custom_cto;
 };
-
-#endif // TENSORMECHANICSPLASTICJ2_H

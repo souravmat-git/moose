@@ -1,35 +1,34 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "GenericConstantMaterial.h"
 
-// libMesh includes
-#include "libmesh/quadrature.h"
+registerMooseObject("MooseApp", GenericConstantMaterial);
+registerMooseObject("MooseApp", ADGenericConstantMaterial);
 
-template <>
+template <bool is_ad>
 InputParameters
-validParams<GenericConstantMaterial>()
+GenericConstantMaterialTempl<is_ad>::validParams()
 {
-  InputParameters params = validParams<Material>();
-  params.addParam<std::vector<std::string>>("prop_names",
-                                            "The names of the properties this material will have");
-  params.addParam<std::vector<Real>>("prop_values",
-                                     "The values associated with the named properties");
+  InputParameters params = Material::validParams();
+  params.addRequiredParam<std::vector<std::string>>(
+      "prop_names", "The names of the properties this material will have");
+  params.addRequiredParam<std::vector<Real>>("prop_values",
+                                             "The values associated with the named properties");
+  params.set<MooseEnum>("constant_on") = "SUBDOMAIN";
+  params.declareControllable("prop_values");
   return params;
 }
 
-GenericConstantMaterial::GenericConstantMaterial(const InputParameters & parameters)
+template <bool is_ad>
+GenericConstantMaterialTempl<is_ad>::GenericConstantMaterialTempl(
+    const InputParameters & parameters)
   : Material(parameters),
     _prop_names(getParam<std::vector<std::string>>("prop_names")),
     _prop_values(getParam<std::vector<Real>>("prop_values"))
@@ -46,18 +45,23 @@ GenericConstantMaterial::GenericConstantMaterial(const InputParameters & paramet
   _properties.resize(num_names);
 
   for (unsigned int i = 0; i < _num_props; i++)
-    _properties[i] = &declareProperty<Real>(_prop_names[i]);
+    _properties[i] = &declareGenericProperty<Real, is_ad>(_prop_names[i]);
 }
 
+template <bool is_ad>
 void
-GenericConstantMaterial::initQpStatefulProperties()
+GenericConstantMaterialTempl<is_ad>::initQpStatefulProperties()
 {
   computeQpProperties();
 }
 
+template <bool is_ad>
 void
-GenericConstantMaterial::computeQpProperties()
+GenericConstantMaterialTempl<is_ad>::computeQpProperties()
 {
   for (unsigned int i = 0; i < _num_props; i++)
     (*_properties[i])[_qp] = _prop_values[i];
 }
+
+template class GenericConstantMaterialTempl<false>;
+template class GenericConstantMaterialTempl<true>;

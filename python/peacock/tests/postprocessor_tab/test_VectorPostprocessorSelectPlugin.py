@@ -1,4 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import sys
 import os
 import unittest
@@ -108,7 +117,6 @@ class TestVectorPostprocessorSelectPlugin(Testing.PeacockImageTestCase):
         self.assertIn("data = mooseutils.VectorPostprocessorReader('TestVectorPostprocessorSelectPlugin_test_*.csv')", output)
         self.assertIn("x = data('index (Peacock)')", output)
         self.assertIn("y = data('y')", output)
-        self.assertIn("axes0.plot(x, y, marker='', linewidth=1, color=[0.698, 0.875, 0.541, 1.0], markersize=1, linestyle='-', label='y')", output)
         self.assertIn("data = mooseutils.VectorPostprocessorReader('TestVectorPostprocessorSelectPlugin_test2_*.csv')", output)
 
 if __name__ == '__main__':

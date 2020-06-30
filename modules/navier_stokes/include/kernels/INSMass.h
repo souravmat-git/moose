@@ -1,28 +1,28 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INSMASS_H
-#define INSMASS_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#include "Kernel.h"
+#pragma once
+
+#include "INSBase.h"
 
 // Forward Declarations
-class INSMass;
-
-template <>
-InputParameters validParams<INSMass>();
 
 /**
  * This class computes the mass equation residual and Jacobian
  * contributions for the incompressible Navier-Stokes momentum
  * equation.
  */
-class INSMass : public Kernel
+class INSMass : public INSBase
 {
 public:
+  static InputParameters validParams();
+
   INSMass(const InputParameters & parameters);
 
   virtual ~INSMass() {}
@@ -32,15 +32,12 @@ protected:
   virtual Real computeQpJacobian();
   virtual Real computeQpOffDiagJacobian(unsigned jvar);
 
-  // Coupled Gradients
-  const VariableGradient & _grad_u_vel;
-  const VariableGradient & _grad_v_vel;
-  const VariableGradient & _grad_w_vel;
+  virtual Real computeQpPGResidual();
+  virtual Real computeQpPGJacobian();
+  virtual Real computeQpPGOffDiagJacobian(unsigned comp);
 
-  // Variable numberings
-  unsigned _u_vel_var_number;
-  unsigned _v_vel_var_number;
-  unsigned _w_vel_var_number;
+  bool _pspg;
+  const Function & _x_ffn;
+  const Function & _y_ffn;
+  const Function & _z_ffn;
 };
-
-#endif // INSMASS_H

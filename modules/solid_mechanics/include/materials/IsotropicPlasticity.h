@@ -1,22 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ISOTROPICPLASTICITY_H
-#define ISOTROPICPLASTICITY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ReturnMappingModel.h"
 
 class PiecewiseLinear;
 
-/**
- */
-
 class IsotropicPlasticity : public ReturnMappingModel
 {
 public:
+  static InputParameters validParams();
+
   IsotropicPlasticity(const InputParameters & parameters);
 
   virtual void initQpStatefulProperties() override;
@@ -34,10 +35,10 @@ protected:
   virtual Real computeHardeningValue(Real scalar);
   virtual Real computeHardeningDerivative(Real scalar);
 
-  Function * _yield_stress_function;
+  const Function * _yield_stress_function;
   Real _yield_stress;
   const Real _hardening_constant;
-  PiecewiseLinear * const _hardening_function;
+  const PiecewiseLinear * const _hardening_function;
 
   Real _yield_condition;
   Real _shear_modulus;
@@ -49,8 +50,3 @@ protected:
   MaterialProperty<Real> & _hardening_variable;
   const MaterialProperty<Real> & _hardening_variable_old;
 };
-
-template <>
-InputParameters validParams<IsotropicPlasticity>();
-
-#endif // ISOTROPICPLASTICITY_H

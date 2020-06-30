@@ -1,21 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROFULLSATMATERIAL_H
-#define POROFULLSATMATERIAL_H
+#pragma once
 
 #include "DerivativeMaterialInterface.h"
 #include "Material.h"
 
 // Forward Declarations
-class PoroFullSatMaterial;
-
-template <>
-InputParameters validParams<PoroFullSatMaterial>();
 
 /**
  * Material designed to calculate and store all the
@@ -26,6 +23,8 @@ InputParameters validParams<PoroFullSatMaterial>();
 class PoroFullSatMaterial : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   PoroFullSatMaterial(const InputParameters & parameters);
 
 protected:
@@ -83,5 +82,3 @@ protected:
   virtual void initQpStatefulProperties();
   virtual void computeQpProperties();
 };
-
-#endif // POROFULLSATMATERIAL_H

@@ -1,20 +1,24 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "KKSXeVacSolidMaterial.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", KKSXeVacSolidMaterial);
+
 InputParameters
-validParams<KKSXeVacSolidMaterial>()
+KKSXeVacSolidMaterial::validParams()
 {
-  InputParameters params = validParams<DerivativeFunctionMaterialBase>();
+  InputParameters params = DerivativeFunctionMaterialBase::validParams();
   params.addClassDescription("KKS Solid phase free energy for Xe,Vac in UO2.  Fm(cmg,cmv)");
   params.addRequiredParam<Real>("T", "Temperature in [K]");
-  params.addRequiredCoupledVar("cmg", "Gas concnetration");
-  params.addRequiredCoupledVar("cmv", "Vacancy concnetration");
+  params.addRequiredCoupledVar("cmg", "Gas concentration");
+  params.addRequiredCoupledVar("cmv", "Vacancy concentration");
   return params;
 }
 
@@ -50,8 +54,9 @@ KKSXeVacSolidMaterial::expectedNumArgs()
 Real
 KKSXeVacSolidMaterial::computeF()
 {
-  return 1.0 / _Omega * (_kB * _T * (cLogC(_cmv[_qp]) + cLogC(1.0 - _cmv[_qp])) + _Efv * _cmv[_qp] +
-                         _kB * _T * (cLogC(_cmg[_qp]) + cLogC(1.0 - _cmg[_qp])) + _Efg * _cmg[_qp]);
+  return 1.0 / _Omega *
+         (_kB * _T * (cLogC(_cmv[_qp]) + cLogC(1.0 - _cmv[_qp])) + _Efv * _cmv[_qp] +
+          _kB * _T * (cLogC(_cmg[_qp]) + cLogC(1.0 - _cmg[_qp])) + _Efg * _cmg[_qp]);
 }
 
 // Derivative of the Free energy

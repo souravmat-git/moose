@@ -1,24 +1,22 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MaterialStdVectorAux.h"
 
-template <>
+registerMooseObject("MooseApp", MaterialStdVectorAux);
+
+defineLegacyParams(MaterialStdVectorAux);
+
 InputParameters
-validParams<MaterialStdVectorAux>()
+MaterialStdVectorAux::validParams()
 {
-  InputParameters params = validParams<MaterialStdVectorAuxBase<>>();
+  InputParameters params = MaterialStdVectorAuxBase<>::validParams();
   params.addClassDescription("Extracts a component of a material type std::vector<Real> to an aux "
                              "variable.  If the std::vector is not of sufficient size then zero is "
                              "returned");

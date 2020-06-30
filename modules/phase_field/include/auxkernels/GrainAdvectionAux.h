@@ -1,21 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GRAINADVECTIONAUX_H
-#define GRAINADVECTIONAUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxKernel.h"
 #include "GrainTrackerInterface.h"
 #include "GrainForceAndTorqueInterface.h"
 
 // Forward Declarations
-class GrainAdvectionAux;
-
-template <>
-InputParameters validParams<GrainAdvectionAux>();
 
 /**
  * Calculates the advection velocity of grain due to rigid body motion
@@ -24,6 +22,8 @@ InputParameters validParams<GrainAdvectionAux>();
 class GrainAdvectionAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   GrainAdvectionAux(const InputParameters & parameters);
 
 protected:
@@ -53,5 +53,3 @@ private:
   RealGradient _velocity_advection;
   MooseEnum _component;
 };
-
-#endif // GRAINADVECTIONAUXAUX_H

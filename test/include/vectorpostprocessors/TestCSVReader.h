@@ -1,27 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef TESTCSVREADER_H
-#define TESTCSVREADER_H
+#pragma once
 
 #include "GeneralUserObject.h"
-
-// Forward Declarations
-class TestCSVReader;
-
-template <>
-InputParameters validParams<TestCSVReader>();
 
 /**
  * Test class to make certain that CSV data is broadcast correctly.
@@ -29,6 +17,8 @@ InputParameters validParams<TestCSVReader>();
 class TestCSVReader : public GeneralUserObject
 {
 public:
+  static InputParameters validParams();
+
   TestCSVReader(const InputParameters & parameters);
   virtual void execute() override;
   virtual void initialize() override {}
@@ -39,5 +29,3 @@ protected:
   const processor_id_type & _rank;
   const std::vector<double> & _gold;
 };
-
-#endif

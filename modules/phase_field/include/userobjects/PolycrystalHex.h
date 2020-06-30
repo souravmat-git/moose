@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef POLYCRYSTALHEX_H
-#define POLYCRYSTALHEX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "PolycrystalVoronoi.h"
 #include "MooseRandom.h"
 
 // Forward Declarations
-class PolycrystalHex;
-
-template <>
-InputParameters validParams<PolycrystalHex>();
 
 /**
  * PolycrystalHex creates a hexagonal polycrystal initial condition.
@@ -23,6 +21,8 @@ InputParameters validParams<PolycrystalHex>();
 class PolycrystalHex : public PolycrystalVoronoi
 {
 public:
+  static InputParameters validParams();
+
   PolycrystalHex(const InputParameters & parameters);
 
   virtual void precomputeGrainStructure();
@@ -32,5 +32,3 @@ private:
   const Real _perturbation_percent;
   MooseRandom _random;
 };
-
-#endif // POLYCRYSTALHEX_H

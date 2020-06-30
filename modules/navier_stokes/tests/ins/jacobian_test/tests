@@ -1,9 +1,0 @@
-[Tests]
-  [./jacobian_test]
-    type = AnalyzeJacobian
-    input = jacobian_test.i
-    expect_out = '\nNo errors detected. :-\)\n'
-    recover = false
-    mesh_mode = REPLICATED
-  [../]
-[]

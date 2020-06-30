@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "Exodus.h"
 
@@ -23,15 +18,17 @@
 #include "MooseVariableScalar.h"
 #include "LockFile.h"
 
-// libMesh includes
 #include "libmesh/exodusII_io.h"
 
-template <>
+registerMooseObject("MooseApp", Exodus);
+
+defineLegacyParams(Exodus);
+
 InputParameters
-validParams<Exodus>()
+Exodus::validParams()
 {
   // Get the base class parameters
-  InputParameters params = validParams<OversampleOutput>();
+  InputParameters params = OversampleOutput::validParams();
   params += AdvancedOutput::enableOutputTypes("nodal elemental scalar postprocessor input");
 
   // Enable sequential file output (do not set default, the use_displace criteria relies on
@@ -41,10 +38,18 @@ validParams<Exodus>()
                         "when 'use_displace = true', otherwise defaults to false");
 
   // Select problem dimension for mesh output
-  params.addParam<bool>("use_problem_dimension",
-                        "Use the problem dimension to the mesh output. "
-                        "Set to false when outputting lower dimensional "
-                        "meshes embedded in a higher dimensional space.");
+  params.addDeprecatedParam<bool>("use_problem_dimension",
+                                  "Use the problem dimension to the mesh output. "
+                                  "Set to false when outputting lower dimensional "
+                                  "meshes embedded in a higher dimensional space.",
+                                  "Use 'output_dimension = problem_dimension' instead.");
+
+  MooseEnum output_dimension("default 1 2 3 problem_dimension", "default");
+
+  params.addParam<MooseEnum>(
+      "output_dimension", output_dimension, "The dimension of the output file");
+
+  params.addParamNamesToGroup("output_dimension", "Advanced");
 
   // Set the default padding to 3
   params.set<unsigned int>("padding") = 3;
@@ -59,7 +64,15 @@ validParams<Exodus>()
                         "existing file, so only a single timestep exists.");
 
   // Set outputting of the input to be on by default
-  params.set<MultiMooseEnum>("execute_input_on") = "initial";
+  params.set<ExecFlagEnum>("execute_input_on") = EXEC_INITIAL;
+
+  // Flag for outputting discontinuous data to Exodus
+  params.addParam<bool>(
+      "discontinuous", false, "Enables discontinuous output format for Exodus files.");
+
+  // Need a layer of geometric ghosting for mesh serialization
+  params.addRelationshipManager("MooseGhostPointNeighbors",
+                                Moose::RelationshipManagerType::GEOMETRIC);
 
   // Return the InputParameters
   return params;
@@ -73,15 +86,43 @@ Exodus::Exodus(const InputParameters & parameters)
     _exodus_mesh_changed(declareRestartableData<bool>("exodus_mesh_changed", true)),
     _sequence(isParamValid("sequence") ? getParam<bool>("sequence")
                                        : _use_displaced ? true : false),
-    _overwrite(getParam<bool>("overwrite"))
+    _overwrite(getParam<bool>("overwrite")),
+    _output_dimension(getParam<MooseEnum>("output_dimension").getEnum<OutputDimension>()),
+    _discontinuous(getParam<bool>("discontinuous"))
 {
+  if (isParamValid("use_problem_dimension"))
+  {
+    auto use_problem_dimension = getParam<bool>("use_problem_dimension");
+
+    if (use_problem_dimension)
+      _output_dimension = OutputDimension::PROBLEM_DIMENSION;
+    else
+      _output_dimension = OutputDimension::DEFAULT;
+  }
+  // If user sets 'discontinuous = true' and 'elemental_as_nodal = false', issue an error that these
+  // are incompatible states
+  if (_discontinuous && parameters.isParamSetByUser("elemental_as_nodal") && !_elemental_as_nodal)
+    mooseError(name(),
+               ": Invalid parameters. 'elemental_as_nodal' set to false while 'discontinuous' set "
+               "to true.");
+  // At this point, if we have discontinuous ouput, we know the user hasn't explicitly set
+  // 'elemental_as_nodal = false', so we can safely default it to true
+  if (_discontinuous)
+    _elemental_as_nodal = true;
+}
+
+void
+Exodus::setOutputDimension(unsigned int /*dim*/)
+{
+  mooseDeprecated(
+      "This method is no longer needed. We can determine output dimension programmatically");
 }
 
 void
 Exodus::initialSetup()
 {
   // Call base class setup method
-  AdvancedOutput::initialSetup();
+  OversampleOutput::initialSetup();
 
   // The libMesh::ExodusII_IO will fail when it is closed if the object is created but
   // nothing is written to the file. This checks that at least something will be written.
@@ -159,40 +200,39 @@ Exodus::outputSetup()
     _exodus_num = 1;
   }
 
-  if (isParamValid("use_problem_dimension"))
-    _exodus_io_ptr->use_mesh_dimension_instead_of_spatial_dimension(
-        getParam<bool>("use_problem_dimension"));
-  else
+  setOutputDimensionInExodusWriter(*_exodus_io_ptr, *_mesh_ptr, _output_dimension);
+}
+
+void
+Exodus::setOutputDimensionInExodusWriter(ExodusII_IO & exodus_io,
+                                         const MooseMesh & mesh,
+                                         OutputDimension output_dimension)
+{
+  switch (output_dimension)
   {
-    // If the spatial_dimension is 1 (this can only happen in recent
-    // versions of libmesh where the meaning of spatial_dimension has
-    // changed), then force the Exodus file to be written with
-    // num_dim==3.
-    //
-    // This works around an issue in Paraview where 1D meshes cannot
-    // not be visualized correctly.  Note: the mesh_dimension() should
-    // get changed back to 1 the next time MeshBase::prepare_for_use()
-    // is called.
-    if (_es_ptr->get_mesh().spatial_dimension() == 1)
-      _exodus_io_ptr->write_as_dimension(3);
+    case OutputDimension::DEFAULT:
+      // If the mesh_dimension is 1, we need to write out as 3D.
+      //
+      // This works around an issue in Paraview where 1D meshes cannot
+      // not be visualized correctly. Otherwise, write out based on the effectiveSpatialDimension.
+      if (mesh.getMesh().mesh_dimension() == 1)
+        exodus_io.write_as_dimension(3);
+      else
+        exodus_io.write_as_dimension(static_cast<int>(mesh.effectiveSpatialDimension()));
+      break;
 
-    // If the spatial_dimension is 2 (again, only possible in recent
-    // versions of libmesh), then we need to be careful as this mesh
-    // would not have been written with num_dim==2 in the past.
-    //
-    // We *can't* simply write it with num_dim==mesh_dimension,
-    // because mesh_dimension might be 1, and as discussed above, we
-    // don't allow num_dim==1 Exodus files.  Therefore, in this
-    // particular case, we force writing with num_dim==3.  Note: the
-    // humor of writing a mesh of 1D elements which lives in 2D space
-    // as num_dim==3 is not lost on me.
-    if (_es_ptr->get_mesh().spatial_dimension() == 2 && _es_ptr->get_mesh().mesh_dimension() == 1)
-      _exodus_io_ptr->write_as_dimension(3);
+    case OutputDimension::ONE:
+    case OutputDimension::TWO:
+    case OutputDimension::THREE:
+      exodus_io.write_as_dimension(static_cast<int>(output_dimension));
+      break;
 
-    // Utilize the spatial dimension.  This value of this flag is
-    // superseded by the value passed to write_as_dimension(), if any.
-    if (_es_ptr->get_mesh().mesh_dimension() != 1)
-      _exodus_io_ptr->use_mesh_dimension_instead_of_spatial_dimension(true);
+    case OutputDimension::PROBLEM_DIMENSION:
+      exodus_io.use_mesh_dimension_instead_of_spatial_dimension(true);
+      break;
+
+    default:
+      ::mooseError("Unknown output_dimension in Exodus writer");
   }
 }
 
@@ -204,8 +244,12 @@ Exodus::outputNodalVariables()
   _exodus_io_ptr->set_output_variables(nodal);
 
   // Write the data via libMesh::ExodusII_IO
-  _exodus_io_ptr->write_timestep(
-      filename(), *_es_ptr, _exodus_num, time() + _app.getGlobalTimeOffset());
+  if (_discontinuous)
+    _exodus_io_ptr->write_timestep_discontinuous(
+        filename(), *_es_ptr, _exodus_num, time() + _app.getGlobalTimeOffset());
+  else
+    _exodus_io_ptr->write_timestep(
+        filename(), *_es_ptr, _exodus_num, time() + _app.getGlobalTimeOffset());
 
   if (!_overwrite)
     _exodus_num++;
@@ -252,14 +296,30 @@ Exodus::outputScalarVariables()
   // Append the scalar to the global output lists
   for (const auto & out_name : out)
   {
-    VariableValue & variable = _problem_ptr->getScalarVariable(0, out_name).sln();
-    unsigned int n = variable.size();
+    // Make sure scalar values are in sync with the solution vector
+    // and are visible on this processor.  See TableOutput.C for
+    // TableOutput::outputScalarVariables() explanatory comments
+
+    MooseVariableScalar & scalar_var = _problem_ptr->getScalarVariable(0, out_name);
+    scalar_var.reinit();
+    VariableValue value(scalar_var.sln());
+
+    const std::vector<dof_id_type> & dof_indices = scalar_var.dofIndices();
+    const unsigned int n = dof_indices.size();
+    value.resize(n);
+
+    const DofMap & dof_map = scalar_var.sys().dofMap();
+    for (unsigned int i = 0; i != n; ++i)
+    {
+      const processor_id_type pid = dof_map.dof_owner(dof_indices[i]);
+      this->comm().broadcast(value[i], pid);
+    }
 
     // If the scalar has a single component, output the name directly
     if (n == 1)
     {
       _global_names.push_back(out_name);
-      _global_values.push_back(variable[0]);
+      _global_values.push_back(value[0]);
     }
 
     // If the scalar as many components add indices to the end of the name
@@ -270,7 +330,7 @@ Exodus::outputScalarVariables()
         std::ostringstream os;
         os << out_name << "_" << i;
         _global_names.push_back(os.str());
-        _global_values.push_back(variable[i]);
+        _global_values.push_back(value[i]);
       }
     }
   }
@@ -291,13 +351,6 @@ Exodus::outputInput()
 void
 Exodus::output(const ExecFlagType & type)
 {
-  // Do nothing if there is nothing to output
-  if (!hasOutput(type))
-    return;
-
-  // Start the performance log
-  Moose::perf_log.push("Exodus::output()", "Output");
-
   // Prepare the ExodusII_IO object
   outputSetup();
   LockFile lf(filename(), processor_id() == 0);
@@ -331,8 +384,23 @@ Exodus::output(const ExecFlagType & type)
   // Reset the mesh changed flag
   _exodus_mesh_changed = false;
 
-  // Stop the logging
-  Moose::perf_log.pop("Exodus::output()", "Output");
+  // It is possible to have an empty file created with the following scenario. By default the
+  // 'execute_on_input' flag is setup to run on INITIAL. If the 'execute_on' is set to FINAL
+  // but the simulation stops early (e.g., --half-transient) the Exodus file is created but there
+  // is no data in it, because of the initial call to write the input data seems to create the file
+  // but doesn't actually write the data into the solution/mesh is also supplied to the IO object.
+  // Then if --recover is used this empty file fails to open for appending.
+  //
+  // The code below will delete any empty files that exist. Another solution is to set the
+  // 'execute_on_input' flag to NONE.
+  std::string current = filename();
+  if (processor_id() == 0 && MooseUtils::checkFileReadable(current, false, false) &&
+      (MooseUtils::fileSize(current) == 0))
+  {
+    int err = std::remove(current.c_str());
+    if (err != 0)
+      mooseError("MOOSE failed to remove the empty file ", current);
+  }
 }
 
 std::string
@@ -363,4 +431,10 @@ Exodus::outputEmptyTimestep()
     _exodus_num++;
 
   _exodus_initialized = true;
+}
+
+void
+Exodus::clear()
+{
+  _exodus_io_ptr.reset();
 }

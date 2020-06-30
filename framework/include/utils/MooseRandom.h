@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MOOSERANDOM_H
-#define MOOSERANDOM_H
+#pragma once
 
 // MOOSE includes
 #include "MooseError.h"
@@ -49,25 +43,25 @@ public:
   static inline void seed(unsigned int seed) { mt_seed32new(seed); }
 
   /**
-   * This method returns the next random number (double format) from the generator
+   * This method returns the next random number (Real format) from the generator
    * @return      the next random number in the range [0,1) with 64-bit precision
    */
-  static inline double rand() { return mt_ldrand(); }
+  static inline Real rand() { return mt_ldrand(); }
 
   /**
-   * This method returns the next random number (double format) from the generator,
+   * This method returns the next random number (Real format) from the generator,
    * drawn from a normal distribution centered around mean, with a width of sigma
    * @param mean     center of the random number distribution
    * @param sigma    width  of the random number distribution
    * @return      the next random number following a normal distribution of width sigma around mean
    * with 64-bit precision
    */
-  static inline double randNormal(double mean, double sigma) { return rd_normal(mean, sigma); }
+  static inline Real randNormal(Real mean, Real sigma) { return rd_normal(mean, sigma); }
 
   /**
    * Return next random number drawn from a standard distribution.
    */
-  static inline double randNormal() { return randNormal(0.0, 1.0); }
+  static inline Real randNormal() { return randNormal(0.0, 1.0); }
 
   /**
    * This method returns the next random number (long format) from the generator
@@ -80,21 +74,21 @@ public:
    * @param i     the index of the generator
    * @param seed  the seed number
    */
-  inline void seed(unsigned int i, unsigned int seed) { mts_seed32new(&(_states[i].first), seed); }
+  inline void seed(std::size_t i, unsigned int seed) { mts_seed32new(&(_states[i].first), seed); }
 
   /**
-   * This method returns the next random number (double format) from the specified generator
+   * This method returns the next random number (Real format) from the specified generator
    * @param i     the index of the generator
    * @return      the next random number in the range [0,1) with 64-bit precision
    */
-  inline double rand(unsigned int i)
+  inline Real rand(std::size_t i)
   {
-    mooseAssert(_states.find(i) != _states.end(), "No random state initialized for id: " << i);
+    // mooseAssert(_states.find(i) != _states.end(), "No random state initialized for id: " << i);
     return mts_ldrand(&(_states[i].first));
   }
 
   /**
-   * This method returns the next random number (double format) from the specified generator,
+   * This method returns the next random number (Real format) from the specified generator,
    * drawn from a normal distribution centered around mean, with a width of sigma
    * @param i     the index of the generator
    * @param mean     center of the random number distribution
@@ -102,7 +96,7 @@ public:
    * @return      the next random number following a normal distribution of width sigma around mean
    * with 64-bit precision
    */
-  inline double randNormal(unsigned int i, double mean, double sigma)
+  inline Real randNormal(std::size_t i, Real mean, Real sigma)
   {
     mooseAssert(_states.find(i) != _states.end(), "No random state initialized for id: " << i);
     return rds_normal(&(_states[i].first), mean, sigma);
@@ -111,17 +105,32 @@ public:
   /**
    * Return next random number drawn from a standard distribution.
    */
-  inline double randNormal(unsigned int i) { return randNormal(i, 0.0, 1.0); }
+  inline Real randNormal(std::size_t i) { return randNormal(i, 0.0, 1.0); }
 
   /**
    * This method returns the next random number (long format) from the specified generator
    * @param i     the index of the generator
    * @return      the next random number in the range [0,max(uinit32_t)) with 32-bit number
    */
-  inline uint32_t randl(unsigned int i)
+  inline uint32_t randl(std::size_t i)
   {
     mooseAssert(_states.find(i) != _states.end(), "No random state initialized for id: " << i);
     return mts_lrand(&(_states[i].first));
+  }
+
+  /**
+   * This method returns the next random number (long format) from the specified generator
+   * within the supplied range.
+   *
+   * @param lower lower bounds of value
+   * @param upper upper bounds of value
+   * @param i     the index of the generator
+   * @return      the next random number in the range [0,max(uinit32_t)) with 32-bit number
+   */
+  inline uint32_t randl(std::size_t i, uint32_t lower, uint32_t upper)
+  {
+    mooseAssert(_states.find(i) != _states.end(), "No random state initialized for id: " << i);
+    return rds_iuniform(&(_states[i].first), lower, upper);
   }
 
   /**
@@ -133,7 +142,7 @@ public:
     _saved = true;
     std::for_each(_states.begin(),
                   _states.end(),
-                  [](std::pair<const unsigned int, std::pair<mt_state, mt_state>> & pair) {
+                  [](std::pair<const std::size_t, std::pair<mt_state, mt_state>> & pair) {
                     pair.second.second = pair.second.first;
                   });
   }
@@ -146,7 +155,7 @@ public:
     mooseAssert(_saved, "saveState() must be called prior to restoreState().");
     std::for_each(_states.begin(),
                   _states.end(),
-                  [](std::pair<const unsigned int, std::pair<mt_state, mt_state>> & pair) {
+                  [](std::pair<const std::size_t, std::pair<mt_state, mt_state>> & pair) {
                     pair.second.first = pair.second.second;
                   });
   }
@@ -154,7 +163,7 @@ public:
   /**
    * Return the number of states.
    */
-  inline unsigned int size() { return _states.size(); }
+  inline std::size_t size() { return _states.size(); }
 
 private:
   /**
@@ -162,7 +171,7 @@ private:
    * second is the backup state. It is used to restore state at a later time
    * to the active state.
    */
-  std::unordered_map<unsigned int, std::pair<mt_state, mt_state>> _states;
+  std::unordered_map<std::size_t, std::pair<mt_state, mt_state>> _states;
 
   // for restart capability
   friend void dataStore<MooseRandom>(std::ostream & stream, MooseRandom & v, void * context);
@@ -184,5 +193,3 @@ dataLoad(std::istream & stream, MooseRandom & v, void * context)
 {
   loadHelper(stream, v._states, context);
 }
-
-#endif // MOOSERANDOM_H

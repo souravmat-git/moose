@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SWITCHINGFUNCTION3PHASEMATERIAL_H
-#define SWITCHINGFUNCTION3PHASEMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "DerivativeParsedMaterialHelper.h"
 #include "ExpressionBuilder.h"
 
 // Forward Declarations
-class SwitchingFunction3PhaseMaterial;
-
-template <>
-InputParameters validParams<SwitchingFunction3PhaseMaterial>();
 
 /**
  * Material class to provide switching functions that prevent formation of a
@@ -25,6 +23,8 @@ class SwitchingFunction3PhaseMaterial : public DerivativeParsedMaterialHelper,
                                         public ExpressionBuilder
 {
 public:
+  static InputParameters validParams();
+
   SwitchingFunction3PhaseMaterial(const InputParameters & parameters);
 
 protected:
@@ -33,5 +33,3 @@ protected:
   EBTerm _eta_j;
   EBTerm _eta_k;
 };
-
-#endif // SWITCHINGFUNCTION3PHASEMATERIAL_H

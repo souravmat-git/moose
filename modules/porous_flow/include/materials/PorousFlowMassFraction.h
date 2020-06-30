@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWMASSFRACTION_H
-#define POROUSFLOWMASSFRACTION_H
+#pragma once
 
 #include "PorousFlowMaterialVectorBase.h"
-
-// Forward Declarations
-class PorousFlowMassFraction;
-
-template <>
-InputParameters validParams<PorousFlowMassFraction>();
 
 /**
  * Material designed to form a std::vector<std::vector>
@@ -23,6 +18,8 @@ InputParameters validParams<PorousFlowMassFraction>();
 class PorousFlowMassFraction : public PorousFlowMaterialVectorBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowMassFraction(const InputParameters & parameters);
 
 protected:
@@ -52,14 +49,12 @@ protected:
    */
   const unsigned int _num_passed_mf_vars;
 
-  /// the variable number of the mass-fraction variables
+  /// The variable number of the mass-fraction variables
   std::vector<unsigned int> _mf_vars_num;
 
-  /// the mass-fraction variables
+  /// The mass-fraction variables
   std::vector<const VariableValue *> _mf_vars;
 
-  /// the gradient of the mass-fraction variables
+  /// The gradient of the mass-fraction variables
   std::vector<const VariableGradient *> _grad_mf_vars;
 };
-
-#endif // POROUSFLOWMASSFRACTION_H

@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "AB2PredictorCorrector.h"
 #include "AdamsPredictor.h"
@@ -20,8 +15,8 @@
 #include "NonlinearSystem.h"
 #include "AuxiliarySystem.h"
 #include "TimeIntegrator.h"
+#include "Conversion.h"
 
-// libMesh includes
 #include "libmesh/nonlinear_solver.h"
 #include "libmesh/numeric_vector.h"
 
@@ -30,11 +25,14 @@
 #include <iostream>
 #include <fstream>
 
-template <>
+registerMooseObject("MooseApp", AB2PredictorCorrector);
+
+defineLegacyParams(AB2PredictorCorrector);
+
 InputParameters
-validParams<AB2PredictorCorrector>()
+AB2PredictorCorrector::validParams()
 {
-  InputParameters params = validParams<TimeStepper>();
+  InputParameters params = TimeStepper::validParams();
   params.addRequiredParam<Real>("e_tol", "Target error tolerance.");
   params.addRequiredParam<Real>("e_max", "Maximum acceptable error.");
   params.addRequiredParam<Real>("dt", "Initial time step size");
@@ -115,23 +113,24 @@ AB2PredictorCorrector::step()
 }
 
 bool
-AB2PredictorCorrector::converged()
+AB2PredictorCorrector::converged() const
 {
   if (!_converged)
-  {
-    _dt_steps_taken = 0;
     return false;
-  }
   if (_error < _e_max)
-  {
     return true;
-  }
   else
-  {
-    _console << "Marking last solve not converged " << _error << " " << _e_max << std::endl;
-    _dt_steps_taken = 0;
     return false;
-  }
+}
+
+void
+AB2PredictorCorrector::postSolve()
+{
+  if (!converged())
+    _dt_steps_taken = 0;
+
+  if (_error >= _e_max)
+    _console << "Marking last solve not converged " << _error << " " << _e_max << std::endl;
 }
 
 Real
@@ -163,50 +162,34 @@ AB2PredictorCorrector::computeInitialDT()
   return getParam<Real>("dt");
 }
 
-int
-AB2PredictorCorrector::stringtoint(std::string string)
-{
-  if (string == "ImplicitEuler")
-    return 0;
-  else if (string == "CrankNicolson")
-    return 2;
-  else if (string == "BDF2")
-    return 3;
-  return 4;
-}
-
 Real
 AB2PredictorCorrector::estimateTimeError(NumericVector<Number> & solution)
 {
   _pred1 = _fe_problem.getNonlinearSystemBase().getPredictor()->solutionPredictor();
   TimeIntegrator * ti = _fe_problem.getNonlinearSystemBase().getTimeIntegrator();
-  std::string scheme = ti->name();
+  auto scheme = Moose::stringToEnum<Moose::TimeIntegratorType>(ti->name());
   Real dt_old = _my_dt_old;
   if (dt_old == 0)
     dt_old = _dt;
 
-  switch (stringtoint(scheme))
+  switch (scheme)
   {
-    case 1:
+    case Moose::TI_IMPLICIT_EULER:
     {
-      // NOTE: this is never called, since stringtoint does not return 1 - EVER!
-      // I am not sure this is actually correct.
       _pred1 *= -1;
       _pred1 += solution;
       Real calc = _dt * _dt * .5;
       _pred1 *= calc;
       return _pred1.l2_norm();
     }
-    case 2:
+    case Moose::TI_CRANK_NICOLSON:
     {
-      // Crank Nicolson
       _pred1 -= solution;
       _pred1 *= (_dt) / (3.0 * (_dt + dt_old));
       return _pred1.l2_norm();
     }
-    case 3:
+    case Moose::TI_BDF2:
     {
-      // BDF2
       _pred1 *= -1.0;
       _pred1 += solution;
       Real topcalc = 2.0 * (_dt + dt_old) * (_dt + dt_old);

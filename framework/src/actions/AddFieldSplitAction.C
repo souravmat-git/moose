@@ -1,27 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "AddFieldSplitAction.h"
 #include "FEProblem.h"
 #include "NonlinearSystemBase.h"
 
-template <>
+registerMooseAction("MooseApp", AddFieldSplitAction, "add_field_split");
+
+defineLegacyParams(AddFieldSplitAction);
+
 InputParameters
-validParams<AddFieldSplitAction>()
+AddFieldSplitAction::validParams()
 {
-  InputParameters params = validParams<MooseObjectAction>();
+  InputParameters params = MooseObjectAction::validParams();
   params.addParam<std::string>("type", "Split", "Classname of the split object");
   params.addParam<std::vector<NonlinearVariableName>>("vars", "variables for this field");
   params.addParam<MultiMooseEnum>(
@@ -40,6 +38,5 @@ AddFieldSplitAction::AddFieldSplitAction(InputParameters params) : MooseObjectAc
 void
 AddFieldSplitAction::act()
 {
-  _moose_object_pars.set<FEProblemBase *>("_fe_problem_base") = _problem.get();
   _problem->getNonlinearSystemBase().addSplit(_type, _name, _moose_object_pars);
 }

@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWPERMEABILITYKOZENYCARMAN_H
-#define POROUSFLOWPERMEABILITYKOZENYCARMAN_H
+#pragma once
 
 #include "PorousFlowPermeabilityBase.h"
-
-// Forward Declarations
-class PorousFlowPermeabilityKozenyCarman;
-
-template <>
-InputParameters validParams<PorousFlowPermeabilityKozenyCarman>();
 
 /**
  * Material designed to provide the permeability tensor which is calculated
@@ -33,6 +28,8 @@ InputParameters validParams<PorousFlowPermeabilityKozenyCarman>();
 class PorousFlowPermeabilityKozenyCarman : public PorousFlowPermeabilityBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowPermeabilityKozenyCarman(const InputParameters & parameters);
 
 protected:
@@ -59,7 +56,7 @@ protected:
   /// Tensor multiplier k_ijk in k = k_ijk * A * phi^n / (1 - phi)^m
   const RealTensorValue _k_anisotropy;
 
-  /// quadpoint porosity
+  /// Quadpoint porosity
   const MaterialProperty<Real> & _porosity_qp;
 
   /// d(quadpoint porosity)/d(PorousFlow variable)
@@ -74,5 +71,3 @@ protected:
   /// Multiplying factor in k = k_ijk * A * phi^n / (1 - phi)^m
   Real _A;
 };
-
-#endif // POROUSFLOWPERMEABILITYKOZENYCARMAN_H

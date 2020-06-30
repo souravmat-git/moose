@@ -31,14 +31,14 @@
   [../]
   [./point_value_function_u]
     type = VectorPostprocessorFunction
-    component = 1
+    component = y
     argument_column = y
     value_column = u
     vectorpostprocessor_name = point_value_vector_postprocessor_u
   [../]
   [./line_value_function_v]
     type = VectorPostprocessorFunction
-    component = 1
+    component = y
     argument_column = y
     value_column = v
     vectorpostprocessor_name = line_value_vector_postprocessor_v
@@ -47,7 +47,7 @@
     type = PiecewiseLinear
     x = '0 0.008'
     y = '1 2'
-    axis = 1
+    axis = y
   [../]
 []
 
@@ -64,6 +64,7 @@
   variable = v
   function = function_v
 [../]
+[]
 
 [BCs]
   [./top_u]
@@ -73,18 +74,18 @@
     function = ramp_u
   [../]
   [./bottom_u]
-    type = PresetBC
+    type = DirichletBC
     boundary = bottom
     variable = u
     value = 0
   [../]
 []
-[]
+
 [Executioner]
   type = Transient
   solve_type = 'PJFNK'
   petsc_options = '-snes_ksp_ew'
-  petsc_options_iname = '-pc_type -pc_factor_mat_solver_package ksp_gmres_restart'
+  petsc_options_iname = '-pc_type -pc_factor_mat_solver_package -ksp_gmres_restart'
   petsc_options_value = ' lu       superlu_dist                 51'
   line_search = 'none'
   l_max_its = 50
@@ -142,7 +143,6 @@
   file_base = out
   [./console]
     type = Console
-    perf_log = true
     output_linear = true
     max_rows = 10
   [../]

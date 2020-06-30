@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSENERGYINVISCIDSPECIFIEDDENSITYANDVELOCITYBC_H
-#define NSENERGYINVISCIDSPECIFIEDDENSITYANDVELOCITYBC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "NSEnergyInviscidBC.h"
 
 // Forward Declarations
-class NSEnergyInviscidSpecifiedDensityAndVelocityBC;
-
-template <>
-InputParameters validParams<NSEnergyInviscidSpecifiedDensityAndVelocityBC>();
 
 /**
  * The inviscid energy BC term with specified density and velocity components.
@@ -22,6 +20,8 @@ InputParameters validParams<NSEnergyInviscidSpecifiedDensityAndVelocityBC>();
 class NSEnergyInviscidSpecifiedDensityAndVelocityBC : public NSEnergyInviscidBC
 {
 public:
+  static InputParameters validParams();
+
   NSEnergyInviscidSpecifiedDensityAndVelocityBC(const InputParameters & parameters);
 
   virtual ~NSEnergyInviscidSpecifiedDensityAndVelocityBC() {}
@@ -41,5 +41,3 @@ protected:
   Real _specified_v; // FIXME: Read these as a single RealVectorValue
   Real _specified_w; // FIXME: Read these as a single RealVectorValue
 };
-
-#endif // NSENERGYINVISCIDSPECIFIEDDENSITYANDVELOCITYBC_H

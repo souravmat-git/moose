@@ -1,27 +1,23 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ExplicitRK2.h"
 #include "NonlinearSystem.h"
 #include "FEProblem.h"
 #include "PetscSupport.h"
 
-template <>
+defineLegacyParams(ExplicitRK2);
+
 InputParameters
-validParams<ExplicitRK2>()
+ExplicitRK2::validParams()
 {
-  InputParameters params = validParams<TimeIntegrator>();
+  InputParameters params = TimeIntegrator::validParams();
 
   return params;
 }
@@ -31,9 +27,10 @@ ExplicitRK2::ExplicitRK2(const InputParameters & parameters)
     _stage(1),
     _residual_old(_nl.addVector("residual_old", false, GHOSTED))
 {
+  mooseInfo("ExplicitRK2-derived TimeIntegrators (ExplicitMidpoint, Heun, Ralston) and other "
+            "multistage TimeIntegrators are known not to work with "
+            "Materials/AuxKernels that accumulate 'state' and should be used with caution.");
 }
-
-ExplicitRK2::~ExplicitRK2() {}
 
 void
 ExplicitRK2::preSolve()
@@ -50,15 +47,22 @@ ExplicitRK2::computeTimeDerivatives()
   // Since advanceState() is called in between stages 2 and 3, this
   // changes the meaning of "_solution_old".  In the second stage,
   // "_solution_older" is actually the original _solution_old.
-  _u_dot = *_solution;
-  if (_stage < 3)
-    _u_dot -= _solution_old;
-  else
-    _u_dot -= _solution_older;
+  if (!_sys.solutionUDot())
+    mooseError("ExplicitRK2: Time derivative of solution (`u_dot`) is not stored. Please set "
+               "uDotRequested() to true in FEProblemBase befor requesting `u_dot`.");
 
-  _u_dot *= 1. / _dt;
+  NumericVector<Number> & u_dot = *_sys.solutionUDot();
+  u_dot = *_solution;
+  computeTimeDerivativeHelper(u_dot, _solution_old, _solution_older);
+
   _du_dot_du = 1. / _dt;
-  _u_dot.close();
+  u_dot.close();
+}
+
+void
+ExplicitRK2::computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const
+{
+  computeTimeDerivativeHelper(ad_u_dot, _solution_old(dof), _solution_older(dof));
 }
 
 void
@@ -67,6 +71,10 @@ ExplicitRK2::solve()
   Real time_new = _fe_problem.time();
   Real time_old = _fe_problem.timeOld();
   Real time_stage2 = time_old + a() * _dt;
+
+  // Reset iteration counts
+  _n_nonlinear_iterations = 0;
+  _n_linear_iterations = 0;
 
   // There is no work to do for the first stage (Y_1 = y_n).  The
   // first solve therefore happens in the second stage.  Note that the
@@ -78,6 +86,12 @@ ExplicitRK2::solve()
   _fe_problem.timeOld() = time_old;
   _fe_problem.time() = time_stage2;
   _fe_problem.getNonlinearSystemBase().system().solve();
+  _n_nonlinear_iterations += getNumNonlinearIterationsLastSolve();
+  _n_linear_iterations += getNumLinearIterationsLastSolve();
+
+  // Abort time step immediately on stage failure - see TimeIntegrator doc page
+  if (!_fe_problem.converged())
+    return;
 
   // Advance solutions old->older, current->old.  Also moves Material
   // properties and other associated state forward in time.
@@ -91,17 +105,19 @@ ExplicitRK2::solve()
   _fe_problem.timeOld() = time_stage2;
   _fe_problem.time() = time_new;
   _fe_problem.getNonlinearSystemBase().system().solve();
+  _n_nonlinear_iterations += getNumNonlinearIterationsLastSolve();
+  _n_linear_iterations += getNumLinearIterationsLastSolve();
 
   // Reset time at beginning of step to its original value
   _fe_problem.timeOld() = time_old;
 }
 
 void
-ExplicitRK2::postStep(NumericVector<Number> & residual)
+ExplicitRK2::postResidual(NumericVector<Number> & residual)
 {
   if (_stage == 1)
   {
-    // If postStep() is called before solve(), _stage==1 and we don't
+    // If postResidual() is called before solve(), _stage==1 and we don't
     // need to do anything.
   }
   else if (_stage == 2)
@@ -145,5 +161,5 @@ ExplicitRK2::postStep(NumericVector<Number> & residual)
     residual.close();
   }
   else
-    mooseError("ExplicitRK2::postStep(): _stage = ", _stage, ", only _stage = 1-3 is allowed.");
+    mooseError("ExplicitRK2::postResidual(): _stage = ", _stage, ", only _stage = 1-3 is allowed.");
 }

@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSEXCAVGEOM
-#define RICHARDSEXCAVGEOM
+#pragma once
 
 #include "Function.h"
 
 // Forward Declarations
-class RichardsExcavGeom;
-
-template <>
-InputParameters validParams<RichardsExcavGeom>();
 
 /**
  * Defines excavation geometry.  It is used to enforce
@@ -44,9 +41,11 @@ InputParameters validParams<RichardsExcavGeom>();
 class RichardsExcavGeom : public Function
 {
 public:
+  static InputParameters validParams();
+
   RichardsExcavGeom(const InputParameters & parameters);
 
-  virtual Real value(Real t, const Point & p);
+  virtual Real value(Real t, const Point & p) const;
 
 protected:
   /// start position
@@ -76,5 +75,3 @@ protected:
   /// norm of retreat velocity
   Real _norm_retreat_vel;
 };
-
-#endif // RICHARDSEXCAVGEOM

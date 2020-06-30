@@ -1,0 +1,9 @@
+[Tests]
+  deprecated = True
+  [./test]
+    type = 'Exodiff'
+    input = 'mesh_smoother.i'
+    exodiff = 'mesh_smoother_out.e'
+    no_error_deprecated = true
+  [../]
+[]

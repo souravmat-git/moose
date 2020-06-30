@@ -1,26 +1,30 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LevelSetCFLCondition.h"
 
-template <>
+registerMooseObject("LevelSetApp", LevelSetCFLCondition);
+
 InputParameters
-validParams<LevelSetCFLCondition>()
+LevelSetCFLCondition::validParams()
 {
-  InputParameters params = validParams<ElementPostprocessor>();
+  InputParameters params = ElementPostprocessor::validParams();
   params.addClassDescription("Compute the minimum timestep from the Courant-Friedrichs-Lewy (CFL) "
                              "condition for the level-set equation.");
-  params += validParams<LevelSetVelocityInterface<>>();
+  params.addRequiredCoupledVar("velocity", "Velocity vector variable.");
   return params;
 }
 
 LevelSetCFLCondition::LevelSetCFLCondition(const InputParameters & parameters)
-  : LevelSetVelocityInterface<ElementPostprocessor>(parameters),
-    _cfl_timestep(std::numeric_limits<Real>::max())
+  : ElementPostprocessor(parameters),
+    _cfl_timestep(std::numeric_limits<Real>::max()),
+    _velocity(adCoupledVectorValue("velocity"))
 {
 }
 
@@ -31,7 +35,7 @@ LevelSetCFLCondition::execute()
   _max_velocity = std::numeric_limits<Real>::min();
   for (unsigned int qp = 0; qp < _q_point.size(); ++qp)
   {
-    RealVectorValue vel(_velocity_x[qp], _velocity_y[qp], _velocity_z[qp]);
+    RealVectorValue vel = MetaPhysicL::raw_value(_velocity[qp]);
     _max_velocity = std::max(_max_velocity, std::abs(vel.norm()));
   }
   _cfl_timestep = std::min(_cfl_timestep, _current_elem->hmin() / _max_velocity);

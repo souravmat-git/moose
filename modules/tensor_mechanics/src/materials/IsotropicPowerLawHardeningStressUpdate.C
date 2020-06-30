@@ -1,24 +1,28 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "IsotropicPowerLawHardeningStressUpdate.h"
 #include "ElasticityTensorTools.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", IsotropicPowerLawHardeningStressUpdate);
+
 InputParameters
-validParams<IsotropicPowerLawHardeningStressUpdate>()
+IsotropicPowerLawHardeningStressUpdate::validParams()
 {
-  InputParameters params = validParams<IsotropicPlasticityStressUpdate>();
+  InputParameters params = IsotropicPlasticityStressUpdate::validParams();
   params.addClassDescription("This class uses the discrete material in a radial return isotropic "
                              "plasticity power law hardening model, solving for the yield stress "
                              "as the intersection of the power law relation curve and Hooke's law. "
                              " This class can be used in conjunction with other creep and "
                              "plasticity materials for more complex simulations.");
 
-  // Set and Suppress paramaters to enable calculation of the yield stress
+  // Set and Suppress parameters to enable calculation of the yield stress
   params.set<Real>("yield_stress") = 1.0;
   params.set<Real>("hardening_constant") = 1.0;
   params.suppressParameter<Real>("yield_stress");

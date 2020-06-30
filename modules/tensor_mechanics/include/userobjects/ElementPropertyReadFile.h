@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ELEMENTPROPERTYREADFILE_H
-#define ELEMENTPROPERTYREADFILE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GeneralUserObject.h"
 
@@ -15,16 +17,13 @@
  * For grain level, voronoi tesellation with random grain centers are generated;
  * Element center points used for assigning properties
  * Usable for generated mesh
-*/
-
-class ElementPropertyReadFile;
-
-template <>
-InputParameters validParams<ElementPropertyReadFile>();
+ */
 
 class ElementPropertyReadFile : public GeneralUserObject
 {
 public:
+  static InputParameters validParams();
+
   ElementPropertyReadFile(const InputParameters & parameters);
   virtual ~ElementPropertyReadFile() {}
 
@@ -96,5 +95,3 @@ private:
   Point _range;
   Real _max_range;
 };
-
-#endif

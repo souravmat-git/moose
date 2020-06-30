@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "RichardsExcavGeom.h"
 
-template <>
+registerMooseObject("RichardsApp", RichardsExcavGeom);
+
 InputParameters
-validParams<RichardsExcavGeom>()
+RichardsExcavGeom::validParams()
 {
-  InputParameters params = validParams<Function>();
+  InputParameters params = Function::validParams();
   params.addRequiredParam<RealVectorValue>(
       "start_posn",
       "Start point of the excavation.  This is an (x,y,z) point in the middle of the "
@@ -60,7 +63,7 @@ RichardsExcavGeom::RichardsExcavGeom(const InputParameters & parameters)
 }
 
 Real
-RichardsExcavGeom::value(Real t, const Point & p)
+RichardsExcavGeom::value(Real t, const Point & p) const
 {
   if (t < _start_time || (p - _start_posn) * _retreat_vel < 0)
     // point is behind start posn - it'll never be active

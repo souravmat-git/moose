@@ -1,14 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CahnHilliard.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", CahnHilliard);
+
 InputParameters
-validParams<CahnHilliard>()
+CahnHilliard::validParams()
 {
   InputParameters params = CahnHilliardBase<Real>::validParams();
   params.addClassDescription("Cahn-Hilliard Kernel that uses a DerivativeMaterial Free Energy and "

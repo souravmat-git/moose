@@ -1,18 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "RichardsBorehole.h"
 #include "RotationMatrix.h"
 
-template <>
+registerMooseObject("RichardsApp", RichardsBorehole);
+
 InputParameters
-validParams<RichardsBorehole>()
+RichardsBorehole::validParams()
 {
-  InputParameters params = validParams<PeacemanBorehole>();
+  InputParameters params = PeacemanBorehole::validParams();
   params.addRequiredParam<UserObjectName>(
       "richardsVarNames_UO", "The UserObject that holds the list of Richards variable names.");
   params.addParam<std::vector<UserObjectName>>("relperm_UO",
@@ -43,18 +46,15 @@ RichardsBorehole::RichardsBorehole(const InputParameters & parameters)
 
     // in the following, getUserObjectByName returns a reference (an alias) to a RichardsBLAH user
     // object, and the & turns it into a pointer
-    _density_UO(_fully_upwind
-                    ? &getUserObjectByName<RichardsDensity>(
-                          getParam<std::vector<UserObjectName>>("density_UO")[_pvar])
-                    : NULL),
-    _seff_UO(_fully_upwind
-                 ? &getUserObjectByName<RichardsSeff>(
-                       getParam<std::vector<UserObjectName>>("seff_UO")[_pvar])
-                 : NULL),
-    _relperm_UO(_fully_upwind
-                    ? &getUserObjectByName<RichardsRelPerm>(
-                          getParam<std::vector<UserObjectName>>("relperm_UO")[_pvar])
-                    : NULL),
+    _density_UO(_fully_upwind ? &getUserObjectByName<RichardsDensity>(
+                                    getParam<std::vector<UserObjectName>>("density_UO")[_pvar])
+                              : NULL),
+    _seff_UO(_fully_upwind ? &getUserObjectByName<RichardsSeff>(
+                                 getParam<std::vector<UserObjectName>>("seff_UO")[_pvar])
+                           : NULL),
+    _relperm_UO(_fully_upwind ? &getUserObjectByName<RichardsRelPerm>(
+                                    getParam<std::vector<UserObjectName>>("relperm_UO")[_pvar])
+                              : NULL),
 
     _num_nodes(0),
     _mobility(0),
@@ -75,7 +75,7 @@ RichardsBorehole::RichardsBorehole(const InputParameters & parameters)
 
   // To correctly compute the Jacobian terms,
   // tell MOOSE that this DiracKernel depends on all the Richards Vars
-  const std::vector<MooseVariable *> & coupled_vars = _richards_name_UO.getCoupledMooseVars();
+  const std::vector<MooseVariableFEBase *> & coupled_vars = _richards_name_UO.getCoupledMooseVars();
   for (unsigned int i = 0; i < coupled_vars.size(); i++)
     addMooseVariableDependency(coupled_vars[i]);
 }

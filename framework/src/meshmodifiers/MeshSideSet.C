@@ -1,22 +1,19 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MeshSideSet.h"
 #include "MooseMesh.h"
 
-// libMesh includes
 #include "libmesh/mesh_modification.h"
+#include "libmesh/elem.h"
+
+registerMooseObjectReplaced("MooseApp", MeshSideSet, "11/30/2019 00:00", MeshSideSetGenerator);
 
 template <>
 InputParameters
@@ -43,13 +40,13 @@ void
 MeshSideSet::modify()
 {
   // this modifier is not designed for working with distributed mesh
-  _mesh_ptr->errorIfDistributedMesh("BreakBoundaryOnSubdomain");
+  _mesh_ptr->errorIfDistributedMesh("MeshSideSet");
 
   // Reference the the libMesh::MeshBase
   auto & mesh = _mesh_ptr->getMesh();
   auto & boundary_info = mesh.get_boundary_info();
 
-  // get IDs of all boundaries to be broken
+  // get IDs of all boundaries with which a new block is created
   std::set<BoundaryID> mesh_boundary_ids;
   if (isParamValid("boundaries"))
   {
@@ -68,7 +65,7 @@ MeshSideSet::modify()
       auto s = (*it)->_side;
 
       // build element from the side
-      std::unique_ptr<Elem> side(elem->build_side(s, false));
+      std::unique_ptr<Elem> side(elem->build_side_ptr(s, false));
       side->processor_id() = elem->processor_id();
 
       // Add the side set subdomain

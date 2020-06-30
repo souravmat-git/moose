@@ -1,17 +1,26 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import sys
 from PyQt5 import QtWidgets
 
 import peacock
 import mooseutils
 
-from PostprocessorPluginManager import PostprocessorPluginManager
-from PostprocessorDataWidget import PostprocessorDataWidget
+from .PostprocessorPluginManager import PostprocessorPluginManager
+from .PostprocessorDataWidget import PostprocessorDataWidget
 
-from plugins.FigurePlugin import FigurePlugin
-from plugins.PostprocessorSelectPlugin import PostprocessorSelectPlugin
-from plugins.AxesSettingsPlugin import AxesSettingsPlugin
-from plugins.AxisTabsPlugin import AxisTabsPlugin
-from plugins.OutputPlugin import OutputPlugin
+from .plugins.FigurePlugin import FigurePlugin
+from .plugins.PostprocessorSelectPlugin import PostprocessorSelectPlugin
+from .plugins.AxesSettingsPlugin import AxesSettingsPlugin
+from .plugins.AxisTabsPlugin import AxisTabsPlugin
+from .plugins.OutputPlugin import OutputPlugin
 
 
 class PostprocessorViewer(peacock.base.ViewerBase):
@@ -98,7 +107,7 @@ def main():
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    filenames = ['../../tests/input/white_elephant_jan_2016.csv']
+    filenames = ['../tests/input/white_elephant_jan_2016.csv']
     widget = main()
     widget.onSetFilenames(filenames)
     sys.exit(app.exec_())

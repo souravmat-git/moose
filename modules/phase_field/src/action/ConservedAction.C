@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ConservedAction.h"
 // MOOSE includes
@@ -14,14 +16,16 @@
 #include "MooseMesh.h"
 #include "AddVariableAction.h"
 
-// libMesh includes
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", ConservedAction, "add_variable");
+
+registerMooseAction("PhaseFieldApp", ConservedAction, "add_kernel");
+
 InputParameters
-validParams<ConservedAction>()
+ConservedAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription(
       "Set up the variable(s) and the kernels needed for a conserved phase field variable."
       " Note that for a direct solve, the element family and order are overwritten with hermite "
@@ -77,7 +81,7 @@ ConservedAction::ConservedAction(const InputParameters & params)
       _chempot_name = "chem_pot_" + _var_name;
       break;
     default:
-      mooseError("Incorrect solve_type in ConservedAction");
+      paramError("solve_type", "Incorrect solve_type in ConservedAction");
   }
 }
 
@@ -89,8 +93,14 @@ ConservedAction::act()
   //
   if (_current_task == "add_variable")
   {
+    auto type = AddVariableAction::determineType(_fe_type, 1);
+    auto var_params = _factory.getValidParams(type);
+    var_params.set<MooseEnum>("family") = Moose::stringify(_fe_type.family);
+    var_params.set<MooseEnum>("order") = _fe_type.order.get_order();
+    var_params.set<std::vector<Real>>("scaling") = {_scaling};
+
     // Create conserved variable _var_name
-    _problem->addVariable(_var_name, _fe_type, _scaling);
+    _problem->addVariable(type, _var_name, var_params);
 
     // Create chemical potential variable for split form
     switch (_solve_type)
@@ -99,7 +109,7 @@ ConservedAction::act()
         break;
       case SolveType::REVERSE_SPLIT:
       case SolveType::FORWARD_SPLIT:
-        _problem->addVariable(_chempot_name, _fe_type, _scaling);
+        _problem->addVariable(type, _chempot_name, var_params);
     }
   }
 
@@ -217,8 +227,9 @@ ConservedAction::act()
           std::string kernel_name = _var_name + "_" + kernel_type;
           InputParameters params = _factory.getValidParams(kernel_type);
           params.set<NonlinearVariableName>("variable") = _var_name;
-          params.set<std::vector<VariableName>>("conc") = {_chempot_name};
-          params.set<MaterialPropertyName>("D_name") = getParam<MaterialPropertyName>("mobility");
+          params.set<std::vector<VariableName>>("v") = {_chempot_name};
+          params.set<MaterialPropertyName>("diffusivity") =
+              getParam<MaterialPropertyName>("mobility");
           params.applyParameters(parameters());
 
           _problem->addKernel(kernel_type, kernel_name, params);
@@ -230,8 +241,8 @@ ConservedAction::act()
           std::string kernel_name = _chempot_name + "_" + kernel_type;
           InputParameters params = _factory.getValidParams(kernel_type);
           params.set<NonlinearVariableName>("variable") = _chempot_name;
-          params.set<std::vector<VariableName>>("conc") = {_var_name};
-          params.set<MaterialPropertyName>("D_name") = getParam<MaterialPropertyName>("kappa");
+          params.set<std::vector<VariableName>>("v") = {_var_name};
+          params.set<MaterialPropertyName>("diffusivity") = getParam<MaterialPropertyName>("kappa");
           params.applyParameters(parameters());
 
           _problem->addKernel(kernel_type, kernel_name, params);

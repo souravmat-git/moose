@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef TRANSFER_H
-#define TRANSFER_H
+#pragma once
 
 // Moose
 #include "MooseObject.h"
@@ -49,6 +43,8 @@ public:
   Transfer(const InputParameters & parameters);
   virtual ~Transfer() = default;
 
+  static InputParameters validParams();
+
   /**
    * Execute the transfer.
    */
@@ -70,6 +66,32 @@ public:
    */
   static System * find_sys(EquationSystems & es, const std::string & var_name);
 
+  enum DIRECTION
+  {
+    TO_MULTIAPP,
+    FROM_MULTIAPP
+  };
+
+  /// Used to construct InputParameters
+  static std::string possibleDirections() { return "to_multiapp from_multiapp"; }
+
+  /// The directions this Transfer should be executed on
+  const MultiMooseEnum & directions() { return _directions; }
+
+  ///@{
+  /// The current direction that this Transfer is going in.
+  /// direction() is to be deprecated for currentDirection()
+  int direction() { return _direction; }
+  int currentDirection() { return _current_direction; }
+  ///@}
+
+  /// Set this Transfer to be executed in a given direction
+  void setCurrentDirection(const int direction)
+  {
+    _current_direction = direction;
+    _direction = direction;
+  }
+
 protected:
   SubProblem & _subproblem;
   FEProblemBase & _fe_problem;
@@ -77,8 +99,16 @@ protected:
 
   THREAD_ID _tid;
 
+  ///@{
+  /// The current direction that is being executed for this Transfer.
+  /// _direction is to be deprecated for _current_direction
+  MooseEnum _direction;
+  MooseEnum _current_direction;
+  ///@}
+
+  /// The directions this Transfer is to be executed on
+  const MultiMooseEnum _directions;
+
 public:
   const static Number OutOfMeshValue;
 };
-
-#endif /* TRANSFER_H */

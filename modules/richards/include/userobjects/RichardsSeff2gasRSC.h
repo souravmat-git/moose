@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSSEFF2GASRSC_H
-#define RICHARDSSEFF2GASRSC_H
+#pragma once
 
 #include "RichardsSeff.h"
 #include "RichardsSeffRSC.h"
@@ -21,14 +22,12 @@
  * infiltration: application of a Backlund transformation" Nonlinear Analysis Theory Methods and
  * Applications 7 (1983) 785--799.
  */
-class RichardsSeff2gasRSC;
-
-template <>
-InputParameters validParams<RichardsSeff2gasRSC>();
 
 class RichardsSeff2gasRSC : public RichardsSeff
 {
 public:
+  static InputParameters validParams();
+
   RichardsSeff2gasRSC(const InputParameters & parameters);
 
   /**
@@ -73,5 +72,3 @@ protected:
   /// RSC scale
   Real _scale;
 };
-
-#endif // RICHARDSSEFF2GASRSC_H

@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GBWIDTHANISOTROPY_H
-#define GBWIDTHANISOTROPY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GBAnisotropyBase.h"
 
 // Forward Declarations
-class GBWidthAnisotropy;
-
-template <>
-InputParameters validParams<GBWidthAnisotropy>();
 
 /**
  * Function[kappa, gamma, m, L] = parameters (sigma, mob, w_GB, sigma0)
@@ -26,11 +24,11 @@ InputParameters validParams<GBWidthAnisotropy>();
 class GBWidthAnisotropy : public GBAnisotropyBase
 {
 public:
+  static InputParameters validParams();
+
   GBWidthAnisotropy(const InputParameters & parameters);
 
 private:
   const Real _mu;
   const Real _kappa;
 };
-
-#endif // GBWIDTHANISOTROPY_H

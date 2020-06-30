@@ -1,23 +1,18 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef VECTORPOSTPROCESSOR_H
-#define VECTORPOSTPROCESSOR_H
+#pragma once
 
 // MOOSE includes
 #include "MooseTypes.h"
 #include "OutputInterface.h"
+#include "MooseEnum.h"
 
 // libMesh
 #include "libmesh/parallel.h"
@@ -41,6 +36,8 @@ InputParameters validParams<VectorPostprocessor>();
 class VectorPostprocessor : public OutputInterface
 {
 public:
+  static InputParameters validParams();
+
   VectorPostprocessor(const InputParameters & parameters);
 
   virtual ~VectorPostprocessor() = default;
@@ -55,6 +52,16 @@ public:
    */
   std::string PPName() { return _vpp_name; }
 
+  /**
+   * Return whether or not this VectorPostprocessor contains complete history
+   */
+  bool containsCompleteHistory() const { return _contains_complete_history; }
+
+  /**
+   * Return true if the VPP is operating in distributed mode.
+   */
+  bool isDistributed() const { return _is_distributed; }
+
 protected:
   /**
    * Register a new vector to fill up.
@@ -67,12 +74,19 @@ protected:
   /// Pointer to FEProblemBase
   FEProblemBase * _vpp_fe_problem;
 
+  /// DISTRIBUTED or REPLICATED
+  const MooseEnum & _parallel_type;
+
   friend class SamplerBase;
 
 private:
   THREAD_ID _vpp_tid;
 
+  const bool _contains_complete_history;
+
+  const bool _is_distributed;
+
+  const bool _is_broadcast;
+
   std::map<std::string, VectorPostprocessorValue> _thread_local_vectors;
 };
-
-#endif

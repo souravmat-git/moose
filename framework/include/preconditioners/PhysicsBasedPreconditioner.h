@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef PHYSICSBASEDPRECONDITIONER_H
-#define PHYSICSBASEDPRECONDITIONER_H
+#pragma once
 
 // MOOSE includes
 #include "MoosePreconditioner.h"
@@ -21,6 +15,7 @@
 // libMesh includes
 #include "libmesh/preconditioner.h"
 #include "libmesh/linear_implicit_system.h"
+#include "libmesh/enum_preconditioner_type.h"
 
 // C++ includes
 #include <vector>
@@ -41,6 +36,8 @@ public:
   /**
    *  Constructor. Initializes PhysicsBasedPreconditioner data structures
    */
+  static InputParameters validParams();
+
   PhysicsBasedPreconditioner(const InputParameters & params);
   virtual ~PhysicsBasedPreconditioner();
 
@@ -82,7 +79,7 @@ protected:
   /// List of linear system that build up the preconditioner
   std::vector<LinearImplicitSystem *> _systems;
   /// Holds one Preconditioner object per small system to solve.
-  std::vector<Preconditioner<Number> *> _preconditioners;
+  std::vector<std::unique_ptr<Preconditioner<Number>>> _preconditioners;
   /// Holds the order the blocks are solved for.
   std::vector<unsigned int> _solve_order;
   /// Which preconditioner to use for each solve.
@@ -98,6 +95,9 @@ protected:
    * to keep looking this thing up through it's name.
    */
   std::vector<std::vector<SparseMatrix<Number> *>> _off_diag_mats;
+
+  /// Timers
+  PerfID _init_timer;
+  PerfID _apply_timer;
 };
 
-#endif // PHYSICSBASEDPRECONDITIONER_H

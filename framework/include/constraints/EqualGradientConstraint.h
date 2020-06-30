@@ -1,42 +1,29 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef EQUALGRADIENTCONSTRAINT_H
-#define EQUALGRADIENTCONSTRAINT_H
+#pragma once
 
-#include "FaceFaceConstraint.h"
-
-class EqualGradientConstraint;
-
-template <>
-InputParameters validParams<EqualGradientConstraint>();
+#include "ADMortarConstraint.h"
 
 /**
  * Constrain a specified component of the gradient of a variable to be the same
  * on both sides of an interface.
  */
-class EqualGradientConstraint : public FaceFaceConstraint
+class EqualGradientConstraint : public ADMortarConstraint
 {
 public:
+  static InputParameters validParams();
+
   EqualGradientConstraint(const InputParameters & parameters);
 
 protected:
-  virtual Real computeQpResidual() override;
-  virtual Real computeQpResidualSide(Moose::ConstraintType res_type) override;
-  virtual Real computeQpJacobianSide(Moose::ConstraintJacobianType jac_type) override;
+  ADReal computeQpResidual(Moose::MortarType mortar_type) final;
 
   const unsigned int _component;
 };
-
-#endif /* EQUALGRADIENTCONSTRAINT_H */

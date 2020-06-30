@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "KKSMultiACBulkC.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", KKSMultiACBulkC);
+
 InputParameters
-validParams<KKSMultiACBulkC>()
+KKSMultiACBulkC::validParams()
 {
-  InputParameters params = validParams<KKSMultiACBulkBase>();
+  InputParameters params = KKSMultiACBulkBase::validParams();
   params.addClassDescription("Multi-phase KKS model kernel (part 2 of 2) for the Bulk Allen-Cahn. "
                              "This includes all terms dependent on chemical potential.");
   params.addRequiredCoupledVar(
@@ -26,10 +30,11 @@ KKSMultiACBulkC::KKSMultiACBulkC(const InputParameters & parameters)
     _cjs_var(_num_j),
     _prop_dF1dc1(getMaterialPropertyDerivative<Real>(_Fj_names[0],
                                                      _c1_name)), // Use first Fj in list for dFj/dcj
-    _prop_d2F1dc12(getMaterialPropertyDerivative<Real>(_Fj_names[0], _c1_name, _c1_name))
+    _prop_d2F1dc12(getMaterialPropertyDerivative<Real>(_Fj_names[0], _c1_name, _c1_name)),
+    _prop_d2F1dc1darg(_n_args)
 {
   if (_num_j != coupledComponents("cj_names"))
-    mooseError("Need to pass in as many cj_names as Fj_names in KKSMultiACBulkC ", name());
+    paramError("cj_names", "Need to pass in as many cj_names as Fj_names");
 
   // Load concentration variables into the arrays
   for (unsigned int i = 0; i < _num_j; ++i)
@@ -38,18 +43,9 @@ KKSMultiACBulkC::KKSMultiACBulkC(const InputParameters & parameters)
     _cjs_var[i] = coupled("cj_names", i);
   }
 
-  // Resize to number of coupled variables (_nvar from KKSMultiACBulkBase constructor)
-  _prop_d2F1dc1darg.resize(_nvar);
-
-  // Iterate over all coupled variables
-  for (unsigned int i = 0; i < _nvar; ++i)
-  {
-    MooseVariable * cvar = _coupled_moose_vars[i];
-
-    // get second partial derivatives wrt c1 and other coupled variable
-    _prop_d2F1dc1darg[i] =
-        &getMaterialPropertyDerivative<Real>(_Fj_names[0], _c1_name, cvar->name());
-  }
+  // get second partial derivatives wrt c1 and other coupled variable
+  for (unsigned int i = 0; i < _n_args; ++i)
+    _prop_d2F1dc1darg[i] = &getMaterialPropertyDerivative<Real>(_Fj_names[0], _c1_name, i);
 }
 
 Real

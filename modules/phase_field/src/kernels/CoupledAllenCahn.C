@@ -1,14 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CoupledAllenCahn.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", CoupledAllenCahn);
+
 InputParameters
-validParams<CoupledAllenCahn>()
+CoupledAllenCahn::validParams()
 {
   InputParameters params = ACBulk<Real>::validParams();
   params.addClassDescription(
@@ -22,15 +26,13 @@ validParams<CoupledAllenCahn>()
 CoupledAllenCahn::CoupledAllenCahn(const InputParameters & parameters)
   : ACBulk<Real>(parameters),
     _v_name(getVar("v", 0)->name()),
-    _nvar(_coupled_moose_vars.size()),
     _dFdV(getMaterialPropertyDerivative<Real>("f_name", _v_name)),
     _d2FdVdEta(getMaterialPropertyDerivative<Real>("f_name", _v_name, _var.name())),
-    _d2FdVdarg(_nvar)
+    _d2FdVdarg(_n_args)
 {
   // Iterate over all coupled variables
-  for (unsigned int i = 0; i < _nvar; ++i)
-    _d2FdVdarg[i] =
-        &getMaterialPropertyDerivative<Real>("f_name", _v_name, _coupled_moose_vars[i]->name());
+  for (unsigned int i = 0; i < _n_args; ++i)
+    _d2FdVdarg[i] = &getMaterialPropertyDerivative<Real>("f_name", _v_name, i);
 }
 
 void

@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiAppVariableValueSampleTransfer.h"
 
@@ -18,20 +13,25 @@
 #include "FEProblem.h"
 #include "MooseMesh.h"
 #include "MooseTypes.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 #include "MultiApp.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/meshfree_interpolation.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/system.h"
 
-template <>
+registerMooseObject("MooseApp", MultiAppVariableValueSampleTransfer);
+
+defineLegacyParams(MultiAppVariableValueSampleTransfer);
+
 InputParameters
-validParams<MultiAppVariableValueSampleTransfer>()
+MultiAppVariableValueSampleTransfer::validParams()
 {
-  InputParameters params = validParams<MultiAppTransfer>();
+  InputParameters params = MultiAppTransfer::validParams();
+  params.addClassDescription(
+      "Transfers the value of a variable within the master application at each sub-application "
+      "position and transfers the value to a field variable on the sub-application(s).");
   params.addRequiredParam<AuxVariableName>(
       "variable", "The auxiliary variable to store the transferred values in.");
   params.addRequiredParam<VariableName>("source_variable", "The variable to transfer from.");
@@ -44,6 +44,8 @@ MultiAppVariableValueSampleTransfer::MultiAppVariableValueSampleTransfer(
     _to_var_name(getParam<AuxVariableName>("variable")),
     _from_var_name(getParam<VariableName>("source_variable"))
 {
+  if (_directions.size() != 1)
+    paramError("direction", "This transfer is only unidirectional");
 }
 
 void
@@ -59,12 +61,12 @@ MultiAppVariableValueSampleTransfer::execute()
 {
   _console << "Beginning VariableValueSampleTransfer " << name() << std::endl;
 
-  switch (_direction)
+  switch (_current_direction)
   {
     case TO_MULTIAPP:
     {
       FEProblemBase & from_problem = _multi_app->problemBase();
-      MooseVariable & from_var = from_problem.getVariable(0, _from_var_name);
+      MooseVariable & from_var = from_problem.getStandardVariable(0, _from_var_name);
       SystemBase & from_system_base = from_var.sys();
       SubProblem & from_sub_problem = from_system_base.subproblem();
 
@@ -101,7 +103,7 @@ MultiAppVariableValueSampleTransfer::execute()
 
         if (_multi_app->hasLocalApp(i))
         {
-          MPI_Comm swapped = Moose::swapLibMeshComm(_multi_app->comm());
+          Moose::ScopedCommSwapper swapper(_multi_app->comm());
 
           // Loop over the master nodes and set the value of the variable
           System * to_sys = find_sys(_multi_app->appProblemBase(i).es(), _to_var_name);
@@ -113,13 +115,8 @@ MultiAppVariableValueSampleTransfer::execute()
 
           MooseMesh & mesh = _multi_app->appProblemBase(i).mesh();
 
-          MeshBase::const_node_iterator node_it = mesh.localNodesBegin();
-          MeshBase::const_node_iterator node_end = mesh.localNodesEnd();
-
-          for (; node_it != node_end; ++node_it)
+          for (const auto & node : as_range(mesh.localNodesBegin(), mesh.localNodesEnd()))
           {
-            Node * node = *node_it;
-
             if (node->n_dofs(sys_num, var_num) > 0) // If this variable has dofs at this node
             {
               // The zero only works for LAGRANGE!
@@ -130,9 +127,6 @@ MultiAppVariableValueSampleTransfer::execute()
           }
           solution.close();
           _multi_app->appProblemBase(i).es().update();
-
-          // Swap back
-          Moose::swapLibMeshComm(swapped);
         }
       }
 

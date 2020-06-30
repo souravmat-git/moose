@@ -1,22 +1,26 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTEVARIABLEEIGENSTRAIN_H
-#define COMPUTEVARIABLEEIGENSTRAIN_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ComputeEigenstrain.h"
 #include "DerivativeMaterialInterface.h"
 
 /**
- * ComputeVariableEigenstrain computes an Eigenstrain that is a function of a single
- * variable defined by a base tensor and a scalar function defined in a Derivative Material.
+ * ComputeVariableEigenstrain computes an Eigenstrain that is a function of
+ * variables defined by a base tensor and a scalar function defined in a Derivative Material.
  */
 class ComputeVariableEigenstrain : public DerivativeMaterialInterface<ComputeEigenstrain>
 {
 public:
+  static InputParameters validParams();
+
   ComputeVariableEigenstrain(const InputParameters & parameters);
 
 protected:
@@ -35,5 +39,3 @@ protected:
   /// second derivatives of the elastic strain w.r.t. to the args
   std::vector<std::vector<MaterialProperty<RankTwoTensor> *>> _d2elastic_strain;
 };
-
-#endif // COMPUTEVARIABLEEIGENSTRAIN_H

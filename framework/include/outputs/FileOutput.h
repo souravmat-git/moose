@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef FILEOUTPUT_H
-#define FILEOUTPUT_H
+#pragma once
 
 // MOOSE includes
 #include "PetscOutput.h"
@@ -32,6 +26,8 @@ InputParameters validParams<FileOutput>();
 class FileOutput : public PetscOutput
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Class constructor
    */
@@ -58,17 +54,6 @@ public:
    * an application and a new output file is desired after the reset.
    */
   unsigned int getFileNumber();
-
-  /**
-   * Returns the default output file base
-   * @return The name of the input file with '_out' append to the end
-   *
-   * This method is static to allow for outside objects to call it, namely
-   * CommonOutputAction::setRecoverFileBase().
-   *
-   * @see CommonOutputAction::setRecoverFileBase()
-   */
-  static std::string getOutputFileBase(MooseApp & app, std::string suffix = "_out");
 
 protected:
   /**
@@ -100,5 +85,3 @@ private:
   // OutputWarehouse::merge)
   friend class OutputWarehouse;
 };
-
-#endif /* FILEOUTPUT_H */

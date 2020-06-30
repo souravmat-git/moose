@@ -1,39 +1,53 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTE2DINCREMENTALSTRAIN_H
-#define COMPUTE2DINCREMENTALSTRAIN_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ComputeIncrementalSmallStrain.h"
 
 /**
  * Compute2DIncrementalStrain defines a strain increment only for
  * incremental strains in 2D geometries, handling the out of plane strains.
- * Compute2DIncrementalStrain contains a virtual method to define the strain_zz
+ * Compute2DIncrementalStrain contains a virtual method to define the out-of-plane strain
  * as a general nonzero value in the inherited classes ComputePlaneIncrementalStrain
  * and ComputeAxisymmetricRZIncrementalStrain.
  */
 class Compute2DIncrementalStrain : public ComputeIncrementalSmallStrain
 {
 public:
+  static InputParameters validParams();
+
   Compute2DIncrementalStrain(const InputParameters & parameters);
 
+  void initialSetup() override;
+
 protected:
-  /// Computes the current and old deformation gradients with the assumptions for
-  /// 2D geometries, including plane strain, generalized plane strain, and axisymmetric,
-  /// and returns the total strain increment tensor
+  virtual void displacementIntegrityCheck() override;
+  /**
+   * Computes the current and old deformation gradients with the assumptions for
+   * 2D geometries, including plane strain, generalized plane strain, and axisymmetric,
+   * and returns the total strain increment tensor
+   */
   virtual void computeTotalStrainIncrement(RankTwoTensor & total_strain_increment) override;
 
-  /// Computes the current out-of-plane displacement gradient; as a virtual function, this function is
-  /// overwritten for the specific geometries defined by inheriting classes
-  virtual Real computeGradDispZZ() = 0;
+  /**
+   * Computes the current out-of-plane component of the displacement gradient; as a virtual
+   * function, this function is overwritten for the specific geometries defined by inheriting
+   * classes
+   */
+  virtual Real computeOutOfPlaneGradDisp() = 0;
 
-  /// Computes the old out-of-plane displacement gradient; as a virtual function, this function is
-  /// overwritten for the specific geometries defined by inheriting classes
-  virtual Real computeGradDispZZOld() = 0;
+  /**
+   * Computes the old out-of-plane component of the displacement gradient; as a virtual function,
+   * this function is overwritten for the specific geometries defined by inheriting classes
+   */
+  virtual Real computeOutOfPlaneGradDispOld() = 0;
+
+  const unsigned int _out_of_plane_direction;
 };
-
-#endif // COMPUTE2DINCREMENTALSTRAIN_H

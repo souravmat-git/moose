@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSPIECEWISELINEARSINKFLUX_H
-#define RICHARDSPIECEWISELINEARSINKFLUX_H
+#pragma once
 
 #include "SideIntegralVariablePostprocessor.h"
 #include "LinearInterpolation.h"
@@ -15,10 +16,6 @@
 class Function;
 
 // Forward Declarations
-class RichardsPiecewiseLinearSinkFlux;
-
-template <>
-InputParameters validParams<RichardsPiecewiseLinearSinkFlux>();
 
 /**
  * This postprocessor computes the fluid flux to a RichardsPiecewiseLinearSink.
@@ -32,6 +29,8 @@ InputParameters validParams<RichardsPiecewiseLinearSinkFlux>();
 class RichardsPiecewiseLinearSinkFlux : public SideIntegralVariablePostprocessor
 {
 public:
+  static InputParameters validParams();
+
   RichardsPiecewiseLinearSinkFlux(const InputParameters & parameters);
 
 protected:
@@ -47,7 +46,7 @@ protected:
   bool _use_relperm;
 
   /// the multiplier function
-  Function & _m_func;
+  const Function & _m_func;
 
   /// holds info regarding the Richards variable names, and their values in the simulation
   const RichardsVarNames & _richards_name_UO;
@@ -74,5 +73,3 @@ protected:
   /// fluid density
   const MaterialProperty<std::vector<Real>> & _density;
 };
-
-#endif

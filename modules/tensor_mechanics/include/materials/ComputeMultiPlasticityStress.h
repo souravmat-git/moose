@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTEMULTIPLASTICITYSTRESS_H
-#define COMPUTEMULTIPLASTICITYSTRESS_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ComputeStressBase.h"
 #include "MultiPlasticityDebugger.h"
-
-class ComputeMultiPlasticityStress;
-
-template <>
-InputParameters validParams<ComputeMultiPlasticityStress>();
 
 /**
  * ComputeMultiPlasticityStress performs the return-map
@@ -28,6 +25,8 @@ InputParameters validParams<ComputeMultiPlasticityStress>();
 class ComputeMultiPlasticityStress : public ComputeStressBase, public MultiPlasticityDebugger
 {
 public:
+  static InputParameters validParams();
+
   ComputeMultiPlasticityStress(const InputParameters & parameters);
 
 protected:
@@ -95,6 +94,11 @@ protected:
   /// whether to perform the rotations necessary in finite-strain simulations
   bool _perform_finite_strain_rotations;
 
+  /// Name of the elasticity tensor material property
+  const std::string _elasticity_tensor_name;
+  /// Elasticity tensor material property
+  const MaterialProperty<RankFourTensor> & _elasticity_tensor;
+
   /// plastic strain
   MaterialProperty<RankTwoTensor> & _plastic_strain;
 
@@ -147,19 +151,19 @@ protected:
   bool _cosserat;
 
   /// The Cosserat curvature strain
-  const MaterialProperty<RankTwoTensor> * _curvature;
+  const MaterialProperty<RankTwoTensor> * const _curvature;
 
   /// The Cosserat elastic flexural rigidity tensor
-  const MaterialProperty<RankFourTensor> * _elastic_flexural_rigidity_tensor;
+  const MaterialProperty<RankFourTensor> * const _elastic_flexural_rigidity_tensor;
 
   /// the Cosserat couple-stress
-  MaterialProperty<RankTwoTensor> * _couple_stress;
+  MaterialProperty<RankTwoTensor> * const _couple_stress;
 
   /// the old value of Cosserat couple-stress
-  const MaterialProperty<RankTwoTensor> * _couple_stress_old;
+  const MaterialProperty<RankTwoTensor> * const _couple_stress_old;
 
   /// derivative of couple-stress w.r.t. curvature
-  MaterialProperty<RankFourTensor> * _Jacobian_mult_couple;
+  MaterialProperty<RankFourTensor> * const _Jacobian_mult_couple;
 
   /// Elasticity tensor that can be rotated by this class (ie, its not const)
   RankFourTensor _my_elasticity_tensor;
@@ -582,14 +586,5 @@ protected:
                                            const std::vector<Real> & cumulative_pm);
 
 private:
-  /// True if this is the first timestep (timestep < 2). In the first timestep,
-  /// an initial stress is needed to subdivide.  This boolean variable
-  /// eliminates the use of the _app.isRestarting() in this class.
-  /// This boolean is delcared as a reference so that the variable is restartable
-  /// data:  if we restart, the code will not think it is the first timestep again.
-  bool & _step_one;
-
   RankTwoTensor rot(const RankTwoTensor & tens);
 };
-
-#endif // COMPUTEMULTIPLASTICITYSTRESS_H

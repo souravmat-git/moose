@@ -1,35 +1,34 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-/*************************************************************************
-*
-*  Welcome to HYRAX!
-*  Andrea M. Jokisaari
-*  CASL/MOOSE
-*
-*  18 April 2012
-*
-*************************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MATERIALSYMMELASTICITYTENSORAUX_H
-#define MATERIALSYMMELASTICITYTENSORAUX_H
+#pragma once
+/*************************************************************************
+ *
+ *  Welcome to HYRAX!
+ *  Andrea M. Jokisaari
+ *  CASL/MOOSE
+ *
+ *  18 April 2012
+ *
+ *************************************************************************/
 
 #include "AuxKernel.h"
 #include "SymmElasticityTensor.h"
 
 // Forward declarations
-class MaterialSymmElasticityTensorAux;
 class SymmElasticityTensor;
-
-template <>
-InputParameters validParams<MaterialSymmElasticityTensorAux>();
 
 class MaterialSymmElasticityTensorAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   MaterialSymmElasticityTensorAux(const InputParameters & parameters);
 
 protected:
@@ -40,5 +39,3 @@ protected:
 private:
   const MaterialProperty<SymmElasticityTensor> & _tensor_prop;
 };
-
-#endif // MATERIALSYMMELASTICITYTENSORAUX_H

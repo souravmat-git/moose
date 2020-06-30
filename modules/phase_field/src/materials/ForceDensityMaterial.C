@@ -1,21 +1,25 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ForceDensityMaterial.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", ForceDensityMaterial);
+
 InputParameters
-validParams<ForceDensityMaterial>()
+ForceDensityMaterial::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params.addClassDescription("Calculating the force density acting on a grain");
   params.addCoupledVar("etas", "Array of coupled order parameters");
   params.addCoupledVar("c", "Concentration field");
   params.addParam<Real>("ceq", 0.9816, "Equilibrium density");
-  params.addParam<Real>("cgb", 0.25, "Thresold Concentration for GB");
+  params.addParam<Real>("cgb", 0.25, "Threshold Concentration for GB");
   params.addParam<Real>("k", 100.0, "stiffness constant");
   return params;
 }
@@ -53,12 +57,6 @@ ForceDensityMaterial::computeQpProperties()
 {
   _dF[_qp].resize(_op_num);
   _dFdc[_qp].resize(_op_num);
-
-  Real c = _c[_qp];
-  if (c >= _ceq)
-    c = _ceq;
-  else if (c < 0.0)
-    c = 0.0;
 
   for (unsigned int i = 0; i < _op_num; ++i)
   {

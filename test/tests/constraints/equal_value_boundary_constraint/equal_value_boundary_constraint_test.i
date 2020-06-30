@@ -1,12 +1,3 @@
-###########################################################
-# This is a test that demonstrates a user-defined
-# constraint. It forces the value of a boundary to
-# match the value seen at a given node.
-#
-# @Requirement F1.90
-###########################################################
-
-
 [Mesh]
   type = GeneratedMesh
   dim = 2
@@ -35,12 +26,14 @@
   [./left]
     type = DirichletBC
     variable = diffused
+    preset = false
     boundary = 'left'
     value = 1.0
   [../]
   [./right]
     type = DirichletBC
     variable = diffused
+    preset = false
     boundary = 'right'
     value = 0.0
   [../]

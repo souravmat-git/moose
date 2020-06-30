@@ -1,17 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "SingleGrainRigidBodyMotion.h"
 #include "GrainTrackerInterface.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", SingleGrainRigidBodyMotion);
+
 InputParameters
-validParams<SingleGrainRigidBodyMotion>()
+SingleGrainRigidBodyMotion::validParams()
 {
-  InputParameters params = validParams<GrainRigidBodyMotionBase>();
+  InputParameters params = GrainRigidBodyMotionBase::validParams();
   params.addClassDescription("Adds rigid mody motion to a single grain");
   params.addParam<unsigned int>("op_index", 0, "Grain number for the kernel to be applied");
   return params;

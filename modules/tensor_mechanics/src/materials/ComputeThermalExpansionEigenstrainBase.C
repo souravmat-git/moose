@@ -1,22 +1,24 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeThermalExpansionEigenstrainBase.h"
 #include "RankTwoTensor.h"
 
-template <>
 InputParameters
-validParams<ComputeThermalExpansionEigenstrainBase>()
+ComputeThermalExpansionEigenstrainBase::validParams()
 {
-  InputParameters params = validParams<ComputeEigenstrainBase>();
+  InputParameters params = ComputeEigenstrainBase::validParams();
   params.addCoupledVar("temperature", "Coupled temperature");
-  params.addCoupledVar("stress_free_temperature",
-                       "Reference temperature at which there is no "
-                       "thermal expansion for thermal eigenstrain "
-                       "calculation");
+  params.addRequiredCoupledVar("stress_free_temperature",
+                               "Reference temperature at which there is no "
+                               "thermal expansion for thermal eigenstrain "
+                               "calculation");
   return params;
 }
 
@@ -34,6 +36,8 @@ void
 ComputeThermalExpansionEigenstrainBase::computeQpEigenstrain()
 {
   Real thermal_strain = 0.0;
+
+  // instantaneous_cte is just the derivative of thermal_strain with respect to temperature
   Real instantaneous_cte = 0.0;
 
   computeThermalStrain(thermal_strain, instantaneous_cte);
@@ -42,5 +46,5 @@ ComputeThermalExpansionEigenstrainBase::computeQpEigenstrain()
   _eigenstrain[_qp].addIa(thermal_strain);
 
   _deigenstrain_dT[_qp].zero();
-  _deigenstrain_dT[_qp].addIa(-instantaneous_cte);
+  _deigenstrain_dT[_qp].addIa(instantaneous_cte);
 }

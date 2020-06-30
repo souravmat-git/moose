@@ -1,3 +1,12 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import subprocess
 from TestHarnessTestCase import TestHarnessTestCase
 
@@ -8,18 +17,18 @@ class TestHarnessTester(TestHarnessTestCase):
         """
         output = self.runTests('-i', 'diffs', '--dry-run')
 
-        self.assertRegexpMatches(output, 'test_harness\.exodiff.*?DRY RUN')
-        self.assertRegexpMatches(output, 'test_harness\.csvdiff.*?DRY RUN')
+        self.assertRegexpMatches(output.decode('utf-8'), 'test_harness\.exodiff.*?DRY RUN')
+        self.assertRegexpMatches(output.decode('utf-8'), 'test_harness\.csvdiff.*?DRY RUN')
 
         # Skipped caveat test which returns skipped instead of 'DRY RUN'
-        output = self.runTests('-i', 'depend_skip_tests', '--dry-run')
-        self.assertIn('skipped (always skipped)', output)
-        self.assertIn('skipped (skipped dependency)', output)
+        output = self.runTests('--no-color', '-i', 'depend_skip_tests', '--dry-run')
+        self.assertRegexpMatches(output.decode('utf-8'), r'tests/test_harness.always_skipped.*? \[ALWAYS SKIPPED\] SKIP')
+        self.assertRegexpMatches(output.decode('utf-8'), r'tests/test_harness.needs_always_skipped.*? \[SKIPPED DEPENDENCY\] SKIP')
 
         # Deleted caveat test which returns a deleted failing tests while
         # performing a dry run
         with self.assertRaises(subprocess.CalledProcessError) as cm:
-            self.runTests('-i', 'deleted', '-e', '--dry-run')
+            self.runTests('--no-color', '-i', 'deleted', '-e', '--dry-run')
 
         e = cm.exception
-        self.assertRegexpMatches(e.output, 'test_harness\.deleted.*?deleted \(test deleted test\)')
+        self.assertRegexpMatches(e.output.decode('utf-8'), r'test_harness\.deleted.*? \[TEST DELETED TEST\] FAILED \(DELETED\)')

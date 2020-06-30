@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSDENSITY_H
-#define RICHARDSDENSITY_H
+#pragma once
 
 #include "GeneralUserObject.h"
-
-class RichardsDensity;
-
-template <>
-InputParameters validParams<RichardsDensity>();
 
 /**
  * Base class for fluid density as a function of porepressure
@@ -23,6 +19,8 @@ InputParameters validParams<RichardsDensity>();
 class RichardsDensity : public GeneralUserObject
 {
 public:
+  static InputParameters validParams();
+
   RichardsDensity(const InputParameters & parameters);
 
   void initialize();
@@ -50,5 +48,3 @@ public:
    */
   virtual Real d2density(Real p) const = 0;
 };
-
-#endif // RICHARDSDENSITY_H

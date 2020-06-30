@@ -6,7 +6,7 @@
 
 [Kernels]
   [./source]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = 'forcing_func'
   [../]
@@ -16,7 +16,7 @@
     velocity = '1 0 0'
   [../]
   [./diffusion]
-    type = MatDiffusion
+    type = MatDiffusionTest
     variable = u
     prop_name = 'k'
   [../]

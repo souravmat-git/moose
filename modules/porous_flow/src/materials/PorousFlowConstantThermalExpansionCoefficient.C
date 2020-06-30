@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowConstantThermalExpansionCoefficient.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlowConstantThermalExpansionCoefficient);
+
 InputParameters
-validParams<PorousFlowConstantThermalExpansionCoefficient>()
+PorousFlowConstantThermalExpansionCoefficient::validParams()
 {
-  InputParameters params = validParams<PorousFlowMaterialVectorBase>();
+  InputParameters params = PorousFlowMaterialVectorBase::validParams();
   params.addRangeCheckedParam<Real>(
       "biot_coefficient", 1.0, "biot_coefficient>=0 & biot_coefficient<=1", "Biot coefficient");
   params.addRangeCheckedParam<Real>("fluid_coefficient",
@@ -22,7 +25,8 @@ validParams<PorousFlowConstantThermalExpansionCoefficient>()
       "drained_coefficient",
       "drained_coefficient>=0.0",
       "Volumetric coefficient of thermal expansion of the drained porous skeleton (ie the porous "
-      "rock without flulid, or with a fluid that is free to move in and out of the rock)");
+      "rock without fluid, or with a fluid that is free to move in and out of the rock)");
+  params.addPrivateParam<std::string>("pf_material_type", "thermal_expansion");
   params.addClassDescription("Computes the effective thermal expansion coefficient, (biot_coeff - "
                              "porosity) * drained_coefficient + porosity * fluid_coefficient.");
   return params;

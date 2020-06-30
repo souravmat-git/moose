@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef TEIC_H
-#define TEIC_H
+#pragma once
 
 #include "Kernel.h"
 #include "InitialCondition.h"
@@ -21,12 +15,6 @@
 
 // System includes
 #include <string>
-
-// Forward Declarations
-class TEIC;
-
-template <>
-InputParameters validParams<TEIC>();
 
 /**
  * ConstantIC just returns a constant value.
@@ -39,6 +27,8 @@ public:
    *
    * @param parameters The parameters object holding data for the class to use.
    */
+  static InputParameters validParams();
+
   TEIC(const InputParameters & parameters);
 
   /**
@@ -52,5 +42,3 @@ protected:
   Real _t_jump;
   Real _slope;
 };
-
-#endif // TEIC_H

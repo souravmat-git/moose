@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowMassFraction.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlowMassFraction);
+
 InputParameters
-validParams<PorousFlowMassFraction>()
+PorousFlowMassFraction::validParams()
 {
-  InputParameters params = validParams<PorousFlowMaterialVectorBase>();
+  InputParameters params = PorousFlowMaterialVectorBase::validParams();
   params.addCoupledVar("mass_fraction_vars",
                        "List of variables that represent the mass fractions.  Format is 'f_ph0^c0 "
                        "f_ph0^c1 f_ph0^c2 ... f_ph0^c(N-1) f_ph1^c0 f_ph1^c1 fph1^c2 ... "
@@ -19,6 +22,7 @@ validParams<PorousFlowMassFraction>()
                        "N=num_components and P=num_phases, and it is assumed that "
                        "f_ph^cN=1-sum(f_ph^c,{c,0,N-1}) so that f_ph^cN need not be given.  If no "
                        "variables are provided then num_phases=1=num_components.");
+  params.addPrivateParam<std::string>("pf_material_type", "mass_fraction");
   params.addClassDescription("This Material forms a std::vector<std::vector ...> of mass-fractions "
                              "out of the individual mass fractions");
   return params;
@@ -46,10 +50,10 @@ PorousFlowMassFraction::PorousFlowMassFraction(const InputParameters & parameter
                " and the number of components is ",
                _num_components,
                ", and stipulates that you should not use PorousFlowMassFraction in this case");
+
   if (_num_passed_mf_vars != _num_phases * (_num_components - 1))
-    mooseError("PorousFlowMassFraction: The number of mass_fraction_vars is ",
-               _num_passed_mf_vars,
-               " which must be equal to the Dictator's num_phases (",
+    paramError("mass_fraction_vars",
+               "This value must be equal to the Dictator's num_phases (",
                _num_phases,
                ") multiplied by num_components-1 (",
                _num_components - 1,
@@ -61,7 +65,7 @@ PorousFlowMassFraction::PorousFlowMassFraction(const InputParameters & parameter
   for (unsigned i = 0; i < _num_passed_mf_vars; ++i)
   {
     _mf_vars_num[i] = coupled("mass_fraction_vars", i);
-    _mf_vars[i] = (_nodal_material ? &coupledNodalValue("mass_fraction_vars", i)
+    _mf_vars[i] = (_nodal_material ? &coupledDofValues("mass_fraction_vars", i)
                                    : &coupledValue("mass_fraction_vars", i));
     _grad_mf_vars[i] = &coupledGradient("mass_fraction_vars", i);
   }

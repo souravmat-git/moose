@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ORDERPARAMETERFUNCTIONMATERIAL_H
-#define ORDERPARAMETERFUNCTIONMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class OrderParameterFunctionMaterial;
-
-template <>
-InputParameters validParams<OrderParameterFunctionMaterial>();
 
 /**
  * Material base class for materials that provide the switching function
@@ -24,6 +22,8 @@ InputParameters validParams<OrderParameterFunctionMaterial>();
 class OrderParameterFunctionMaterial : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   OrderParameterFunctionMaterial(const InputParameters & parameters);
 
 protected:
@@ -44,5 +44,3 @@ protected:
   /// Material property to store the second derivative \f$ d^2f(\eta)/d\eta^2 \f$
   MaterialProperty<Real> & _prop_d2f;
 };
-
-#endif // ORDERPARAMETERFUNCTIONMATERIAL_H

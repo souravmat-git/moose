@@ -1,24 +1,22 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ElementIntegralVariableUserObject.h"
 
-template <>
+registerMooseObject("MooseApp", ElementIntegralVariableUserObject);
+
+defineLegacyParams(ElementIntegralVariableUserObject);
+
 InputParameters
-validParams<ElementIntegralVariableUserObject>()
+ElementIntegralVariableUserObject::validParams()
 {
-  InputParameters params = validParams<ElementIntegralUserObject>();
+  InputParameters params = ElementIntegralUserObject::validParams();
   params.addRequiredCoupledVar("variable", "The name of the variable that this object operates on");
   return params;
 }
@@ -26,7 +24,11 @@ validParams<ElementIntegralVariableUserObject>()
 ElementIntegralVariableUserObject::ElementIntegralVariableUserObject(
     const InputParameters & parameters)
   : ElementIntegralUserObject(parameters),
-    MooseVariableInterface(this, false),
+    MooseVariableInterface<Real>(this,
+                                 false,
+                                 "variable",
+                                 Moose::VarKindType::VAR_ANY,
+                                 Moose::VarFieldType::VAR_FIELD_STANDARD),
     _u(coupledValue("variable")),
     _grad_u(coupledGradient("variable"))
 {

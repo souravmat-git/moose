@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MATERIALSTDVECTORAUXBASE_H
-#define MATERIALSTDVECTORAUXBASE_H
+#pragma once
 
 // MOOSE includes
 #include "MaterialAuxBase.h"
@@ -31,6 +25,8 @@ template <typename T>
 class MaterialStdVectorAuxBase : public MaterialAuxBase<std::vector<T>>
 {
 public:
+  static InputParameters validParams();
+
   MaterialStdVectorAuxBase(const InputParameters & parameters);
 
 protected:
@@ -46,6 +42,15 @@ protected:
 };
 
 template <typename T>
+InputParameters
+MaterialStdVectorAuxBase<T>::validParams()
+{
+  InputParameters params = MaterialAuxBase<T>::validParams();
+  params.addParam<unsigned int>("index", 0, "The index to consider for this kernel");
+  return params;
+}
+
+template <typename T>
 MaterialStdVectorAuxBase<T>::MaterialStdVectorAuxBase(const InputParameters & parameters)
   : MaterialAuxBase<std::vector<T>>(parameters),
     _index(this->template getParam<unsigned int>("index"))
@@ -58,10 +63,6 @@ MaterialStdVectorAuxBase<T>::computeValue()
 {
   mooseAssert(_prop[_qp].size() > _index,
               "MaterialStdVectorRealGradientAux: You chose to extract component "
-                  << _index
-                  << " but your Material property only has size "
-                  << _prop[_qp].size());
+                  << _index << " but your Material property only has size " << _prop[_qp].size());
   return MaterialAuxBase<std::vector<T>>::computeValue();
 }
-
-#endif // MATERIALSTDVECTORAUXBASE_H

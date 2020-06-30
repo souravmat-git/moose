@@ -1,21 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MOVINGPLANARFRONT_H
-#define MOVINGPLANARFRONT_H
+#pragma once
 
 #include "Function.h"
 #include "FunctionInterface.h"
-
-// Forward Declarations
-class MovingPlanarFront;
-
-template <>
-InputParameters validParams<MovingPlanarFront>();
 
 /**
  * Defines the position of a moving front.
@@ -28,9 +23,11 @@ InputParameters validParams<MovingPlanarFront>();
 class MovingPlanarFront : public Function, protected FunctionInterface
 {
 public:
+  static InputParameters validParams();
+
   MovingPlanarFront(const InputParameters & parameters);
 
-  virtual Real value(Real t, const Point & p) override;
+  virtual Real value(Real t, const Point & p) const override;
 
 protected:
   /// Initial position of front
@@ -40,25 +37,23 @@ protected:
   const RealVectorValue _end_posn;
 
   /// The front's distance from start_posn (along the normal direction)
-  Function & _distance;
+  const Function & _distance;
 
-  /// active length
+  /// Active length
   const Real _active_length;
 
-  /// true value to return
+  /// True value to return
   const Real _true_value;
 
-  /// false value to return
+  /// False value to return
   const Real _false_value;
 
-  /// activation time
+  /// Activation time
   const Real _activation_time;
 
-  /// deactivation time
+  /// Deactivation time
   const Real _deactivation_time;
 
-  /// front unit normal
+  /// Front unit normal
   RealVectorValue _front_normal;
 };
-
-#endif // MOVINGPLANARFRONT_H

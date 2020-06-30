@@ -1,31 +1,21 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef ADAPTANDMODIFY_H
-#define ADAPTANDMODIFY_H
+#pragma once
 
 #include "Transient.h"
-
-// Forward Declarations
-class AdaptAndModify;
-
-template <>
-InputParameters validParams<AdaptAndModify>();
 
 class AdaptAndModify : public Transient
 {
 public:
+  static InputParameters validParams();
+
   AdaptAndModify(const InputParameters & parameters);
 
   virtual void incrementStepOrReject();
@@ -35,5 +25,3 @@ public:
 protected:
   unsigned int _adapt_cycles;
 };
-
-#endif // ADAPTANDMODIFY_H

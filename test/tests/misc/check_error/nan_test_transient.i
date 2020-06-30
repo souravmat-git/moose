@@ -3,8 +3,6 @@
 []
 
 [Variables]
-  active = 'u'
-
   [./u]
     order = FIRST
     family = LAGRANGE
@@ -31,12 +29,7 @@
 [Executioner]
   type = Transient
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
   dt = 1
-  num_steps = 5
-[]
-
-[Outputs]
-  exodus = true
+  num_steps = 2
 []

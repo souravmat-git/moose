@@ -1,32 +1,17 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef OUTPUTOBJECTTEST_H
-#define OUTPUTOBJECTTEST_H
+#pragma once
 
 // MOOSE includes
 #include "Console.h"
 
-// Forward declerations
-class OutputObjectTest;
-
-template <>
-InputParameters validParams<OutputObjectTest>();
-
-/**
- *
- */
 class OutputObjectTest : public Console
 {
 public:
@@ -35,6 +20,8 @@ public:
    * @param name
    * @param InputParameters
    */
+  static InputParameters validParams();
+
   OutputObjectTest(const InputParameters & parameters);
 
   /**
@@ -47,5 +34,3 @@ public:
 private:
   MooseEnum _type;
 };
-
-#endif // OUTPUTOBJECTTEST_H

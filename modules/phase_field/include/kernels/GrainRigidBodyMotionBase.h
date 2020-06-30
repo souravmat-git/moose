@@ -1,32 +1,32 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GRAINRIGIDBODYMOTIONBASE_H
-#define GRAINRIGIDBODYMOTIONBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "NonlocalKernel.h"
 #include "GrainForceAndTorqueInterface.h"
 
 // Forward Declarations
-class GrainRigidBodyMotionBase;
 class GrainTrackerInterface;
-
-template <>
-InputParameters validParams<GrainRigidBodyMotionBase>();
 
 class GrainRigidBodyMotionBase : public NonlocalKernel
 
 {
 public:
+  static InputParameters validParams();
+
   GrainRigidBodyMotionBase(const InputParameters & parameters);
 
   virtual void timestepSetup();
 
 protected:
-  virtual bool globalDoFEnabled(MooseVariable & /*var*/, dof_id_type /*dof_index*/);
+  virtual bool globalDoFEnabled(MooseVariableFEBase & /*var*/, dof_id_type /*dof_index*/);
 
   virtual void precalculateResidual();
   virtual void precalculateJacobian();
@@ -54,7 +54,7 @@ protected:
   std::vector<const VariableGradient *> _grad_vals;
 
   /// base name specifying type of force density material
-  std::string _base_name;
+  const std::string _base_name;
 
   /// getting userobject for calculating grain forces and torques
   const GrainForceAndTorqueInterface & _grain_force_torque;
@@ -83,5 +83,3 @@ protected:
   /// obtain the active grain ids
   std::vector<unsigned int> _grain_ids;
 };
-
-#endif // GRAINRIGIDBODYMOTIONBASE_H

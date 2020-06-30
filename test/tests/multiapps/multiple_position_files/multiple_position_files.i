@@ -38,7 +38,6 @@
 []
 
 [Executioner]
-  # Preconditioned JFNK (default)
   type = Transient
   num_steps = 2
   dt = 0.1
@@ -56,7 +55,7 @@
     type = TransientMultiApp
     app_type = MooseTestApp
     input_files = 'sub1.i sub2.i'
-    positions_file = 'position1 position2'
+    positions_file = 'position1.txt position2.txt'
     output_in_position = true
   [../]
 []

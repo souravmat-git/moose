@@ -1,27 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef GENERICCONSTANTMATERIAL_H
-#define GENERICCONSTANTMATERIAL_H
+#pragma once
 
 #include "Material.h"
-
-// Forward Declarations
-class GenericConstantMaterial;
-
-template <>
-InputParameters validParams<GenericConstantMaterial>();
 
 /**
  * This material automatically declares as material properties whatever is passed to it
@@ -31,21 +19,25 @@ InputParameters validParams<GenericConstantMaterial>();
  * This is not meant to be used in a production capacity... and instead is meant to be used
  * during development phases for ultimate flexibility.
  */
-class GenericConstantMaterial : public Material
+template <bool is_ad>
+class GenericConstantMaterialTempl : public Material
 {
 public:
-  GenericConstantMaterial(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  GenericConstantMaterialTempl(const InputParameters & parameters);
 
 protected:
   virtual void initQpStatefulProperties() override;
   virtual void computeQpProperties() override;
 
   std::vector<std::string> _prop_names;
-  std::vector<Real> _prop_values;
+  const std::vector<Real> & _prop_values;
 
   unsigned int _num_props;
 
-  std::vector<MaterialProperty<Real> *> _properties;
+  std::vector<GenericMaterialProperty<Real, is_ad> *> _properties;
 };
 
-#endif // GENERICCONSTANTMATERIAL_H
+typedef GenericConstantMaterialTempl<false> GenericConstantMaterial;
+typedef GenericConstantMaterialTempl<true> ADGenericConstantMaterial;

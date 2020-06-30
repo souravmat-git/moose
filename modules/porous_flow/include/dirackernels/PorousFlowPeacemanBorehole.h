@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWPEACEMANBOREHOLE_H
-#define POROUSFLOWPEACEMANBOREHOLE_H
+#pragma once
 
 #include "PorousFlowLineSink.h"
-
-class PorousFlowPeacemanBorehole;
-
-template <>
-InputParameters validParams<PorousFlowPeacemanBorehole>();
 
 /**
  * Approximates a borehole by a sequence of Dirac Points
@@ -29,6 +25,8 @@ public:
    * It also calculates segment-lengths and rotation matrices
    * needed for computing the borehole well constant
    */
+  static InputParameters validParams();
+
   PorousFlowPeacemanBorehole(const InputParameters & parameters);
 
 protected:
@@ -39,18 +37,18 @@ protected:
    * pressure, and does nothing otherwise
    * The flow rate to/from the borehole is multiplied by |character|, so usually character = +/- 1
    */
-  Function & _character;
+  const Function & _character;
 
-  /// bottomhole pressure of borehole
+  /// Bottomhole pressure of borehole
   const Real _p_bot;
 
-  /// unit weight of fluid in borehole (for calculating bottomhole pressure at each Dirac Point)
+  /// Unit weight of fluid in borehole (for calculating bottomhole pressure at each Dirac Point)
   const RealVectorValue _unit_weight;
 
-  /// borehole constant
+  /// Borehole constant
   const Real _re_constant;
 
-  /// well constant
+  /// Well constant
   const Real _well_constant;
 
   /// Whether there is a quadpoint permeability material (for error checking)
@@ -65,7 +63,7 @@ protected:
   /// d(Permeability)/d(PorousFlow variable)
   const MaterialProperty<std::vector<RealTensorValue>> & _dperm_or_cond_dvar;
 
-  /// rotation matrix used in well_constant calculation
+  /// Rotation matrix used in well_constant calculation
   std::vector<RealTensorValue> _rot_matrix;
 
   /**
@@ -85,5 +83,3 @@ protected:
                                     Real & outflow,
                                     Real & outflowp) const override;
 };
-
-#endif // POROUSFLOWPEACEMANBOREHOLE_H

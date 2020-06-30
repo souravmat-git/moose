@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSSEFF1RSC_H
-#define RICHARDSSEFF1RSC_H
+#pragma once
 
 #include "RichardsSeff.h"
 #include "RichardsSeffRSC.h"
-
-class RichardsSeff1RSC;
-
-template <>
-InputParameters validParams<RichardsSeff1RSC>();
 
 /**
  * Rogers-Stallybrass-Clements version of effective saturation for single-phase simulations
@@ -29,6 +25,8 @@ InputParameters validParams<RichardsSeff1RSC>();
 class RichardsSeff1RSC : public RichardsSeff
 {
 public:
+  static InputParameters validParams();
+
   RichardsSeff1RSC(const InputParameters & parameters);
 
   /**
@@ -72,5 +70,3 @@ protected:
   /// RSC scale
   Real _scale;
 };
-
-#endif // RICHARDSSEFF1RSC_H

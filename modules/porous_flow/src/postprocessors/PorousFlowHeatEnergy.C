@@ -1,23 +1,24 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowHeatEnergy.h"
 
-// MOOSE includes
 #include "MooseVariable.h"
 
-// libMesh includes for qrule
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlowHeatEnergy);
+
 InputParameters
-validParams<PorousFlowHeatEnergy>()
+PorousFlowHeatEnergy::validParams()
 {
-  InputParameters params = validParams<ElementIntegralPostprocessor>();
+  InputParameters params = ElementIntegralPostprocessor::validParams();
   params.addRequiredParam<UserObjectName>(
       "PorousFlowDictator", "The UserObject that holds the list of PorousFlow variable names.");
   params.addParam<bool>(
@@ -47,42 +48,47 @@ PorousFlowHeatEnergy::PorousFlowHeatEnergy(const InputParameters & parameters)
     _phase_index(getParam<std::vector<unsigned int>>("phase")),
     _porosity(getMaterialProperty<Real>("PorousFlow_porosity_nodal")),
     _rock_energy_nodal(getMaterialProperty<Real>("PorousFlow_matrix_internal_energy_nodal")),
-    _fluid_density(
-        _fluid_present
-            ? &getMaterialProperty<std::vector<Real>>("PorousFlow_fluid_phase_density_nodal")
-            : nullptr),
+    _fluid_density(_fluid_present ? &getMaterialProperty<std::vector<Real>>(
+                                        "PorousFlow_fluid_phase_density_nodal")
+                                  : nullptr),
     _fluid_saturation_nodal(
         _fluid_present ? &getMaterialProperty<std::vector<Real>>("PorousFlow_saturation_nodal")
                        : nullptr),
-    _energy_nodal(_fluid_present
-                      ? &getMaterialProperty<std::vector<Real>>(
-                            "PorousFlow_fluid_phase_internal_energy_nodal")
-                      : nullptr),
+    _energy_nodal(_fluid_present ? &getMaterialProperty<std::vector<Real>>(
+                                       "PorousFlow_fluid_phase_internal_energy_nodal")
+                                 : nullptr),
     _var(getParam<unsigned>("kernel_variable_number") < _dictator.numVariables()
-             ? _dictator.getCoupledMooseVars()[getParam<unsigned>("kernel_variable_number")]
+             ? &_fe_problem.getStandardVariable(
+                   _tid,
+                   _dictator
+                       .getCoupledStandardMooseVars()[getParam<unsigned>("kernel_variable_number")]
+                       ->name())
              : nullptr)
 {
   if (!_phase_index.empty())
   {
-    /// Check that the phase indices entered are not greater than the number of phases
+    // Check that the phase indices entered are not greater than the number of phases
     const unsigned int max_phase_num = *std::max_element(_phase_index.begin(), _phase_index.end());
     if (max_phase_num > _num_phases - 1)
-      mooseError("The Dictator proclaims that the phase index ",
+      paramError("phase",
+                 "The Dictator proclaims that the phase index ",
                  max_phase_num,
-                 " in the Postprocessor ",
-                 _name,
                  " is greater than the largest phase index possible, which is ",
                  _num_phases - 1);
   }
 
-  /// Check that kernel_variable_number is OK
+  // Check that kernel_variable_number is OK
   if (getParam<unsigned>("kernel_variable_number") >= _dictator.numVariables())
-    mooseError("PorousFlowHeatEnergy: The dictator pronounces that the number of porous-flow "
-               "variables is ",
+    paramError("kernel_variable_number",
+               "The Dictator pronounces that the number of PorousFlow variables is ",
                _dictator.numVariables(),
-               ", however you have used kernel_variable_number = ",
+               ", however you have used ",
                getParam<unsigned>("kernel_variable_number"),
-               ".  This is an error");
+               ". This is an error");
+
+  // Now that we know kernel_variable_number is OK, _var must be OK,
+  // so ensure that reinit is called on _var:
+  addMooseVariableDependency(_var);
 }
 
 Real
@@ -90,13 +96,12 @@ PorousFlowHeatEnergy::computeIntegral()
 {
   Real sum = 0;
 
-  /** The use of _test in the loops below mean that the
-   * integral is exactly the same as the one computed
-   * by the PorousFlowMassTimeDerivative Kernel.  Because that
-   * Kernel is lumped, this Postprocessor also needs to
-   * be lumped.  Hence the use of the "nodal" Material
-   * Properties
-   */
+  // The use of _test in the loops below mean that the
+  // integral is exactly the same as the one computed
+  // by the PorousFlowMassTimeDerivative Kernel.  Because that
+  // Kernel is lumped, this Postprocessor also needs to
+  // be lumped.  Hence the use of the "nodal" Material
+  // Properties
   const VariableTestValue & test = _var->phi();
 
   for (unsigned node = 0; node < test.size(); ++node)

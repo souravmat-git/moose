@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RADIALDISPLACEMENTCYLINDERAUX_H
-#define RADIALDISPLACEMENTCYLINDERAUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxKernel.h"
-
-class RadialDisplacementCylinderAux;
-
-template <>
-InputParameters validParams<RadialDisplacementCylinderAux>();
 
 /**
  * Calculates the radial displacement for cylindrical geometries.
@@ -22,6 +19,8 @@ InputParameters validParams<RadialDisplacementCylinderAux>();
 class RadialDisplacementCylinderAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   RadialDisplacementCylinderAux(const InputParameters & parameters);
 
   virtual ~RadialDisplacementCylinderAux() {}
@@ -44,5 +43,3 @@ protected:
   /// Point used to define the origin of the cylinder axis for Cartesian systems
   RealVectorValue _origin;
 };
-
-#endif // RADIALDISPLACEMENTCYLINDERAUX_H

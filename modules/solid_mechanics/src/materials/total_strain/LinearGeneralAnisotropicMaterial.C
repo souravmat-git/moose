@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 // Original class author: A.M. Jokisaari
 // O. Heinonen, et al. at ANL also have contributed significantly - thanks guys!
 
@@ -16,11 +19,12 @@
  * simplified to specify HCP, monoclinic, cubic, etc as needed.
  */
 
-template <>
+registerMooseObject("SolidMechanicsApp", LinearGeneralAnisotropicMaterial);
+
 InputParameters
-validParams<LinearGeneralAnisotropicMaterial>()
+LinearGeneralAnisotropicMaterial::validParams()
 {
-  InputParameters params = validParams<SolidMechanicsMaterial>();
+  InputParameters params = SolidMechanicsMaterial::validParams();
   params.addRequiredParam<std::vector<Real>>("C_matrix", "Stiffness tensor for matrix");
   params.addRequiredParam<bool>("all_21",
                                 "True if all 21 independent values are given; else false "

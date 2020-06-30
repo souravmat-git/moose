@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSMULTIACBULKC_H
-#define KKSMULTIACBULKC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "KKSMultiACBulkBase.h"
 
 // Forward Declarations
-class KKSMultiACBulkC;
-
-template <>
-InputParameters validParams<KKSMultiACBulkC>();
 
 /**
  * KKSACBulkBase child class for the phase concentration term
@@ -25,6 +23,8 @@ InputParameters validParams<KKSMultiACBulkC>();
 class KKSMultiACBulkC : public KKSMultiACBulkBase
 {
 public:
+  static InputParameters validParams();
+
   KKSMultiACBulkC(const InputParameters & parameters);
 
 protected:
@@ -44,5 +44,3 @@ protected:
   /// any other coupled variables \f$ \frac {d^2}{dc_1 dv} F_1 \f$
   std::vector<const MaterialProperty<Real> *> _prop_d2F1dc1darg;
 };
-
-#endif // KKSMULTIACBULKC_H

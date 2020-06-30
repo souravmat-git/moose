@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "GeneralizedPlaneStrainAction.h"
 
 #include "Conversion.h"
@@ -11,19 +14,26 @@
 #include "MooseMesh.h"
 #include "NonlinearSystemBase.h"
 
-template <>
+registerMooseAction("TensorMechanicsApp", GeneralizedPlaneStrainAction, "add_scalar_kernel");
+
+registerMooseAction("TensorMechanicsApp", GeneralizedPlaneStrainAction, "add_kernel");
+
+registerMooseAction("TensorMechanicsApp", GeneralizedPlaneStrainAction, "add_user_object");
+
 InputParameters
-validParams<GeneralizedPlaneStrainAction>()
+GeneralizedPlaneStrainAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription("Set up the GeneralizedPlaneStrain environment");
-  params.addRequiredParam<std::vector<NonlinearVariableName>>("displacements",
-                                                              "The displacement variables");
-  params.addRequiredParam<NonlinearVariableName>("scalar_out_of_plane_strain",
-                                                 "Scalar variable for the out-of-plane strain (in "
-                                                 "y direction for 1D Axisymmetric or in z "
-                                                 "direction for 2D Cartesian problems)");
-  params.addParam<NonlinearVariableName>("temperature", "The temperature variable");
+  params.addRequiredParam<std::vector<VariableName>>("displacements", "The displacement variables");
+  params.addRequiredParam<VariableName>("scalar_out_of_plane_strain",
+                                        "Scalar variable for the out-of-plane strain (in "
+                                        "y direction for 1D Axisymmetric or in z "
+                                        "direction for 2D Cartesian problems)");
+  params.addParam<std::vector<VariableName>>("temperature", "The temperature variable");
+  MooseEnum outOfPlaneDirection("x y z", "z");
+  params.addParam<MooseEnum>(
+      "out_of_plane_direction", outOfPlaneDirection, "The direction of the out-of-plane strain.");
   params.addParam<FunctionName>("out_of_plane_pressure",
                                 "0",
                                 "Function used to prescribe pressure "
@@ -37,18 +47,19 @@ validParams<GeneralizedPlaneStrainAction>()
                                               "The list of ids of the blocks (subdomain) "
                                               "that the GeneralizedPlaneStrain kernels "
                                               "will be applied to");
+  params.addParam<std::vector<TagName>>(
+      "extra_vector_tags",
+      "The tag names for extra vectors that residual data should be saved into");
 
   return params;
 }
 
 GeneralizedPlaneStrainAction::GeneralizedPlaneStrainAction(const InputParameters & params)
   : Action(params),
-    _displacements(getParam<std::vector<NonlinearVariableName>>("displacements")),
-    _ndisp(_displacements.size())
+    _displacements(getParam<std::vector<VariableName>>("displacements")),
+    _ndisp(_displacements.size()),
+    _out_of_plane_direction(getParam<MooseEnum>("out_of_plane_direction"))
 {
-  if (_ndisp > 2)
-    mooseError("GeneralizedPlaneStrain only works for 1D axisymmetric or 2D generalized plane "
-               "strain cases!");
 }
 
 void
@@ -67,11 +78,14 @@ GeneralizedPlaneStrainAction::act()
 
     params.applyParameters(parameters(), {"scalar_out_of_plane_strain"});
     params.set<std::vector<VariableName>>("scalar_out_of_plane_strain") = {
-        getParam<NonlinearVariableName>("scalar_out_of_plane_strain")};
+        getParam<VariableName>("scalar_out_of_plane_strain")};
 
     // add off-diagonal jacobian kernels for the displacements
     for (unsigned int i = 0; i < _ndisp; ++i)
     {
+      if (_out_of_plane_direction == i)
+        continue;
+
       std::string k_name = _name + "GeneralizedPlaneStrainOffDiag_disp" + Moose::stringify(i);
       params.set<NonlinearVariableName>("variable") = _displacements[i];
 
@@ -81,13 +95,13 @@ GeneralizedPlaneStrainAction::act()
     // add temperature kernel only if temperature is a nonlinear variable (and not an auxvariable)
     if (isParamValid("temperature"))
     {
-      NonlinearVariableName temp = getParam<NonlinearVariableName>("temperature");
-      if (_problem->getNonlinearSystemBase().hasVariable(temp))
+      auto temp = getParam<std::vector<VariableName>>("temperature");
+      if (temp.size() > 1)
+        mooseError("Only one variable may be specified in 'temperature'");
+      if (_problem->getNonlinearSystemBase().hasVariable(temp[0]))
       {
-        params.set<NonlinearVariableName>("temperature") = temp;
-
         std::string k_name = _name + "_GeneralizedPlaneStrainOffDiag_temp";
-        params.set<NonlinearVariableName>("variable") = temp;
+        params.set<NonlinearVariableName>("variable") = temp[0];
 
         _problem->addKernel(k_type, k_name, params);
       }
@@ -103,7 +117,7 @@ GeneralizedPlaneStrainAction::act()
     InputParameters params = _factory.getValidParams(uo_type);
 
     params.applyParameters(parameters());
-    params.set<MultiMooseEnum>("execute_on") = "linear";
+    params.set<ExecFlagEnum>("execute_on") = EXEC_LINEAR;
 
     _problem->addUserObject(uo_type, uo_name, params);
   }
@@ -117,10 +131,14 @@ GeneralizedPlaneStrainAction::act()
     InputParameters params = _factory.getValidParams(sk_type);
 
     params.set<NonlinearVariableName>("variable") =
-        getParam<NonlinearVariableName>("scalar_out_of_plane_strain");
+        getParam<VariableName>("scalar_out_of_plane_strain");
 
     // set the UserObjectName from previously added UserObject
     params.set<UserObjectName>("generalized_plane_strain") = uo_name;
+
+    if (isParamValid("extra_vector_tags"))
+      params.set<std::vector<TagName>>("extra_vector_tags") =
+          getParam<std::vector<TagName>>("extra_vector_tags");
 
     _problem->addScalarKernel(sk_type, _name + "_GeneralizedPlaneStrain", params);
   }

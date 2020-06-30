@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "DOFMapOutput.h"
@@ -22,18 +17,22 @@
 #include "MooseMesh.h"
 #include "NonlinearSystem.h"
 
-// libMesh includes
 #include "libmesh/fe.h"
 
 // compiler includes (for type demangling)
 #include <cxxabi.h>
+#include <fstream>
 
-template <>
+registerMooseObjectAliased("MooseApp", DOFMapOutput, "DOFMap");
+
+defineLegacyParams(DOFMapOutput);
+
 InputParameters
-validParams<DOFMapOutput>()
+DOFMapOutput::validParams()
 {
   // Get the parameters from the base class
-  InputParameters params = validParams<FileOutput>();
+  InputParameters params = FileOutput::validParams();
+  params.addClassDescription("Output degree-of-freedom (DOF) map.");
 
   // Screen and file output toggles
   params.addParam<bool>("output_screen", false, "Output to the screen");
@@ -41,7 +40,7 @@ validParams<DOFMapOutput>()
   params.addParam<std::string>("system_name", "nl0", "System to output");
 
   // By default this only executes on the initial timestep
-  params.set<MultiMooseEnum>("execute_on") = "initial";
+  params.set<ExecFlagEnum>("execute_on", true) = EXEC_INITIAL;
 
   return params;
 }
@@ -87,6 +86,9 @@ DOFMapOutput::writeStreamToFile(bool /*append*/)
 
   // Open the file and write contents of file output stream and close the file
   output.open(filename().c_str(), std::ios::trunc);
+  if (output.fail())
+    mooseError("Unable to open file ", filename());
+
   output << _file_output_stream.str();
   output.close();
 
@@ -120,7 +122,7 @@ DOFMapOutput::output(const ExecFlagType & /*type*/)
 
   // fetch the KernelWarehouse through the NonlinearSystem
   NonlinearSystemBase & _nl = _problem_ptr->getNonlinearSystemBase();
-  const KernelWarehouse & kernels = _nl.getKernelWarehouse();
+  auto & kernels = _nl.getKernelWarehouse();
 
   // get a set of all subdomains
   const std::set<SubdomainID> & subdomains = _mesh.meshSubdomains();

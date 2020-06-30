@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PolycrystalColoringIC.h"
 #include "IndirectSort.h"
@@ -13,14 +15,16 @@
 #include "GrainTrackerInterface.h"
 #include "PolycrystalUserObjectBase.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", PolycrystalColoringIC);
+
 InputParameters
-validParams<PolycrystalColoringIC>()
+PolycrystalColoringIC::validParams()
 {
-  InputParameters params = validParams<InitialCondition>();
+  InputParameters params = InitialCondition::validParams();
   params.addClassDescription(
       "Random Voronoi tesselation polycrystal (used by PolycrystalVoronoiICAction)");
-  params.addRequiredParam<UserObjectName>("polycrystal_ic_uo", "TODO");
+  params.addRequiredParam<UserObjectName>("polycrystal_ic_uo",
+                                          "User object generating a point to grain number mapping");
   params.addRequiredParam<unsigned int>("op_index", "The index for the current order parameter");
 
   return params;

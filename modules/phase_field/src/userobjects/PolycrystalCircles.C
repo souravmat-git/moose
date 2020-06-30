@@ -1,19 +1,25 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PolycrystalCircles.h"
 #include "MooseMesh.h"
 #include "MooseVariable.h"
 
-template <>
+#include "libmesh/utility.h"
+#include <fstream>
+
+registerMooseObject("PhaseFieldApp", PolycrystalCircles);
+
 InputParameters
-validParams<PolycrystalCircles>()
+PolycrystalCircles::validParams()
 {
-  InputParameters params = validParams<PolycrystalUserObjectBase>();
+  InputParameters params = PolycrystalUserObjectBase::validParams();
   params.addClassDescription(
       "Polycrystal circles generated from a vector input or read from a file");
   params.addParam<bool>("read_from_file",
@@ -28,6 +34,7 @@ validParams<PolycrystalCircles>()
   params.addParam<std::vector<Real>>("z_positions", "z coordinate for each circle center");
   params.addParam<std::vector<Real>>("radii", "The radius for each circle");
   params.addParam<FileName>("file_name", "File containing circle centers and radii");
+  params.addParam<Real>("int_width", 0.0, "Width of diffuse interface");
 
   return params;
 }
@@ -35,6 +42,7 @@ validParams<PolycrystalCircles>()
 PolycrystalCircles::PolycrystalCircles(const InputParameters & parameters)
   : PolycrystalUserObjectBase(parameters),
     _columnar_3D(getParam<bool>("columnar_3D")),
+    _int_width(getParam<Real>("int_width")),
     _grain_num(0)
 {
 }
@@ -59,7 +67,7 @@ PolycrystalCircles::getGrainsBasedOnPoint(const Point & point,
     else
       distance = _mesh.minPeriodicDistance(_vars[0]->number(), _centerpoints[i], point);
 
-    if (distance < _radii[i])
+    if (distance < _radii[i] + _int_width)
       grains.push_back(i);
   }
 }
@@ -78,7 +86,7 @@ PolycrystalCircles::getVariableValue(unsigned int op_index, const Point & p) con
       break;
     }
 
-  return active_grain_on_op != invalid_id ? 1.0 : 0.0;
+  return active_grain_on_op != invalid_id ? computeDiffuseInterface(p, active_grain_on_op) : 0.0;
 }
 
 void
@@ -89,15 +97,15 @@ PolycrystalCircles::precomputeGrainStructure()
   {
     // Read file
     const FileName file_name = getParam<FileName>("file_name");
-    MooseUtils::DelimitedFileReader txt_reader(file_name, true, " ", &_communicator);
+    MooseUtils::DelimitedFileReader txt_reader(file_name, &_communicator);
 
     txt_reader.read();
-    std::vector<std::string> col_names = txt_reader.getColumnNames();
-    std::vector<std::vector<Real>> data = txt_reader.getColumnData();
+    std::vector<std::string> col_names = txt_reader.getNames();
+    std::vector<std::vector<Real>> data = txt_reader.getData();
     _grain_num = data[0].size();
     _centerpoints.resize(_grain_num);
 
-    std::array<int, 4> col_map = {-1, -1, -1, -1};
+    std::array<int, 4> col_map = {{-1, -1, -1, -1}};
 
     for (unsigned int i = 0; i < col_names.size(); ++i)
     {
@@ -163,4 +171,24 @@ PolycrystalCircles::precomputeGrainStructure()
       _centerpoints[i](2) = z_c[i];
     }
   }
+}
+
+Real
+PolycrystalCircles::computeDiffuseInterface(const Point & p, const unsigned int & i) const
+{
+  if (_int_width == 0)
+    return 1.0;
+
+  Real d = 0;
+
+  if (_columnar_3D)
+  {
+    Real d_x = (p(0) - _centerpoints[i](0)) * (p(0) - _centerpoints[i](0));
+    Real d_y = (p(1) - _centerpoints[i](1)) * (p(1) - _centerpoints[i](1));
+    d = std::sqrt(d_x + d_y);
+  }
+  else
+    d = _mesh.minPeriodicDistance(_vars[0]->number(), _centerpoints[i], p);
+
+  return 0.5 * (1 - std::tanh(2.0 * (d - _radii[i]) / _int_width));
 }

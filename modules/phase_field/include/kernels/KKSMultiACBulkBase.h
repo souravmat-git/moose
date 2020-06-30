@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSMULTIACBULKBASE_H
-#define KKSMULTIACBULKBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ACBulk.h"
 
 // Forward Declarations
-class KKSMultiACBulkBase;
-
-template <>
-InputParameters validParams<KKSMultiACBulkBase>();
 
 /**
  * ACBulk child class that sets up necessary variables and materials for
@@ -25,14 +23,13 @@ InputParameters validParams<KKSMultiACBulkBase>();
 class KKSMultiACBulkBase : public ACBulk<Real>
 {
 public:
+  static InputParameters validParams();
+
   KKSMultiACBulkBase(const InputParameters & parameters);
 
   virtual void initialSetup();
 
 protected:
-  /// Number of coupled variables
-  unsigned int _nvar;
-
   /// name of order parameter that derivatives are taken wrt (needed to retrieve the derivative material properties)
   VariableName _etai_name;
 
@@ -64,5 +61,3 @@ protected:
   /// Second derivatives of the switching functions (needed for off-diagonal Jacobians)
   std::vector<std::vector<const MaterialProperty<Real> *>> _prop_d2hjdetaidarg;
 };
-
-#endif // KKSMULTIACBULKBASE_H

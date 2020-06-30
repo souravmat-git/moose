@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "GapConductance.h"
 
@@ -15,14 +17,14 @@
 #include "SystemBase.h"
 #include "AddVariableAction.h"
 
-// libMesh includes
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseObject("HeatConductionApp", GapConductance);
+
 InputParameters
-validParams<GapConductance>()
+GapConductance::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params += GapConductance::actionParameters();
 
   params.addRequiredCoupledVar("variable", "Temperature variable");
@@ -57,6 +59,12 @@ validParams<GapConductance>()
                         "are provided in the Mesh block the "
                         "undisplaced mesh will still be used.");
 
+  params.addParam<bool>(
+      "warnings", false, "Whether to output warning messages concerning nodes not being found");
+
+  MooseEnum orders(AddVariableAction::getNonlinearVariableOrders());
+  params.addParam<MooseEnum>("order", orders, "The finite element order");
+
   return params;
 }
 
@@ -75,26 +83,27 @@ GapConductance::actionParameters()
                                    "End point for line defining cylindrical axis");
   params.addParam<RealVectorValue>("sphere_origin", "Origin for sphere geometry");
 
-  params.addRangeCheckedParam<Real>("emissivity_1",
-                                    0.0,
-                                    "emissivity_1>=0 & emissivity_1<=1",
-                                    "The emissivity of the fuel surface");
-  params.addRangeCheckedParam<Real>("emissivity_2",
-                                    0.0,
-                                    "emissivity_2>=0 & emissivity_2<=1",
-                                    "The emissivity of the cladding surface");
-
-  params.addParam<bool>(
-      "warnings", false, "Whether to output warning messages concerning nodes not being found");
-
-  MooseEnum orders(AddVariableAction::getNonlinearVariableOrders());
-  params.addParam<MooseEnum>("order", orders, "The finite element order");
-
+  params.addRangeCheckedParam<Real>("emissivity_master",
+                                    1,
+                                    "emissivity_master>=0 & emissivity_master<=1",
+                                    "The emissivity of the master surface");
+  params.addRangeCheckedParam<Real>("emissivity_slave",
+                                    1,
+                                    "emissivity_slave>=0 & emissivity_slave<=1",
+                                    "The emissivity of the slave surface");
+  params.addDeprecatedParam<Real>("emissivity_1",
+                                  "The emissivity of the fuel surface",
+                                  "Please use \"emissivity_master\" instead");
+  params.addDeprecatedParam<Real>("emissivity_2",
+                                  "The emissivity of the cladding surface",
+                                  "Please use \"emissivity_slave\" instead");
   // Common
   params.addRangeCheckedParam<Real>(
-      "min_gap", 1e-6, "min_gap>=0", "A minimum gap (denominator) size");
+      "min_gap", 1e-6, "min_gap>0", "A minimum gap (denominator) size");
   params.addRangeCheckedParam<Real>(
       "max_gap", 1e6, "max_gap>=0", "A maximum gap (denominator) size");
+  params.addRangeCheckedParam<unsigned int>(
+      "min_gap_order", 0, "min_gap_order<=1", "Order of the Taylor expansion below min_gap");
 
   return params;
 }
@@ -103,8 +112,8 @@ GapConductance::GapConductance(const InputParameters & parameters)
   : Material(parameters),
     _appended_property_name(getParam<std::string>("appended_property_name")),
     _temp(coupledValue("variable")),
-    _gap_geometry_params_set(false),
-    _gap_geometry_type(GapConductance::PLATE),
+    _gap_geometry_type(declareRestartableData<GapConductance::GAP_GEOMETRY>("gap_geometry_type",
+                                                                            GapConductance::PLATE)),
     _quadrature(getParam<bool>("quadrature")),
     _gap_temp(0),
     _gap_distance(88888),
@@ -125,18 +134,46 @@ GapConductance::GapConductance(const InputParameters & parameters)
                                             ? &coupledValue("gap_conductivity_function_variable")
                                             : NULL),
     _stefan_boltzmann(getParam<Real>("stefan_boltzmann")),
-    _emissivity(getParam<Real>("emissivity_1") != 0.0 && getParam<Real>("emissivity_2") != 0.0
-                    ? 1.0 / getParam<Real>("emissivity_1") + 1.0 / getParam<Real>("emissivity_2") -
-                          1
-                    : 0.0),
     _min_gap(getParam<Real>("min_gap")),
+    _min_gap_order(getParam<unsigned int>("min_gap_order")),
     _max_gap(getParam<Real>("max_gap")),
     _temp_var(_quadrature ? getVar("variable", 0) : NULL),
     _penetration_locator(NULL),
     _serialized_solution(_quadrature ? &_temp_var->sys().currentSolution() : NULL),
     _dof_map(_quadrature ? &_temp_var->sys().dofMap() : NULL),
-    _warnings(getParam<bool>("warnings"))
+    _warnings(getParam<bool>("warnings")),
+    _p1(declareRestartableData<Point>("cylinder_axis_point_1", Point(0, 1, 0))),
+    _p2(declareRestartableData<Point>("cylinder_axis_point_2", Point(0, 0, 0)))
 {
+  // set emissivity but allow legacy naming; legacy names are used if they
+  // are present
+  Real emissivity_master = getParam<Real>("emissivity_master");
+  if (isParamValid("emissivity_1"))
+  {
+    emissivity_master = getParam<Real>("emissivity_1");
+
+    // make sure emissivity is physical
+    if (emissivity_master < 0 || emissivity_master > 1)
+      paramError("emissivity_1",
+                 "Emissivities must have values between 0 and 1. You provided: ",
+                 emissivity_master);
+  }
+
+  Real emissivity_slave = getParam<Real>("emissivity_slave");
+  if (isParamValid("emissivity_2"))
+  {
+    emissivity_slave = getParam<Real>("emissivity_2");
+
+    // make sure emissivity is physical
+    if (emissivity_slave < 0 || emissivity_slave > 1)
+      paramError("emissivity_2",
+                 "Emissivities must have values between 0 and 1. You provided: ",
+                 emissivity_slave);
+  }
+  _emissivity = emissivity_master != 0.0 && emissivity_slave != 0.0
+                    ? 1.0 / emissivity_master + 1.0 / emissivity_slave - 1
+                    : 0.0;
+
   if (_quadrature)
   {
     if (!parameters.isParamValid("paired_boundary"))
@@ -158,17 +195,22 @@ GapConductance::GapConductance(const InputParameters & parameters)
         getParam<std::vector<BoundaryName>>("boundary")[0],
         Utility::string_to_enum<Order>(parameters.get<MooseEnum>("order")));
   }
+
+  if (_mesh.uniformRefineLevel() != 0)
+    mooseError("GapConductance does not work with uniform mesh refinement.");
 }
 
 void
 GapConductance::initialSetup()
 {
-  setGapGeometryParameters(_pars, _coord_sys, _gap_geometry_type, _p1, _p2);
+  setGapGeometryParameters(
+      _pars, _coord_sys, _fe_problem.getAxisymmetricRadialCoord(), _gap_geometry_type, _p1, _p2);
 }
 
 void
 GapConductance::setGapGeometryParameters(const InputParameters & params,
                                          const Moose::CoordinateSystemType coord_sys,
+                                         unsigned int axisymmetric_radial_coord,
                                          GAP_GEOMETRY & gap_geometry_type,
                                          Point & p1,
                                          Point & p2)
@@ -212,8 +254,17 @@ GapConductance::setGapGeometryParameters(const InputParameters & params,
         ::mooseError("The 'cylinder_axis_point_1' and 'cylinder_axis_point_2' cannot be specified "
                      "with axisymmetric models.  The y-axis is used as the cylindrical axis of "
                      "symmetry.");
-      p1 = Point(0, 0, 0);
-      p2 = Point(0, 1, 0);
+
+      if (axisymmetric_radial_coord == 0) // R-Z problem
+      {
+        p1 = Point(0, 0, 0);
+        p2 = Point(0, 1, 0);
+      }
+      else // Z-R problem
+      {
+        p1 = Point(0, 0, 0);
+        p2 = Point(1, 0, 0);
+      }
     }
     else if (coord_sys == Moose::COORD_RSPHERICAL)
       ::mooseError("'gap_geometry_type = CYLINDER' cannot be used with models having a spherical "
@@ -261,11 +312,32 @@ GapConductance::computeQpConductance()
 }
 
 Real
+GapConductance::gapAttenuation(Real adjusted_length, Real min_gap, unsigned int min_gap_order)
+{
+  mooseAssert(min_gap > 0, "min_gap must be larger than zero.");
+
+  if (adjusted_length > min_gap)
+    return 1.0 / adjusted_length;
+  else
+    switch (min_gap_order)
+    {
+      case 0:
+        return 1.0 / min_gap;
+
+      case 1:
+        return 1.0 / min_gap - (adjusted_length - min_gap) / (min_gap * min_gap);
+
+      default:
+        ::mooseError("Invalid Taylor expansion order");
+    }
+}
+
+Real
 GapConductance::h_conduction()
 {
   _gap_thermal_conductivity[_qp] = gapK();
-  return _gap_thermal_conductivity[_qp] /
-         gapLength(_gap_geometry_type, _radius, _r1, _r2, _min_gap, _max_gap);
+  const Real adjusted_length = gapLength(_gap_geometry_type, _radius, _r1, _r2, _max_gap);
+  return _gap_thermal_conductivity[_qp] * gapAttenuation(adjusted_length, _min_gap, _min_gap_order);
 }
 
 Real
@@ -281,7 +353,7 @@ GapConductance::h_radiation()
    Gap conductance due to radiation is based on the diffusion approximation:
 
       qr = sigma*Fe*(Tf^4 - Tc^4) ~ hr(Tf - Tc)
-         where sigma is the Stefan-Boltztmann constant, Fe is an emissivity function, Tf and Tc
+         where sigma is the Stefan-Boltzmann constant, Fe is an emissivity function, Tf and Tc
          are the fuel and clad absolute temperatures, respectively, and hr is the radiant gap
          conductance. Solving for hr,
 
@@ -314,39 +386,35 @@ GapConductance::dh_radiation()
 }
 
 Real
-GapConductance::gapLength(const GapConductance::GAP_GEOMETRY & gap_geom,
-                          Real radius,
-                          Real r1,
-                          Real r2,
-                          Real min_gap,
-                          Real max_gap)
+GapConductance::gapLength(
+    const GapConductance::GAP_GEOMETRY & gap_geom, Real radius, Real r1, Real r2, Real max_gap)
 {
   if (gap_geom == GapConductance::CYLINDER)
-    return gapCyl(radius, r1, r2, min_gap, max_gap);
+    return gapCyl(radius, r1, r2, max_gap);
   else if (gap_geom == GapConductance::SPHERE)
-    return gapSphere(radius, r1, r2, min_gap, max_gap);
+    return gapSphere(radius, r1, r2, max_gap);
   else
-    return gapRect(r2 - r1, min_gap, max_gap);
+    return gapRect(r2 - r1, max_gap);
 }
 
 Real
-GapConductance::gapRect(Real distance, Real min_gap, Real max_gap)
+GapConductance::gapRect(Real distance, Real max_gap)
 {
-  return std::max(min_gap, std::min(distance, max_gap));
+  return std::min(distance, max_gap);
 }
 
 Real
-GapConductance::gapCyl(Real radius, Real r1, Real r2, Real min_denom, Real max_denom)
+GapConductance::gapCyl(Real radius, Real r1, Real r2, Real max_denom)
 {
-  Real denominator = radius * std::log(r2 / r1);
-  return std::max(min_denom, std::min(denominator, max_denom));
+  const Real denominator = radius * std::log(r2 / r1);
+  return std::min(denominator, max_denom);
 }
 
 Real
-GapConductance::gapSphere(Real radius, Real r1, Real r2, Real min_denom, Real max_denom)
+GapConductance::gapSphere(Real radius, Real r1, Real r2, Real max_denom)
 {
-  Real denominator = std::pow(radius, 2.0) * ((1.0 / r1) - (1.0 / r2));
-  return std::max(min_denom, std::min(denominator, max_denom));
+  const Real denominator = radius * radius * ((1.0 / r1) - (1.0 / r2));
+  return std::min(denominator, max_denom);
 }
 
 Real
@@ -389,7 +457,7 @@ GapConductance::computeGapValues()
       _gap_distance = pinfo->_distance;
       _has_info = true;
 
-      Elem * slave_side = pinfo->_side;
+      const Elem * slave_side = pinfo->_side;
       std::vector<std::vector<Real>> & slave_side_phi = pinfo->_side_phi;
       std::vector<dof_id_type> slave_side_dof_indices;
 

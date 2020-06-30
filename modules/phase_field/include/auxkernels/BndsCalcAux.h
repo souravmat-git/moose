@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef BNDSCALCAUX_H
-#define BNDSCALCAUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxKernel.h"
 
 // Forward Declarations
-class BndsCalcAux;
-
-template <>
-InputParameters validParams<BndsCalcAux>();
 
 /**
  * Visualize the location of grain boundaries in a polycrystalline simulation.
@@ -21,6 +19,8 @@ InputParameters validParams<BndsCalcAux>();
 class BndsCalcAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   BndsCalcAux(const InputParameters & parameters);
 
 protected:
@@ -29,5 +29,3 @@ protected:
   const unsigned int _op_num;
   std::vector<const VariableValue *> _vals;
 };
-
-#endif // BNDSCALCAUX_H

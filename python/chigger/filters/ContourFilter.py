@@ -1,21 +1,17 @@
 #pylint: disable=missing-docstring
-#################################################################
-#                   DO NOT MODIFY THIS HEADER                   #
-#  MOOSE - Multiphysics Object Oriented Simulation Environment  #
-#                                                               #
-#            (c) 2010 Battelle Energy Alliance, LLC             #
-#                      ALL RIGHTS RESERVED                      #
-#                                                               #
-#           Prepared by Battelle Energy Alliance, LLC           #
-#             Under Contract No. DE-AC07-05ID14517              #
-#              With the U. S. Department of Energy              #
-#                                                               #
-#              See COPYRIGHT for full restrictions              #
-#################################################################
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import vtk
 import mooseutils
-from ChiggerFilterBase import ChiggerFilterBase
-from ..exodus import ExodusReader
+import chigger
+from .ChiggerFilterBase import ChiggerFilterBase
 class ContourFilter(ChiggerFilterBase):
     """
     Filter for computing and visualizing contours.
@@ -40,7 +36,7 @@ class ContourFilter(ChiggerFilterBase):
         super(ContourFilter, self).update(**kwargs)
 
         varinfo = self._source.getCurrentVariableInformation()
-        if varinfo.object_type != ExodusReader.NODAL:
+        if varinfo.object_type != chigger.exodus.ExodusReader.NODAL:
             raise mooseutils.MooseException('ContourFilter currently only works with nodal '
                                             'variables.')
 

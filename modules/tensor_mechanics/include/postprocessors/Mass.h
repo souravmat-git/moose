@@ -1,32 +1,31 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MASS_H
-#define MASS_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ElementIntegralVariablePostprocessor.h"
-
-// Forward Declarations
-class Mass;
-
-template <>
-InputParameters validParams<Mass>();
 
 /**
  * This postprocessor computes the mass by integrating the density over the volume.
  */
-
-class Mass : public ElementIntegralVariablePostprocessor
+template <bool is_ad>
+class MassTempl : public ElementIntegralVariablePostprocessor
 {
 public:
-  Mass(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  MassTempl(const InputParameters & parameters);
 
 protected:
   virtual Real computeQpIntegral();
-  const MaterialProperty<Real> & _density;
+  const GenericMaterialProperty<Real, is_ad> & _density;
 };
 
-#endif // MASS_H
+typedef MassTempl<false> Mass;
+typedef MassTempl<true> ADMass;

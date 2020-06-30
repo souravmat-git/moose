@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSHARDENINGEXPONENTIAL_H
-#define TENSORMECHANICSHARDENINGEXPONENTIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsHardeningModel.h"
-
-class TensorMechanicsHardeningExponential;
-
-template <>
-InputParameters validParams<TensorMechanicsHardeningExponential>();
 
 /**
  * Exponential hardening
@@ -23,6 +20,8 @@ InputParameters validParams<TensorMechanicsHardeningExponential>();
 class TensorMechanicsHardeningExponential : public TensorMechanicsHardeningModel
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsHardeningExponential(const InputParameters & parameters);
 
   virtual Real value(Real intnl) const override;
@@ -41,5 +40,3 @@ private:
   /// The value = _val_res + (val_0 - val_res)*exp(-rate*internal_parameter)
   Real _rate;
 };
-
-#endif // TENSORMECHANICSHARDENINGEXPONENTIAL_H

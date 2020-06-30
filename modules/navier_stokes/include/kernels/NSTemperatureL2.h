@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSTEMPERATUREL2_H
-#define NSTEMPERATUREL2_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "Material.h"
 
 // Forward Declarations
-class NSTemperatureL2;
-
-template <>
-InputParameters validParams<NSTemperatureL2>();
 
 /**
  * This class was originally used to solve for the temperature
@@ -24,6 +22,8 @@ InputParameters validParams<NSTemperatureL2>();
 class NSTemperatureL2 : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   NSTemperatureL2(const InputParameters & parameters);
 
 protected:
@@ -48,5 +48,3 @@ protected:
 
   const MaterialProperty<Real> & _c_v;
 };
-
-#endif // NSTEMPERATUREL2_H

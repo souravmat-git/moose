@@ -1,33 +1,42 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "SwitchingFunctionConstraintEta.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", SwitchingFunctionConstraintEta);
+
 InputParameters
-validParams<SwitchingFunctionConstraintEta>()
+SwitchingFunctionConstraintEta::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addClassDescription("Lagrange multiplier kernel to constrain the sum of all switching "
                              "functions in a multiphase system. This kernel acts on a "
                              "non-conserved order parameter eta_i.");
   params.addParam<MaterialPropertyName>("h_name",
                                         "Switching Function Materials that provides h(eta_i)");
   params.addRequiredCoupledVar("lambda", "Lagrange multiplier");
+  params.addCoupledVar("args", "Further arguments to the switching function");
   return params;
 }
 
 SwitchingFunctionConstraintEta::SwitchingFunctionConstraintEta(const InputParameters & parameters)
-  : DerivativeMaterialInterface<Kernel>(parameters),
+  : DerivativeMaterialInterface<JvarMapKernelInterface<Kernel>>(parameters),
     _eta_name(_var.name()),
     _dh(getMaterialPropertyDerivative<Real>("h_name", _eta_name)),
     _d2h(getMaterialPropertyDerivative<Real>("h_name", _eta_name, _eta_name)),
+    _d2ha(coupledComponents("args")),
+    _d2ha_map(getParameterJvarMap("args")),
     _lambda(coupledValue("lambda")),
     _lambda_var(coupled("lambda"))
 {
+  for (std::size_t i = 0; i < _d2ha.size(); ++i)
+    _d2ha[i] = &getMaterialPropertyDerivative<Real>("h_name", _eta_name, getVar("args", i)->name());
 }
 
 Real
@@ -43,10 +52,14 @@ SwitchingFunctionConstraintEta::computeQpJacobian()
 }
 
 Real
-SwitchingFunctionConstraintEta::computeQpOffDiagJacobian(unsigned int j_var)
+SwitchingFunctionConstraintEta::computeQpOffDiagJacobian(unsigned int jvar)
 {
-  if (j_var == _lambda_var)
+  if (jvar == _lambda_var)
     return _phi[_j][_qp] * _dh[_qp] * _test[_i][_qp];
-  else
-    return 0.0;
+
+  auto k = mapJvarToCvar(jvar, _d2ha_map);
+  if (k >= 0)
+    return _lambda[_qp] * (*_d2ha[k])[_qp] * _phi[_j][_qp] * _test[_i][_qp];
+
+  return 0.0;
 }

@@ -1,22 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSSEFFPRIMEAUX_H
-#define RICHARDSSEFFPRIMEAUX_H
+#pragma once
 
 #include "AuxKernel.h"
 
 #include "RichardsSeff.h"
 
 // Forward Declarations
-class RichardsSeffPrimeAux;
-
-template <>
-InputParameters validParams<RichardsSeffPrimeAux>();
 
 /**
  * Calculates derivative of effective saturation wrt a specified porepressure
@@ -24,6 +21,8 @@ InputParameters validParams<RichardsSeffPrimeAux>();
 class RichardsSeffPrimeAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   RichardsSeffPrimeAux(const InputParameters & parameters);
 
 protected:
@@ -52,5 +51,3 @@ protected:
   /// array of derivtives: This auxkernel returns _mat[_wrt1]
   std::vector<Real> _mat;
 };
-
-#endif // RICHARDSSEFFPRIMEAUX_H

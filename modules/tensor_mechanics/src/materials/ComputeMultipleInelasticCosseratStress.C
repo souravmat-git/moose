@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeMultipleInelasticCosseratStress.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeMultipleInelasticCosseratStress);
+
 InputParameters
-validParams<ComputeMultipleInelasticCosseratStress>()
+ComputeMultipleInelasticCosseratStress::validParams()
 {
-  InputParameters params = validParams<ComputeMultipleInelasticStress>();
+  InputParameters params = ComputeMultipleInelasticStress::validParams();
   params.addClassDescription("Compute state (stress and other quantities such as plastic "
                              "strains and internal parameters) using an iterative process, as well "
                              "as Cosserat versions of these quantities.  Only elasticity is "
@@ -37,9 +41,6 @@ ComputeMultipleInelasticCosseratStress::initQpStatefulProperties()
 {
   ComputeMultipleInelasticStress::initQpStatefulProperties();
   _couple_stress[_qp].zero();
-
-  if (!_is_elasticity_tensor_guaranteed_constant_in_time)
-    mooseError("The Cosserat stress classes assume constant elasticity tensors");
 }
 
 void

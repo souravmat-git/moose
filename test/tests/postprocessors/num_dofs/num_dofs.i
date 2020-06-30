@@ -39,7 +39,7 @@
     variable = u
   [../]
   [./force]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = force
   [../]
@@ -61,7 +61,6 @@
 []
 
 [Executioner]
-  # Preconditioned JFNK (default)
   type = Transient
   num_steps = 4
   dt = 1

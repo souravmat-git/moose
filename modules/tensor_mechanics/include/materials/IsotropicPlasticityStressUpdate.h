@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ISOTROPICPLASTICITYSTRESSUPDATE_H
-#define ISOTROPICPLASTICITYSTRESSUPDATE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "RadialReturnStressUpdate.h"
 
@@ -30,17 +32,20 @@
 class IsotropicPlasticityStressUpdate : public RadialReturnStressUpdate
 {
 public:
+  static InputParameters validParams();
+
   IsotropicPlasticityStressUpdate(const InputParameters & parameters);
 
 protected:
   virtual void initQpStatefulProperties() override;
+  virtual void propagateQpStatefulProperties() override;
 
   virtual void computeStressInitialize(const Real effective_trial_stress,
                                        const RankFourTensor & elasticity_tensor) override;
   virtual Real computeResidual(const Real effective_trial_stress, const Real scalar) override;
   virtual Real computeDerivative(const Real effective_trial_stress, const Real scalar) override;
   virtual void iterationFinalize(Real scalar) override;
-  virtual void computeStressFinalize(const RankTwoTensor & plasticStrainIncrement) override;
+  virtual void computeStressFinalize(const RankTwoTensor & plastic_strain_increment) override;
 
   virtual void computeYieldStress(const RankFourTensor & elasticity_tensor);
   virtual Real computeHardeningValue(Real scalar);
@@ -49,10 +54,10 @@ protected:
   /// a string to prepend to the plastic strain Material Property name
   const std::string _plastic_prepend;
 
-  Function * _yield_stress_function;
+  const Function * _yield_stress_function;
   Real _yield_stress;
   const Real _hardening_constant;
-  Function * _hardening_function;
+  const Function * const _hardening_function;
 
   Real _yield_condition;
   Real _hardening_slope;
@@ -67,5 +72,3 @@ protected:
   const MaterialProperty<Real> & _hardening_variable_old;
   const VariableValue & _temperature;
 };
-
-#endif // ISOTROPICPLASTICITYSTRESSUPDATE_H

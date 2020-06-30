@@ -1,6 +1,14 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 from FileTester import FileTester
 import os
-import util
 import sys
 from mooseutils.ImageDiffer import ImageDiffer
 
@@ -15,7 +23,7 @@ class ImageDiff(FileTester):
         params.addParam('allowed_darwin', "Absolute zero cuttoff used for Mac OS (Darwin) machines, if not provided 'allowed' is used.")
         # We don't want to check for any errors on the screen with this. If there are any real errors then the image test will fail.
         params['errors'] = []
-        params['display_required'] = True
+        params['display_required'] = False
         return params
 
     def __init__(self, name, params):
@@ -24,14 +32,14 @@ class ImageDiff(FileTester):
     def getOutputFiles(self):
         return self.specs['imagediff']
 
-    def processResults(self, moose_dir, retcode, options, output):
+    def processResults(self, moose_dir, options, output):
         """
         Perform image diff
         """
 
         # Call base class processResults
-        output = FileTester.processResults(self, moose_dir, retcode, options, output)
-        if self.getStatus() == self.bucket_fail:
+        output += FileTester.processResults(self, moose_dir, options, output)
+        if self.isFail():
             return output
 
         # Loop through files
@@ -39,16 +47,16 @@ class ImageDiff(FileTester):
         for filename in specs['imagediff']:
 
             # Error if gold file does not exist
-            if not os.path.exists(os.path.join(specs['test_dir'], specs['gold_dir'], filename)):
-                output += "File Not Found: " + os.path.join(specs['test_dir'], specs['gold_dir'], filename)
-                self.setStatus('MISSING GOLD FILE', self.bucket_fail)
+            if not os.path.exists(os.path.join(self.getTestDir(), specs['gold_dir'], filename)):
+                output += "File Not Found: " + os.path.join(self.getTestDir(), specs['gold_dir'], filename)
+                self.setStatus(self.fail, 'MISSING GOLD FILE')
                 break
 
             # Perform diff
             else:
                 output = 'Running ImageDiffer.py'
-                gold = os.path.join(specs['test_dir'], specs['gold_dir'], filename)
-                test = os.path.join(specs['test_dir'], filename)
+                gold = os.path.join(self.getTestDir(), specs['gold_dir'], filename)
+                test = os.path.join(self.getTestDir(), filename)
 
                 if sys.platform in ['linux', 'linux2']:
                     name = 'allowed_linux'
@@ -62,11 +70,7 @@ class ImageDiff(FileTester):
 
                 output += differ.message()
                 if differ.fail():
-                    self.setStatus('IMAGEDIFF', self.bucket_diff)
+                    self.setStatus(self.diff, 'IMAGEDIFF')
                     break
-
-        # If status is still pending, then it is a passing test
-        if self.getStatus() == self.bucket_pending:
-            self.setStatus(self.success_message, self.bucket_success)
 
         return output

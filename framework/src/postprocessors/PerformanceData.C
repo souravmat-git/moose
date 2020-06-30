@@ -1,27 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PerformanceData.h"
 
 #include "FEProblem.h"
 #include "SubProblem.h"
 
-template <>
+registerMooseObjectReplaced("MooseApp", PerformanceData, "02/01/2019 00:00", PerfGraphData);
+
+defineLegacyParams(PerformanceData);
+
 InputParameters
-validParams<PerformanceData>()
+PerformanceData::validParams()
 {
-  InputParameters params = validParams<GeneralPostprocessor>();
+  InputParameters params = GeneralPostprocessor::validParams();
 
   MooseEnum column_options("n_calls total_time average_time total_time_with_sub "
                            "average_time_with_sub percent_of_active_time "
@@ -42,6 +40,7 @@ validParams<PerformanceData>()
       "also valid events, category and column are ignored for these "
       "cases).");
 
+  params.addClassDescription("Provides programmatic access to Performance Log Data");
   return params;
 }
 

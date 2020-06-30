@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef XFEMCRACKGROWTHINCREMENT2DCUT_H
-#define XFEMCRACKGROWTHINCREMENT2DCUT_H
+#pragma once
 
 #include "libmesh/libmesh_common.h"
 #include "libmesh/libmesh.h" // libMesh::invalid_uint
@@ -16,10 +17,10 @@ using namespace libMesh;
 
 struct CutEdgeForCrackGrowthIncr
 {
-  unsigned int id1;
-  unsigned int id2;
-  Real distance;
-  unsigned int host_side_id;
+  unsigned int _id1;
+  unsigned int _id2;
+  Real _distance;
+  unsigned int _host_side_id;
 };
 
 class XFEMCrackGrowthIncrement2DCut
@@ -47,5 +48,3 @@ protected:
 private:
   const std::pair<Point, Point> _cut_line_endpoints;
 };
-
-#endif // XFEMCRACKGROWTHINCREMENT2DCUT_H

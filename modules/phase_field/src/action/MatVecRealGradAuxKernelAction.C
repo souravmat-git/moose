@@ -1,19 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MatVecRealGradAuxKernelAction.h"
 #include "Factory.h"
 #include "Conversion.h"
 #include "FEProblem.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", MatVecRealGradAuxKernelAction, "add_aux_kernel");
+
 InputParameters
-validParams<MatVecRealGradAuxKernelAction>()
+MatVecRealGradAuxKernelAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addRequiredParam<unsigned int>("op_num",
                                         "Value that specifies the number of grains to create");
   params.addRequiredParam<std::vector<std::string>>(
@@ -52,7 +56,7 @@ MatVecRealGradAuxKernelAction::act()
   const unsigned int size_p = _prop.size();
 
   if (size_p != size_v)
-    mooseError("var_name_base and property must be vectors of the same dimension");
+    paramError("property", "var_name_base and property must be vectors of the same dimension");
 
   for (unsigned int op = 0; op < op_num; ++op)
   {

@@ -1,26 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef NANKERNEL_H
-#define NANKERNEL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
-
-// Forward Declaration
-class NanKernel;
-
-template <>
-InputParameters validParams<NanKernel>();
 
 /**
  * Kernel that generates NaN
@@ -28,6 +17,8 @@ InputParameters validParams<NanKernel>();
 class NanKernel : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   NanKernel(const InputParameters & parameters);
 
 protected:
@@ -41,5 +32,3 @@ private:
   unsigned int _deprecated_default;
   unsigned int _deprecated_no_default;
 };
-
-#endif // NANKERNEL_H

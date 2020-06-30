@@ -38,7 +38,7 @@
   [../]
 
   [./func_time]
-    type = UserForcingFunction
+    type = BodyForce
     variable = Time
     function = func
   [../]
@@ -61,8 +61,6 @@
   #scheme = 'crank-nicolson'
   start_time = 0
   num_steps = 4
-  ss_check_tol = .00000000000000001
-  trans_ss_check = true
   nl_abs_tol = 1e-15
   petsc_options = '-snes_converged_reason'
   abort_on_solve_fail = true

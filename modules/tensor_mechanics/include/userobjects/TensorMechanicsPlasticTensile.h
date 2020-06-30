@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICTENSILE_H
-#define TENSORMECHANICSPLASTICTENSILE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticModel.h"
 #include "TensorMechanicsHardeningModel.h"
-
-class TensorMechanicsPlasticTensile;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticTensile>();
 
 /**
  * FiniteStrainTensile implements rate-independent associative tensile failure
@@ -30,6 +27,8 @@ InputParameters validParams<TensorMechanicsPlasticTensile>();
 class TensorMechanicsPlasticTensile : public TensorMechanicsPlasticModel
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticTensile(const InputParameters & parameters);
 
   virtual std::string modelName() const override;
@@ -101,5 +100,3 @@ protected:
   /// d(tensile strength)/d(internal_param) as a function of residual value, rate, and internal_param
   virtual Real dtensile_strength(const Real internal_param) const;
 };
-
-#endif // TENSORMECHANICSPLASTICTENSILE_H

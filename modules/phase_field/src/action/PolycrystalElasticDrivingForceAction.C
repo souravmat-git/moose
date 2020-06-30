@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PolycrystalElasticDrivingForceAction.h"
 #include "Factory.h"
 #include "FEProblem.h"
 #include "Conversion.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", PolycrystalElasticDrivingForceAction, "add_kernel");
+
 InputParameters
-validParams<PolycrystalElasticDrivingForceAction>()
+PolycrystalElasticDrivingForceAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription(
       "Action that addes the elastic driving force for each order parameter");
   params.addRequiredParam<unsigned int>("op_num", "specifies the number of grains to create");
@@ -52,7 +55,8 @@ PolycrystalElasticDrivingForceAction::act()
     std::string var_name = _var_name_base + Moose::stringify(op);
 
     // Create Stiffness derivative name
-    MaterialPropertyName D_stiff_name = propertyNameFirst(_elasticity_tensor_name, var_name);
+    MaterialPropertyName D_stiff_name =
+        derivativePropertyNameFirst(_elasticity_tensor_name, var_name);
 
     // Set name of kernel being created
     std::string kernel_type = "ACGrGrElasticDrivingForce";

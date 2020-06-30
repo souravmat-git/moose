@@ -41,7 +41,6 @@
   num_steps = 10
   dt = 1 # This will be constrained by the multiapp
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 
   petsc_options_iname = '-pc_type -pc_hypre_type'
@@ -54,7 +53,7 @@
 
 [MultiApps]
   [./sub_app]
-    positions_file = positions
+    positions_file = positions.txt
     type = TransientMultiApp
     input_files = 'dt_from_multi_sub.i'
     app_type = MooseTestApp

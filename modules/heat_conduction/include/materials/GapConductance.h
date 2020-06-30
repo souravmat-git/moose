@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GAPCONDUCTANCE_H
-#define GAPCONDUCTANCE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 
@@ -21,20 +23,23 @@ public:
     CYLINDER,
     SPHERE
   };
+  static InputParameters validParams();
 
   GapConductance(const InputParameters & parameters);
 
   static InputParameters actionParameters();
 
-  static Real gapLength(
-      const GAP_GEOMETRY & gap_geom, Real radius, Real r1, Real r2, Real min_gap, Real max_gap);
+  static Real gapLength(const GAP_GEOMETRY & gap_geom, Real radius, Real r1, Real r2, Real max_gap);
 
-  static Real gapRect(Real distance, Real min_gap, Real max_gap);
-  static Real gapCyl(Real radius, Real r1, Real r2, Real min_denom, Real max_denom);
-  static Real gapSphere(Real radius, Real r1, Real r2, Real min_denom, Real max_denom);
+  static Real gapRect(Real distance, Real max_gap);
+  static Real gapCyl(Real radius, Real r1, Real r2, Real max_denom);
+  static Real gapSphere(Real radius, Real r1, Real r2, Real max_denom);
+
+  static Real gapAttenuation(Real adjusted_length, Real min_gap, unsigned int min_gap_order);
 
   static void setGapGeometryParameters(const InputParameters & params,
                                        const Moose::CoordinateSystemType coord_sys,
+                                       unsigned int axisymmetric_radial_coord,
                                        GAP_GEOMETRY & gap_geometry_type,
                                        Point & p1,
                                        Point & p2);
@@ -50,6 +55,13 @@ public:
                               Real & radius);
 
   virtual void initialSetup() override;
+
+  /// Legacy method that clamps at min_gap
+  static Real gapLength(
+      const GAP_GEOMETRY & gap_geom, Real radius, Real r1, Real r2, Real min_gap, Real max_gap)
+  {
+    return std::max(min_gap, gapLength(gap_geom, radius, r1, r2, max_gap));
+  }
 
 protected:
   virtual void computeQpProperties() override;
@@ -71,8 +83,7 @@ protected:
 
   const VariableValue & _temp;
 
-  bool _gap_geometry_params_set;
-  GAP_GEOMETRY _gap_geometry_type;
+  GAP_GEOMETRY & _gap_geometry_type;
 
   bool _quadrature;
 
@@ -91,26 +102,22 @@ protected:
   MaterialProperty<Real> & _gap_thermal_conductivity;
 
   const Real _gap_conductivity;
-  Function * const _gap_conductivity_function;
-  const VariableValue * _gap_conductivity_function_variable;
+  const Function * const _gap_conductivity_function;
+  const VariableValue * const _gap_conductivity_function_variable;
 
   const Real _stefan_boltzmann;
   Real _emissivity;
 
-  Real _min_gap;
-  Real _max_gap;
+  const Real _min_gap;
+  const unsigned int _min_gap_order;
+  const Real _max_gap;
 
   MooseVariable * _temp_var;
   PenetrationLocator * _penetration_locator;
-  const NumericVector<Number> ** _serialized_solution;
+  const NumericVector<Number> * const * _serialized_solution;
   DofMap * _dof_map;
   const bool _warnings;
 
-  Point _p1;
-  Point _p2;
+  Point & _p1;
+  Point & _p2;
 };
-
-template <>
-InputParameters validParams<GapConductance>();
-
-#endif // GAPCONDUCTANCE_H

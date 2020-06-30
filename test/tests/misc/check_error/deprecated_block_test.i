@@ -26,14 +26,11 @@
 []
 
 [DeprecatedBlock]
-  type = ElementAverageValue
-  variable = u
 []
 
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 []
 

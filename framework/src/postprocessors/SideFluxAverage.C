@@ -1,60 +1,66 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "SideFluxAverage.h"
 
-template <>
+registerMooseObject("MooseApp", SideFluxAverage);
+registerMooseObject("MooseApp", ADSideFluxAverage);
+
+template <bool is_ad>
 InputParameters
-validParams<SideFluxAverage>()
+SideFluxAverageTempl<is_ad>::validParams()
 {
-  InputParameters params = validParams<SideFluxIntegral>();
+  InputParameters params = SideFluxIntegralTempl<is_ad>::validParams();
   return params;
 }
 
-SideFluxAverage::SideFluxAverage(const InputParameters & parameters)
-  : SideFluxIntegral(parameters), _volume(0)
+template <bool is_ad>
+SideFluxAverageTempl<is_ad>::SideFluxAverageTempl(const InputParameters & parameters)
+  : SideFluxIntegralTempl<is_ad>(parameters), _volume(0)
 {
 }
 
+template <bool is_ad>
 void
-SideFluxAverage::initialize()
+SideFluxAverageTempl<is_ad>::initialize()
 {
-  SideIntegralVariablePostprocessor::initialize();
+  SideFluxIntegralTempl<is_ad>::initialize();
   _volume = 0;
 }
 
+template <bool is_ad>
 void
-SideFluxAverage::execute()
+SideFluxAverageTempl<is_ad>::execute()
 {
-  SideIntegralVariablePostprocessor::execute();
-  _volume += _current_side_volume;
+  SideFluxIntegralTempl<is_ad>::execute();
+  _volume += this->_current_side_volume;
 }
 
+template <bool is_ad>
 Real
-SideFluxAverage::getValue()
+SideFluxAverageTempl<is_ad>::getValue()
 {
-  Real integral = SideIntegralVariablePostprocessor::getValue();
+  Real integral = SideFluxIntegralTempl<is_ad>::getValue();
 
-  gatherSum(_volume);
+  this->gatherSum(_volume);
 
   return integral / _volume;
 }
 
+template <bool is_ad>
 void
-SideFluxAverage::threadJoin(const UserObject & y)
+SideFluxAverageTempl<is_ad>::threadJoin(const UserObject & y)
 {
-  SideIntegralVariablePostprocessor::threadJoin(y);
-  const SideFluxAverage & pps = static_cast<const SideFluxAverage &>(y);
+  SideFluxIntegralTempl<is_ad>::threadJoin(y);
+  const SideFluxAverageTempl<is_ad> & pps = static_cast<const SideFluxAverageTempl<is_ad> &>(y);
   _volume += pps._volume;
 }
+
+template class SideFluxAverageTempl<false>;
+template class SideFluxAverageTempl<true>;

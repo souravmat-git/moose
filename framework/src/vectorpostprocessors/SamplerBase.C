@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "SamplerBase.h"
 
@@ -21,14 +16,21 @@
 #include "MooseError.h"
 #include "VectorPostprocessor.h"
 
-template <>
+#include "libmesh/point.h"
+
+defineLegacyParams(SamplerBase);
+
 InputParameters
-validParams<SamplerBase>()
+SamplerBase::validParams()
 {
   InputParameters params = emptyInputParameters();
 
   MooseEnum sort_options("x y z id");
   params.addRequiredParam<MooseEnum>("sort_by", sort_options, "What to sort the samples by");
+
+  // The value from this VPP is naturally already on every processor
+  // TODO: Make this not the case!  See #11415
+  params.set<bool>("_auto_broadcast") = false;
 
   return params;
 }
@@ -67,13 +69,17 @@ SamplerBase::addSample(const Point & p, const Real & id, const std::vector<Real>
   _id.push_back(id);
 
   mooseAssert(values.size() == _variable_names.size(), "Mismatch of variable names to vector size");
-  for (auto i = beginIndex(values); i < values.size(); ++i)
+  for (MooseIndex(values) i = 0; i < values.size(); ++i)
     _values[i]->emplace_back(values[i]);
 }
 
 void
 SamplerBase::initialize()
 {
+  // Don't reset the vectors if we want to retain history
+  if (_vpp->containsCompleteHistory() && _comm.rank() == 0)
+    return;
+
   _x.clear();
   _y.clear();
   _z.clear();
@@ -127,13 +133,13 @@ SamplerBase::finalize()
 #endif
 
   // Sort each of the vectors using the same sorted indices
-  for (auto i = beginIndex(vec_ptrs); i < vec_ptrs.size(); ++i)
+  for (auto & vec_ptr : vec_ptrs)
   {
-    for (auto j = beginIndex(sorted_indices); j < sorted_indices.size(); ++j)
-      tmp_vector[j] = (*vec_ptrs[i])[sorted_indices[j]];
+    for (MooseIndex(sorted_indices) j = 0; j < sorted_indices.size(); ++j)
+      tmp_vector[j] = (*vec_ptr)[sorted_indices[j]];
 
     // Swap vector storage with sorted vector
-    vec_ptrs[i]->swap(tmp_vector);
+    vec_ptr->swap(tmp_vector);
   }
 }
 
@@ -146,6 +152,6 @@ SamplerBase::threadJoin(const SamplerBase & y)
 
   _id.insert(_id.end(), y._id.begin(), y._id.end());
 
-  for (unsigned int i = 0; i < _variable_names.size(); i++)
+  for (MooseIndex(_variable_names) i = 0; i < _variable_names.size(); i++)
     _values[i]->insert(_values[i]->end(), y._values[i]->begin(), y._values[i]->end());
 }

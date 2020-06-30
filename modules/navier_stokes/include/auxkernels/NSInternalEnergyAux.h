@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSINTERNALENERGYAUX_H
-#define NSINTERNALENERGYAUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxKernel.h"
 
 // Forward Declarations
-class NSInternalEnergyAux;
-
-template <>
-InputParameters validParams<NSInternalEnergyAux>();
 
 /**
  * Auxiliary kernel for computing the internal energy of the fluid.
@@ -21,6 +19,8 @@ InputParameters validParams<NSInternalEnergyAux>();
 class NSInternalEnergyAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   NSInternalEnergyAux(const InputParameters & parameters);
 
   virtual ~NSInternalEnergyAux() {}
@@ -34,5 +34,3 @@ protected:
   const VariableValue & _w_vel;
   const VariableValue & _rhoE;
 };
-
-#endif

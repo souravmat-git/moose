@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ElementJacobianDamper.h"
 #include "FEProblem.h"
@@ -18,17 +13,17 @@
 #include "DisplacedProblem.h"
 #include "Assembly.h"
 
-// libMesh includes
 #include "libmesh/quadrature.h" // _qrule
 
-template <>
+registerMooseObject("TensorMechanicsApp", ElementJacobianDamper);
+
 InputParameters
-validParams<ElementJacobianDamper>()
+ElementJacobianDamper::validParams()
 {
-  InputParameters params = validParams<GeneralDamper>();
+  InputParameters params = GeneralDamper::validParams();
   params.addClassDescription("Damper that limits the change in element Jacobians");
-  params.addParam<std::vector<NonlinearVariableName>>("displacements",
-                                                      "The nonlinear displacement variables");
+  params.addParam<std::vector<VariableName>>("displacements",
+                                             "The nonlinear displacement variables");
   params.addParam<Real>(
       "max_increment",
       0.1,
@@ -52,13 +47,12 @@ ElementJacobianDamper::ElementJacobianDamper(const InputParameters & parameters)
 
   _mesh = &_displaced_problem->mesh();
 
-  const std::vector<NonlinearVariableName> & nl_vnames(
-      getParam<std::vector<NonlinearVariableName>>("displacements"));
+  const std::vector<VariableName> & nl_vnames(getParam<std::vector<VariableName>>("displacements"));
   _ndisp = nl_vnames.size();
 
   for (unsigned int i = 0; i < _ndisp; ++i)
   {
-    _disp_var.push_back(&_sys.getVariable(_tid, nl_vnames[i]));
+    _disp_var.push_back(&_sys.getFieldVariable<Real>(_tid, nl_vnames[i]));
     _disp_incr.push_back(_disp_var.back()->increment());
   }
 }
@@ -80,11 +74,8 @@ ElementJacobianDamper::computeDamping(const NumericVector<Number> & /* solution 
   std::vector<Point> point_copies;
 
   // Loop over elements in the mesh
-  const MeshBase::element_iterator end = _mesh->getMesh().active_local_elements_end();
-  for (auto el = _mesh->getMesh().active_local_elements_begin(); el != end; ++el)
+  for (auto & current_elem : _mesh->getMesh().active_local_element_ptr_range())
   {
-    Elem * current_elem = *el;
-
     point_copies.clear();
     point_copies.reserve(current_elem->n_nodes());
 

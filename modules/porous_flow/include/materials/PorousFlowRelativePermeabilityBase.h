@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWRELATIVEPERMEABILITYBASE_H
-#define POROUSFLOWRELATIVEPERMEABILITYBASE_H
+#pragma once
 
 #include "PorousFlowMaterialBase.h"
-
-class PorousFlowRelativePermeabilityBase;
-
-template <>
-InputParameters validParams<PorousFlowRelativePermeabilityBase>();
 
 /**
  * Base class for PorousFlow relative permeability materials. All materials
@@ -23,6 +19,8 @@ InputParameters validParams<PorousFlowRelativePermeabilityBase>();
 class PorousFlowRelativePermeabilityBase : public PorousFlowMaterialBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowRelativePermeabilityBase(const InputParameters & parameters);
 
 protected:
@@ -52,9 +50,6 @@ protected:
   /// Relative permeability is multiplied by this quantity
   const Real _scaling;
 
-  /// Name of (dummy) saturation primary variable
-  VariableName _saturation_variable_name;
-
   /// Saturation material property
   const MaterialProperty<std::vector<Real>> & _saturation;
 
@@ -73,5 +68,3 @@ protected:
   /// Derivative of effective saturation with respect to saturation
   const Real _dseff_ds;
 };
-
-#endif // POROUSFLOWRELATIVEPERMEABILITYBASE_H

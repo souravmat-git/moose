@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef Q2PSATURATIONDIFFUSION
-#define Q2PSATURATIONDIFFUSION
+#pragma once
 
 #include "Kernel.h"
 #include "RichardsDensity.h"
@@ -15,10 +16,6 @@
 #include "Function.h"
 
 // Forward Declarations
-class Q2PSaturationDiffusion;
-
-template <>
-InputParameters validParams<Q2PSaturationDiffusion>();
 
 /**
  * Diffusive Kernel that models nonzero capillary pressure in Q2P models
@@ -27,6 +24,8 @@ InputParameters validParams<Q2PSaturationDiffusion>();
 class Q2PSaturationDiffusion : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   Q2PSaturationDiffusion(const InputParameters & parameters);
 
 protected:
@@ -56,5 +55,3 @@ protected:
 
   Real _diffusivity;
 };
-
-#endif // Q2PSATURATIONDIFFUSION

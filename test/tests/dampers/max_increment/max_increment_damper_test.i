@@ -35,6 +35,7 @@
   [./left]
     type = DirichletBC
     variable = u
+    preset = false
     boundary = left
     value = 0
   [../]
@@ -42,6 +43,7 @@
   [./right]
     type = DirichletBC
     variable = u
+    preset = false
     boundary = right
     value = 1
   [../]
@@ -58,9 +60,4 @@
 [Executioner]
   type = Steady
   solve_type = 'PJFNK'
-[]
-
-[Outputs]
-  file_base = out
-  exodus = true
 []

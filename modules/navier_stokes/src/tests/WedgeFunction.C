@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "WedgeFunction.h"
 
-template <>
+registerMooseObject("NavierStokesApp", WedgeFunction);
+
 InputParameters
-validParams<WedgeFunction>()
+WedgeFunction::validParams()
 {
-  InputParameters params = validParams<Function>();
+  InputParameters params = Function::validParams();
   params.addClassDescription("Function object for tests/ins/jeffery_hamel responsible for setting "
                              "the exact value of the velocity and pressure variables.");
   params.addRequiredParam<Real>(
@@ -48,7 +51,7 @@ WedgeFunction::WedgeFunction(const InputParameters & parameters)
 }
 
 Real
-WedgeFunction::value(Real /*t*/, const Point & p)
+WedgeFunction::value(Real /*t*/, const Point & p) const
 {
   const Real r = std::sqrt(p(0) * p(0) + p(1) * p(1));
   const Real theta = std::atan2(p(1), p(0));
@@ -64,7 +67,7 @@ WedgeFunction::value(Real /*t*/, const Point & p)
 
   // We pass "eta" to the PiecewiseLinear function in place of "time",
   // plus a dummy Point which is not used.
-  const Real f_value = _f.value(eta, Point(0., 0., 0.));
+  const Real f_value = _f.value(eta, _point_zero);
 
   // Vars 0 and 1 are the velocities.
   if (_var_num < 2)

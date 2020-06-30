@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWCONSTANTTHERMALEXPANSIONCOEFFICIENT_H
-#define POROUSFLOWCONSTANTTHERMALEXPANSIONCOEFFICIENT_H
+#pragma once
 
 #include "PorousFlowMaterialVectorBase.h"
-
-// Forward Declarations
-class PorousFlowConstantThermalExpansionCoefficient;
-
-template <>
-InputParameters validParams<PorousFlowConstantThermalExpansionCoefficient>();
 
 /**
  * Material designed to provide a time-invariant
@@ -29,6 +24,8 @@ InputParameters validParams<PorousFlowConstantThermalExpansionCoefficient>();
 class PorousFlowConstantThermalExpansionCoefficient : public PorousFlowMaterialVectorBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowConstantThermalExpansionCoefficient(const InputParameters & parameters);
 
 protected:
@@ -53,5 +50,3 @@ protected:
   /// Old value of the volumetric thermal expansion coefficient.  This variable is necessary in order to keep the thermal expansion coefficient constant even if porosity is changing.
   const MaterialProperty<Real> & _coeff_old;
 };
-
-#endif // POROUSFLOWCONSTANTTHERMALEXPANSIONCOEFFICIENT_H

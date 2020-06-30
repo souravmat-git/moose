@@ -1,26 +1,20 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MATERIALPROPERTYDEBUGOUTPUT_H
-#define MATERIALPROPERTYDEBUGOUTPUT_H
+#pragma once
 
 // MOOSE includes
 #include "Output.h"
 
 // Forward declerations
 class MaterialPropertyDebugOutput;
-class Material;
+class MaterialBase;
 
 template <>
 InputParameters validParams<MaterialPropertyDebugOutput>();
@@ -33,6 +27,8 @@ InputParameters validParams<MaterialPropertyDebugOutput>();
 class MaterialPropertyDebugOutput : public Output
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Class constructor
    * @param parameters Object input parameters
@@ -54,10 +50,9 @@ protected:
   /**
    * Builds a output streams for the properties in each material object
    * @param output The output stream to populate
-   * @param materials Vector of pointers to the Material objects of interest
+   * @param materials Vector of pointers to the MaterialBase objects of interest
    */
   void printMaterialProperties(std::stringstream & output,
-                               const std::vector<std::shared_ptr<Material>> & materials) const;
+                               const std::vector<std::shared_ptr<MaterialBase>> & materials) const;
 };
 
-#endif // MATERIALPROPERTYEBUGOUTPUT_H

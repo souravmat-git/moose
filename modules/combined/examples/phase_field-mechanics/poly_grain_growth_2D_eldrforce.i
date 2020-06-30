@@ -189,19 +189,19 @@
     [../]
   [../]
   [./top_displacement]
-    type = PresetBC
+    type = DirichletBC
     variable = disp_y
     boundary = top
     value = -50.0
   [../]
   [./x_anchor]
-    type = PresetBC
+    type = DirichletBC
     variable = disp_x
     boundary = 'left right'
     value = 0.0
   [../]
   [./y_anchor]
-    type = PresetBC
+    type = DirichletBC
     variable = disp_y
     boundary = bottom
     value = 0.0
@@ -246,8 +246,9 @@
     type = TimestepSize
   [../]
   [./run_time]
-    type = PerformanceData
-    event = active
+    type = PerfGraphData
+    section_name = "Root"
+    data_type = total
   [../]
 []
 

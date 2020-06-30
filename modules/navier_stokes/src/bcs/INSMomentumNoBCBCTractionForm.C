@@ -1,18 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "INSMomentumNoBCBCTractionForm.h"
 #include "MooseMesh.h"
 
-template <>
+registerMooseObject("NavierStokesApp", INSMomentumNoBCBCTractionForm);
+
 InputParameters
-validParams<INSMomentumNoBCBCTractionForm>()
+INSMomentumNoBCBCTractionForm::validParams()
 {
-  InputParameters params = validParams<INSMomentumNoBCBCBase>();
+  InputParameters params = INSMomentumNoBCBCBase::validParams();
 
   params.addClassDescription("This class implements the 'No BC' boundary condition based on the "
                              "'traction' form of the viscous stress tensor.");
@@ -65,8 +68,9 @@ Real
 INSMomentumNoBCBCTractionForm::computeQpJacobian()
 {
   // The extra contribution comes from the "2" on the diagonal of the viscous stress tensor
-  return -_mu[_qp] * (_grad_phi[_j][_qp] * _normals[_qp] +
-                      _grad_phi[_j][_qp](_component) * _normals[_qp](_component)) *
+  return -_mu[_qp] *
+         (_grad_phi[_j][_qp] * _normals[_qp] +
+          _grad_phi[_j][_qp](_component) * _normals[_qp](_component)) *
          _test[_i][_qp];
 }
 

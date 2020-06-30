@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 //  van-Genuchten gas effective saturation as a function of (Pwater, Pgas), and its derivs wrt to
 //  that pressure
 //
 #include "RichardsSeff2gasVG.h"
 
-template <>
+registerMooseObject("RichardsApp", RichardsSeff2gasVG);
+
 InputParameters
-validParams<RichardsSeff2gasVG>()
+RichardsSeff2gasVG::validParams()
 {
-  InputParameters params = validParams<RichardsSeff>();
+  InputParameters params = RichardsSeff::validParams();
   params.addRequiredRangeCheckedParam<Real>("al",
                                             "al > 0",
                                             "van-Genuchten alpha parameter.  Must "

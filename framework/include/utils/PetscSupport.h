@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef PETSCSUPPORT_H
-#define PETSCSUPPORT_H
+#pragma once
 
 #include "libmesh/libmesh.h" // Real, LIBMESH_HAVE_PETSC
 
@@ -22,8 +16,11 @@
 // MOOSE includes
 #include "MultiMooseEnum.h"
 
-// libMesh includes
 #include "libmesh/petsc_macro.h"
+#include "libmesh/linear_solver.h"
+#include "libmesh/petsc_linear_solver.h"
+
+#include <petscksp.h>
 
 // Forward declarations
 class FEProblemBase;
@@ -63,6 +60,23 @@ public:
 void petscSetOptions(FEProblemBase & problem);
 
 /**
+ * Set the default options for a KSP
+ */
+void petscSetKSPDefaults(FEProblemBase & problem, KSP ksp);
+
+/**
+ * Set the defaults for a libMesh LinearSolver
+ *
+ * Used in explicit solves
+ */
+template <typename T>
+void
+setLinearSolverDefaults(FEProblemBase & problem, LinearSolver<T> & linear_solver)
+{
+  petscSetKSPDefaults(problem, libMesh::cast_ref<PetscLinearSolver<T> &>(linear_solver).ksp());
+}
+
+/**
  * Sets the default options for PETSc
  */
 void petscSetDefaults(FEProblemBase & problem);
@@ -72,7 +86,7 @@ void petscSetupDM(NonlinearSystemBase & nl);
 PetscErrorCode petscSetupOutput(CommandLine * cmd_line);
 
 /**
- * Helper function for outputing the norm values with/without color
+ * Helper function for outputting the norm values with/without color
  */
 void outputNorm(libMesh::Real old_norm, libMesh::Real norm, bool use_color = false);
 
@@ -85,6 +99,11 @@ PetscErrorCode petscLinearMonitor(KSP /*ksp*/, PetscInt its, PetscReal rnorm, vo
  * Stores the PETSc options supplied from the InputParameters with MOOSE
  */
 void storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params);
+
+/**
+ * Returns the valid petsc line search options as a set of strings
+ */
+std::set<std::string> getPetscValidLineSearches();
 
 /**
  * Returns the PETSc options that are common between Executioners and Preconditioners
@@ -100,6 +119,9 @@ MultiMooseEnum getCommonPetscFlags();
 
 /// A helper function to produce a MultiMooseEnum with commonly used PETSc iname options (keys in key-value pairs)
 MultiMooseEnum getCommonPetscKeys();
+
+/// check if SNES type is variational inequalities (VI) solver
+bool isSNESVI(FEProblemBase & fe_problem);
 
 /**
  * A wrapper function for dealing with different versions of
@@ -122,9 +144,13 @@ void colorAdjacencyMatrix(PetscScalar * adjacency_matrix,
                           unsigned int colors,
                           std::vector<unsigned int> & vertex_colors,
                           const char * coloring_algorithm);
+
+#if PETSC_VERSION_LESS_THAN(3, 4, 0)
+#define SNESGETLINESEARCH SNESGetSNESLineSearch
+#else
+#define SNESGETLINESEARCH SNESGetLineSearch
+#endif
 }
 }
 
 #endif // LIBMESH_HAVE_PETSC
-
-#endif // PETSCSUPPORT_H

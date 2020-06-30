@@ -1,18 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CappedWeakInclinedPlaneStressUpdate.h"
 #include "RotationMatrix.h" // for rotVecToZ
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", CappedWeakInclinedPlaneStressUpdate);
+
 InputParameters
-validParams<CappedWeakInclinedPlaneStressUpdate>()
+CappedWeakInclinedPlaneStressUpdate::validParams()
 {
-  InputParameters params = validParams<CappedWeakPlaneStressUpdate>();
+  InputParameters params = CappedWeakPlaneStressUpdate::validParams();
   params.addClassDescription("Capped weak inclined plane plasticity stress calculator");
   params.addRequiredParam<RealVectorValue>("normal_vector", "The normal vector to the weak plane");
   return params;
@@ -59,9 +63,9 @@ CappedWeakInclinedPlaneStressUpdate::finalizeReturnProcess(const RankTwoTensor &
 }
 
 void
-CappedWeakInclinedPlaneStressUpdate::initialiseReturnProcess()
+CappedWeakInclinedPlaneStressUpdate::initializeReturnProcess()
 {
-  CappedWeakPlaneStressUpdate::initialiseReturnProcess();
+  CappedWeakPlaneStressUpdate::initializeReturnProcess();
   if (_perform_finite_strain_rotations)
   {
     _rot_n_to_z = RotationMatrix::rotVecToZ(_n[_qp]);

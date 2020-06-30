@@ -1,20 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSMULTIPHASECONCENTRATION_H
-#define KKSMULTIPHASECONCENTRATION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#include "Kernel.h"
+#pragma once
+
+#include "KernelValue.h"
+#include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class KKSMultiPhaseConcentration;
-
-template <>
-InputParameters validParams<KKSMultiPhaseConcentration>();
 
 /**
  * Enforce sum of phase concentrations to be the real concentration.
@@ -29,20 +28,24 @@ InputParameters validParams<KKSMultiPhaseConcentration>();
  *
  * \see KKSPhaseChemicalPotential
  */
-class KKSMultiPhaseConcentration : public DerivativeMaterialInterface<Kernel>
+class KKSMultiPhaseConcentration
+  : public DerivativeMaterialInterface<JvarMapKernelInterface<KernelValue>>
 {
 public:
+  static InputParameters validParams();
+
   KKSMultiPhaseConcentration(const InputParameters & parameters);
 
 protected:
-  virtual Real computeQpResidual();
-  virtual Real computeQpJacobian();
+  virtual Real precomputeQpResidual();
+  virtual Real precomputeQpJacobian();
   virtual Real computeQpOffDiagJacobian(unsigned int jvar);
 
 private:
   const unsigned int _num_j;
-  std::vector<const VariableValue *> _cjs;
-  std::vector<unsigned int> _cjs_var;
+  std::vector<const VariableValue *> _cj;
+  const JvarMap & _cj_map;
+
   /// Position of the nonlinear variable in the list of cj's
   int _k;
 
@@ -55,10 +58,8 @@ private:
 
   /// Order parameters for each phase \f$ \eta_j \f$
   std::vector<VariableName> _eta_names;
-  std::vector<unsigned int> _eta_vars;
+  const JvarMap & _eta_map;
 
   /// Derivative of the switching function \f$ \frac d{d\eta} h(\eta) \f$
   std::vector<std::vector<const MaterialProperty<Real> *>> _prop_dhjdetai;
 };
-
-#endif // KKSMULTIPHASECONCENTRATION_H

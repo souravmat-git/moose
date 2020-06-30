@@ -1,17 +1,25 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "RankTwoAux.h"
 #include "RankTwoScalarTools.h"
 
-template <>
+#include "metaphysicl/raw_type.h"
+
+registerMooseObject("TensorMechanicsApp", RankTwoAux);
+registerMooseObject("TensorMechanicsApp", ADRankTwoAux);
+
+template <bool is_ad>
 InputParameters
-validParams<RankTwoAux>()
+RankTwoAuxTempl<is_ad>::validParams()
 {
-  InputParameters params = validParams<AuxKernel>();
+  InputParameters params = NodalPatchRecovery::validParams();
   params.addClassDescription("Access a component of a RankTwoTensor");
   params.addRequiredParam<MaterialPropertyName>("rank_two_tensor",
                                                 "The rank two material tensor name");
@@ -28,9 +36,10 @@ validParams<RankTwoAux>()
   return params;
 }
 
-RankTwoAux::RankTwoAux(const InputParameters & parameters)
-  : AuxKernel(parameters),
-    _tensor(getMaterialProperty<RankTwoTensor>("rank_two_tensor")),
+template <bool is_ad>
+RankTwoAuxTempl<is_ad>::RankTwoAuxTempl(const InputParameters & parameters)
+  : NodalPatchRecovery(parameters),
+    _tensor(getGenericMaterialProperty<RankTwoTensor, is_ad>("rank_two_tensor")),
     _i(getParam<unsigned int>("index_i")),
     _j(getParam<unsigned int>("index_j")),
     _has_selected_qp(isParamValid("selected_qp")),
@@ -38,8 +47,9 @@ RankTwoAux::RankTwoAux(const InputParameters & parameters)
 {
 }
 
+template <bool is_ad>
 Real
-RankTwoAux::computeValue()
+RankTwoAuxTempl<is_ad>::computeValue()
 {
   unsigned int qp = _qp;
   if (_has_selected_qp)
@@ -56,5 +66,8 @@ RankTwoAux::computeValue()
     qp = _selected_qp;
   }
 
-  return RankTwoScalarTools::component(_tensor[qp], _i, _j);
+  return RankTwoScalarTools::component(MetaPhysicL::raw_value(_tensor[qp]), _i, _j);
 }
+
+template class RankTwoAuxTempl<false>;
+template class RankTwoAuxTempl<true>;

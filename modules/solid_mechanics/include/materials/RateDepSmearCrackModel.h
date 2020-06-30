@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RATEDEPSMEARCRACKMODEL_H
-#define RATEDEPSMEARCRACKMODEL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ConstitutiveModel.h"
 #include "SymmElasticityTensor.h"
@@ -17,11 +19,6 @@
 extern "C" void FORTRAN_CALL(dgetri)(...); // matrix inversion routine from LAPACK
 #endif
 
-class RateDepSmearCrackModel;
-
-template <>
-InputParameters validParams<RateDepSmearCrackModel>();
-
 /**
  * RateDepSmearCrackModel is the base class for rate dependent continuum damage model.
  * The model is local and hence mesh sensitive.
@@ -30,6 +27,8 @@ InputParameters validParams<RateDepSmearCrackModel>();
 class RateDepSmearCrackModel : public ConstitutiveModel
 {
 public:
+  static InputParameters validParams();
+
   RateDepSmearCrackModel(const InputParameters & parameters);
 
   virtual ~RateDepSmearCrackModel();
@@ -123,5 +122,3 @@ protected:
 
 private:
 };
-
-#endif // RATEDEPSMEARCRACKMODEL

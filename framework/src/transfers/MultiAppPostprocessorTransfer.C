@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiAppPostprocessorTransfer.h"
 
@@ -23,11 +18,16 @@
 #include "libmesh/meshfree_interpolation.h"
 #include "libmesh/system.h"
 
-template <>
+registerMooseObject("MooseApp", MultiAppPostprocessorTransfer);
+
+defineLegacyParams(MultiAppPostprocessorTransfer);
+
 InputParameters
-validParams<MultiAppPostprocessorTransfer>()
+MultiAppPostprocessorTransfer::validParams()
 {
-  InputParameters params = validParams<MultiAppTransfer>();
+  InputParameters params = MultiAppTransfer::validParams();
+  params.addClassDescription(
+      "Transfers postprocessor data between the master application and sub-application(s).");
   params.addRequiredParam<PostprocessorName>(
       "from_postprocessor",
       "The name of the Postprocessor in the Master to transfer the value from.");
@@ -49,7 +49,10 @@ MultiAppPostprocessorTransfer::MultiAppPostprocessorTransfer(const InputParamete
     _to_pp_name(getParam<PostprocessorName>("to_postprocessor")),
     _reduction_type(getParam<MooseEnum>("reduction_type"))
 {
-  if (_direction == FROM_MULTIAPP)
+  if (_directions.size() != 1)
+    paramError("direction", "This transfer is only unidirectional");
+
+  if (_current_direction == FROM_MULTIAPP)
     if (!_reduction_type.isValid())
       mooseError("In MultiAppPostprocessorTransfer, must specify 'reduction_type' if direction = "
                  "from_multiapp");
@@ -60,7 +63,7 @@ MultiAppPostprocessorTransfer::execute()
 {
   _console << "Beginning PostprocessorTransfer " << name() << std::endl;
 
-  switch (_direction)
+  switch (_current_direction)
   {
     case TO_MULTIAPP:
     {

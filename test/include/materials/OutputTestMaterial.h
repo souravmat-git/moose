@@ -1,32 +1,19 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef OUTPUTTESTMATERIAL_H
-#define OUTPUTTESTMATERIAL_H
+#pragma once
 
 // MOOSE includes
 #include "Material.h"
+#include "RankTwoTensorForward.h"
+#include "RankFourTensorForward.h"
 
-// Forward declarations
-class OutputTestMaterial;
-
-template <>
-InputParameters validParams<OutputTestMaterial>();
-
-/**
- *
- */
 class OutputTestMaterial : public Material
 {
 public:
@@ -34,6 +21,8 @@ public:
    * Class constructor
    * @param prop_name
    */
+  static InputParameters validParams();
+
   OutputTestMaterial(const InputParameters & parameters);
 
   // Used for testing if hidden compiler warning shows up
@@ -50,8 +39,8 @@ protected:
   MaterialProperty<Real> & _real_property;
   MaterialProperty<RealVectorValue> & _vector_property;
   MaterialProperty<RealTensorValue> & _tensor_property;
+  MaterialProperty<RankTwoTensor> & _ranktwotensor_property;
+  MaterialProperty<RankFourTensor> & _rankfourtensor_property;
   Real _factor;
   const VariableValue & _variable;
 };
-
-#endif // OUTPUTTESTMATERIAL_H

@@ -1,17 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LinearElasticTruss.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", LinearElasticTruss);
+
 InputParameters
-validParams<LinearElasticTruss>()
+LinearElasticTruss::validParams()
 {
-  InputParameters params = validParams<TrussMaterial>();
+  InputParameters params = TrussMaterial::validParams();
+  params.addClassDescription("Computes the linear elastic strain for a truss element");
   params.addParam<Real>("thermal_expansion_coeff", 0.0, "Thermal expansion coefficient in 1/K");
   params.addParam<Real>("temperature_ref", 273, "Reference temperature for thermal expansion in K");
   params.addCoupledVar("temperature", 273, "Temperature in Kelvin");

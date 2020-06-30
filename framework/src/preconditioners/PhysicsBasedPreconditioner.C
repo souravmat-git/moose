@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PhysicsBasedPreconditioner.h"
 
@@ -18,11 +13,10 @@
 #include "ComputeJacobianBlocksThread.h"
 #include "FEProblem.h"
 #include "MooseEnum.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 #include "NonlinearSystem.h"
 #include "PetscSupport.h"
 
-// libMesh Includes
 #include "libmesh/libmesh_common.h"
 #include "libmesh/equation_systems.h"
 #include "libmesh/nonlinear_implicit_system.h"
@@ -34,11 +28,14 @@
 #include "libmesh/string_to_enum.h"
 #include "libmesh/coupling_matrix.h"
 
-template <>
+registerMooseObjectAliased("MooseApp", PhysicsBasedPreconditioner, "PBP");
+
+defineLegacyParams(PhysicsBasedPreconditioner);
+
 InputParameters
-validParams<PhysicsBasedPreconditioner>()
+PhysicsBasedPreconditioner::validParams()
 {
-  InputParameters params = validParams<MoosePreconditioner>();
+  InputParameters params = MoosePreconditioner::validParams();
 
   params.addRequiredParam<std::vector<std::string>>(
       "solve_order",
@@ -62,7 +59,9 @@ validParams<PhysicsBasedPreconditioner>()
 PhysicsBasedPreconditioner::PhysicsBasedPreconditioner(const InputParameters & params)
   : MoosePreconditioner(params),
     Preconditioner<Number>(MoosePreconditioner::_communicator),
-    _nl(_fe_problem.getNonlinearSystemBase())
+    _nl(_fe_problem.getNonlinearSystemBase()),
+    _init_timer(registerTimedSection("init", 2)),
+    _apply_timer(registerTimedSection("apply", 1))
 {
   unsigned int num_systems = _nl.system().n_vars();
   _systems.resize(num_systems);
@@ -138,20 +137,13 @@ PhysicsBasedPreconditioner::PhysicsBasedPreconditioner(const InputParameters & p
   for (unsigned int var = 0; var < n_vars; var++)
     addSystem(var, off_diag[var], _pre_type[var]);
 
-  // We don't want to be computing the big Jacobian!
-  _nl.nonlinearSolver()->jacobian = NULL;
-  _nl.nonlinearSolver()->attach_preconditioner(this);
+  _nl.attachPreconditioner(this);
 
-  _fe_problem.solverParams()._type = Moose::ST_JFNK;
+  if (_fe_problem.solverParams()._type != Moose::ST_JFNK)
+    mooseError("PBP must be used with JFNK solve type");
 }
 
-PhysicsBasedPreconditioner::~PhysicsBasedPreconditioner()
-{
-  this->clear();
-
-  for (auto & pc : _preconditioners)
-    delete pc;
-}
+PhysicsBasedPreconditioner::~PhysicsBasedPreconditioner() { this->clear(); }
 
 void
 PhysicsBasedPreconditioner::addSystem(unsigned int var,
@@ -184,7 +176,7 @@ PhysicsBasedPreconditioner::addSystem(unsigned int var,
 void
 PhysicsBasedPreconditioner::init()
 {
-  Moose::perf_log.push("init()", "PhysicsBasedPreconditioner");
+  TIME_SECTION(_init_timer);
 
   // Tell libMesh that this is initialized!
   _is_initialized = true;
@@ -206,18 +198,16 @@ PhysicsBasedPreconditioner::init()
 
     if (!_preconditioners[system_var])
       _preconditioners[system_var] =
-          Preconditioner<Number>::build(MoosePreconditioner::_communicator);
+          Preconditioner<Number>::build_preconditioner(MoosePreconditioner::_communicator);
 
     // we have to explicitly set the matrix in the preconditioner, because h-adaptivity could have
     // changed it and we have to work with the current one
-    Preconditioner<Number> * preconditioner = _preconditioners[system_var];
+    Preconditioner<Number> * preconditioner = _preconditioners[system_var].get();
     preconditioner->set_matrix(*u_system.matrix);
     preconditioner->set_type(_pre_type[system_var]);
 
     preconditioner->init();
   }
-
-  Moose::perf_log.pop("init()", "PhysicsBasedPreconditioner");
 }
 
 void
@@ -258,7 +248,7 @@ PhysicsBasedPreconditioner::setup()
 void
 PhysicsBasedPreconditioner::apply(const NumericVector<Number> & x, NumericVector<Number> & y)
 {
-  Moose::perf_log.push("apply()", "PhysicsBasedPreconditioner");
+  TIME_SECTION(_apply_timer);
 
   const unsigned int num_systems = _systems.size();
 
@@ -299,6 +289,11 @@ PhysicsBasedPreconditioner::apply(const NumericVector<Number> & x, NumericVector
       rhs.close();
     }
 
+    // If there is no off_diag, then u_system.rhs will not be closed.
+    // Thus, we need to close it right here
+    if (!_off_diag[system_var].size())
+      u_system.rhs->close();
+
     // Apply the preconditioner to the small system
     _preconditioners[system_var]->apply(*u_system.rhs, *u_system.solution);
 
@@ -316,8 +311,6 @@ PhysicsBasedPreconditioner::apply(const NumericVector<Number> & x, NumericVector
   }
 
   y.close();
-
-  Moose::perf_log.pop("apply()", "PhysicsBasedPreconditioner");
 }
 
 void

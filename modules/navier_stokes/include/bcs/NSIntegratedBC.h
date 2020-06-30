@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSINTEGRATEDBC_H
-#define NSINTEGRATEDBC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "IntegratedBC.h"
 
 // Forward Declarations
-class NSIntegratedBC;
 class IdealGasFluidProperties;
-
-template <>
-InputParameters validParams<NSIntegratedBC>();
 
 /**
  * This class couples together all the variables
@@ -27,6 +25,8 @@ InputParameters validParams<NSIntegratedBC>();
 class NSIntegratedBC : public IntegratedBC
 {
 public:
+  static InputParameters validParams();
+
   NSIntegratedBC(const InputParameters & parameters);
 
 protected:
@@ -64,5 +64,3 @@ protected:
   bool isNSVariable(unsigned var);
   unsigned mapVarNumber(unsigned var);
 };
-
-#endif // NSINTEGRATEDBC_H

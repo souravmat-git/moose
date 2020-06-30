@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "SplitCHParsed.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", SplitCHParsed);
+
 InputParameters
-validParams<SplitCHParsed>()
+SplitCHParsed::validParams()
 {
-  InputParameters params = validParams<SplitCHCRes>();
+  InputParameters params = SplitCHCRes::validParams();
   params.addClassDescription(
       "Split formulation Cahn-Hilliard Kernel that uses a DerivativeMaterial Free Energy");
   params.addRequiredParam<MaterialPropertyName>(
@@ -21,17 +25,13 @@ validParams<SplitCHParsed>()
 
 SplitCHParsed::SplitCHParsed(const InputParameters & parameters)
   : DerivativeMaterialInterface<JvarMapKernelInterface<SplitCHCRes>>(parameters),
-    _nvar(_coupled_moose_vars.size()),
     _dFdc(getMaterialPropertyDerivative<Real>("f_name", _var.name())),
-    _d2Fdc2(getMaterialPropertyDerivative<Real>("f_name", _var.name(), _var.name()))
+    _d2Fdc2(getMaterialPropertyDerivative<Real>("f_name", _var.name(), _var.name())),
+    _d2Fdcdarg(_n_args)
 {
-  // reserve space for derivatives
-  _d2Fdcdarg.resize(_nvar);
-
   // Iterate over all coupled variables
-  for (unsigned int i = 0; i < _nvar; ++i)
-    _d2Fdcdarg[i] =
-        &getMaterialPropertyDerivative<Real>("f_name", _var.name(), _coupled_moose_vars[i]->name());
+  for (unsigned int i = 0; i < _n_args; ++i)
+    _d2Fdcdarg[i] = &getMaterialPropertyDerivative<Real>("f_name", _var.name(), i);
 }
 
 void

@@ -1,338 +1,218 @@
-#pylint: disable=missing-docstring
-####################################################################################################
-#                                    DO NOT MODIFY THIS HEADER                                     #
-#                   MOOSE - Multiphysics Object Oriented Simulation Environment                    #
-#                                                                                                  #
-#                              (c) 2010 Battelle Energy Alliance, LLC                              #
-#                                       ALL RIGHTS RESERVED                                        #
-#                                                                                                  #
-#                            Prepared by Battelle Energy Alliance, LLC                             #
-#                               Under Contract No. DE-AC07-05ID14517                               #
-#                               With the U. S. Department of Energy                                #
-#                                                                                                  #
-#                               See COPYRIGHT for full restrictions                                #
-####################################################################################################
-#pylint: enable=missing-docstring
-
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
 import os
-import re
-import collections
-
 import logging
-
-from markdown.inlinepatterns import Pattern
-from markdown.blockprocessors import BlockProcessor
-from markdown.util import etree
-
-from MooseMarkdownExtension import MooseMarkdownExtension
-from MooseMarkdownCommon import MooseMarkdownCommon
+from ..common import exceptions
+from ..base import components, Extension, LatexRenderer
+from ..tree import tokens, html, latex
+from . import command, floats
 
 LOG = logging.getLogger(__name__)
 
-class MediaExtension(MooseMarkdownExtension):
-    """
-    Extension for adding media files via markdown.
-    """
-    @staticmethod
-    def defaultConfig():
-        config = MooseMarkdownExtension.defaultConfig()
-        return config
+def make_extension(**kwargs):
+    return MediaExtension(**kwargs)
 
-    def extendMarkdown(self, md, md_globals):
-        """
-        Adds Bibtex support for MOOSE flavored markdown.
-        """
-        md.registerExtension(self)
-        config = self.getConfigs()
-        md.inlinePatterns.add('moose_image',
-                              ImagePattern(markdown_instance=md, **config),
-                              '_begin')
-        md.inlinePatterns.add('moose_video',
-                              VideoPattern(markdown_instance=md, **config),
-                              '<moose_image')
-        md.parser.blockprocessors.add('moose_slider',
-                                      SliderBlockProcessor(md.parser, **config),
-                                      '_begin')
+Image = tokens.newToken('Image', src='', tex='')
+Video = tokens.newToken('Video', src='', tex='',
+                        controls=True, autoplay=True, loop=True, tstart=None, tstop=None)
 
-def makeExtension(*args, **kwargs): #pylint: disable=invalid-name
-    """
-    Create the MediaExtension.
-    """
-    return MediaExtension(*args, **kwargs)
+class MediaExtensionBase(command.CommandExtension):
 
-class MediaPatternBase(MooseMarkdownCommon, Pattern):
-    """
-    Markdown extension for handling images.
+    def latexImage(self, parent, token, page, src):
 
-    Usage:
-     !media image_file.png|jpg|etc attribute=setting
-    """
-    @staticmethod
-    def defaultSettings():
-        settings = MooseMarkdownCommon.defaultSettings()
-        settings['caption'] = (None, "The caption text for the media element.")
-        settings['card'] = (False, "Wrap the content in a materialize card.")
-        settings['counter'] = ('figure', "The counter group that this media item belongs. This is "
-                                         "used by float extension to provide numbered references. "
-                                         "Set this to None to avoid counting.")
-        return settings
+        args = []
+        style = latex.parse_style(token)
+        width = style.get('width', None)
+        if width:
+            if width.endswith('%'):
+                width = '{}\\textwidth'.format(int(width[:-1])/100.)
+            args.append(latex.Bracket(string='width={}'.format(width), escape=False))
 
-    def __init__(self, pattern, markdown_instance=None, **kwargs):
-        MooseMarkdownCommon.__init__(self, **kwargs)
-        Pattern.__init__(self, pattern, markdown_instance)
-        self._classname = kwargs.pop('classname', 'media')
+        if style.get('text-align', None) == 'center':
+            env = latex.Environment(parent, 'center')
+        else:
+            env = parent
 
-    def handleMatch(self, match):
-        """
-        Create the element containing the image, this is a separate function to allow for other
-        objects.
-
-        Inputs:
-          rel_filename[str]: The path to the image relative to the git repository.
-          settings[dict]: The settings extracted via getSettings() method.
-        """
-
-        # Extract the filename and settings from regex
-        filename = match.group('filename')
-        settings = self.getSettings(match.group('settings'))
-
-        # Create content
-        div = self.createFloatElement(settings)
-        media_element = self.createMediaElement(filename, settings)
-        div.insert(0, media_element)
-
-        if settings.get('card', None):
-            self._cardWrapper(div)
-
-        return div
-
-    @staticmethod
-    def _cardWrapper(div):
-        """
-        Helper for optionally wrapping a materialize 'card'
-        """
-        img = div.find('img')
-        if img is not None:
-            div.remove(img)
-        cap = div.find('p')
-        if cap is not None:
-            div.remove(cap)
-
-        card = etree.SubElement(div, 'div')
-        card.set('class', 'card')
-        card.set('style', 'margin-left:auto;margin-right:auto;')
-
-        img_card = etree.SubElement(card, 'div')
-        img_card.set('class', 'card-image')
-        img_card.append(img)
-
-        if cap:
-            cap_card = etree.SubElement(card, 'div')
-            cap_card.set('class', 'card-content')
-            cap_card.append(cap)
-
-    def createMediaElement(self, filename, settings): #pylint: disable=unused-argument
-        """
-        Return the actual media content.
-        """
-        raise NotImplementedError('The createMediaElement method must be overridden.')
-
-class ImagePattern(MediaPatternBase):
-    """
-    Find !media /path/to/file attribute=setting
-    """
-    RE = r'!media\s+(?P<filename>.*?)(?:$|\s+)(?P<settings>.*)'
-
-    @staticmethod
-    def defaultSettings():
-        settings = MediaPatternBase.defaultSettings()
-        settings['materialboxed'] = (True, "Create Materialize boxed content.")
-        return settings
-
-    def __init__(self, markdown_instance, **kwargs):
-        kwargs.setdefault('classname', 'image')
-        super(ImagePattern, self).__init__(self.RE, markdown_instance, **kwargs)
-
-    def createMediaElement(self, filename, settings):
-        """
-        Return the img tag.
-        """
-        img = etree.Element('img')
-        img.set('src', filename)
-        img.set('width', '100%')
-        if settings['materialboxed']:
-            img.set('class', 'materialboxed')
-            if settings['caption']:
-                img.set('data-caption', settings['caption'])
-
+        node = self.translator.findPage(src)
+        fname = os.path.join(self.translator.destination, node.local)
+        img = latex.Command(env, 'includegraphics', string=fname, args=args, escape=False)
         return img
 
-class VideoPattern(MediaPatternBase):
+class MediaExtension(MediaExtensionBase):
     """
-    Find !media /path/to/file attribute=setting
+    Extension for including images and movies, using the !media command.
+    """
 
-    Creates a <video> tag for webm, ogg, or mp4 extensions.
-    """
-    RE = r'^!media\s+(?P<filename>.*\.(webm|ogg|mp4))(?:$|\s+)(?P<settings>.*)'
+    @staticmethod
+    def defaultConfig():
+        config = MediaExtensionBase.defaultConfig()
+        config['prefix'] = ('Figure', "The caption prefix (e.g., Fig.).")
+        return config
+
+    def initPage(self, page):
+        page[self.name] = dict(prefix=self.get('prefix'))
+
+    def preRead(self, page):
+        page['prefix'] = page[self.name]['prefix']
+
+    def extend(self, reader, renderer):
+        self.requires(command, floats)
+
+        self.addCommand(reader, ImageCommand())
+        self.addCommand(reader, VideoCommand())
+
+        renderer.add('Image', RenderImage())
+        renderer.add('Video', RenderVideo())
+
+        if isinstance(renderer, LatexRenderer):
+            renderer.addPackage('graphicx')
+            renderer.addPackage('xcolor')
+
+class ImageCommand(command.CommandComponent):
+    COMMAND = 'media'
+    SUBCOMMAND = ('jpg', 'jpeg', 'gif', 'png', 'svg', None)
 
     @staticmethod
     def defaultSettings():
-        settings = MediaPatternBase.defaultSettings()
+        settings = command.CommandComponent.defaultSettings()
+        settings['latex_src'] = (None, "Image to utilize when rendering with LaTeX")
+        settings.update(floats.caption_settings())
+        return settings
+
+    def createToken(self, parent, info, page):
+
+        flt = floats.create_float(parent, self.extension, self.reader, page, self.settings,
+                                  bottom=True, **self.attributes)
+        img = Image(flt, src=info['subcommand'], tex=self.settings['latex_src'])
+        if flt is parent:
+            img.attributes.update(**self.attributes)
+        return parent
+
+class VideoCommand(command.CommandComponent):
+    COMMAND = 'media'
+    SUBCOMMAND = ('ogv', 'webm', 'mp4', 'm4v')
+
+    @staticmethod
+    def defaultSettings():
+        settings = command.CommandComponent.defaultSettings()
+        settings['latex_src'] = (None, "Image to utilize when rendering with LaTeX")
         settings['controls'] = (True, "Display the video player controls.")
         settings['loop'] = (False, "Automatically loop the video.")
         settings['autoplay'] = (False, "Automatically start playing the video.")
-        settings['video-width'] = ('auto', "The width of the video player.")
-        settings['video-height'] = ('auto', "The height of the video player.")
-        settings['caption'] = (None, "The text for the video caption.")
-        settings.pop('card')
+        settings['tstart'] = (None, "Time (sec) to start video.")
+        settings['tstop'] = (None, "Time (sec) to stop video.")
+        settings.update(floats.caption_settings())
         return settings
 
-    def __init__(self, markdown_instance=None, **kwargs):
-        kwargs.setdefault('classname', 'video')
-        super(VideoPattern, self).__init__(self.RE, markdown_instance, **kwargs)
+    def createToken(self, parent, info, page):
 
-    def createMediaElement(self, filename, settings):
-        """
-        Creates a video element.
-        """
-        _, ext = os.path.splitext(filename)
+        flt = floats.create_float(parent, self.extension, self.reader, page, self.settings,
+                                  bottom=True, img=True)
+        vid = Video(flt,
+                    src=info['subcommand'],
+                    tex=self.settings['latex_src'],
+                    controls=self.settings['controls'],
+                    loop=self.settings['loop'],
+                    autoplay=self.settings['autoplay'],
+                    tstart=self.settings['tstart'],
+                    tstop=self.settings['tstop'])
 
-        # HTML5 video tag can accept non-paired attributes, which is not supported by the etree
-        # markdown util. However, the video tag does support "control=control" for legacy purposes,
-        # so that is what is done here.
-        v_opts = dict()
-        v_opts['controls'] = settings.pop('controls')
-        v_opts['loop'] = settings.pop('loop')
-        v_opts['autoplay'] = settings.pop('autoplay')
-        v_opts['width'] = settings.pop('video-width')
-        v_opts['height'] = settings.pop('video-height')
+        if flt is parent:
+            vid.attributes.update(**self.attributes)
 
-        video = etree.Element('video')
-        for key, value in v_opts.iteritems():
-            if value:
-                if isinstance(value, bool):
-                    video.set(key, key)
-                else:
-                    video.set(key, value)
+        return parent
 
-        src = etree.SubElement(video, 'source')
-        src.set('type', 'video/{}'.format(ext[1:]))
-        src.set('src', filename)
-        return video
+class RenderImage(components.RenderComponent):
 
-class SliderBlockProcessor(BlockProcessor, MooseMarkdownCommon):
-    """
-    Markdown extension for showing a Materialize carousel of images.
-    Markdown syntax is:
+    def createHTML(self, parent, token, page):
 
-     !slider <options>
-       images/intro.png <image_options> caption=Some caption <caption_options>
-       images/more*.png
+        # Determine the location of the media
+        src = token['src']
+        if not src.startswith('http'):
+            node = self.translator.findPage(src)
+            src = str(node.relativeSource(page))
 
-    Where <options> are key=value pairs.
-    Valid options are standard CSS options (images are set as background images).
+        return html.Tag(parent, 'img', token, src=src)
 
-    It is assumed image names will have the same filepath as on the webserver.
-    """
+    def createMaterialize(self, parent, token, page):
+        tag = self.createHTML(parent, token, page)
+        tag.addClass('materialboxed', 'moose-image')
+        return tag
 
-    RE = re.compile(r'^!media(?P<settings>.*)\n(\s+.*\..*)+', flags=re.MULTILINE)
+    def createLatex(self, parent, token, page):
+        src = token['tex'] or token['src']
 
-    @staticmethod
-    def defaultSettings():
-        settings = MooseMarkdownCommon.defaultSettings()
-        settings['caption'] = (None, "The text for the slider caption.")
-        settings['counter'] = ('figure', "The counter group that this media item belongs. This is "
-                                         "used by float extension to provide numbered references.")
-        return settings
+        _, ext = os.path.splitext(src)
+        if src.startswith('http') and (ext not in ('.jpg', '.png', '.pdf')):
+            msg = "Online images and images with the '{}' extension are not supported. The image " \
+                  "should be downloaded and converted to a '.jpg', '.png', or '.pdf'. If the " \
+                  "online version is desired for the website, the 'latex_src' setting can be used."
+            raise exceptions.MooseDocsException(msg, ext)
+        elif src.startswith('http'):
+            msg = "Online images are not supported. The image should be downloaded. If the " \
+                  "online version is desired for the website, the 'latex_src' setting can be used."
+            raise exceptions.MooseDocsException(msg, ext)
+        elif ext not in ('.jpg', '.png', '.pdf'):
+            msg = "Images with the '{}' extension are not supported. The image " \
+                  "should be converted to a '.jpg', '.png', or '.pdf'."
+            raise exceptions.MooseDocsException(msg, ext)
 
-    ImageInfo = collections.namedtuple('ImageInfo', 'filename img_settings caption_settings')
+        self.extension.latexImage(parent, token, page, src)
+        return parent
 
-    def __init__(self, parser, **kwargs):
-        MooseMarkdownCommon.__init__(self, **kwargs)
-        BlockProcessor.__init__(self, parser)
+class RenderVideo(components.RenderComponent):
+    def createHTML(self, parent, token, page):
 
-    def parseFilenames(self, filenames_block):
-        """
-        Parse a set of lines with filenames, image options, and optional captions. Filenames can
-        contain wildcards and glob will be used to expand them. Any CSS styles after the filename
-        (but before caption if it exists) will be applied to the image (image is set as a background
-        in slider). CSS styles listed after the caption will be applied to it.
+        node = None
+        src = token['src']
+        if not src.startswith('http'):
+            node = self.translator.findPage(src)
+            src = str(node.relativeSource(page))
 
-        Expected input is similar to:
-          images/1.png caption=My caption color=blue
-          images/2.png background-color=gray caption= Another caption color=red
+        tstart = token['tstart']
+        tstop = token['tstop']
+        if tstart and tstop:
+            src += '#t={},{}'.format(tstart, tstop)
+        elif tstart:
+            src += '#t={}'.format(tstart)
+        elif tstop:
+            src += '#t=0,{}'.format(tstop)
 
-        Input:
-         filenames_block[str]: String block to parse
+        video = html.Tag(parent, 'video', token, src=src)
+        _, ext = os.path.splitext(src)
+        html.Tag(video, 'source', src=src, type_="video/{}".format(ext[1:]))
 
-        Return:
-         list of list of dicts. The list has an entry for each image (including
-         one for each expanded image from glob), each entry contains:
-         1. dict of "path" which is the filename path
-         2. dict of attributes to be applied to the image
-         3. dict of attributes to be applied to the caption
-         Each image will default to fit the slideshow window with white background
-         and no caption if no options are specified.
-        """
-        lines = filenames_block.split("\n")
-        files = []
-        regular_expression = re.compile(r'(.*?\s|.*?$)(.*?)(caption.*|$)')
-        for line in lines:
-            line = line.strip()
-            matches = regular_expression.search(line)
-            fname = matches.group(1).strip()
+        video['width'] = '100%'
+        if token['controls']:
+            video['controls'] = 'controls'
+        if token['autoplay']:
+            video['autoplay'] = 'autoplay'
+        if token['loop']:
+            video['loop'] = 'loop'
 
-            # Build separate dictionaries for the image and caption
-            img_settings = self.getSettings(matches.group(2).strip())
-            img_settings.setdefault('background-size', 'contain')
-            img_settings.setdefault('background-repeat', 'no-repeat')
-            img_settings.setdefault('background-color', 'white')
-            caption_settings = self.getSettings(matches.group(3).strip())
+    def createLatex(self, parent, token, page):
 
-            img_settings.pop('counter')
-            caption_settings.pop('counter')
+        src = token['tex']
+        _, ext = os.path.splitext(src)
+        if not src:
+            msg = "Videos ({}) are not supported with LaTeX output, the 'latex_src' setting " \
+                  "should be utilized to supply an image ('.jpg', '.png', or '.pdf')."
+            raise exceptions.MooseDocsException(msg, token['src'], ext)
+        elif ext not in ('.jpg', '.png', '.pdf'):
+            msg = "Images ({}) with the '{}' extension are not supported. The image " \
+                  "should be converted to a '.jpg', '.png', or '.pdf'."
+            raise exceptions.MooseDocsException(msg, src, ext)
 
-            files.append(SliderBlockProcessor.ImageInfo(fname, img_settings,
-                                                        caption_settings))
+        img = self.extension.latexImage(parent, token, page, src)
+        if token['src'].startswith('http'):
+            latex.String(img.parent, content='\\newline(', escape=False)
+            latex.Command(img.parent, 'url', string=token['src'])
+            latex.String(img.parent, content=')')
 
-        return files
-
-    def test(self, parent, block):
-        """
-        Test to see if we should process this block of markdown.
-        Inherited from BlockProcessor.
-        """
-        return self.RE.search(block)
-
-    def run(self, parent, blocks):
-        """
-        Called when it is determined that we can process this block.
-        This will convert the markdown into HTML
-        """
-        block = blocks.pop(0)
-        match = self.RE.search(block)
-        settings = self.getSettings(match.group('settings'))
-
-        div = self.createFloatElement(settings)
-        parent.append(div)
-
-        slider = etree.Element('div')
-        slider.set('class', 'slider')
-        div.insert(0, slider)
-
-        ul = etree.SubElement(slider, 'ul')
-        ul.set('class', 'slides')
-
-        for item in self.parseFilenames(block[match.end('settings')+1:]):
-            li = etree.SubElement(ul, 'li')
-            img = etree.SubElement(li, 'img')
-            img.set('src', item.filename)
-            self.applyElementSettings(img, item.img_settings, keys=item.img_settings.keys())
-
-            #Add the caption and its options if they exist
-            if len(item[2]) != 0:
-                caption = etree.SubElement(li, 'div')
-                caption.set('class', 'caption')
-                caption.text = item.caption_settings.pop('caption', '')
-                caption = self.applyElementSettings(caption, item.caption_settings,
-                                                    keys=item.caption_settings.keys())
+        return parent

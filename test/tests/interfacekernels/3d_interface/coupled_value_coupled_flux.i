@@ -1,28 +1,28 @@
 [Mesh]
-  type = GeneratedMesh
-  dim = 3
-  nx = 2
-  xmax = 2
-  ny = 2
-  ymax = 2
-  nz = 2
-  zmax = 2
-[]
-
-[MeshModifiers]
+  [gen]
+    type = GeneratedMeshGenerator
+    dim = 3
+    nx = 2
+    xmax = 2
+    ny = 2
+    ymax = 2
+    nz = 2
+    zmax = 2
+  []
   [./subdomain1]
-    type = SubdomainBoundingBox
+    input = gen
+    type = SubdomainBoundingBoxGenerator
     bottom_left = '0 0 0'
     top_right = '1 1 1'
     block_id = 1
   [../]
   [./break_boundary]
-    depends_on = subdomain1
-    type = BreakBoundaryOnSubdomain
+    input = subdomain1
+    type = BreakBoundaryOnSubdomainGenerator
   [../]
   [./interface]
-    type = SideSetsBetweenSubdomains
-    depends_on = break_boundary
+    type = SideSetsBetweenSubdomainsGenerator
+    input = break_boundary
     master_block = '0'
     paired_block = '1'
     new_boundary = 'master0_interface'
@@ -65,12 +65,11 @@
 
 [InterfaceKernels]
   [./interface]
-    type = InterfaceDiffusion
+    type = PenaltyInterfaceDiffusion
     variable = u
     neighbor_var = v
     boundary = master0_interface
-    D = 4
-    D_neighbor = 2
+    penalty = 1e6
   [../]
 []
 
@@ -84,12 +83,6 @@
     type = VacuumBC
     variable = v
     boundary = 'left_to_1 bottom_to_1 back_to_1'
-  [../]
-  [./middle]
-    type = MatchedValueBC
-    variable = v
-    boundary = 'master0_interface'
-    v = u
   [../]
 []
 

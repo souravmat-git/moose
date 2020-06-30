@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef CHECKPOINT_H
-#define CHECKPOINT_H
+#pragma once
 
 // MOOSE includes
 #include "FileOutput.h"
@@ -41,6 +35,9 @@ struct CheckpointFileNames
 
   /// Filename for restartable data filename
   std::string restart;
+
+  /// Filename for restartable data filename
+  std::set<std::string> restart_meta_data;
 };
 
 /**
@@ -49,6 +46,8 @@ struct CheckpointFileNames
 class Checkpoint : public FileOutput
 {
 public:
+  static InputParameters validParams();
+
   /**
    * Class constructor
    * @param parameters
@@ -64,7 +63,15 @@ public:
    * Retrieve the checkpoint output directory
    * @return String containing the checkpoint output directory
    */
-  std::string directory();
+  std::string directory() const;
+
+  /**
+   * Method to return the file suffix (ASCII or binary) for the Checkpoint format.
+   */
+  std::string getMeshFileSuffix(bool is_binary)
+  {
+    return is_binary ? BINARY_MESH_SUFFIX : ASCII_MESH_SUFFIX;
+  }
 
 protected:
   /**
@@ -82,29 +89,21 @@ private:
   /// Directory suffix
   const std::string _suffix;
 
-  /// True if outputing checkpoint files in binary format
+  /// True if outputting checkpoint files in binary format
   bool _binary;
 
   /// True if running with parallel mesh
   bool _parallel_mesh;
 
   /// Reference to the restartable data
-  const RestartableDatas & _restartable_data;
-
-  /// Reference to the recoverable data
-  std::set<std::string> & _recoverable_data;
-
-  /// Reference to the material property storage
-  const MaterialPropertyStorage & _material_property_storage;
-
-  /// Reference to the boundary material property storage
-  const MaterialPropertyStorage & _bnd_material_property_storage;
+  const RestartableDataMaps & _restartable_data;
 
   /// RestrableData input/output interface
   RestartableDataIO _restartable_data_io;
 
   /// Vector of checkpoint filename structures
   std::deque<CheckpointFileNames> _file_names;
-};
 
-#endif // CHECKPOINT_H
+  static constexpr auto ASCII_MESH_SUFFIX = "_mesh.cpa";
+  static constexpr auto BINARY_MESH_SUFFIX = "_mesh.cpr";
+};

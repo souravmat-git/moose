@@ -1,33 +1,33 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef DISPLACEMENTABOUTAXIS_H
-#define DISPLACEMENTABOUTAXIS_H
+#pragma once
 
-#include "PresetNodalBC.h"
+#include "DirichletBCBase.h"
 
 // MOOSE includes
 #include "ColumnMajorMatrix.h"
 
 // Forward Declarations
-class DisplacementAboutAxis;
 class Function;
 
-template <>
-InputParameters validParams<DisplacementAboutAxis>();
 void addDisplacementAboutAxisParams(InputParameters & params);
 
 /**
  * Implements a boundary condition that enforces rotational displacement around
  * an axis on a boundary.
  */
-class DisplacementAboutAxis : public PresetNodalBC
+class DisplacementAboutAxis : public DirichletBCBase
 {
 public:
+  static InputParameters validParams();
+
   DisplacementAboutAxis(const InputParameters & parameters);
 
 protected:
@@ -48,7 +48,7 @@ protected:
   void calculateTransformationMatrices();
 
   const int _component;
-  Function & _func;
+  const Function & _func;
   MooseEnum _angle_units;
   const Point _axis_origin;
   Point _axis_direction;
@@ -56,5 +56,3 @@ protected:
   ColumnMajorMatrix _transformation_matrix;
   ColumnMajorMatrix _transformation_matrix_inv;
 };
-
-#endif // DISPLACEMENTABOUTAXIS_H

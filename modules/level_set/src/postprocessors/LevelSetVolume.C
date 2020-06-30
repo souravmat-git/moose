@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LevelSetVolume.h"
 
-template <>
+registerMooseObject("LevelSetApp", LevelSetVolume);
+
 InputParameters
-validParams<LevelSetVolume>()
+LevelSetVolume::validParams()
 {
-  InputParameters params = validParams<ElementVariablePostprocessor>();
+  InputParameters params = ElementVariablePostprocessor::validParams();
   params.addClassDescription(
       "Compute the area or volume of the region inside or outside of a level set contour.");
   params.addParam<Real>(

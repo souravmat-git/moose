@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWADVECTIVEFLUX_H
-#define POROUSFLOWADVECTIVEFLUX_H
+#pragma once
 
 #include "PorousFlowDarcyBase.h"
-
-class PorousFlowAdvectiveFlux;
-
-template <>
-InputParameters validParams<PorousFlowAdvectiveFlux>();
 
 /**
  * Convective flux of component k in fluid phase alpha.
@@ -23,6 +19,8 @@ InputParameters validParams<PorousFlowAdvectiveFlux>();
 class PorousFlowAdvectiveFlux : public PorousFlowDarcyBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowAdvectiveFlux(const InputParameters & parameters);
 
 protected:
@@ -44,5 +42,3 @@ protected:
   /// Index of the fluid component that this kernel acts on
   const unsigned int _fluid_component;
 };
-
-#endif // POROUSFLOWADVECTIVEFLUX_H

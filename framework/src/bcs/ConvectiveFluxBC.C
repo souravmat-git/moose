@@ -1,28 +1,28 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ConvectiveFluxBC.h"
 
-template <>
+registerMooseObject("MooseApp", ConvectiveFluxBC);
+
+defineLegacyParams(ConvectiveFluxBC);
+
 InputParameters
-validParams<ConvectiveFluxBC>()
+ConvectiveFluxBC::validParams()
 {
-  InputParameters params = validParams<IntegratedBC>();
+  InputParameters params = IntegratedBC::validParams();
   params.set<Real>("rate") = 7500;
   params.set<Real>("initial") = 500;
   params.set<Real>("final") = 500;
   params.set<Real>("duration") = 0.0;
+  params.addClassDescription(
+      "Determines boundary values via the initial and final values, flux, and exposure duration");
   return params;
 }
 

@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTESTRESSBASE_H
-#define COMPUTESTRESSBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "RankTwoTensor.h"
@@ -19,33 +21,37 @@
 class ComputeStressBase : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   ComputeStressBase(const InputParameters & parameters);
 
 protected:
   virtual void initQpStatefulProperties() override;
   virtual void computeQpProperties() override;
+
+  /**
+   * Compute the stress and store it in the _stress material property
+   * for the current quadrature point
+   **/
   virtual void computeQpStress() = 0;
 
+  /// Base name prepended to all material property names to allow for
+  /// multi-material systems
   const std::string _base_name;
-  const std::string _elasticity_tensor_name;
 
+  /// Mechanical strain material property
   const MaterialProperty<RankTwoTensor> & _mechanical_strain;
+  /// Stress material property
   MaterialProperty<RankTwoTensor> & _stress;
+  /// Elastic strain material property
   MaterialProperty<RankTwoTensor> & _elastic_strain;
-
-  const MaterialProperty<RankFourTensor> & _elasticity_tensor;
 
   /// Extra stress tensor
   const MaterialProperty<RankTwoTensor> & _extra_stress;
 
   /// initial stress components
-  std::vector<Function *> _initial_stress;
+  std::vector<const Function *> _initial_stress_fcn;
 
   /// derivative of stress w.r.t. strain (_dstress_dstrain)
   MaterialProperty<RankFourTensor> & _Jacobian_mult;
-
-  /// Parameter which decides whether to store old stress. This is required for HHT time integration and Rayleigh damping
-  const bool _store_stress_old;
 };
-
-#endif // COMPUTESTRESSBASE_H

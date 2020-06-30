@@ -1,10 +1,20 @@
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "DefaultMatPropConsumerMaterial.h"
 
-template <>
+registerMooseObject("MooseTestApp", DefaultMatPropConsumerMaterial);
+
 InputParameters
-validParams<DefaultMatPropConsumerMaterial>()
+DefaultMatPropConsumerMaterial::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params.addParam<std::string>("mat_prop", "prop", "Material property name to fetch");
   return params;
 }

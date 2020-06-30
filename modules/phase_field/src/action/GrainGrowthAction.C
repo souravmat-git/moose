@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "GrainGrowthAction.h"
 
@@ -14,46 +16,67 @@
 #include "Factory.h"
 #include "MooseObjectAction.h"
 #include "MooseMesh.h"
+#include "NonlinearSystemBase.h"
 
-// libMesh includes
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", GrainGrowthAction, "add_aux_variable");
+registerMooseAction("PhaseFieldApp", GrainGrowthAction, "add_aux_kernel");
+registerMooseAction("PhaseFieldApp", GrainGrowthAction, "add_variable");
+registerMooseAction("PhaseFieldApp", GrainGrowthAction, "add_kernel");
+registerMooseAction("PhaseFieldApp", GrainGrowthAction, "copy_nodal_vars");
+registerMooseAction("PhaseFieldApp", GrainGrowthAction, "check_copy_nodal_vars");
+
 InputParameters
-validParams<GrainGrowthAction>()
+GrainGrowthAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription(
       "Set up the variable and the kernels needed for a grain growth simulation");
   params.addRequiredParam<unsigned int>("op_num",
                                         "specifies the number of order parameters to create");
   params.addRequiredParam<std::string>("var_name_base", "specifies the base name of the variables");
+  params.addParam<Real>(
+      "scaling", 1.0, "Specifies a scaling factor to apply to the order parameters");
+  params.addParam<bool>(
+      "initial_from_file",
+      false,
+      "Take the initial condition of all polycrystal variables from the mesh file");
+
   // Get MooseEnums for the possible order/family options for this variable
   MooseEnum families(AddVariableAction::getNonlinearVariableFamilies());
   MooseEnum orders(AddVariableAction::getNonlinearVariableOrders());
   params.addParam<MooseEnum>("family",
                              families,
                              "Specifies the family of FE "
-                             "shape functions to use for this variable");
+                             "shape function to use for the order parameters");
   params.addParam<MooseEnum>("order",
                              orders,
                              "Specifies the order of the FE "
-                             "shape function to use for this variable");
+                             "shape function to use for the order parameters");
+
   params.addParam<MaterialPropertyName>(
-      "mobility", "L", "The isotropic mobility used with the kernel");
-  params.addParam<MaterialPropertyName>("kappa", "kappa_op", "The kappa used with the kernel");
-  params.addParam<Real>("scaling", 1.0, "Specifies a scaling factor to apply to this variable");
-  params.addParam<bool>("implicit", true, "Whether kernels are implicit or not");
-  params.addParam<bool>(
-      "use_displaced_mesh", false, "Whether to use displaced mesh in the kernels");
+      "mobility", "L", "The isotropic mobility used with the kernels");
+  params.addParam<MaterialPropertyName>("kappa", "kappa_op", "The kappa used with the kernels");
+
   params.addParam<VariableName>("c", "Name of coupled concentration variable");
+
   params.addParam<Real>("en_ratio", 1.0, "Ratio of surface to GB energy");
-  params.addParam<unsigned int>("ndef", 0, "specifies the number of deformed grains to create");
+  params.addParam<unsigned int>("ndef", 0, "Specifies the number of deformed grains to create");
   params.addParam<bool>("variable_mobility",
                         true,
                         "The mobility is a function of any MOOSE variable (if "
                         "this is set to false, L must be constant over the "
                         "entire domain!)");
+  params.addCoupledVar("args", "Vector of nonlinear variable arguments that L depends on");
+
+  params.addParam<bool>("implicit", true, "Whether kernels are implicit or not");
+  params.addParam<bool>(
+      "use_displaced_mesh", false, "Whether to use displaced mesh in the kernels");
+  params.addParam<bool>("use_automatic_differentiation",
+                        false,
+                        "Flag to use automatic differentiation (AD) objects when possible");
+
   params.addParamNamesToGroup("scaling implicit use_displaced_mesh", "Advanced");
   params.addParamNamesToGroup("c en_ratio ndef", "Multiphysics");
 
@@ -65,22 +88,45 @@ GrainGrowthAction::GrainGrowthAction(const InputParameters & params)
     _op_num(getParam<unsigned int>("op_num")),
     _var_name_base(getParam<std::string>("var_name_base")),
     _fe_type(Utility::string_to_enum<Order>(getParam<MooseEnum>("order")),
-             Utility::string_to_enum<FEFamily>(getParam<MooseEnum>("family")))
+             Utility::string_to_enum<FEFamily>(getParam<MooseEnum>("family"))),
+    _use_ad(getParam<bool>("use_automatic_differentiation"))
 {
 }
 
 void
 GrainGrowthAction::act()
 {
+  // take initial values from file?
+  bool initial_from_file = getParam<bool>("initial_from_file");
+
   // Loop over order parameters
   for (unsigned int op = 0; op < _op_num; op++)
   {
+    auto type = AddVariableAction::determineType(_fe_type, 1);
+    auto var_params = _factory.getValidParams(type);
+
+    var_params.applySpecificParameters(_pars, {"family", "order"});
+    var_params.set<std::vector<Real>>("scaling") = {getParam<Real>("scaling")};
+
     // Create variable name
     std::string var_name = _var_name_base + Moose::stringify(op);
 
+    // Setup initial from file if requested
+    if (initial_from_file)
+    {
+      if (_current_task == "check_copy_nodal_vars")
+        _app.setFileRestart() = true;
+
+      if (_current_task == "copy_nodal_vars")
+      {
+        auto * system = &_problem->getNonlinearSystemBase();
+        system->addVariableToCopy(var_name, var_name, "LATEST");
+      }
+    }
+
     // Add variable
     if (_current_task == "add_variable")
-      _problem->addVariable(var_name, _fe_type, getParam<Real>("scaling"));
+      _problem->addVariable(type, var_name, var_params);
 
     // Add Kernels
     else if (_current_task == "add_kernel")
@@ -90,14 +136,14 @@ GrainGrowthAction::act()
       //
 
       {
-        std::string kernel_type = "TimeDerivative";
+        std::string kernel_type = _use_ad ? "ADTimeDerivative" : "TimeDerivative";
 
         std::string kernel_name = var_name + "_" + kernel_type;
         InputParameters params = _factory.getValidParams(kernel_type);
         params.set<NonlinearVariableName>("variable") = var_name;
         params.applyParameters(parameters());
 
-        _problem->addKernel(kernel_type, kernel_name, params);
+        addKernel(kernel_type, kernel_name, params);
       }
 
       //
@@ -105,7 +151,7 @@ GrainGrowthAction::act()
       //
 
       {
-        std::string kernel_type = "ACGrGrPoly";
+        std::string kernel_type = _use_ad ? "ADGrainGrowth" : "ACGrGrPoly";
 
         // Make vector of order parameter names, excluding this one
         std::vector<VariableName> v;
@@ -123,7 +169,7 @@ GrainGrowthAction::act()
         params.set<MaterialPropertyName>("mob_name") = getParam<MaterialPropertyName>("mobility");
         params.applyParameters(parameters());
 
-        _problem->addKernel(kernel_type, kernel_name, params);
+        addKernel(kernel_type, kernel_name, params);
       }
 
       //
@@ -131,7 +177,7 @@ GrainGrowthAction::act()
       //
 
       {
-        std::string kernel_type = "ACInterface";
+        std::string kernel_type = _use_ad ? "ADACInterface" : "ACInterface";
 
         std::string kernel_name = var_name + "_" + kernel_type;
         InputParameters params = _factory.getValidParams(kernel_type);
@@ -141,7 +187,7 @@ GrainGrowthAction::act()
         params.set<bool>("variable_L") = getParam<bool>("variable_mobility");
         params.applyParameters(parameters());
 
-        _problem->addKernel(kernel_type, kernel_name, params);
+        addKernel(kernel_type, kernel_name, params);
       }
 
       //
@@ -150,6 +196,9 @@ GrainGrowthAction::act()
 
       if (isParamValid("c"))
       {
+        if (_use_ad)
+          mooseError("AD version of ACGBPoly is not implemented");
+
         std::string kernel_type = "ACGBPoly";
 
         std::string kernel_name = var_name + "_" + kernel_type;
@@ -164,9 +213,13 @@ GrainGrowthAction::act()
   }
   // Create auxvariable
   if (_current_task == "add_aux_variable")
-    _problem->addAuxVariable("bnds",
-                             FEType(Utility::string_to_enum<Order>("FIRST"),
-                                    Utility::string_to_enum<FEFamily>("LAGRANGE")));
+  {
+    auto var_params = _factory.getValidParams("MooseVariable");
+    var_params.set<MooseEnum>("family") = "LAGRANGE";
+    var_params.set<MooseEnum>("order") = "FIRST";
+    _problem->addAuxVariable("MooseVariable", "bnds", var_params);
+  }
+
   // Create BndsCalcAux auxkernel
   else if (_current_task == "add_aux_kernel")
   {
@@ -187,4 +240,12 @@ GrainGrowthAction::act()
 
     _problem->addAuxKernel(aux_kernel_type, aux_kernel_name, params);
   }
+}
+
+void
+GrainGrowthAction::addKernel(const std::string & kernel_type,
+                             const std::string & kernel_name,
+                             InputParameters params)
+{
+  _problem->addKernel(kernel_type, kernel_name, params);
 }

@@ -1,26 +1,16 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef HEATCONDUCTIONOUTFLOW_H
-#define HEATCONDUCTIONOUTFLOW_H
+#pragma once
 
-#include "IntegratedBC.h"
-
-class HeatConductionOutflow;
-
-template <>
-InputParameters validParams<HeatConductionOutflow>();
+// Include the base class so it can be extended
+#include "ADIntegratedBC.h"
 
 /**
  * An IntegratedBC representing the "No BC" boundary condition for
@@ -35,25 +25,19 @@ InputParameters validParams<HeatConductionOutflow>();
  * boundary condition.", International Journal for Numerical Methods
  * in Fluids, vol. 24, no. 4, 1997, pp. 393-411.
  */
-class HeatConductionOutflow : public IntegratedBC
+class HeatConductionOutflow : public ADIntegratedBC
 {
 public:
+  static InputParameters validParams();
+
   HeatConductionOutflow(const InputParameters & parameters);
 
 protected:
   /**
    * This is called to integrate the residual across the boundary.
    */
-  virtual Real computeQpResidual() override;
-
-  /**
-   * Optional (but recommended!) to compute the derivative of the
-   * residual with respect to _this_ variable.
-   */
-  virtual Real computeQpJacobian() override;
+  virtual ADReal computeQpResidual() override;
 
   /// Thermal conductivity of the material
-  const MaterialProperty<Real> & _thermal_conductivity;
+  const ADMaterialProperty<Real> & _thermal_conductivity;
 };
-
-#endif // HEATCONDUCTIONOUTFLOW_H

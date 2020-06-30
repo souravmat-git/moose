@@ -1,28 +1,19 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef GENERALUSEROBJECT_H
-#define GENERALUSEROBJECT_H
+#pragma once
 
 // MOOSE includes
 #include "UserObject.h"
 #include "MaterialPropertyInterface.h"
 #include "TransientInterface.h"
 #include "DependencyResolverInterface.h"
-#include "UserObjectInterface.h"
-#include "PostprocessorInterface.h"
-#include "VectorPostprocessorInterface.h"
 
 // Forward Declarations
 class GeneralUserObject;
@@ -35,12 +26,11 @@ InputParameters validParams<GeneralUserObject>();
 class GeneralUserObject : public UserObject,
                           public MaterialPropertyInterface,
                           public TransientInterface,
-                          public DependencyResolverInterface,
-                          public UserObjectInterface,
-                          protected PostprocessorInterface,
-                          protected VectorPostprocessorInterface
+                          public DependencyResolverInterface
 {
 public:
+  static InputParameters validParams();
+
   GeneralUserObject(const InputParameters & parameters);
 
   const std::set<std::string> & getRequestedItems() override;
@@ -51,15 +41,16 @@ public:
   /**
    * This method is not used and should not be used in a custom GeneralUserObject.
    */
-  virtual void threadJoin(const UserObject &) final;
-  virtual void subdomainSetup() final;
+  virtual void threadJoin(const UserObject &) override;
+  virtual void subdomainSetup() override;
   ///@}
 
   ///@{
   /**
    * Store dependency among same object types for proper execution order
    */
-  virtual const PostprocessorValue & getPostprocessorValue(const std::string & name);
+  virtual const PostprocessorValue & getPostprocessorValue(const std::string & name,
+                                                           unsigned int index = 0);
   virtual const PostprocessorValue & getPostprocessorValueByName(const PostprocessorName & name);
 
   virtual const VectorPostprocessorValue &
@@ -67,11 +58,17 @@ public:
   virtual const VectorPostprocessorValue &
   getVectorPostprocessorValueByName(const VectorPostprocessorName & name,
                                     const std::string & vector_name) override;
+
+  virtual const VectorPostprocessorValue & getVectorPostprocessorValue(
+      const std::string & name, const std::string & vector_name, bool use_broadcast) override;
+  virtual const VectorPostprocessorValue &
+  getVectorPostprocessorValueByName(const VectorPostprocessorName & name,
+                                    const std::string & vector_name,
+                                    bool use_broadcast) override;
+
   ///@}
 
 protected:
   std::set<std::string> _depend_vars;
   std::set<std::string> _supplied_vars;
 };
-
-#endif

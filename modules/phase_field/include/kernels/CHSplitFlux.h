@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CHSPLITFLUX_H
-#define CHSPLITFLUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "DerivativeMaterialInterface.h"
 #include "RankTwoTensor.h"
-
-class CHSplitFlux;
-
-template <>
-InputParameters validParams<CHSplitFlux>();
 
 /**
  * CHSplitFlux computes flux as non-linear variable via
@@ -24,6 +21,8 @@ InputParameters validParams<CHSplitFlux>();
 class CHSplitFlux : public DerivativeMaterialInterface<Kernel>
 {
 public:
+  static InputParameters validParams();
+
   CHSplitFlux(const InputParameters & parameters);
 
 protected:
@@ -39,7 +38,5 @@ protected:
   const bool _has_coupled_c;
   const unsigned int _c_var;
 
-  const MaterialProperty<RealTensorValue> * _dmobility_dc;
+  const MaterialProperty<RealTensorValue> * const _dmobility_dc;
 };
-
-#endif

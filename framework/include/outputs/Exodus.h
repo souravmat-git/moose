@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef EXODUS_H
-#define EXODUS_H
+#pragma once
 
 // MOOSE includes
 #include "OversampleOutput.h"
@@ -36,6 +30,17 @@ InputParameters validParams<Exodus>();
 class Exodus : public OversampleOutput
 {
 public:
+  static InputParameters validParams();
+
+  enum class OutputDimension : int
+  {
+    DEFAULT,
+    ONE,
+    TWO,
+    THREE,
+    PROBLEM_DIMENSION
+  };
+
   /**
    * Class constructor
    */
@@ -43,7 +48,7 @@ public:
 
   /**
    * Overload the OutputBase::output method, this is required for ExodusII
-   * output due to the method utilized for outputing single/global parameters
+   * output due to the method utilized for outputting single/global parameters
    */
   virtual void output(const ExecFlagType & type) override;
 
@@ -76,6 +81,28 @@ public:
    * is set to false initially
    */
   virtual void sequence(bool state);
+
+  /**
+   * Force the output dimension programatically
+   *
+   * @param dim The dimension written in the output file
+   */
+  void setOutputDimension(unsigned int dim);
+
+  /**
+   * Helper method to change the output dimension in the passed in Exodus writer depending on
+   * the dimension and coordinates of the passed in mesh.
+   *
+   * @param exodus_io The ExodusII_IO object to modify
+   * @param mesh The MooseMesh object that is queried to determine the appropriate output dimension.
+   */
+  static void
+  setOutputDimensionInExodusWriter(ExodusII_IO & exodus_io,
+                                   const MooseMesh & mesh,
+                                   OutputDimension output_dim = OutputDimension::DEFAULT);
+
+  /// Reset Exodus output
+  void clear();
 
 protected:
   /**
@@ -159,6 +186,10 @@ private:
 
   /// Flag for overwriting timesteps
   bool _overwrite;
-};
 
-#endif /* EXODUS_H */
+  /// Enum for the output dimension
+  OutputDimension _output_dimension;
+
+  /// Flag to output discontinuous format in Exodus
+  bool _discontinuous;
+};

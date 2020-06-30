@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWDARCYBASE_H
-#define POROUSFLOWDARCYBASE_H
+#pragma once
 
 #include "Kernel.h"
 #include "PorousFlowDictator.h"
-
-class PorousFlowDarcyBase;
-
-template <>
-InputParameters validParams<PorousFlowDarcyBase>();
 
 /**
  * Darcy advective flux.
@@ -27,6 +23,8 @@ InputParameters validParams<PorousFlowDarcyBase>();
 class PorousFlowDarcyBase : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowDarcyBase(const InputParameters & parameters);
 
 protected:
@@ -34,22 +32,25 @@ protected:
   virtual Real computeQpResidual() override;
   virtual void computeResidual() override;
   virtual void computeJacobian() override;
-  virtual void computeOffDiagJacobian(unsigned int jvar) override;
+  virtual void computeOffDiagJacobian(MooseVariableFEBase & jvar) override;
+  using Kernel::computeOffDiagJacobian;
 
-  /// the Darcy part of the flux (this is the non-upwinded part)
+  /// The Darcy part of the flux (this is the non-upwinded part)
   virtual Real darcyQp(unsigned int ph) const;
 
   /// Jacobian of the Darcy part of the flux
   virtual Real darcyQpJacobian(unsigned int jvar, unsigned int ph) const;
 
-  /** The mobility of the fluid.  For multi-component Darcy flow
+  /**
+   * The mobility of the fluid.  For multi-component Darcy flow
    * this is mass_fraction * fluid_density * relative_permeability / fluid_viscosity
    * @param nodenum The node-number to evaluate the mobility for
    * @param phase the fluid phase number
    */
   virtual Real mobility(unsigned nodenum, unsigned phase) const;
 
-  /** The derivative of mobility with respect to PorousFlow variable pvar
+  /**
+   * The derivative of mobility with respect to PorousFlow variable pvar
    * @param nodenum The node-number to evaluate the mobility for
    * @param phase the fluid phase number
    * @param pvar the PorousFlow variable pvar
@@ -82,10 +83,10 @@ protected:
   /// Permeability of porous material
   const MaterialProperty<RealTensorValue> & _permeability;
 
-  /// d(permeabiity)/d(porous-flow variable)
+  /// d(permeabiity)/d(PorousFlow variable)
   const MaterialProperty<std::vector<RealTensorValue>> & _dpermeability_dvar;
 
-  /// d(permeabiity)/d(grad(porous-flow variable))
+  /// d(permeabiity)/d(grad(PorousFlow variable))
   const MaterialProperty<std::vector<std::vector<RealTensorValue>>> & _dpermeability_dgradvar;
 
   /// Fluid density for each phase (at the node)
@@ -118,14 +119,17 @@ protected:
   /// Derivative of Grad porepressure in each phase wrt PorousFlow variables
   const MaterialProperty<std::vector<std::vector<RealGradient>>> & _dgrad_p_dvar;
 
-  /// PorousFlow UserObject
-  const PorousFlowDictator & _porousflow_dictator;
+  /// PorousFlowDictator UserObject
+  const PorousFlowDictator & _dictator;
 
   /// The number of fluid phases
   const unsigned int _num_phases;
 
   /// Gravity. Defaults to 9.81 m/s^2
   const RealVectorValue _gravity;
+
+  /// Flag to check whether permeabiity derivatives are non-zero
+  const bool _perm_derivs;
 
   /**
    * If the number of upwind-downwind swaps is less than this amount then
@@ -199,5 +203,3 @@ protected:
    */
   void harmonicMean(JacRes res_or_jac, unsigned int ph, unsigned int pvar);
 };
-
-#endif // POROUSFLOWDARCYBASE_H

@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CHSPLITCHEMICALPOTENTIAL_H
-#define CHSPLITCHEMICALPOTENTIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "DerivativeMaterialInterface.h"
-
-class CHSplitChemicalPotential;
-
-template <>
-InputParameters validParams<CHSplitChemicalPotential>();
 
 /**
  * Solves chemical potential in a weak sense (mu-mu_prop=0)
@@ -25,6 +22,8 @@ InputParameters validParams<CHSplitChemicalPotential>();
 class CHSplitChemicalPotential : public DerivativeMaterialInterface<Kernel>
 {
 public:
+  static InputParameters validParams();
+
   CHSplitChemicalPotential(const InputParameters & parameters);
 
 protected:
@@ -39,5 +38,3 @@ protected:
   const MaterialProperty<Real> & _dchemical_potential_dc;
   const unsigned int _c_var;
 };
-
-#endif

@@ -1,4 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import os
 import shutil
 import unittest
@@ -21,9 +30,6 @@ class TestMooseDataFrame(unittest.TestCase):
         """
         Test that if a file exists it is loaded w/o error.
         """
-
-        #x_key = 'air_temp_low_24_hour_set_1'
-        #y_key = 'snow_depth_set_1'
 
         # Test basic read
         data = mooseutils.MooseDataFrame(self._filename)

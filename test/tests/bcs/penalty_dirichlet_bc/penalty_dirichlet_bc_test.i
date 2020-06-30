@@ -44,7 +44,7 @@
   [../]
 
   [./forcing]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn
   [../]
@@ -68,7 +68,6 @@
 
   [./h]
     type = AverageElementSize
-    variable = u
   [../]
 
   [./L2error]

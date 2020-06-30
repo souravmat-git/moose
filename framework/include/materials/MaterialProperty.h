@@ -1,22 +1,17 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MATERIALPROPERTY_H
-#define MATERIALPROPERTY_H
+#pragma once
 
 #include <vector>
 
+#include "MooseADWrapper.h"
 #include "MooseArray.h"
 #include "DataIO.h"
 
@@ -24,21 +19,16 @@
 #include "libmesh/tensor_value.h"
 #include "libmesh/vector_value.h"
 
+#include "metaphysicl/raw_type.h"
+
 class PropertyValue;
 
 /**
  * Scalar Init helper routine so that specialization isn't needed for basic scalar MaterialProperty
  * types
  */
-template <typename P>
-PropertyValue * _init_helper(int size, PropertyValue * prop, const P * the_type);
-
-/**
- * Vector Init helper routine so that specialization isn't needed for basic vector MaterialProperty
- * types
- */
-template <typename P>
-PropertyValue * _init_helper(int size, PropertyValue * prop, const std::vector<P> * the_type);
+template <typename T>
+PropertyValue * _init_helper(int size, T * prop);
 
 /**
  * Abstract definition of a property value.
@@ -67,8 +57,23 @@ public:
 
   virtual void swap(PropertyValue * rhs) = 0;
 
+  virtual bool isAD() = 0;
+
+  /**
+   * Creates a regular material property, copying any existing qp values from this
+   */
+  virtual PropertyValue * makeRegularProperty() = 0;
+
+  /**
+   * Creates an AD material property, copying any existing qp *values* from this. Derivative
+   * information is zeroed
+   */
+  virtual PropertyValue * makeADProperty() = 0;
+
   /**
    * Copy the value of a Property from one specific to a specific qp in this Property.
+   * Important note: this copy operation loses AD derivative information if either this
+   * or the rhs is not an AD material property
    *
    * @param to_qp The quadrature point in _this_ Property that you want to copy to.
    * @param rhs The Property you want to copy _from_.
@@ -100,56 +105,60 @@ dataLoad(std::istream & stream, PropertyValue *& p, void * /*context*/)
  * Concrete definition of a parameter value
  * for a specified type.
  */
-template <typename T>
-class MaterialProperty : public PropertyValue
+template <typename T, bool is_ad>
+class MaterialPropertyBase : public PropertyValue
 {
 public:
-  /// Explicitly declare a public constructor because we made the copy constructor private
-  MaterialProperty() : PropertyValue() { /* */}
+  typedef MooseADWrapper<T, is_ad> value_type;
 
-  virtual ~MaterialProperty() { _value.release(); }
+  /// Explicitly declare a public constructor because we made the copy constructor private
+  MaterialPropertyBase() : PropertyValue()
+  { /* */
+  }
+
+  virtual ~MaterialPropertyBase() {}
+
+  bool isAD() override { return is_ad; }
+
+  PropertyValue * makeRegularProperty() override;
+  PropertyValue * makeADProperty() override;
 
   /**
    * @returns a read-only reference to the parameter value.
    */
-  MooseArray<T> & get() { return _value; }
+  const MooseArray<MooseADWrapper<T, is_ad>> & get() const { return _value; }
 
   /**
    * @returns a writable reference to the parameter value.
    */
-  MooseArray<T> & set() { return _value; }
+  MooseArray<MooseADWrapper<T, is_ad>> & set() { return _value; }
 
   /**
    * String identifying the type of parameter stored.
    */
-  virtual std::string type();
-
-  /**
-   * Clone this value.  Useful in copy-construction.
-   */
-  virtual PropertyValue * init(int size);
+  virtual std::string type() override;
 
   /**
    * Resizes the property to the size n
    */
-  virtual void resize(int n);
+  virtual void resize(int n) override;
+
+  virtual unsigned int size() const override { return _value.size(); }
 
   /**
-   * Get element i out of the array.
+   * Get element i out of the array as a writeable reference.
    */
-  T & operator[](const unsigned int i) { return _value[i]; }
-
-  unsigned int size() const { return _value.size(); }
+  MooseADWrapper<T, is_ad> & operator[](const unsigned int i) { return _value[i]; }
 
   /**
-   * Get element i out of the array.
+   * Get element i out of the array as a ready-only reference.
    */
-  const T & operator[](const unsigned int i) const { return _value[i]; }
+  const MooseADWrapper<T, is_ad> & operator[](const unsigned int i) const { return _value[i]; }
 
   /**
    *
    */
-  virtual void swap(PropertyValue * rhs);
+  virtual void swap(PropertyValue * rhs) override;
 
   /**
    * Copy the value of a Property from one specific to a specific qp in this Property.
@@ -158,35 +167,170 @@ public:
    * @param rhs The Property you want to copy _from_.
    * @param from_qp The quadrature point in rhs you want to copy _from_.
    */
-  virtual void qpCopy(const unsigned int to_qp, PropertyValue * rhs, const unsigned int from_qp);
+  virtual void
+  qpCopy(const unsigned int to_qp, PropertyValue * rhs, const unsigned int from_qp) override;
 
   /**
    * Store the property into a binary stream
    */
-  virtual void store(std::ostream & stream);
+  virtual void store(std::ostream & stream) override;
 
   /**
    * Load the property from a binary stream
    */
-  virtual void load(std::istream & stream);
+  virtual void load(std::istream & stream) override;
 
-  /**
-   * Friend helper function to handle scalar material property initializations
-   * @param size - the size corresponding to the quadrature rule
-   * @param prop - The Material property that we will resize since this is not a member
-   * @param the_type - This is just a template parameter used to identify the
-   *                   difference between the scalar and vector template functions
-   */
-  template <typename P>
-  friend PropertyValue * _init_helper(int size, PropertyValue * prop, const P * the_type);
+private:
+  /// private copy constructor to avoid shallow copying of material properties
+  MaterialPropertyBase(const MaterialPropertyBase<T, is_ad> & /*src*/)
+  {
+    mooseError("Material properties must be assigned to references (missing '&')");
+  }
 
-  /**
-   * Friend helper function to handle vector material property initializations
-   * This function is an overload for the vector version
-   */
-  template <typename P>
-  friend PropertyValue *
-  _init_helper(int size, PropertyValue * prop, const std::vector<P> * the_type);
+  /// private assignment operator to avoid shallow copying of material properties
+  MaterialPropertyBase<T, is_ad> & operator=(const MaterialPropertyBase<T, is_ad> & /*rhs*/)
+  {
+    mooseError("Material properties must be assigned to references (missing '&')");
+  }
+
+protected:
+  /// Stored parameter value.
+  MooseArray<MooseADWrapper<T, is_ad>> _value;
+};
+
+template <typename T>
+class MaterialProperty;
+template <typename T>
+class ADMaterialProperty;
+
+// ------------------------------------------------------------
+// Material::Property<> class inline methods
+
+namespace moose
+{
+namespace internal
+{
+template <typename T1, typename T2>
+void
+rawValueEqualityHelper(T1 & out, const T2 & in)
+{
+  out = MetaPhysicL::raw_value(in);
+}
+
+template <typename T1, typename T2>
+void
+rawValueEqualityHelper(std::vector<T1> & out, const std::vector<T2> & in)
+{
+  out.resize(in.size());
+  for (MooseIndex(in) i = 0; i < in.size(); ++i)
+    out[i] = MetaPhysicL::raw_value(in[i]);
+}
+
+template <typename T1, typename T2>
+void
+rawValueEqualityHelper(std::vector<std::vector<T1>> & out, const std::vector<std::vector<T2>> & in)
+{
+  out.resize(in.size());
+  for (MooseIndex(in) i = 0; i < in.size(); ++i)
+  {
+    out[i].resize(in[i].size());
+    for (MooseIndex(in[i].size()) j = 0; j < in[i].size(); ++j)
+      out[i][j] = MetaPhysicL::raw_value(in[i][j]);
+  }
+}
+}
+}
+
+template <typename T, bool is_ad>
+PropertyValue *
+MaterialPropertyBase<T, is_ad>::makeRegularProperty()
+{
+  auto * new_prop = new MaterialProperty<T>;
+
+  new_prop->resize(this->size());
+
+  for (MooseIndex(_value) i = 0; i < _value.size(); ++i)
+    moose::internal::rawValueEqualityHelper((*new_prop)[i], _value[i]);
+
+  return new_prop;
+}
+
+template <typename T, bool is_ad>
+PropertyValue *
+MaterialPropertyBase<T, is_ad>::makeADProperty()
+{
+  auto * new_prop = new ADMaterialProperty<T>;
+
+  new_prop->resize(this->size());
+
+  for (MooseIndex(_value) i = 0; i < _value.size(); ++i)
+    moose::internal::rawValueEqualityHelper((*new_prop)[i], _value[i]);
+
+  return new_prop;
+}
+
+template <typename T, bool is_ad>
+inline std::string
+MaterialPropertyBase<T, is_ad>::type()
+{
+  return typeid(MooseADWrapper<T, is_ad>).name();
+}
+
+template <typename T, bool is_ad>
+inline void
+MaterialPropertyBase<T, is_ad>::resize(int n)
+{
+  _value.template resize</*value_initalize=*/true>(n);
+}
+
+template <typename T, bool is_ad>
+inline void
+MaterialPropertyBase<T, is_ad>::swap(PropertyValue * rhs)
+{
+  mooseAssert(rhs != NULL, "Assigning NULL?");
+  _value.swap(cast_ptr<MaterialPropertyBase<T, is_ad> *>(rhs)->_value);
+}
+
+template <typename T, bool is_ad>
+inline void
+MaterialPropertyBase<T, is_ad>::qpCopy(const unsigned int to_qp,
+                                       PropertyValue * rhs,
+                                       const unsigned int from_qp)
+{
+  mooseAssert(rhs != NULL, "Assigning NULL?");
+
+  // If we're the same
+  if (rhs->isAD() == is_ad)
+    _value[to_qp] = cast_ptr<const MaterialPropertyBase<T, is_ad> *>(rhs)->_value[from_qp];
+
+  else
+    moose::internal::rawValueEqualityHelper(
+        _value[to_qp], (*cast_ptr<const MaterialPropertyBase<T, !is_ad> *>(rhs))[from_qp]);
+}
+
+template <typename T, bool is_ad>
+inline void
+MaterialPropertyBase<T, is_ad>::store(std::ostream & stream)
+{
+  for (unsigned int i = 0; i < size(); i++)
+    storeHelper(stream, _value[i], NULL);
+}
+
+template <typename T, bool is_ad>
+inline void
+MaterialPropertyBase<T, is_ad>::load(std::istream & stream)
+{
+  for (unsigned int i = 0; i < size(); i++)
+    loadHelper(stream, _value[i], NULL);
+}
+
+template <typename T>
+class MaterialProperty : public MaterialPropertyBase<T, false>
+{
+public:
+  MaterialProperty() = default;
+
+  PropertyValue * init(int size) override { return _init_helper(size, this); }
 
 private:
   /// private copy constructor to avoid shallow copying of material properties
@@ -200,67 +344,31 @@ private:
   {
     mooseError("Material properties must be assigned to references (missing '&')");
   }
-
-  /// Stored parameter value.
-  MooseArray<T> _value;
 };
 
-// ------------------------------------------------------------
-// Material::Property<> class inline methods
 template <typename T>
-inline std::string
-MaterialProperty<T>::type()
+class ADMaterialProperty : public MaterialPropertyBase<T, true>
 {
-  return typeid(T).name();
-}
+public:
+  ADMaterialProperty() = default;
 
-template <typename T>
-inline PropertyValue *
-MaterialProperty<T>::init(int size)
-{
-  return _init_helper(size, this, static_cast<T *>(0));
-}
+  using typename MaterialPropertyBase<T, true>::value_type;
 
-template <typename T>
-inline void
-MaterialProperty<T>::resize(int n)
-{
-  _value.resize(n);
-}
+  PropertyValue * init(int size) override { return _init_helper(size, this); }
 
-template <typename T>
-inline void
-MaterialProperty<T>::swap(PropertyValue * rhs)
-{
-  mooseAssert(rhs != NULL, "Assigning NULL?");
-  _value.swap(cast_ptr<MaterialProperty<T> *>(rhs)->_value);
-}
+private:
+  /// private copy constructor to avoid shallow copying of material properties
+  ADMaterialProperty(const ADMaterialProperty<T> & /*src*/)
+  {
+    mooseError("Material properties must be assigned to references (missing '&')");
+  }
 
-template <typename T>
-inline void
-MaterialProperty<T>::qpCopy(const unsigned int to_qp,
-                            PropertyValue * rhs,
-                            const unsigned int from_qp)
-{
-  mooseAssert(rhs != NULL, "Assigning NULL?");
-  _value[to_qp] = cast_ptr<const MaterialProperty<T> *>(rhs)->_value[from_qp];
-}
-
-template <typename T>
-inline void
-MaterialProperty<T>::store(std::ostream & stream)
-{
-  for (unsigned int i = 0; i < _value.size(); i++)
-    storeHelper(stream, _value[i], NULL);
-}
-
-template <typename T>
-inline void
-MaterialProperty<T>::load(std::istream & stream)
-{
-  for (unsigned int i = 0; i < _value.size(); i++)
-    loadHelper(stream, _value[i], NULL);
-}
+  /// private assignment operator to avoid shallow copying of material properties
+  ADMaterialProperty<T> & operator=(const ADMaterialProperty<T> & /*rhs*/)
+  {
+    mooseError("Material properties must be assigned to references (missing '&')");
+  }
+};
 
 /**
  * Container for storing material properties
@@ -325,30 +433,26 @@ dataLoad(std::istream & stream, MaterialProperties & v, void * context)
 }
 
 // Scalar Init Helper Function
-template <typename P>
+template <typename T>
 PropertyValue *
-_init_helper(int size, PropertyValue * /*prop*/, const P *)
+_init_helper(int size, T * /*prop*/)
 {
-  MaterialProperty<P> * copy = new MaterialProperty<P>;
-  copy->_value.resize(size, P{});
+  T * copy = new T;
+  copy->resize(size);
   return copy;
 }
 
-// Vector Init Helper Function
-template <typename P>
-PropertyValue *
-_init_helper(int size, PropertyValue * /*prop*/, const std::vector<P> *)
+template <typename T, bool is_ad>
+struct GenericMaterialPropertyStruct
 {
-  typedef MaterialProperty<std::vector<P>> PropType;
-  PropType * copy = new PropType;
-  copy->_value.resize(size, std::vector<P>{});
+  typedef MaterialProperty<T> type;
+};
 
-  // We don't know the size of the underlying vector at each
-  // quadrature point, the user will be responsible for resizing it
-  // and filling in the entries...
+template <typename T>
+struct GenericMaterialPropertyStruct<T, true>
+{
+  typedef ADMaterialProperty<T> type;
+};
 
-  // Return the copy we allocated
-  return copy;
-}
-
-#endif
+template <typename T, bool is_ad>
+using GenericMaterialProperty = typename GenericMaterialPropertyStruct<T, is_ad>::type;

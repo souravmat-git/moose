@@ -1,23 +1,25 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ComputeRSphericalFiniteStrain.h"
 #include "Assembly.h"
 #include "FEProblem.h"
 #include "MooseMesh.h"
 
-// libmesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeRSphericalFiniteStrain);
+
 InputParameters
-validParams<ComputeRSphericalFiniteStrain>()
+ComputeRSphericalFiniteStrain::validParams()
 {
-  InputParameters params = validParams<ComputeFiniteStrain>();
+  InputParameters params = ComputeFiniteStrain::validParams();
   params.addClassDescription("Compute a strain increment and rotation increment for finite strains "
                              "in 1D spherical symmetry problems.");
   return params;
@@ -31,6 +33,8 @@ ComputeRSphericalFiniteStrain::ComputeRSphericalFiniteStrain(const InputParamete
 void
 ComputeRSphericalFiniteStrain::initialSetup()
 {
+  ComputeIncrementalStrainBase::initialSetup();
+
   const auto & subdomainIDs = _mesh.meshSubdomains();
   for (auto subdomainID : subdomainIDs)
     if (_fe_problem.getCoordSystem(subdomainID) != Moose::COORD_RSPHERICAL)
@@ -62,7 +66,7 @@ ComputeRSphericalFiniteStrain::computeProperties()
       Fbar(1, 1) = _disp_old_0[_qp] / _q_point[_qp](0);
     }
 
-    // The polar and azimuthal strains are equalivalent in this 1D problem
+    // The polar and azimuthal strains are equivalent in this 1D problem
     A(2, 2) = A(1, 1);
     Fbar(2, 2) = Fbar(1, 1);
 

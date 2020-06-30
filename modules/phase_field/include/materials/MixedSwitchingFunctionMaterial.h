@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MIXEDSWITCHINGFUNCTIONMATERIAL_H
-#define MIXEDSWITCHINGFUNCTIONMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "OrderParameterFunctionMaterial.h"
 
 // Forward Declarations
-class MixedSwitchingFunctionMaterial;
-
-template <>
-InputParameters validParams<MixedSwitchingFunctionMaterial>();
 
 /**
  * Material class to provide the switching function \f$ h(\eta) \f$ for
@@ -25,6 +23,8 @@ InputParameters validParams<MixedSwitchingFunctionMaterial>();
 class MixedSwitchingFunctionMaterial : public OrderParameterFunctionMaterial
 {
 public:
+  static InputParameters validParams();
+
   MixedSwitchingFunctionMaterial(const InputParameters & parameters);
 
 protected:
@@ -36,5 +36,3 @@ protected:
   /// Weight parameter of mixed-type h(eta)
   Real _weight;
 };
-
-#endif // MIXEDSWITCHINGFUNCTIONMATERIAL_H

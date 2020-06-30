@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "RndSmoothCircleIC.h"
 
@@ -11,11 +13,12 @@
 #include "MooseMesh.h"
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", RndSmoothCircleIC);
+
 InputParameters
-validParams<RndSmoothCircleIC>()
+RndSmoothCircleIC::validParams()
 {
-  InputParameters params = validParams<SmoothCircleIC>();
+  InputParameters params = SmoothCircleIC::validParams();
   params.addClassDescription(
       "Random noise with different min/max inside/outside of a smooth circle");
   params.addRequiredParam<Real>("variation_invalue", "Plus or minus this amount on the invalue");
@@ -28,6 +31,8 @@ RndSmoothCircleIC::RndSmoothCircleIC(const InputParameters & parameters)
     _variation_invalue(parameters.get<Real>("variation_invalue")),
     _variation_outvalue(parameters.get<Real>("variation_outvalue"))
 {
+  if (_profile == ProfileType::TANH)
+    paramError("profile", "Hyperbolic tangent profile is not supported for this IC");
 }
 
 Real

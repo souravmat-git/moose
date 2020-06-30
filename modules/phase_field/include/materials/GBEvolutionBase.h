@@ -1,24 +1,24 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GBEVOLUTIONBASE_H
-#define GBEVOLUTIONBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
+#include "DerivativeMaterialInterface.h"
 
-// Forward Declarations
-class GBEvolutionBase;
-
-template <>
-InputParameters validParams<GBEvolutionBase>();
-
-class GBEvolutionBase : public Material
+template <bool is_ad>
+class GBEvolutionBaseTempl : public DerivativeMaterialInterface<Material>
 {
 public:
-  GBEvolutionBase(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  GBEvolutionBaseTempl(const InputParameters & parameters);
 
 protected:
   virtual void computeQpProperties();
@@ -34,20 +34,21 @@ protected:
 
   const VariableValue & _T;
 
-  MaterialProperty<Real> & _sigma;
-  MaterialProperty<Real> & _M_GB;
-  MaterialProperty<Real> & _kappa;
-  MaterialProperty<Real> & _gamma;
-  MaterialProperty<Real> & _L;
-  MaterialProperty<Real> & _l_GB;
-  MaterialProperty<Real> & _mu;
-  MaterialProperty<Real> & _entropy_diff;
-  MaterialProperty<Real> & _molar_volume;
-  MaterialProperty<Real> & _act_wGB;
-  MaterialProperty<Real> & _tgrad_corr_mult;
+  GenericMaterialProperty<Real, is_ad> & _sigma;
+  GenericMaterialProperty<Real, is_ad> & _M_GB;
+  GenericMaterialProperty<Real, is_ad> & _kappa;
+  GenericMaterialProperty<Real, is_ad> & _gamma;
+  GenericMaterialProperty<Real, is_ad> & _L;
+  MaterialProperty<Real> * _dLdT;
+  GenericMaterialProperty<Real, is_ad> & _l_GB;
+  GenericMaterialProperty<Real, is_ad> & _mu;
+  GenericMaterialProperty<Real, is_ad> & _entropy_diff;
+  GenericMaterialProperty<Real, is_ad> & _molar_volume;
+  GenericMaterialProperty<Real, is_ad> & _act_wGB;
 
   const Real _kb;
   const Real _JtoeV;
 };
 
-#endif // GBEVOLUTIONBASE_H
+typedef GBEvolutionBaseTempl<false> GBEvolutionBase;
+typedef GBEvolutionBaseTempl<true> ADGBEvolutionBase;

@@ -1,22 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef LEVELSETADVECTION_H
-#define LEVELSETADVECTION_H
+#pragma once
 
-// MOOSE includes
-#include "Kernel.h"
-#include "LevelSetVelocityInterface.h"
-
-// Forward declarations
-class LevelSetAdvection;
-
-template <>
-InputParameters validParams<LevelSetAdvection>();
+#include "ADKernelValue.h"
 
 /**
  * Advection Kernel for the levelset equation.
@@ -25,14 +18,16 @@ InputParameters validParams<LevelSetAdvection>();
  * where \vec{v} is the interface velocity that is a set of
  * coupled variables.
  */
-class LevelSetAdvection : public LevelSetVelocityInterface<Kernel>
+class LevelSetAdvection : public ADKernelValue
 {
 public:
+  static InputParameters validParams();
+
   LevelSetAdvection(const InputParameters & parameters);
 
 protected:
-  virtual Real computeQpResidual() override;
-  virtual Real computeQpJacobian() override;
-};
+  virtual ADReal precomputeQpResidual() override;
 
-#endif // LEVELSETADVECTION_H
+  /// Velocity vector variable
+  const ADVectorVariableValue & _velocity;
+};

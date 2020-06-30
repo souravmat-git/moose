@@ -1,35 +1,37 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "BoundaryFluxBase.h"
 
-// Static mutex definition
-Threads::spin_mutex BoundaryFluxBase::_mutex;
-
-template <>
 InputParameters
-validParams<BoundaryFluxBase>()
+BoundaryFluxBase::validParams()
 {
-  InputParameters params = validParams<GeneralUserObject>();
+  InputParameters params = GeneralUserObject::validParams();
   return params;
 }
 
 BoundaryFluxBase::BoundaryFluxBase(const InputParameters & parameters)
-  : GeneralUserObject(parameters)
+  : ThreadedGeneralUserObject(parameters),
+    _cached_flux_elem_id(libMesh::invalid_uint),
+    _cached_flux_side_id(libMesh::invalid_uint),
+    _cached_jacobian_elem_id(libMesh::invalid_uint),
+    _cached_jacobian_side_id(libMesh::invalid_uint)
 {
-  _flux.resize(libMesh::n_threads());
-  _jac1.resize(libMesh::n_threads());
 }
 
 void
 BoundaryFluxBase::initialize()
 {
-  _cached_elem_id = 0;
-  _cached_side_id = libMesh::invalid_uint;
+  _cached_flux_elem_id = libMesh::invalid_uint;
+  _cached_flux_side_id = libMesh::invalid_uint;
+  _cached_jacobian_elem_id = libMesh::invalid_uint;
+  _cached_jacobian_side_id = libMesh::invalid_uint;
 }
 
 void
@@ -42,38 +44,39 @@ BoundaryFluxBase::finalize()
 {
 }
 
+void
+BoundaryFluxBase::threadJoin(const UserObject &)
+{
+}
+
 const std::vector<Real> &
 BoundaryFluxBase::getFlux(unsigned int iside,
                           dof_id_type ielem,
                           const std::vector<Real> & uvec1,
-                          const RealVectorValue & dwave,
-                          THREAD_ID tid) const
+                          const RealVectorValue & dwave) const
 {
-  Threads::spin_mutex::scoped_lock lock(_mutex);
-  if (_cached_elem_id != ielem || _cached_side_id != iside)
+  if (_cached_flux_elem_id != ielem || _cached_flux_side_id != iside)
   {
-    _cached_elem_id = ielem;
-    _cached_side_id = iside;
+    _cached_flux_elem_id = ielem;
+    _cached_flux_side_id = iside;
 
-    calcFlux(iside, ielem, uvec1, dwave, _flux[tid]);
+    calcFlux(iside, ielem, uvec1, dwave, _flux);
   }
-  return _flux[tid];
+  return _flux;
 }
 
 const DenseMatrix<Real> &
 BoundaryFluxBase::getJacobian(unsigned int iside,
                               dof_id_type ielem,
                               const std::vector<Real> & uvec1,
-                              const RealVectorValue & dwave,
-                              THREAD_ID tid) const
+                              const RealVectorValue & dwave) const
 {
-  Threads::spin_mutex::scoped_lock lock(_mutex);
-  if (_cached_elem_id != ielem || _cached_side_id != iside)
+  if (_cached_jacobian_elem_id != ielem || _cached_jacobian_side_id != iside)
   {
-    _cached_elem_id = ielem;
-    _cached_side_id = iside;
+    _cached_jacobian_elem_id = ielem;
+    _cached_jacobian_side_id = iside;
 
-    calcJacobian(iside, ielem, uvec1, dwave, _jac1[tid]);
+    calcJacobian(iside, ielem, uvec1, dwave, _jac1);
   }
-  return _jac1[tid];
+  return _jac1;
 }

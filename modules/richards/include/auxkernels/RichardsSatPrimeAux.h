@@ -1,22 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSSATPRIMEAUX_H
-#define RICHARDSSATPRIMEAUX_H
+#pragma once
 
 #include "AuxKernel.h"
 
 #include "RichardsSat.h"
 
 // Forward Declarations
-class RichardsSatPrimeAux;
-
-template <>
-InputParameters validParams<RichardsSatPrimeAux>();
 
 /**
  * Derivative of fluid Saturation wrt effective saturation
@@ -24,6 +21,8 @@ InputParameters validParams<RichardsSatPrimeAux>();
 class RichardsSatPrimeAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   RichardsSatPrimeAux(const InputParameters & parameters);
 
 protected:
@@ -35,5 +34,3 @@ protected:
   /// User object defining saturation as a function of effective saturation
   const RichardsSat & _sat_UO;
 };
-
-#endif // RICHARDSSATPRIMEAUX_H

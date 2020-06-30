@@ -1,18 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #pylint: disable=missing-docstring
-#################################################################
-#                   DO NOT MODIFY THIS HEADER                   #
-#  MOOSE - Multiphysics Object Oriented Simulation Environment  #
-#                                                               #
-#            (c) 2010 Battelle Energy Alliance, LLC             #
-#                      ALL RIGHTS RESERVED                      #
-#                                                               #
-#           Prepared by Battelle Energy Alliance, LLC           #
-#             Under Contract No. DE-AC07-05ID14517              #
-#              With the U. S. Department of Energy              #
-#                                                               #
-#              See COPYRIGHT for full restrictions              #
-#################################################################
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import os
 import unittest
 import shutil
@@ -77,9 +73,9 @@ class TestExodusReader(unittest.TestCase):
 
         # Blocks
         blockinfo = reader.getBlockInformation()
-        self.assertEqual(blockinfo[reader.BLOCK].keys(), ['1', '76'])
-        self.assertEqual(blockinfo[reader.NODESET].keys(), ['1', '2'])
-        self.assertEqual(blockinfo[reader.SIDESET].keys(), ['1', '2'])
+        self.assertEqual(list(blockinfo[reader.BLOCK].keys()), ['1', '76'])
+        self.assertEqual(list(blockinfo[reader.NODESET].keys()), ['1', '2'])
+        self.assertEqual(list(blockinfo[reader.SIDESET].keys()), ['1', '2'])
         self.assertEqual(blockinfo[reader.SIDESET]['2'].name, 'top')
         self.assertEqual(blockinfo[reader.SIDESET]['2'].object_type, 3)
         self.assertEqual(blockinfo[reader.SIDESET]['2'].object_index, 1)
@@ -87,21 +83,21 @@ class TestExodusReader(unittest.TestCase):
 
         # Variable Info
         varinfo = reader.getVariableInformation()
-        self.assertEqual(varinfo.keys(), ['aux_elem', 'convected', 'diffused', 'func_pp'])
+        self.assertEqual(list(varinfo.keys()), ['aux_elem', 'convected', 'diffused', 'func_pp'])
 
         # Elemental Variables
         elemental = reader.getVariableInformation(var_types=[reader.ELEMENTAL])
-        self.assertEqual(elemental.keys(), ['aux_elem'])
+        self.assertEqual(list(elemental.keys()), ['aux_elem'])
         self.assertEqual(elemental['aux_elem'].num_components, 1)
 
         # Nodal Variables
         elemental = reader.getVariableInformation(var_types=[reader.NODAL])
-        self.assertEqual(elemental.keys(), ['convected', 'diffused'])
+        self.assertEqual(list(elemental.keys()), ['convected', 'diffused'])
         self.assertEqual(elemental['diffused'].num_components, 1)
 
         # Global Variables
         gvars = reader.getVariableInformation(var_types=[reader.GLOBAL])
-        self.assertEqual(gvars.keys(), ['func_pp'])
+        self.assertEqual(list(gvars.keys()), ['func_pp'])
         self.assertEqual(gvars['func_pp'].num_components, 1)
 
     def testSingleFieldData(self):
@@ -121,7 +117,7 @@ class TestExodusReader(unittest.TestCase):
         reader.update()
 
         variables = reader.getVariableInformation()
-        self.assertEqual(variables.keys(), ['u', 'vel_'])
+        self.assertEqual(list(variables.keys()), ['u', 'vel_'])
         self.assertEqual(variables['vel_'].num_components, 2)
 
     def testAdaptivity(self):

@@ -69,10 +69,11 @@
 [Postprocessors]
   [./num_vars]
     type = NumVars
+    system = 'NL'
   [../]
   [./num_aux]
     type = NumVars
-    system = auxiliary
+    system = 'AUX'
   [../]
 []
 
@@ -85,7 +86,6 @@
 
 [Outputs]
   execute_on = 'timestep_end'
-  console = true
 []
 
 [ICs]

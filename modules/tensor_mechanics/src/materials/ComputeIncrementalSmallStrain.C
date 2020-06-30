@@ -1,19 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeIncrementalSmallStrain.h"
 #include "Assembly.h"
-// libmesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeIncrementalSmallStrain);
+
 InputParameters
-validParams<ComputeIncrementalSmallStrain>()
+ComputeIncrementalSmallStrain::validParams()
 {
-  InputParameters params = validParams<ComputeIncrementalStrainBase>();
+  InputParameters params = ComputeIncrementalStrainBase::validParams();
   params.addClassDescription(
       "Compute a strain increment and rotation increment for small strains.");
   return params;
@@ -64,6 +67,9 @@ ComputeIncrementalSmallStrain::computeProperties()
 
     // Update strain in intermediate configuration: rotations are not needed
     _mechanical_strain[_qp] = _mechanical_strain_old[_qp] + _strain_increment[_qp];
+
+    // incremental small strain does not include rotation
+    _rotation_increment[_qp].setToIdentity();
   }
 }
 

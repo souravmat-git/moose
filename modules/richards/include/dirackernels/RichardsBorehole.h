@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSBOREHOLE_H
-#define RICHARDSBOREHOLE_H
+#pragma once
 
 // Moose Includes
 #include "PeacemanBorehole.h"
@@ -14,11 +15,6 @@
 #include "RichardsDensity.h"
 #include "RichardsRelPerm.h"
 #include "RichardsSeff.h"
-
-class RichardsBorehole;
-
-template <>
-InputParameters validParams<RichardsBorehole>();
 
 /**
  * Approximates a borehole by a sequence of Dirac Points
@@ -35,6 +31,8 @@ public:
    * It also calculates segment-lengths and rotation matrices
    * needed for computing the borehole well constant
    */
+  static InputParameters validParams();
+
   RichardsBorehole(const InputParameters & parameters);
 
   /**
@@ -83,13 +81,13 @@ protected:
   const unsigned int _pvar;
 
   /// user object defining the density.  Only used if _fully_upwind = true
-  const RichardsDensity * _density_UO;
+  const RichardsDensity * const _density_UO;
 
   /// user object defining the effective saturation.  Only used if _fully_upwind = true
-  const RichardsSeff * _seff_UO;
+  const RichardsSeff * const _seff_UO;
 
   /// user object defining the relative permeability.  Only used if _fully_upwind = true
-  const RichardsRelPerm * _relperm_UO;
+  const RichardsRelPerm * const _relperm_UO;
 
   /// number of nodes in this element.  Only used if _fully_upwind = true
   unsigned int _num_nodes;
@@ -138,8 +136,8 @@ protected:
    * Only used if _fully_upwind = true
    * Eg:
    * _ps_at_nodes[_pvar] is a pointer to this variable's nodal porepressure values
-   * So: (*_ps_at_nodes[_pvar])[i] = _var.nodalSln()[i] = porepressure of pressure-variable _pvar at
-   * node i
+   * So: (*_ps_at_nodes[_pvar])[i] = _var.dofValues()[i] = porepressure of pressure-variable _pvar
+   * at node i
    */
   std::vector<const VariableValue *> _ps_at_nodes;
 
@@ -152,5 +150,3 @@ protected:
    */
   Real jac(unsigned int wrt_num);
 };
-
-#endif // RICHARDSBOREHOLE_H

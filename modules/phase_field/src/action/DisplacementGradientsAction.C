@@ -1,20 +1,28 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "DisplacementGradientsAction.h"
 #include "Factory.h"
 #include "FEProblem.h"
 
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", DisplacementGradientsAction, "add_kernel");
+
+registerMooseAction("PhaseFieldApp", DisplacementGradientsAction, "add_material");
+
+registerMooseAction("PhaseFieldApp", DisplacementGradientsAction, "add_variable");
+
 InputParameters
-validParams<DisplacementGradientsAction>()
+DisplacementGradientsAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addClassDescription("Set up variables, kernels, and materials for a the displacement "
                              "gradients and their elastic free energy derivatives for non-split "
                              "Cahn-Hilliard problems.");
@@ -45,11 +53,13 @@ DisplacementGradientsAction::act()
     Real scaling = getParam<Real>("scaling");
     for (unsigned int i = 0; i < ngrad; ++i)
     {
+      auto var_params = _factory.getValidParams("MooseVariable");
+      var_params.set<MooseEnum>("family") = "LAGRANGE";
+      var_params.set<MooseEnum>("order") = "FIRST";
+      var_params.set<std::vector<Real>>("scaling") = {scaling};
+
       // Create displacement gradient variables
-      _problem->addVariable(_displacement_gradients[i],
-                            FEType(Utility::string_to_enum<Order>("FIRST"),
-                                   Utility::string_to_enum<FEFamily>("LAGRANGE")),
-                            scaling);
+      _problem->addVariable("MooseVariable", _displacement_gradients[i], var_params);
     }
   }
   else if (_current_task == "add_material")
@@ -63,7 +73,8 @@ DisplacementGradientsAction::act()
   {
     unsigned int ndisp = _displacements.size();
     if (ndisp * ndisp != ngrad)
-      mooseError("Number of displacement gradient variables must be the square of the number of "
+      paramError("displacement_gradients",
+                 "Number of displacement gradient variables must be the square of the number of "
                  "displacement variables.");
 
     // Loop through the displacements

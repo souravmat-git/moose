@@ -1,26 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef IMPLICITSTATEFUL_H
-#define IMPLICITSTATEFUL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
-
-// Forward Declarations
-class ImplicitStateful;
-
-template <>
-InputParameters validParams<ImplicitStateful>();
 
 /**
  * Stateful material class that defines a few properties.
@@ -28,6 +17,8 @@ InputParameters validParams<ImplicitStateful>();
 class ImplicitStateful : public Material
 {
 public:
+  static InputParameters validParams();
+
   ImplicitStateful(const InputParameters & parameters);
 
 protected:
@@ -41,5 +32,3 @@ private:
   const MaterialProperty<Real> & _coupled_old;
   const MaterialProperty<Real> & _coupled_older;
 };
-
-#endif // STATEFULMATERIAL_H

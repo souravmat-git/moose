@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ACInterface_H
-#define ACInterface_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
-
-class ACInterface;
-
-template <>
-InputParameters validParams<ACInterface>();
 
 /**
  * Compute the Allen-Cahn interface term with the weak form residual
@@ -23,6 +20,8 @@ InputParameters validParams<ACInterface>();
 class ACInterface : public DerivativeMaterialInterface<JvarMapKernelInterface<Kernel>>
 {
 public:
+  static InputParameters validParams();
+
   ACInterface(const InputParameters & parameters);
   virtual void initialSetup();
 
@@ -33,6 +32,9 @@ protected:
 
   RealGradient gradL();
   RealGradient gradKappa();
+
+  /// the \f$ \nabla(L\psi) \f$ term
+  RealGradient nablaLPsi();
 
   /// the \f$ \kappa\nabla(L\psi) \f$ term
   RealGradient kappaNablaLPsi();
@@ -53,9 +55,6 @@ protected:
   /// kappa derivative w.r.t. order parameter
   const MaterialProperty<Real> & _dkappadop;
 
-  /// number of coupled variables
-  const unsigned int _nvar;
-
   /// @{ Mobility derivative w.r.t. other coupled variables
   std::vector<const MaterialProperty<Real> *> _dLdarg;
   std::vector<const MaterialProperty<Real> *> _d2Ldargdop;
@@ -68,5 +67,3 @@ protected:
   /// Gradients for all coupled variables
   std::vector<const VariableGradient *> _gradarg;
 };
-
-#endif // ACInterface_H

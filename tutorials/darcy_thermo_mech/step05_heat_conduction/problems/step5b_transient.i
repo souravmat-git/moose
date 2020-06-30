@@ -8,43 +8,43 @@
 []
 
 [Variables]
-  [./temperature]
+  [temperature]
     initial_condition = 300 # Start at room temperature
-  [../]
+  []
 []
 
 [Kernels]
-  [./heat_conduction]
-    type = HeatConduction
+  [heat_conduction]
+    type = ADHeatConduction
     variable = temperature
-  [../]
-  [./heat_conduction_time_derivative]
-    type = HeatConductionTimeDerivative
+  []
+  [heat_conduction_time_derivative]
+    type = ADHeatConductionTimeDerivative
     variable = temperature
-  [../]
+  []
 []
 
 [BCs]
-  [./inlet_temperature]
+  [inlet_temperature]
     type = DirichletBC
     variable = temperature
     boundary = left
     value = 350 # (K)
-  [../]
-  [./outlet_temperature]
+  []
+  [outlet_temperature]
     type = DirichletBC
     variable = temperature
     boundary = right
     value = 300 # (K)
-  [../]
+  []
 []
 
 [Materials]
-  [./steel]
-    type = GenericConstantMaterial
+  [steel]
+    type = ADGenericConstantMaterial
     prop_names = 'thermal_conductivity specific_heat density'
     prop_values = '18 0.466 8000' # W/m*K, J/kg-K, kg/m^3 @ 296K
-  [../]
+  []
 []
 
 [Problem]
@@ -56,7 +56,7 @@
 [Executioner]
   type = Transient
   num_steps = 10
-  solve_type = PJFNK
+  solve_type = NEWTON
   petsc_options_iname = '-pc_type -pc_hypre_type'
   petsc_options_value = 'hypre boomeramg'
 []

@@ -1,26 +1,39 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RANKTHREETENSOR_H
-#define RANKTHREETENSOR_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-// MOOSE includes
-#include "DataIO.h"
+#pragma once
 
-// libMesh includes
-#include "libmesh/tensor_value.h"
+#include "Moose.h"
+#include "ADRankTwoTensorForward.h"
+#include "ADRankThreeTensorForward.h"
+#include "ADRankFourTensorForward.h"
+
 #include "libmesh/libmesh.h"
-#include "libmesh/vector_value.h"
+
+#include "metaphysicl/raw_type.h"
+
+using libMesh::Real;
+namespace libMesh
+{
+template <typename>
+class TensorValue;
+template <typename>
+class TypeTensor;
+template <typename>
+class VectorValue;
+}
 
 // Forward declarations
 class MooseEnum;
-class RankTwoTensor;
-class RankThreeTensor;
-class RankFourTensor;
 
+namespace MathUtils
+{
 template <typename T>
 void mooseSetToZero(T & v);
 
@@ -29,13 +42,17 @@ void mooseSetToZero(T & v);
  * Needed by DerivativeMaterialInterface
  */
 template <>
-void mooseSetToZero<RankThreeTensor>(RankThreeTensor & v);
+void mooseSetToZero<RankThreeTensorTempl<Real>>(RankThreeTensorTempl<Real> & v);
+template <>
+void mooseSetToZero<RankThreeTensorTempl<DualReal>>(RankThreeTensorTempl<DualReal> & v);
+}
 
 /**
  * RankThreeTensor is designed to handle any N-dimensional third order tensor, r.
  *
  */
-class RankThreeTensor
+template <typename T>
+class RankThreeTensorTempl
 {
 public:
   /// Initialization method
@@ -51,29 +68,43 @@ public:
    */
   enum FillMethod
   {
-    general
+    automatic,
+    general,
+    plane_normal
   };
 
   /// Default constructor; fills to zero
-  RankThreeTensor();
+  RankThreeTensorTempl();
+
+  /// Copy assignment operator must be defined if used
+  RankThreeTensorTempl(const RankThreeTensorTempl<T> & a) = default;
+
+  /**
+   * Construct from other class template instantiation
+   */
+  template <typename T2>
+  RankThreeTensorTempl(const RankThreeTensorTempl<T2> & copy);
 
   /// Select specific initialization pattern
-  RankThreeTensor(const InitMethod);
+  RankThreeTensorTempl(const InitMethod);
 
   /// Fill from vector
-  RankThreeTensor(const std::vector<Real> &, FillMethod);
+  RankThreeTensorTempl(const std::vector<T> &, FillMethod method = automatic);
 
   /// Gets the value for the index specified.  Takes index = 0,1,2
-  inline Real & operator()(unsigned int i, unsigned int j, unsigned int k)
+  inline T & operator()(unsigned int i, unsigned int j, unsigned int k)
   {
-    return _vals[((i * LIBMESH_DIM + j) * LIBMESH_DIM + k)];
+    return _vals[((i * N + j) * N + k)];
   }
 
   /// Gets the value for the index specified.  Takes index = 0,1,2. Used for const
-  inline Real operator()(unsigned int i, unsigned int j, unsigned int k) const
+  inline T operator()(unsigned int i, unsigned int j, unsigned int k) const
   {
-    return _vals[((i * LIBMESH_DIM + j) * LIBMESH_DIM + k)];
+    return _vals[((i * N + j) * N + k)];
   }
+
+  /// Assignment-from-scalar operator.
+  RankThreeTensorTempl<T> & operator=(const T & value);
 
   /// Zeros out the tensor.
   void zero();
@@ -81,66 +112,57 @@ public:
   /// Print the rank three tensor
   void print(std::ostream & stm = Moose::out) const;
 
-  /// copies values from a into this tensor
-  RankThreeTensor & operator=(const RankThreeTensor & a);
+  /// copies values from "a" into this tensor
+  RankThreeTensorTempl<T> & operator=(const RankThreeTensorTempl<T> & a);
 
-  /// r_ijk*a_kl
-  // RankTwoTensor operator*(const RankTwoTensor & a) const;
+  template <typename T2>
+  RankThreeTensorTempl<T> & operator=(const RankThreeTensorTempl<T2> & a);
 
   /// b_i = r_ijk * a_jk
-  RealVectorValue operator*(const RankTwoTensor & a) const;
-
-  /// r_ijk*a_kl
-  // RealTensorValue operator*(const RealTensorValue & a) const;
+  VectorValue<T> operator*(const RankTwoTensorTempl<T> & a) const;
 
   /// r_ijk*a
-  RankThreeTensor operator*(const Real a) const;
+  RankThreeTensorTempl<T> operator*(const T a) const;
 
   /// r_ijk *= a
-  RankThreeTensor & operator*=(const Real a);
+  RankThreeTensorTempl<T> & operator*=(const T a);
 
   /// r_ijk/a
-  RankThreeTensor operator/(const Real a) const;
+  RankThreeTensorTempl<T> operator/(const T a) const;
 
   /// r_ijk /= a  for all i, j, k
-  RankThreeTensor & operator/=(const Real a);
+  RankThreeTensorTempl<T> & operator/=(const T a);
 
   /// r_ijk += a_ijk  for all i, j, k
-  RankThreeTensor & operator+=(const RankThreeTensor & a);
+  RankThreeTensorTempl<T> & operator+=(const RankThreeTensorTempl<T> & a);
 
   /// r_ijkl + a_ijk
-  RankThreeTensor operator+(const RankThreeTensor & a) const;
+  RankThreeTensorTempl<T> operator+(const RankThreeTensorTempl<T> & a) const;
 
   /// r_ijk -= a_ijk
-  RankThreeTensor & operator-=(const RankThreeTensor & a);
+  RankThreeTensorTempl<T> & operator-=(const RankThreeTensorTempl<T> & a);
 
   /// r_ijk - a_ijk
-  RankThreeTensor operator-(const RankThreeTensor & a) const;
+  RankThreeTensorTempl<T> operator-(const RankThreeTensorTempl<T> & a) const;
 
   /// -r_ijk
-  RankThreeTensor operator-() const;
+  RankThreeTensorTempl<T> operator-() const;
 
   /// \sqrt(r_ijk*r_ijk)
-  Real L2norm() const;
+  T L2norm() const;
 
   /**
    * Rotate the tensor using
    * r_ijk = R_im R_in R_ko r_mno
    */
-  template <class T>
-  void rotate(const T & R);
+  template <class T2>
+  void rotate(const T2 & R);
 
   /**
    * Rotate the tensor using
    * r_ijk = R_im R_in R_ko r_mno
    */
-  void rotate(const RealTensorValue & R);
-
-  /**
-   * Rotate the tensor using
-   * r_ijk = R_im R_in R_ko R_lp r_mno
-   */
-  void rotate(const RankTwoTensor & R);
+  void rotate(const TensorValue<T> & R);
 
   /// Static method for use in validParams for getting the "fill_method"
   static MooseEnum fillMethodEnum();
@@ -153,20 +175,27 @@ public:
    *             general (use fillGeneralFromInputVector)
    *             more fill_methods to be implemented soon!
    */
-  void fillFromInputVector(const std::vector<Real> & input, FillMethod fill_method);
+  void fillFromInputVector(const std::vector<T> & input, FillMethod fill_method = automatic);
 
   /**
    * Fills RankThreeTensor from plane normal vectors
    * ref. Kuhl et. al. Int. J. Solids Struct. 38(2001) 2933-2952
    * @param input plane normal vector
    */
-  void fillFromPlaneNormal(const RealVectorValue & input);
+  void fillFromPlaneNormal(const VectorValue<T> & input);
 
   /**
-   * Creates fourth order tensor D=A*b*A where A is rank 3 and b is rank 2
-   * @param a RankTwoTensor A in the equation above
+   * Creates fourth order tensor D_{ijkl}=A_{mij}*b_{mn}*A_{nkl} where A is rank 3 and b is rank 2
+   * @param a RankThreeTensor A in the equation above
    */
-  RankFourTensor mixedProductRankFour(const RankTwoTensor & a) const;
+  RankFourTensorTempl<T> mixedProductRankFour(const RankTwoTensorTempl<T> & a) const;
+
+  /**
+   * Creates a vector from the double contraction of a rank three and rank two tensor.
+   *
+   * c_i = A_{ijk} * b_{jk}
+   */
+  VectorValue<T> doubleContraction(const RankTwoTensorTempl<T> & b) const;
 
 protected:
   /// Dimensionality of rank-three tensor
@@ -175,31 +204,58 @@ protected:
   static constexpr unsigned int N3 = N * N * N;
 
   /// The values of the rank-three tensor stored by index=((i * LIBMESH_DIM + j) * LIBMESH_DIM + k)
-  Real _vals[N3];
+  T _vals[N3];
 
-  void fillGeneralFromInputVector(const std::vector<Real> & input);
+  void fillGeneralFromInputVector(const std::vector<T> & input);
 
-  template <class T>
-  friend void dataStore(std::ostream &, T &, void *);
+  template <class T2>
+  friend void dataStore(std::ostream &, RankThreeTensorTempl<T2> &, void *);
 
-  template <class T>
-  friend void dataLoad(std::istream &, T &, void *);
+  template <class T2>
+  friend void dataLoad(std::istream &, RankThreeTensorTempl<T2> &, void *);
+
+  template <class T2>
+  friend class RankTwoTensorTempl;
+
+  template <class T2>
+  friend class RankThreeTensorTempl;
+
+  template <class T2>
+  friend class RankFourTensorTempl;
 };
 
-template <>
-void dataStore(std::ostream &, RankThreeTensor &, void *);
+namespace MetaPhysicL
+{
+template <typename T>
+struct RawType<RankThreeTensorTempl<T>>
+{
+  typedef RankThreeTensorTempl<typename RawType<T>::value_type> value_type;
 
-template <>
-void dataLoad(std::istream &, RankThreeTensor &, void *);
+  static value_type value(const RankThreeTensorTempl<T> & in)
+  {
+    value_type ret;
+    for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+      for (unsigned int j = 0; j < LIBMESH_DIM; ++j)
+        for (unsigned int k = 0; k < LIBMESH_DIM; ++k)
+          ret(i, j, k) = raw_value(in(i, j, k));
 
-inline RankThreeTensor operator*(Real a, const RankThreeTensor & b) { return b * a; }
+    return ret;
+  }
+};
+}
 
-///r=v*A where r is rank 2, v is vector and A is rank 3
-RankTwoTensor operator*(const RealVectorValue &, const RankThreeTensor &);
+template <typename T>
+template <typename T2>
+RankThreeTensorTempl<T>::RankThreeTensorTempl(const RankThreeTensorTempl<T2> & copy)
+{
+  for (unsigned int i = 0; i < N3; ++i)
+    _vals[i] = copy._vals[i];
+}
 
-template <class T>
+template <typename T>
+template <class T2>
 void
-RankThreeTensor::rotate(const T & R)
+RankThreeTensorTempl<T>::rotate(const T2 & R)
 {
   unsigned int index = 0;
   for (unsigned int i = 0; i < N; ++i)
@@ -207,13 +263,13 @@ RankThreeTensor::rotate(const T & R)
       for (unsigned int k = 0; k < N; ++k)
       {
         unsigned int index2 = 0;
-        Real sum = 0.0;
+        T sum = 0.0;
         for (unsigned int m = 0; m < N; ++m)
         {
-          Real a = R(i, m);
+          T a = R(i, m);
           for (unsigned int n = 0; n < N; ++n)
           {
-            Real ab = a * R(j, n);
+            T ab = a * R(j, n);
             for (unsigned int o = 0; o < N; ++o)
               sum += ab * R(k, o) * _vals[index2++];
           }
@@ -222,4 +278,35 @@ RankThreeTensor::rotate(const T & R)
       }
 }
 
-#endif // RANKTHREETENSOR_H
+template <typename T>
+RankThreeTensorTempl<T> operator*(T a, const RankThreeTensorTempl<T> & b)
+{
+  return b * a;
+}
+
+///r=v*A where r is rank 2, v is vector and A is rank 3
+template <typename T>
+RankTwoTensorTempl<T> operator*(const VectorValue<T> & p, const RankThreeTensorTempl<T> & b)
+{
+  RankTwoTensorTempl<T> result;
+
+  for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+    for (unsigned int j = 0; j < LIBMESH_DIM; ++j)
+      for (unsigned int k = 0; k < LIBMESH_DIM; ++k)
+        result(i, j) += p(k) * b(k, i, j);
+
+  return result;
+}
+
+template <typename T>
+template <typename T2>
+RankThreeTensorTempl<T> &
+RankThreeTensorTempl<T>::operator=(const RankThreeTensorTempl<T2> & a)
+{
+  for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+    for (unsigned int j = 0; j < LIBMESH_DIM; ++j)
+      for (unsigned int k = 0; k < LIBMESH_DIM; ++k)
+        (*this)(i, j, k) = a(i, j, k);
+
+  return *this;
+}

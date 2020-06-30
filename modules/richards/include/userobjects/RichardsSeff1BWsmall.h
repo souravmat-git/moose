@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSSEFF1BWSMALL_H
-#define RICHARDSSEFF1BWSMALL_H
+#pragma once
 
 #include "RichardsSeff.h"
-
-class RichardsSeff1BWsmall;
-
-template <>
-InputParameters validParams<RichardsSeff1BWsmall>();
 
 /**
  * "Broadbridge-White" form of effective saturation for Kn small
@@ -25,6 +21,8 @@ InputParameters validParams<RichardsSeff1BWsmall>();
 class RichardsSeff1BWsmall : public RichardsSeff
 {
 public:
+  static InputParameters validParams();
+
   RichardsSeff1BWsmall(const InputParameters & parameters);
 
   /**
@@ -75,5 +73,3 @@ protected:
   /// BW's lambda_s parameter multiplied by (fluiddensity*gravity)
   Real _las;
 };
-
-#endif // RICHARDSSEFF1BWSMALL_H

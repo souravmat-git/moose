@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MatReaction.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", MatReaction);
+
 InputParameters
-validParams<MatReaction>()
+MatReaction::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addCoupledVar("v",
                        "Set this to make v a coupled variable, otherwise it will use the "
                        "kernel's nonlinear variable for v");
@@ -30,15 +34,11 @@ MatReaction::MatReaction(const InputParameters & parameters)
     _eta_name(_var.name()),
     _dLdop(getMaterialPropertyDerivative<Real>("mob_name", _eta_name)),
     _dLdv(getMaterialPropertyDerivative<Real>("mob_name", _v_name)),
-    _nvar(_coupled_moose_vars.size()),
-    _dLdarg(_nvar)
+    _dLdarg(_n_args)
 {
   // Get reaction rate derivatives
-  for (unsigned int i = 0; i < _nvar; ++i)
-  {
-    MooseVariable * ivar = _coupled_moose_vars[i];
-    _dLdarg[i] = &getMaterialPropertyDerivative<Real>("mob_name", ivar->name());
-  }
+  for (unsigned int i = 0; i < _n_args; ++i)
+    _dLdarg[i] = &getMaterialPropertyDerivative<Real>("mob_name", i);
 }
 
 void

@@ -1,3 +1,12 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 class InputParameters:
     def __init__(self, *args):
         self.valid = {}
@@ -101,12 +110,12 @@ class InputParameters:
 
         # Check that the group is a string
         if not isinstance(group, str):
-            print 'ERROR: The supplied group name must be a string'
+            print('ERROR: The supplied group name must be a string')
             return
 
         # Check that the prop_list is a list
         if not isinstance(prop_list, list):
-            print 'ERROR: The supplied properties must be supplied as a list'
+            print('ERROR: The supplied properties must be supplied as a list')
             return
 
         # Create the storage for the group if it doesn't exist
@@ -129,7 +138,7 @@ class InputParameters:
     def applyParams(self, common):
 
         if not isinstance(common, InputParameters):
-            print 'ERROR: Supplied "common" variable must of of type InputParameters'
+            print('ERROR: Supplied "common" variable must of of type InputParameters')
             return
 
         # Loop through the valid parameters in the common parameters,
@@ -145,5 +154,5 @@ class InputParameters:
             if k in self.valid:
                 value = self.valid[k]
 
-            print k.ljust(20), value
-            print ' '.ljust(20), self.desc[k]
+            print(k.ljust(20), value)
+            print(' '.ljust(20), self.desc[k])

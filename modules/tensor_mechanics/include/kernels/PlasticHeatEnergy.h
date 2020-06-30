@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef PLASTICHEATENERGY_H
-#define PLASTICHEATENERGY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "RankTwoTensor.h"
 
 // Forward Declarations
-class PlasticHeatEnergy;
-
-template <>
-InputParameters validParams<PlasticHeatEnergy>();
 
 /**
  * Provides a heat source from plastic deformation:
@@ -23,6 +21,8 @@ InputParameters validParams<PlasticHeatEnergy>();
 class PlasticHeatEnergy : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   PlasticHeatEnergy(const InputParameters & parameters);
 
 protected:
@@ -34,7 +34,7 @@ protected:
   Real _coeff;
 
   /// optional parameter that allows multiple mechanics models to be defined
-  std::string _base_name;
+  const std::string _base_name;
 
   /// stress * plastic_strain_rate
   const MaterialProperty<Real> & _plastic_heat;
@@ -48,5 +48,3 @@ protected:
   /// MOOSE variable number for the displacement variables
   std::vector<unsigned int> _disp_var;
 };
-
-#endif // PLASTICHEATENERGY_H

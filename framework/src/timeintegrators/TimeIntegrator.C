@@ -1,54 +1,86 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#include "libmesh/nonlinear_implicit_system.h"
+#include "libmesh/petsc_nonlinear_solver.h"
 
 #include "TimeIntegrator.h"
 #include "FEProblem.h"
 #include "SystemBase.h"
 #include "NonlinearSystem.h"
 
-template <>
+defineLegacyParams(TimeIntegrator);
+
 InputParameters
-validParams<TimeIntegrator>()
+TimeIntegrator::validParams()
 {
-  InputParameters params = validParams<MooseObject>();
+  InputParameters params = MooseObject::validParams();
   params.registerBase("TimeIntegrator");
   return params;
 }
 
 TimeIntegrator::TimeIntegrator(const InputParameters & parameters)
   : MooseObject(parameters),
-    Restartable(parameters, "TimeIntegrators"),
-    _fe_problem(*parameters.getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
-    _sys(*parameters.getCheckedPointerParam<SystemBase *>("_sys")),
+    Restartable(this, "TimeIntegrators"),
+    _fe_problem(*getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
+    _sys(*getCheckedPointerParam<SystemBase *>("_sys")),
     _nl(_fe_problem.getNonlinearSystemBase()),
-    _u_dot(_sys.solutionUDot()),
+    _nonlinear_implicit_system(dynamic_cast<NonlinearImplicitSystem *>(&_sys.system())),
     _du_dot_du(_sys.duDotDu()),
     _solution(_sys.currentSolution()),
-    _solution_old(_sys.solutionOld()),
-    _solution_older(_sys.solutionOlder()),
+    _solution_old(_sys.solutionState(1)),
+    _solution_older(_sys.solutionState(2)),
     _t_step(_fe_problem.timeStep()),
     _dt(_fe_problem.dt()),
     _dt_old(_fe_problem.dtOld()),
-    _Re_time(_nl.residualVector(Moose::KT_TIME)),
-    _Re_non_time(_nl.residualVector(Moose::KT_NONTIME))
+    _Re_time(_nl.getResidualTimeVector()),
+    _Re_non_time(_nl.getResidualNonTimeVector()),
+    _n_nonlinear_iterations(0),
+    _n_linear_iterations(0),
+    _is_explicit(false),
+    _is_lumped(false),
+    _u_dot_factor_tag(_fe_problem.addVectorTag("u_dot_factor", Moose::VECTOR_TAG_SOLUTION)),
+    _u_dotdot_factor_tag(_fe_problem.addVectorTag("u_dotdot_factor", Moose::VECTOR_TAG_SOLUTION))
 {
+  _fe_problem.setUDotRequested(true);
 }
 
-TimeIntegrator::~TimeIntegrator() {}
+void
+TimeIntegrator::preStep()
+{
+  // If nothing else (children TimeIntegrators) associated these tags, associate them now
+  if (!_nl.hasVector(_u_dot_factor_tag))
+    _nl.associateVectorToTag(*_nl.solutionUDot(), _u_dot_factor_tag);
+  if (!_nl.hasVector(_u_dotdot_factor_tag) && _fe_problem.uDotDotRequested())
+    _nl.associateVectorToTag(*_nl.solutionUDotDot(), _u_dotdot_factor_tag);
+}
 
 void
 TimeIntegrator::solve()
 {
   _nl.system().solve();
+
+  _n_nonlinear_iterations = getNumNonlinearIterationsLastSolve();
+  _n_linear_iterations = getNumLinearIterationsLastSolve();
+}
+
+unsigned int
+TimeIntegrator::getNumNonlinearIterationsLastSolve() const
+{
+  return _nonlinear_implicit_system->n_nonlinear_iterations();
+}
+
+unsigned int
+TimeIntegrator::getNumLinearIterationsLastSolve() const
+{
+  NonlinearSolver<Real> & nonlinear_solver =
+      static_cast<NonlinearSolver<Real> &>(*_nonlinear_implicit_system->nonlinear_solver);
+
+  return nonlinear_solver.get_total_linear_iterations();
 }

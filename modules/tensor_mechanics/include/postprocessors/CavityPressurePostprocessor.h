@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CAVITYPRESSUREPOSTPROCESSOR_H
-#define CAVITYPRESSUREPOSTPROCESSOR_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GeneralPostprocessor.h"
 
@@ -14,23 +16,18 @@ class CavityPressureUserObject;
 class CavityPressurePostprocessor : public GeneralPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   CavityPressurePostprocessor(const InputParameters & parameters);
 
-  virtual ~CavityPressurePostprocessor() {}
+  virtual void initialize() override {}
 
-  virtual void initialize() {}
+  virtual void execute() override {}
 
-  virtual void execute() {}
-
-  virtual PostprocessorValue getValue();
+  virtual PostprocessorValue getValue() override;
 
 protected:
   const CavityPressureUserObject & _cpuo;
 
-  const std::string _quantity;
+  const MooseEnum _quantity;
 };
-
-template <>
-InputParameters validParams<CavityPressurePostprocessor>();
-
-#endif

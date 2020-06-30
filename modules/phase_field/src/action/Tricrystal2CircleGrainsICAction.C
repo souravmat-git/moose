@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "Tricrystal2CircleGrainsICAction.h"
 #include "Factory.h"
 #include "Parser.h"
@@ -13,7 +16,6 @@
 #include <sstream>
 #include <stdexcept>
 
-// libMesh includes
 #include "libmesh/libmesh.h"
 #include "libmesh/exodusII_io.h"
 #include "libmesh/equation_systems.h"
@@ -23,11 +25,12 @@
 
 const Real Tricrystal2CircleGrainsICAction::_abs_zero_tol = 1e-12;
 
-template <>
+registerMooseAction("PhaseFieldApp", Tricrystal2CircleGrainsICAction, "add_ic");
+
 InputParameters
-validParams<Tricrystal2CircleGrainsICAction>()
+Tricrystal2CircleGrainsICAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   params.addRequiredParam<unsigned int>("op_num", "number of order parameters to create");
   params.addRequiredParam<std::string>("var_name_base", "specifies the base name of the variables");
 

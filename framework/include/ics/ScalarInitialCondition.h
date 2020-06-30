@@ -1,23 +1,18 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SCALARINITIALCONDITION_H
-#define SCALARINITIALCONDITION_H
+#pragma once
 
 #include "MooseObject.h"
 #include "ScalarCoupleable.h"
 #include "FunctionInterface.h"
+#include "UserObjectInterface.h"
 #include "DependencyResolverInterface.h"
 
 // forward declarations
@@ -42,6 +37,7 @@ InputParameters validParams<ScalarInitialCondition>();
 class ScalarInitialCondition : public MooseObject,
                                public ScalarCoupleable,
                                public FunctionInterface,
+                               public UserObjectInterface,
                                public DependencyResolverInterface
 {
 public:
@@ -53,6 +49,8 @@ public:
   ScalarInitialCondition(const InputParameters & parameters);
 
   virtual ~ScalarInitialCondition();
+
+  static InputParameters validParams();
 
   MooseVariableScalar & variable() { return _var; }
 
@@ -67,6 +65,14 @@ public:
    * This must be overridden by derived classes.
    */
   virtual Real value() = 0;
+
+  /**
+   * Gets called at the beginning of the simulation before this object is asked to do its job.
+   * Note: This method is normally inherited from SetupInterface.  However in this case it makes
+   * no sense to inherit the other virtuals available in that class so we are adding this virtual
+   * directly to this class with out the extra inheritance.
+   */
+  virtual void initialSetup() {}
 
   virtual const std::set<std::string> & getRequestedItems();
 
@@ -89,5 +95,3 @@ protected:
   std::set<std::string> _depend_vars;
   std::set<std::string> _supplied_vars;
 };
-
-#endif // SCALARINITIALCONDITION_H

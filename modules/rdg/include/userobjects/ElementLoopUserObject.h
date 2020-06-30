@@ -1,19 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef ELEMENTLOOPUSEROBJECT_H
-#define ELEMENTLOOPUSEROBJECT_H
+#pragma once
 
 #include "GeneralUserObject.h"
 #include "Coupleable.h"
-#include "MooseVariableInterface.h"
 #include "ScalarCoupleable.h"
 #include "MooseVariableDependencyInterface.h"
-#include "ZeroInterface.h"
 #include "MooseVariable.h"
 #include "SubProblem.h"
 #include "NonlinearSystem.h"
@@ -25,16 +24,12 @@
 #include "libmesh/parallel_algebra.h"
 
 // Forward Declarations
-class ElementLoopUserObject;
 
 namespace libMesh
 {
 class Elem;
 class QBase;
 }
-
-template <>
-InputParameters validParams<ElementLoopUserObject>();
 
 /**
  * A base class that loops over elements and do things
@@ -59,10 +54,11 @@ InputParameters validParams<ElementLoopUserObject>();
 class ElementLoopUserObject : public GeneralUserObject,
                               public BlockRestrictable,
                               public Coupleable,
-                              public MooseVariableDependencyInterface,
-                              public ZeroInterface
+                              public MooseVariableDependencyInterface
 {
 public:
+  static InputParameters validParams();
+
   ElementLoopUserObject(const InputParameters & parameters);
   ElementLoopUserObject(ElementLoopUserObject & x, Threads::split split);
   virtual ~ElementLoopUserObject();
@@ -72,6 +68,7 @@ public:
   virtual void finalize();
 
   virtual void pre();
+  virtual void preElement(const Elem * elem);
   virtual void onElement(const Elem * elem);
   virtual void onBoundary(const Elem * elem, unsigned int side, BoundaryID bnd_id);
   virtual void onInternalSide(const Elem * elem, unsigned int side);
@@ -95,7 +92,7 @@ protected:
   const Elem * _current_neighbor;
 
   const MooseArray<Point> & _q_point;
-  QBase *& _qrule;
+  const QBase * const & _qrule;
   const MooseArray<Real> & _JxW;
   const MooseArray<Real> & _coord;
 
@@ -113,6 +110,5 @@ protected:
   virtual void computeElement();
   virtual void computeBoundary();
   virtual void computeInternalSide();
+  virtual void computeInterface();
 };
-
-#endif

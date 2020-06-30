@@ -1,24 +1,27 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PFCRFFEnergyDensity.h"
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", PFCRFFEnergyDensity);
+
 InputParameters
-validParams<PFCRFFEnergyDensity>()
+PFCRFFEnergyDensity::validParams()
 {
-  InputParameters params = validParams<AuxKernel>();
+  InputParameters params = AuxKernel::validParams();
   params.addRequiredCoupledVar("v", "Array of coupled variables");
-  params.addParam<Real>("a", 1.0, "Modified Coefficent in Taylor Series Expanstion");
-  params.addParam<Real>("b", 1.0, "Modified Coefficent in Taylor Series Expanstion");
-  params.addParam<Real>("c", 1.0, "Modified Coefficent in Taylor Series Expanstion");
+  params.addParam<Real>("a", 1.0, "Modified Coefficent in Taylor series expansion");
+  params.addParam<Real>("b", 1.0, "Modified Coefficent in Taylor series expansion");
+  params.addParam<Real>("c", 1.0, "Modified Coefficent in Taylor series expansion");
   params.addParam<unsigned int>(
-      "num_exp_terms", 4, "This is the number of terms to use in the taylor series expansion");
+      "num_exp_terms", 4, "Number of terms to use in the Taylor series expansion");
   MooseEnum log_options("tolerance cancelation expansion nothing");
   params.addRequiredParam<MooseEnum>(
       "log_approach", log_options, "Which approach will be used to handle the natural log");

@@ -1,28 +1,16 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef TRACKDIRACFRONT_H
-#define TRACKDIRACFRONT_H
+#pragma once
 
 #include "NodalUserObject.h"
 #include "libmesh/id_types.h"
-
-// Forward Declarations
-class TrackDiracFront;
-
-template <>
-InputParameters validParams<TrackDiracFront>();
 
 /**
  * This is an example NodalUserObject that will record nodal positions where the
@@ -49,6 +37,8 @@ InputParameters validParams<TrackDiracFront>();
 class TrackDiracFront : public NodalUserObject
 {
 public:
+  static InputParameters validParams();
+
   TrackDiracFront(const InputParameters & parameters);
 
   virtual void initialize();
@@ -69,5 +59,3 @@ protected:
 
   const VariableValue & _var_value;
 };
-
-#endif // TRACKDIRACFRONT_H

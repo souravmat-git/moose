@@ -1,28 +1,24 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // Moose
+#include "DenseMatrix.h"
 #include "FindContactPoint.h"
 #include "LineSegment.h"
 #include "PenetrationInfo.h"
 
 // libMesh
+#include "libmesh/fe_base.h"
 #include "libmesh/boundary_info.h"
 #include "libmesh/elem.h"
 #include "libmesh/plane.h"
 #include "libmesh/fe_interface.h"
-#include "libmesh/dense_matrix.h"
 #include "libmesh/dense_vector.h"
 #include "libmesh/fe_base.h"
 #include "libmesh/vector_value.h"
@@ -78,9 +74,11 @@ findContactPoint(PenetrationInfo & p_info,
     p_info._closest_point_ref =
         master_elem->master_point(master_elem->get_node_index(nearest_node));
     std::vector<Point> elem_points = {p_info._closest_point_ref};
-    fe_elem->reinit(master_elem, &elem_points);
 
     const std::vector<RealGradient> & elem_dxyz_dxi = fe_elem->get_dxyzdxi();
+
+    fe_elem->reinit(master_elem, &elem_points);
+
     p_info._normal = elem_dxyz_dxi[0];
     if (nearest_node->id() == master_elem->node_id(0))
       p_info._normal *= -1.0;
@@ -210,7 +208,14 @@ findContactPoint(PenetrationInfo & p_info,
   }
   else
   {
-    p_info._normal = RealGradient(dxyz_dxi[0](1), -dxyz_dxi[0](0));
+    const Node * const * elem_nodes = master_elem->get_nodes();
+    const Point in_plane_vector1 = *elem_nodes[1] - *elem_nodes[0];
+    const Point in_plane_vector2 = *elem_nodes[2] - *elem_nodes[0];
+
+    Point out_of_plane_normal = in_plane_vector1.cross(in_plane_vector2);
+    out_of_plane_normal /= out_of_plane_normal.norm();
+
+    p_info._normal = dxyz_dxi[0].cross(out_of_plane_normal);
     if (std::fabs(p_info._normal.norm()) > 1e-15)
       p_info._normal /= p_info._normal.norm();
   }

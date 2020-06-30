@@ -1,21 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWHEATCONDUCTION_H
-#define POROUSFLOWHEATCONDUCTION_H
+#pragma once
 
 #include "Kernel.h"
 #include "PorousFlowDictator.h"
-
-// Forward Declarations
-class PorousFlowHeatConduction;
-
-template <>
-InputParameters validParams<PorousFlowHeatConduction>();
 
 /**
  * Kernel = grad(test) * thermal_conductivity * grad(temperature)
@@ -23,6 +18,8 @@ InputParameters validParams<PorousFlowHeatConduction>();
 class PorousFlowHeatConduction : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowHeatConduction(const InputParameters & parameters);
 
 protected:
@@ -30,10 +27,10 @@ protected:
   virtual Real computeQpJacobian() override;
   virtual Real computeQpOffDiagJacobian(unsigned int jvar) override;
 
-  /// holds info on the PorousFlow variables
+  /// PorousFlowDictator UserObject
   const PorousFlowDictator & _dictator;
 
-  /// thermal conductivity at the quadpoints
+  /// Thermal conductivity at the quadpoints
   const MaterialProperty<RealTensorValue> & _la;
 
   /// d(thermal conductivity at the quadpoints)/d(PorousFlow variable)
@@ -48,5 +45,3 @@ protected:
   /// d(gradT)/d(grad PorousFlow variable)
   const MaterialProperty<std::vector<Real>> & _dgrad_t_dgradvar;
 };
-
-#endif // POROUSFLOWHEATCONDUCTION_H

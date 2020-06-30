@@ -1,22 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
+#pragma once
 //  "cut" van-Genuchten effective saturation as a function of single pressure, and its derivs wrt to
 //  that pressure
 //
-#ifndef RICHARDSSEFF1VGCUT_H
-#define RICHARDSSEFF1VGCUT_H
 
 #include "RichardsSeff1VG.h"
-
-class RichardsSeff1VGcut;
-
-template <>
-InputParameters validParams<RichardsSeff1VGcut>();
 
 /**
  * Effective saturation as a function of porepressure
@@ -30,6 +26,8 @@ InputParameters validParams<RichardsSeff1VGcut>();
 class RichardsSeff1VGcut : public RichardsSeff1VG
 {
 public:
+  static InputParameters validParams();
+
   RichardsSeff1VGcut(const InputParameters & parameters);
 
   /// just prints some (maybe) useful info to the console
@@ -80,5 +78,3 @@ protected:
   /// derivative of effective saturation wrt p at p=_p_cut
   Real _ds_cut;
 };
-
-#endif // RICHARDSSEFF1VGCUT_H

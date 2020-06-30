@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "AddNodalNormalsAction.h"
 #include "FEProblem.h"
@@ -19,11 +14,18 @@
 #include "libmesh/fe.h"
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("MooseApp", AddNodalNormalsAction, "add_aux_variable");
+
+registerMooseAction("MooseApp", AddNodalNormalsAction, "add_postprocessor");
+
+registerMooseAction("MooseApp", AddNodalNormalsAction, "add_user_object");
+
+defineLegacyParams(AddNodalNormalsAction);
+
 InputParameters
-validParams<AddNodalNormalsAction>()
+AddNodalNormalsAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
 
   // Initialize the 'boundary' input option to default to any boundary
   std::vector<BoundaryName> everywhere(1, "ANY_BOUNDARY_ID");
@@ -52,21 +54,25 @@ void
 AddNodalNormalsAction::act()
 {
   // Set the order from the input
-  Order order = Utility::string_to_enum<Order>(getParam<MooseEnum>("order"));
+  auto enum_order = getParam<MooseEnum>("order");
+  Order order = Utility::string_to_enum<Order>(enum_order);
   FEFamily family = LAGRANGE;
-  FEType fe_type(order, family);
+
+  auto var_params = _factory.getValidParams("MooseVariable");
+  var_params.set<MooseEnum>("family") = "LAGRANGE";
+  var_params.set<MooseEnum>("order") = enum_order;
 
   // Add 3 aux variables for each component of the normal
   if (_current_task == "add_aux_variable")
   {
-    _problem->addAuxVariable("nodal_normal_x", fe_type);
-    _problem->addAuxVariable("nodal_normal_y", fe_type);
-    _problem->addAuxVariable("nodal_normal_z", fe_type);
+    _problem->addAuxVariable("MooseVariable", "nodal_normal_x", var_params);
+    _problem->addAuxVariable("MooseVariable", "nodal_normal_y", var_params);
+    _problem->addAuxVariable("MooseVariable", "nodal_normal_z", var_params);
   }
 
   // Set the execute options
-  MultiMooseEnum execute_options(SetupInterface::getExecuteOptions());
-  execute_options = "initial timestep_begin";
+  ExecFlagEnum execute_options = MooseUtils::getDefaultExecFlagEnum();
+  execute_options = {EXEC_INITIAL, EXEC_TIMESTEP_BEGIN};
 
   // Create the NodalNormalsPreprocessor UserObject
   if (_current_task == "add_postprocessor")
@@ -74,8 +80,8 @@ AddNodalNormalsAction::act()
     InputParameters pars = _factory.getValidParams("NodalNormalsPreprocessor");
     pars.set<Order>("fe_order") = order;
     pars.set<FEFamily>("fe_family") = family;
-    pars.set<MultiMooseEnum>("execute_on") = execute_options;
-    pars.set<std::vector<BoundaryName>>("boundary") = _boundary;
+    pars.set<ExecFlagEnum>("execute_on") = execute_options;
+    pars.set<std::vector<BoundaryName>>("surface_boundary") = _boundary;
 
     if (_has_corners)
       pars.set<BoundaryName>("corner_boundary") = _corner_boundary;
@@ -89,7 +95,7 @@ AddNodalNormalsAction::act()
     if (_has_corners)
     {
       InputParameters pars = _factory.getValidParams("NodalNormalsCorner");
-      pars.set<MultiMooseEnum>("execute_on") = execute_options;
+      pars.set<ExecFlagEnum>("execute_on") = execute_options;
       pars.set<std::vector<BoundaryName>>("boundary") = _boundary;
       pars.set<BoundaryName>("corner_boundary") = _corner_boundary;
       _problem->addUserObject("NodalNormalsCorner", "nodal_normals_corner", pars);
@@ -98,7 +104,7 @@ AddNodalNormalsAction::act()
     /// Create the NodalNormalsEvaluator UserObject
     {
       InputParameters pars = _factory.getValidParams("NodalNormalsEvaluator");
-      pars.set<MultiMooseEnum>("execute_on") = execute_options;
+      pars.set<ExecFlagEnum>("execute_on") = execute_options;
       pars.set<std::vector<BoundaryName>>("boundary") = _boundary;
       _problem->addUserObject("NodalNormalsEvaluator", "nodal_normals_evaluator", pars);
     }

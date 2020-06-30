@@ -4,7 +4,6 @@
 
 [GlobalParams]
   displacements = 'disp_r disp_z'
-  use_displaced_mesh = true
 []
 
 [Problem]
@@ -17,44 +16,11 @@
   second_order = true
 []
 
-[Variables]
-  [./disp_r]
-    order = SECOND
-  [../]
-  [./disp_z]
-    order = SECOND
-  [../]
-[]
-
-[Kernels]
-  [./TensorMechanics]
-  [../]
-[]
-
-[AuxVariables]
-  [./stress_tt]
-    family = MONOMIAL
-    order = CONSTANT
-  [../]
-  [./Von_Mises_stress]
-    family = MONOMIAL
-    order = CONSTANT
-  [../]
-[]
-
-[AuxKernels]
-  [./stress_xx]
-    type = RankTwoAux
-    variable = stress_tt
-    rank_two_tensor = stress
-    index_i = 2
-    index_j = 2
-  [../]
-  [./Von_Mises_stress]
-    type = RankTwoScalarAux
-    variable = Von_Mises_stress
-    rank_two_tensor = stress
-    scalar_type = VonMisesStress
+[Modules/TensorMechanics/Master]
+  [./block1]
+    strain = FINITE #change to use finite strain instead of small linearized strain class
+    add_variables = true #detects the change of the mesh to second order and automatically sets the variables
+    generate_output = 'stress_zz vonmises_stress'
   [../]
 []
 
@@ -64,9 +30,6 @@
     youngs_modulus = 2.1e5
     poissons_ratio = 0.3
   [../]
-  [./strain]
-    type = ComputeAxisymmetricRZFiniteStrain
-  [../]
   [./stress]
     type = ComputeFiniteStrainElasticStress
   [../]
@@ -74,19 +37,19 @@
 
 [BCs]
   [./left]
-    type = PresetBC
+    type = DirichletBC
     variable = disp_r
     boundary = left
     value = 0.0
   [../]
   [./bottom]
-    type = PresetBC
+    type = DirichletBC
     variable = disp_z
     boundary = bottom
     value = 0.0
   [../]
   [./top]
-    type = FunctionPresetBC
+    type = FunctionDirichletBC
     variable = disp_z
     boundary = top
     function = '0.0007*t'
@@ -113,5 +76,5 @@
 
 [Outputs]
   exodus = true
-  print_perf_log = true
+  perf_graph = true
 []

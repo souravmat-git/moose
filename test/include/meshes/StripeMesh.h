@@ -1,26 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef STRIPEMESH_H_
-#define STRIPEMESH_H_
+#pragma once
 
 #include "GeneratedMesh.h"
-
-class StripeMesh;
-
-template <>
-InputParameters validParams<StripeMesh>();
 
 /**
  * Mesh with subdomains as stripes
@@ -30,6 +19,8 @@ InputParameters validParams<StripeMesh>();
 class StripeMesh : public GeneratedMesh
 {
 public:
+  static InputParameters validParams();
+
   StripeMesh(const InputParameters & parameters);
   StripeMesh(const StripeMesh & other_mesh);
   virtual ~StripeMesh();
@@ -41,5 +32,3 @@ public:
 protected:
   unsigned int _n_stripes; ///< number of stripes
 };
-
-#endif /* STRIPEMESH_H_ */

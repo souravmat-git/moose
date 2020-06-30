@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "RegularSolutionFreeEnergy.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", RegularSolutionFreeEnergy);
+
 InputParameters
-validParams<RegularSolutionFreeEnergy>()
+RegularSolutionFreeEnergy::validParams()
 {
-  InputParameters params = validParams<DerivativeParsedMaterialHelper>();
+  InputParameters params = DerivativeParsedMaterialHelper::validParams();
   params.addClassDescription("Material that implements the free energy of a regular solution");
   params.addRequiredCoupledVar("c", "Concentration variable");
   params.addCoupledVar("T", 300, "Temperature variable");

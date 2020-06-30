@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ThirdPhaseSuppressionMaterial.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", ThirdPhaseSuppressionMaterial);
+
 InputParameters
-validParams<ThirdPhaseSuppressionMaterial>()
+ThirdPhaseSuppressionMaterial::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params.addParam<std::string>("function_name", "g", "actual name for g(eta_i)");
   params.addRequiredCoupledVar("etas", "eta_i order parameters, one for each h");
   params.addClassDescription(

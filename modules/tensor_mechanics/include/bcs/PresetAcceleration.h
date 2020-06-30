@@ -1,13 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef PRESETACCELERATION_H
-#define PRESETACCELERATION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#include "PresetNodalBC.h"
+#pragma once
+
+#include "DirichletBCBase.h"
 
 /**
  * This class prescribes the acceleration on a given boundary in a given direction.
@@ -15,9 +17,11 @@
  * displacement is applied on the boundary.
  **/
 
-class PresetAcceleration : public PresetNodalBC
+class PresetAcceleration : public DirichletBCBase
 {
 public:
+  static InputParameters validParams();
+
   PresetAcceleration(const InputParameters & parameters);
 
 protected:
@@ -25,13 +29,8 @@ protected:
 
   const VariableValue & _u_old;
   const Real _scale_factor;
-  Function & _function;
+  const Function & _function;
   const VariableValue & _vel_old;
   const VariableValue & _accel_old;
   const Real _beta;
 };
-
-template <>
-InputParameters validParams<PresetAcceleration>();
-
-#endif /* PRESETACCERELATION_H */

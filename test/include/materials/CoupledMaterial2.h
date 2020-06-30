@@ -1,25 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef COUPLEDMATERIAL2_H_
-#define COUPLEDMATERIAL2_H_
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
-
-class CoupledMaterial2;
-
-template <>
-InputParameters validParams<CoupledMaterial2>();
 
 /**
  * A material that couples a material property
@@ -27,6 +17,8 @@ InputParameters validParams<CoupledMaterial2>();
 class CoupledMaterial2 : public Material
 {
 public:
+  static InputParameters validParams();
+
   CoupledMaterial2(const InputParameters & parameters);
 
 protected:
@@ -38,5 +30,3 @@ protected:
   const MaterialProperty<Real> & _coupled_mat_prop;
   const MaterialProperty<Real> & _coupled_mat_prop2;
 };
-
-#endif // COUPLEDMATERIAL2_H

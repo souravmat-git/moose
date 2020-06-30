@@ -1,30 +1,27 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "DGDiffusion.h"
 
 // MOOSE includes
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 
-// libMesh includes
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("MooseApp", DGDiffusion);
+
+defineLegacyParams(DGDiffusion);
+
 InputParameters
-validParams<DGDiffusion>()
+DGDiffusion::validParams()
 {
-  InputParameters params = validParams<DGKernel>();
+  InputParameters params = DGKernel::validParams();
   // See header file for sigma and epsilon
   params.addRequiredParam<Real>("sigma", "sigma");
   params.addRequiredParam<Real>("epsilon", "epsilon");
@@ -49,7 +46,7 @@ DGDiffusion::computeQpResidual(Moose::DGResidualType type)
 
   const unsigned int elem_b_order = _var.order();
   const double h_elem =
-      _current_elem->volume() / _current_side_elem->volume() * 1. / Utility::pow<2>(elem_b_order);
+      _current_elem_volume / _current_side_volume * 1. / Utility::pow<2>(elem_b_order);
 
   switch (type)
   {
@@ -82,7 +79,7 @@ DGDiffusion::computeQpJacobian(Moose::DGJacobianType type)
 
   const unsigned int elem_b_order = _var.order();
   const double h_elem =
-      _current_elem->volume() / _current_side_elem->volume() * 1. / Utility::pow<2>(elem_b_order);
+      _current_elem_volume / _current_side_volume * 1. / Utility::pow<2>(elem_b_order);
 
   switch (type)
   {

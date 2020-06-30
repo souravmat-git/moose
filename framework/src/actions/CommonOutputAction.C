@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "CommonOutputAction.h"
@@ -29,15 +24,19 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-template <>
+registerMooseAction("MooseApp", CommonOutputAction, "common_output");
+
+defineLegacyParams(CommonOutputAction);
+
 InputParameters
-validParams<CommonOutputAction>()
+CommonOutputAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
+  params.addClassDescription("Adds short-cut syntax and common parameters to the Outputs block.");
 
   // Short-cut methods for typical output objects
   params.addParam<bool>(
-      "exodus", false, "Output the results using the default settings for Exodus output");
+      "exodus", false, "Output the results using the default settings for Exodus output.");
   params.addParam<bool>(
       "nemesis", false, "Output the results using the default settings for Nemesis output");
   params.addParam<bool>(
@@ -46,6 +45,10 @@ validParams<CommonOutputAction>()
                         false,
                         "Output the scalar variable and postprocessors to a *.csv "
                         "file using the default CSV output.");
+  params.addParam<bool>("xml",
+                        false,
+                        "Output the vector postprocessors to a *.xml "
+                        "file using the default XML output.");
   params.addParam<bool>(
       "vtk", false, "Output the results using the default settings for VTKOutput output");
   params.addParam<bool>(
@@ -78,7 +81,7 @@ validParams<CommonOutputAction>()
                                             "strings.  This is helpful in outputting only a subset "
                                             "of outputs when using MultiApps.");
   params.addParam<unsigned int>(
-      "interval", 1, "The interval at which timesteps are output to the solution file");
+      "interval", 1, "The interval at which timesteps are output to the solution file.");
   params.addParam<std::vector<Real>>("sync_times",
                                      std::vector<Real>(),
                                      "Times at which the output and solution is forced to occur");
@@ -99,15 +102,17 @@ validParams<CommonOutputAction>()
       "(may include Variables, ScalarVariables, and Postprocessor names).");
 
   // Add the 'execute_on' input parameter
-  params.addParam<MultiMooseEnum>(
-      "execute_on",
-      Output::getExecuteOptions("initial timestep_end"),
-      "Set to (initial|linear|nonlinear|timestep_end|timestep_begin|final|failed|custom) to "
-      "execute only at that moment (default: 'initial timestep_end')");
+  ExecFlagEnum exec_enum = Output::getDefaultExecFlagEnum();
+  exec_enum = {EXEC_INITIAL, EXEC_TIMESTEP_END};
+  params.addParam<ExecFlagEnum>("execute_on", exec_enum, exec_enum.getDocString());
 
   // Add special Console flags
+  params.addDeprecatedParam<bool>(
+      "print_perf_log", false, "Use perf_graph instead!", "Use perf_graph instead!");
+
   params.addParam<bool>(
-      "print_perf_log", false, "Enable printing of the performance log to the screen (Console)");
+      "perf_graph", false, "Enable printing of the performance graph to the screen (Console)");
+
   params.addParam<bool>("print_mesh_changed_info",
                         false,
                         "When true, each time the mesh is changed the mesh information is printed");
@@ -156,6 +161,9 @@ CommonOutputAction::act()
   if (getParam<bool>("csv"))
     create("CSV");
 
+  if (getParam<bool>("xml"))
+    create("XMLOutput");
+
 #ifdef LIBMESH_HAVE_VTK
   if (getParam<bool>("vtk"))
     create("VTK");
@@ -191,6 +199,11 @@ CommonOutputAction::act()
   if (getParam<bool>("controls") || _app.getParam<bool>("show_controls"))
     create("ControlOutput");
 
+  if (!_app.getParam<bool>("no_timing") &&
+      (getParam<bool>("perf_graph") || getParam<bool>("print_perf_log") ||
+       _app.getParam<bool>("timing")))
+    create("PerfGraphOutput");
+
   if (!getParam<bool>("color"))
     Moose::setColorConsole(false);
 }
@@ -224,7 +237,10 @@ CommonOutputAction::hasConsole()
        it != _awh.actionBlocksWithActionEnd("add_output");
        it++)
   {
-    MooseObjectAction * moa = static_cast<MooseObjectAction *>(*it);
+    MooseObjectAction * moa = dynamic_cast<MooseObjectAction *>(*it);
+    if (!moa)
+      continue;
+
     const std::string & type = moa->getMooseObjectType();
     InputParameters & params = moa->getObjectParams();
     if (type.compare("Console") == 0 && params.get<bool>("output_screen"))

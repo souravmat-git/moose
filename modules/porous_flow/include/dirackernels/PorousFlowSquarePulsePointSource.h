@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWSQUAREPULSEPOINTSOURCE_H
-#define POROUSFLOWSQUAREPULSEPOINTSOURCE_H
+#pragma once
 
 #include "DiracKernel.h"
-
-class PorousFlowSquarePulsePointSource;
-
-template <>
-InputParameters validParams<PorousFlowSquarePulsePointSource>();
 
 /**
  * Point source (or sink) that adds (removes) fluid at a constant mass flux rate for times
@@ -23,6 +19,8 @@ InputParameters validParams<PorousFlowSquarePulsePointSource>();
 class PorousFlowSquarePulsePointSource : public DiracKernel
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowSquarePulsePointSource(const InputParameters & parameters);
 
   virtual void addPoints() override;
@@ -41,5 +39,3 @@ protected:
   /// The time at which the point source (sink) stops operating
   const Real _end_time;
 };
-
-#endif // POROUSFLOWSQUAREPULSEPOINTSOURCE_H

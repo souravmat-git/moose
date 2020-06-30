@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PolycrystalHex.h"
 #include "MooseRandom.h"
 #include "MooseMesh.h"
 #include "MathUtils.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", PolycrystalHex);
+
 InputParameters
-validParams<PolycrystalHex>()
+PolycrystalHex::validParams()
 {
-  InputParameters params = validParams<PolycrystalVoronoi>();
+  InputParameters params = PolycrystalVoronoi::validParams();
   params.addClassDescription("Perturbed hexagonal polycrystal");
   params.addParam<Real>("x_offset", 0.5, "Specifies offset of hexagon grid in x-direction");
   params.addRangeCheckedParam<Real>(

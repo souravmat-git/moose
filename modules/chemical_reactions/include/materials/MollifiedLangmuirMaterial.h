@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MOLLFIEDLANGMUIRMATERIAL_H
-#define MOLLFIEDLANGMUIRMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 
 // Forward Declarations
-class MollifiedLangmuirMaterial;
-
-template <>
-InputParameters validParams<MollifiedLangmuirMaterial>();
 
 /**
  * Holds Langmuir parameters associated with desorption
@@ -22,6 +20,8 @@ InputParameters validParams<MollifiedLangmuirMaterial>();
 class MollifiedLangmuirMaterial : public Material
 {
 public:
+  static InputParameters validParams();
+
   MollifiedLangmuirMaterial(const InputParameters & parameters);
 
 protected:
@@ -29,10 +29,10 @@ protected:
 
 private:
   /// reciprocal of desorption time constant
-  const VariableValue * _one_over_de_time_const;
+  const VariableValue & _one_over_de_time_const;
 
   /// reciprocal of adsorption time constant
-  const VariableValue * _one_over_ad_time_const;
+  const VariableValue & _one_over_ad_time_const;
 
   /// langmuir density
   const Real _langmuir_dens;
@@ -41,10 +41,10 @@ private:
   const Real _langmuir_p;
 
   /// concentration of adsorbed fluid in matrix
-  const VariableValue * _conc;
+  const VariableValue & _conc;
 
   /// porespace pressure (or partial pressure if multiphase flow scenario)
-  const VariableValue * _pressure;
+  const VariableValue & _pressure;
 
   /**
    * mollifying parameter.  the time constants are
@@ -63,5 +63,3 @@ private:
   /// derivative of mass flow rate wrt pressure
   MaterialProperty<Real> & _dmass_rate_from_matrix_dp;
 };
-
-#endif // MOLLFIEDLANGMUIRMATERIAL_H

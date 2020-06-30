@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // C POSIX includes
 #include <sys/stat.h>
@@ -21,21 +16,28 @@
 #include "FEProblem.h"
 
 #include <unistd.h>
-#include <time.h>
+#include <ctime>
 
-template <>
+#include "libmesh/utility.h"
+
+defineLegacyParams(FileOutput);
+
 InputParameters
-validParams<FileOutput>()
+FileOutput::validParams()
 {
   // Create InputParameters object for this stand-alone object
-  InputParameters params = validParams<PetscOutput>();
-  params.addParam<std::string>("file_base",
-                               "The desired solution output name without an extension");
+  InputParameters params = PetscOutput::validParams();
+  params.addRequiredParam<std::string>(
+      "file_base",
+      "The desired solution output name without an extension. If not provided, MOOSE sets it "
+      "with Outputs/file_base when available. Otherwise, MOOSE uses input file name and this "
+      "object name for a master input or uses master file_base, the subapp name and this object "
+      "name for a subapp input to set it.");
   params.addParam<bool>(
       "append_date", false, "When true the date and time are appended to the output filename.");
   params.addParam<std::string>("append_date_format",
                                "The format of the date/time to append, if not given UTC format "
-                               "used (see http://www.cplusplus.com/reference/ctime/strftime).");
+                               "is used (see http://www.cplusplus.com/reference/ctime/strftime).");
   // Add the padding option and list it as 'Advanced'
   params.addParam<unsigned int>(
       "padding", 4, "The number of for extension suffix (e.g., out.e-s002)");
@@ -52,21 +54,14 @@ validParams<FileOutput>()
 
 FileOutput::FileOutput(const InputParameters & parameters)
   : PetscOutput(parameters),
+    _file_base(getParam<std::string>("file_base")),
     _file_num(declareRecoverableData<unsigned int>("file_num", 0)),
     _padding(getParam<unsigned int>("padding")),
-    _output_if_base_contains(parameters.get<std::vector<std::string>>("output_if_base_contains"))
+    _output_if_base_contains(getParam<std::vector<std::string>>("output_if_base_contains"))
 {
   // If restarting reset the file number
   if (_app.isRestarting())
     _file_num = 0;
-
-  // Set the file base
-  if (isParamValid("file_base"))
-    _file_base = getParam<std::string>("file_base");
-  else if (getParam<bool>("_built_by_moose"))
-    _file_base = getOutputFileBase(_app);
-  else
-    _file_base = getOutputFileBase(_app, "_" + name());
 
   // Append the date/time
   if (getParam<bool>("append_date"))
@@ -78,7 +73,7 @@ FileOutput::FileOutput(const InputParameters & parameters)
       format = "%Y-%m-%dT%T%z";
 
     // Get the current time
-    time_t now;
+    std::time_t now;
     ::time(&now); // need :: to avoid confusion with time() method of Output class
 
     // Format the time
@@ -89,7 +84,12 @@ FileOutput::FileOutput(const InputParameters & parameters)
   }
 
   // Check the file directory of file_base and create if needed
-  std::string base = "./" + _file_base;
+  // Check if _file_base is an absolute path
+  std::string base;
+  if (_file_base.find_first_of("/", 0) == 0)
+    base = "./" + MooseUtils::relativepath(_file_base);
+  else
+    base = "./" + _file_base;
   base = base.substr(0, base.find_last_of('/'));
 
   if (_app.processor_id() == 0 && access(base.c_str(), W_OK) == -1)
@@ -102,35 +102,10 @@ FileOutput::FileOutput(const InputParameters & parameters)
     {
       inc_path += '/' + path_names[i];
       if (access(inc_path.c_str(), W_OK) == -1)
-        if (mkdir(inc_path.c_str(), S_IRWXU | S_IRGRP) == -1)
+        if (Utility::mkdir(inc_path.c_str()) == -1)
           mooseError("Could not create directory: " + inc_path + " for file base: " + _file_base);
     }
   }
-}
-
-std::string
-FileOutput::getOutputFileBase(MooseApp & app, std::string suffix)
-{
-  // If the App has an outputfile, then use it (MultiApp scenario)
-  if (!app.getOutputFileBase().empty())
-    return app.getOutputFileBase();
-
-  // If the output base is not set it must be determined from the input file
-  /* This will only return a non-empty string if the setInputFileName() was called, which is
-   * generally not the case. One exception is when CoupledExecutioner is used */
-  std::string input_filename = app.getInputFileName();
-  if (input_filename.empty())
-    input_filename = app.getFileName();
-
-  // Assert that the filename is not empty
-  mooseAssert(!input_filename.empty(), "Input Filename is NULL");
-
-  // Determine location of "." in extension, assert if it is not found
-  size_t pos = input_filename.find_last_of('.');
-  mooseAssert(pos != std::string::npos, "Unable to determine suffix of input file name");
-
-  // Append the "_out" to the name and return it
-  return input_filename.substr(0, pos) + suffix;
 }
 
 bool

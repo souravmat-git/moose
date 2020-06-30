@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTEGRAINCENTERUSEROBJECT_H
-#define COMPUTEGRAINCENTERUSEROBJECT_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ElementUserObject.h"
 
 // Forward Declarations
-class ComputeGrainCenterUserObject;
-
-template <>
-InputParameters validParams<ComputeGrainCenterUserObject>();
 
 /**
  * This UserObject computes a volumes and centers of grains.
@@ -21,6 +19,8 @@ InputParameters validParams<ComputeGrainCenterUserObject>();
 class ComputeGrainCenterUserObject : public ElementUserObject
 {
 public:
+  static InputParameters validParams();
+
   ComputeGrainCenterUserObject(const InputParameters & parameters);
 
   virtual void initialize();
@@ -42,5 +42,3 @@ protected:
   std::vector<Point> _grain_centers;
   ///@}
 };
-
-#endif // COMPUTEGRAINCENTERUSEROBJECT_H

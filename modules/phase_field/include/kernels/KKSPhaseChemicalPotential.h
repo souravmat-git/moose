@@ -1,21 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSPHASECHEMICALPOTENTIAL_H
-#define KKSPHASECHEMICALPOTENTIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class KKSPhaseChemicalPotential;
-
-template <>
-InputParameters validParams<KKSPhaseChemicalPotential>();
 
 /**
  * Enforce the equality of the chemical potentials in the two phases.
@@ -34,6 +32,8 @@ InputParameters validParams<KKSPhaseChemicalPotential>();
 class KKSPhaseChemicalPotential : public DerivativeMaterialInterface<JvarMapKernelInterface<Kernel>>
 {
 public:
+  static InputParameters validParams();
+
   KKSPhaseChemicalPotential(const InputParameters & parameters);
 
 protected:
@@ -55,6 +55,9 @@ private:
 
   std::vector<const MaterialProperty<Real> *> _d2fadcadarg;
   std::vector<const MaterialProperty<Real> *> _d2fbdcbdarg;
-};
 
-#endif // KKSPHASECHEMICALPOTENTIAL_H
+  ///@{ site fractions
+  const Real _ka;
+  const Real _kb;
+  ///@}
+};

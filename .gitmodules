@@ -1,4 +1,10 @@
 [submodule "libmesh"]
-        path = libmesh
-        url = https://github.com/libMesh/libmesh.git
-        ignore = dirty
+    path = libmesh
+    url = ../../libMesh/libmesh
+    ignore = dirty
+[submodule "large_media"]
+    path = large_media
+    url = ../../idaholab/large_media
+[submodule "petsc"]
+    path = petsc
+    url = https://gitlab.com/petsc/petsc.git

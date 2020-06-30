@@ -1,40 +1,40 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "InternalSideUserObject.h"
 #include "Assembly.h"
 
-template <>
+defineLegacyParams(InternalSideUserObject);
+
 InputParameters
-validParams<InternalSideUserObject>()
+InternalSideUserObject::validParams()
 {
-  InputParameters params = validParams<UserObject>();
-  params += validParams<BlockRestrictable>();
-  params += validParams<TwoMaterialPropertyInterface>();
+  InputParameters params = UserObject::validParams();
+  params += BlockRestrictable::validParams();
+  params += TwoMaterialPropertyInterface::validParams();
+  params += TransientInterface::validParams();
+
+  // Need one layer of ghosting
+  params.addRelationshipManager("ElementSideNeighborLayers",
+                                Moose::RelationshipManagerType::GEOMETRIC |
+                                    Moose::RelationshipManagerType::ALGEBRAIC);
+
   return params;
 }
 
 InternalSideUserObject::InternalSideUserObject(const InputParameters & parameters)
   : UserObject(parameters),
-    BlockRestrictable(parameters),
-    TwoMaterialPropertyInterface(this, blockIDs()),
+    BlockRestrictable(this),
+    TwoMaterialPropertyInterface(this, blockIDs(), Moose::EMPTY_BOUNDARY_IDS),
     NeighborCoupleable(this, false, false),
     MooseVariableDependencyInterface(),
-    UserObjectInterface(this),
     TransientInterface(this),
-    PostprocessorInterface(this),
-    ZeroInterface(parameters),
     _mesh(_subproblem.mesh()),
     _q_point(_assembly.qPointsFace()),
     _qrule(_assembly.qRuleFace()),
@@ -42,13 +42,15 @@ InternalSideUserObject::InternalSideUserObject(const InputParameters & parameter
     _coord(_assembly.coordTransformation()),
     _normals(_assembly.normals()),
     _current_elem(_assembly.elem()),
+    _current_elem_volume(_assembly.elemVolume()),
     _current_side(_assembly.side()),
     _current_side_elem(_assembly.sideElem()),
     _current_side_volume(_assembly.sideElemVolume()),
-    _neighbor_elem(_assembly.neighbor())
+    _neighbor_elem(_assembly.neighbor()),
+    _current_neighbor_volume(_assembly.neighborVolume())
 {
   // Keep track of which variables are coupled so we know what we depend on
-  const std::vector<MooseVariable *> & coupled_vars = getCoupledMooseVars();
+  const std::vector<MooseVariableFEBase *> & coupled_vars = getCoupledMooseVars();
   for (const auto & var : coupled_vars)
     addMooseVariableDependency(var);
 }

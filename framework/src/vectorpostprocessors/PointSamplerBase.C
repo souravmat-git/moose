@@ -1,36 +1,33 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PointSamplerBase.h"
 
 // MOOSE includes
 #include "MooseMesh.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 
-// libMesh includes
 #include "libmesh/mesh_tools.h"
 
-template <>
-InputParameters
-validParams<PointSamplerBase>()
-{
-  InputParameters params = validParams<GeneralVectorPostprocessor>();
+defineLegacyParams(PointSamplerBase);
 
-  params += validParams<SamplerBase>();
+InputParameters
+PointSamplerBase::validParams()
+{
+  InputParameters params = GeneralVectorPostprocessor::validParams();
+
+  params += SamplerBase::validParams();
 
   params.addRequiredCoupledVar(
       "variable", "The names of the variables that this VectorPostprocessor operates on");
+  params.addParam<PostprocessorName>(
+      "scaling", 1.0, "The postprocessor that the variables are multiplied with");
 
   return params;
 }
@@ -38,9 +35,17 @@ validParams<PointSamplerBase>()
 PointSamplerBase::PointSamplerBase(const InputParameters & parameters)
   : GeneralVectorPostprocessor(parameters),
     CoupleableMooseVariableDependencyIntermediateInterface(this, false),
+    MooseVariableInterface<Real>(this,
+                                 false,
+                                 "variable",
+                                 Moose::VarKindType::VAR_ANY,
+                                 Moose::VarFieldType::VAR_FIELD_STANDARD),
     SamplerBase(parameters, this, _communicator),
-    _mesh(_subproblem.mesh())
+    _mesh(_subproblem.mesh()),
+    _pp_value(getPostprocessorValue("scaling"))
 {
+  addMooseVariableDependency(mooseVariable());
+
   std::vector<std::string> var_names(_coupled_moose_vars.size());
 
   for (unsigned int i = 0; i < _coupled_moose_vars.size(); i++)
@@ -73,12 +78,12 @@ PointSamplerBase::initialize()
 void
 PointSamplerBase::execute()
 {
-  MeshTools::BoundingBox bbox = _mesh.getInflatedProcessorBoundingBox();
+  BoundingBox bbox = _mesh.getInflatedProcessorBoundingBox();
 
   /// So we don't have to create and destroy this
   std::vector<Point> point_vec(1);
 
-  for (auto i = beginIndex(_points); i < _points.size(); ++i)
+  for (MooseIndex(_points) i = 0; i < _points.size(); ++i)
   {
     Point & p = _points[i];
 
@@ -98,10 +103,12 @@ PointSamplerBase::execute()
         // We have to pass a vector of points into reinitElemPhys
         point_vec[0] = p;
 
+        _subproblem.setCurrentSubdomainID(elem, 0);
         _subproblem.reinitElemPhys(elem, point_vec, 0); // Zero is for tid
 
-        for (auto j = beginIndex(_coupled_moose_vars); j < _coupled_moose_vars.size(); ++j)
-          values[j] = _coupled_moose_vars[j]->sln()[0]; // The zero is for the "qp"
+        for (MooseIndex(_coupled_moose_vars) j = 0; j < _coupled_moose_vars.size(); ++j)
+          values[j] = (dynamic_cast<MooseVariable *>(_coupled_moose_vars[j]))->sln()[0] *
+                      _pp_value; // The zero is for the "qp"
 
         _found_points[i] = true;
       }
@@ -124,7 +131,7 @@ PointSamplerBase::finalize()
 
   _communicator.maxloc(_found_points, max_id);
 
-  for (auto i = beginIndex(max_id); i < max_id.size(); ++i)
+  for (MooseIndex(max_id) i = 0; i < max_id.size(); ++i)
   {
     // Only do this check on the proc zero because it's the same on every processor
     // _found_points should contain all 1's at this point (ie every point was found by a proc)
@@ -136,6 +143,18 @@ PointSamplerBase::finalize()
   }
 
   SamplerBase::finalize();
+}
+
+void
+PointSamplerBase::setPointsVector(const std::vector<Point> & points)
+{
+  _points = points;
+}
+
+void
+PointSamplerBase::transferPointsVector(std::vector<Point> && points)
+{
+  _points = std::move(points);
 }
 
 const Elem *

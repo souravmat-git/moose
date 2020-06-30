@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SPECIFICENTHALPYAUX_H
-#define SPECIFICENTHALPYAUX_H
+#pragma once
 
 #include "AuxKernel.h"
 
-class SpecificEnthalpyAux;
 class SinglePhaseFluidProperties;
-
-template <>
-InputParameters validParams<SpecificEnthalpyAux>();
 
 /**
  * Computes specific enthalpy from pressure and temperature.
@@ -22,6 +19,8 @@ InputParameters validParams<SpecificEnthalpyAux>();
 class SpecificEnthalpyAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   SpecificEnthalpyAux(const InputParameters & parameters);
 
 protected:
@@ -32,5 +31,3 @@ protected:
 
   const SinglePhaseFluidProperties & _fp;
 };
-
-#endif /* SPECIFICENTHALPYAUX_H */

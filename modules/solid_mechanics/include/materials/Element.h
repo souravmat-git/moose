@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ELEMENT_H
-#define ELEMENT_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "InputParameters.h"
@@ -20,7 +22,7 @@ namespace SolidMechanics
 /**
  * Element is the base class for all of this module's solid mechanics element formulations.
  */
-class Element : public Coupleable, public ZeroInterface
+class Element : public Coupleable
 {
 public:
   Element(SolidModel & solid_model, const std::string & name, const InputParameters & parameters);
@@ -75,5 +77,3 @@ private:
 };
 
 } // namespace solid_mechanics
-
-#endif

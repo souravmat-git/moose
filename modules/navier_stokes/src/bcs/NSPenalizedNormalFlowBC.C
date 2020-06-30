@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "NSPenalizedNormalFlowBC.h"
 
-template <>
+registerMooseObject("NavierStokesApp", NSPenalizedNormalFlowBC);
+
 InputParameters
-validParams<NSPenalizedNormalFlowBC>()
+NSPenalizedNormalFlowBC::validParams()
 {
-  InputParameters params = validParams<NSIntegratedBC>();
+  InputParameters params = NSIntegratedBC::validParams();
   params.addClassDescription("This class penalizes the the value of u.n on the boundary so that it "
                              "matches some desired value.");
   params.addRequiredParam<Real>("penalty", "The penalty parameter, some (large) value.");

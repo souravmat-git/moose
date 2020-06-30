@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTEAXISYMMETRIC1DSMALLSTRAIN_H
-#define COMPUTEAXISYMMETRIC1DSMALLSTRAIN_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Compute1DSmallStrain.h"
 #include "SubblockIndexProvider.h"
@@ -17,11 +19,13 @@
 class ComputeAxisymmetric1DSmallStrain : public Compute1DSmallStrain
 {
 public:
+  static InputParameters validParams();
+
   ComputeAxisymmetric1DSmallStrain(const InputParameters & parameters);
 
-protected:
   void initialSetup() override;
 
+protected:
   /// Computes the strain_yy for axisymmetric problems
   Real computeStrainYY() override;
 
@@ -35,14 +39,21 @@ protected:
     return _subblock_id_provider ? _subblock_id_provider->getSubblockIndex(*_current_elem) : 0;
   };
 
-  const SubblockIndexProvider * _subblock_id_provider;
+  /// A Userobject that carries the subblock ID for all elements
+  const SubblockIndexProvider * const _subblock_id_provider;
 
+  /// Whether an out-of-plane strain variable is coupled
   const bool _has_out_of_plane_strain;
+
+  /// The out-of-plane strain variable
   const VariableValue & _out_of_plane_strain;
 
+  /// Whether out-of-plane strain scalar variables are coupled
   const bool _has_scalar_out_of_plane_strain;
+
+  /// Number of out-of-plane strain scalar variables
   unsigned int _nscalar_strains;
+
+  /// The out-of-plane strain scalar variables
   std::vector<const VariableValue *> _scalar_out_of_plane_strain;
 };
-
-#endif // COMPUTEAXISYMMETRIC1DSMALLSTRAIN_H

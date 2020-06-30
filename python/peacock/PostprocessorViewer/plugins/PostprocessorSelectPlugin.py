@@ -1,3 +1,12 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import sys
 import os
 import numpy as np
@@ -5,10 +14,9 @@ import matplotlib.pyplot as plt
 import itertools
 
 from PyQt5 import QtCore, QtWidgets
-from PostprocessorPlugin import PostprocessorPlugin
-from LineGroupWidget import LineGroupWidget
-
 import mooseutils
+from .PostprocessorPlugin import PostprocessorPlugin
+from .LineGroupWidget import LineGroupWidget
 
 class PostprocessorSelectPlugin(QtWidgets.QWidget, PostprocessorPlugin):
     """
@@ -177,8 +185,12 @@ def main(filenames, reader=mooseutils.VectorPostprocessorReader):
     """
     Run FigurePlugin by itself.
     """
-    from peacock.PostprocessorViewer.PostprocessorViewer import PostprocessorViewer
-    from FigurePlugin import FigurePlugin
+    from ..PostprocessorViewer import PostprocessorViewer
+    from .FigurePlugin import FigurePlugin
+
+    import matplotlib
+    matplotlib.rcParams["figure.figsize"] = (6.25, 6.25)
+    matplotlib.rcParams["figure.dpi"] = (100)
 
     widget = PostprocessorViewer(reader, timeout=None, plugins=[FigurePlugin, PostprocessorSelectPlugin])
     widget.onSetFilenames(filenames)
@@ -192,7 +204,7 @@ def main(filenames, reader=mooseutils.VectorPostprocessorReader):
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    filenames = ['../../../tests/input/vpp_*.csv']
+    filenames = ['../../tests/input/vpp_*.csv']
     _, widget, _ = main(filenames)
     app.exec_()
     os.remove('tmp_001.csv')

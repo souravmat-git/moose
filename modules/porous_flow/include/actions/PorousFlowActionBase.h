@@ -1,46 +1,62 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef POROUSFLOWACTIONBASE_H
-#define POROUSFLOWACTIONBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Action.h"
 #include "PorousFlowDependencies.h"
+#include "MooseEnum.h"
 
-class PorousFlowActionBase;
-
-template <>
-InputParameters validParams<PorousFlowActionBase>();
+#include "libmesh/vector_value.h"
 
 /**
- * Base class for PorousFlow actions.  This act() method simply
- * defines the name of the PorousFlowDictator.  However, this
- * class also contains a number of utility functions that may
- * be used by derived classes
+ * Base class for PorousFlow actions.  This act() method makes consistency checks and
+ * calls several methods that should be implemented in derived classes. This class also
+ * contains a number of utility functions that may be used by derived classes.
+ *
+ * Derived classes should typically only override the following methods:
+ * * addUserObjects()
+ * * addMaterialDependencies()
+ * * addMaterials()
+ * * addAuxObjects()
+ * * addKernels()
  */
 class PorousFlowActionBase : public Action, public PorousFlowDependencies
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowActionBase(const InputParameters & params);
 
   virtual void act() override;
 
+  using Action::addRelationshipManagers;
+  virtual void addRelationshipManagers(Moose::RelationshipManagerType when_type) override;
+
 protected:
   /**
-   * List of Kernels, AuxKernels, Materials, etc, to be added.
+   * List of Kernels, AuxKernels, Materials, etc, that are added in this input file.
    * This list will be used to determine what Materials need
-   * to be added.
-   * Actions may add or remove things from this list
+   * to be added. Actions may add or remove things from this list
    */
-  std::vector<std::string> _objects_to_add;
+  std::vector<std::string> _included_objects;
 
   /// The name of the PorousFlowDictator object to be added
   const std::string _dictator_name;
 
-  /// gravity
+  /// Number of aqueous-equilibrium secondary species
+  const unsigned int _num_aqueous_equilibrium;
+
+  /// Number of aqeuous-kinetic secondary species that are involved in mineralisation
+  const unsigned int _num_aqueous_kinetic;
+
+  /// Gravity
   const RealVectorValue _gravity;
 
   /// Name of the mass-fraction variables (if any)
@@ -52,19 +68,56 @@ protected:
   /// Name of the temperature variable (if any)
   const std::vector<VariableName> & _temperature_var;
 
-  /// displacement NonlinearVariable names (if any)
-  const std::vector<NonlinearVariableName> & _displacements;
+  /// Displacement NonlinearVariable names (if any)
+  const std::vector<VariableName> & _displacements;
 
-  /// number of displacement variables supplied
+  /// Number of displacement variables supplied
   const unsigned _ndisp;
 
-  /// displacement Variable names
+  /// Displacement Variable names
   std::vector<VariableName> _coupled_displacements;
 
+  /// Flux limiter type in the Kuzmin-Turek FEM-TVD stabilization scheme
+  const MooseEnum _flux_limiter_type;
+
+  const enum class StabilizationEnum { Full, KT } _stabilization;
+
+  /// Coordinate system of the simulation (eg RZ, XYZ, etc)
+  Moose::CoordinateSystemType _coord_system;
+
+  /// Flag to denote if the simulation is transient
+  bool _transient;
+
   /**
-   * add the PorousFlowDictator object
+   * Add the PorousFlowDictator object
    */
   virtual void addDictator() = 0;
+
+  /**
+   * Add all other UserObjects
+   */
+  virtual void addUserObjects();
+
+  /**
+   * Add all AuxVariables and AuxKernels
+   */
+  virtual void addAuxObjects();
+
+  /**
+   * Add all Kernels
+   */
+  virtual void addKernels();
+
+  /**
+   * Add all material dependencies so that the correct
+   * version of each material can be added
+   */
+  virtual void addMaterialDependencies();
+
+  /**
+   * Add all Materials
+   */
+  virtual void addMaterials();
 
   /**
    * Add an AuxVariable and AuxKernel to calculate saturation
@@ -127,6 +180,22 @@ protected:
                                        const UserObjectName & fp);
 
   /**
+   * Adds a brine fluid Material
+   * @param xnacl the variable containing the mass fraction of NaCl in the fluid
+   * @param phase the phase number of the fluid
+   * @param compute_density_and_viscosity compute the density and viscosity of the fluid
+   * @param compute_internal_energy compute the fluid internal energy
+   * @param compute_enthalpy compute the fluid enthalpy
+   * @param at_nodes add a nodal material
+   */
+  void addBrineMaterial(const VariableName xnacl,
+                        bool at_nodes,
+                        unsigned phase,
+                        bool compute_density_and_viscosity,
+                        bool compute_internal_energy,
+                        bool compute_enthalpy);
+
+  /**
    * Adds a relative-permeability Material of the Corey variety
    * @param phase the phase number of the fluid
    * @param n The Corey exponent
@@ -154,50 +223,29 @@ protected:
    */
   void addCapillaryPressureVG(Real m, Real alpha, std::string userobject_name);
 
-  /**
-   * Adds a PorousFlowJoiner for the material_property Material
-   * @param at_nodes if true: the Joiner should produce a nodal material, otherwise: produce a QP
-   * material
-   * @param material_property Join this PorousFlow Material
-   * @param output_name The name given to this PorousFlowJoiner in the input file
-   */
-  void
-  addJoiner(bool at_nodes, const std::string & material_property, const std::string & output_name);
+  void addAdvectiveFluxCalculatorSaturated(unsigned phase,
+                                           bool multiply_by_density,
+                                           std::string userobject_name);
 
-  /**
-   * Adds a PorousFlowJoiner for the fluid density
-   * @param at_nodes if true: the Joiner should produce a nodal material, otherwise: produce a QP
-   * material
-   */
-  void joinDensity(bool at_nodes);
+  void addAdvectiveFluxCalculatorUnsaturated(unsigned phase,
+                                             bool multiply_by_density,
+                                             std::string userobject_name);
 
-  /**
-   * Adds a PorousFlowJoiner for the fluid viscosity
-   * @param at_nodes if true: the Joiner should produce a nodal material, otherwise: produce a QP
-   * material
-   */
-  void joinViscosity(bool at_nodes);
+  void addAdvectiveFluxCalculatorSaturatedHeat(unsigned phase,
+                                               bool multiply_by_density,
+                                               std::string userobject_name);
 
-  /**
-   * Adds a PorousFlowJoiner for the fluid relative permeability
-   * @param at_nodes if true: the Joiner should produce a nodal material, otherwise: produce a QP
-   * material
-   */
-  void joinRelativePermeability(bool at_nodes);
+  void addAdvectiveFluxCalculatorUnsaturatedHeat(unsigned phase,
+                                                 bool multiply_by_density,
+                                                 std::string userobject_name);
 
-  /**
-   * Adds a PorousFlowJoiner for the fluid internal energy
-   * @param at_nodes if true: the Joiner should produce a nodal material, otherwise: produce a QP
-   * material
-   */
-  void joinInternalEnergy(bool at_nodes);
+  void addAdvectiveFluxCalculatorSaturatedMultiComponent(unsigned phase,
+                                                         unsigned fluid_component,
+                                                         bool multiply_by_density,
+                                                         std::string userobject_name);
 
-  /**
-   * Adds a PorousFlowJoiner for the fluid enthalpy
-   * @param at_nodes if true: the Joiner should produce a nodal material, otherwise: produce a QP
-   * material
-   */
-  void joinEnthalpy(bool at_nodes);
+  void addAdvectiveFluxCalculatorUnsaturatedMultiComponent(unsigned phase,
+                                                           unsigned fluid_component,
+                                                           bool multiply_by_density,
+                                                           std::string userobject_name);
 };
-
-#endif // POROUSFLOWACTIONBASE_H

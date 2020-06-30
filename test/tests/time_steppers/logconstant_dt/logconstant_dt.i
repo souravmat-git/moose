@@ -1,11 +1,3 @@
-###########################################################
-# This is a simple test with a time-dependent problem
-# demonstrating the use of the TimeStepper system.
-#
-# @Requirement F1.20
-###########################################################
-
-
 [Mesh]
   type = GeneratedMesh
   dim = 2
@@ -46,7 +38,6 @@
 []
 
 [Executioner]
-  # Preconditioned JFNK (default)
   type = Transient
   num_steps = 11
   solve_type = PJFNK

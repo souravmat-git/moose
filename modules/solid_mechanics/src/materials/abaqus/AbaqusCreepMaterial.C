@@ -1,22 +1,28 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "AbaqusCreepMaterial.h"
 
 #include "SymmTensor.h"
 #include "Factory.h"
 
+#ifdef LIBMESH_HAVE_DLOPEN
 #include <dlfcn.h>
+#endif
 #define QUOTE(macro) stringifyName(macro)
 
-template <>
+registerMooseObject("SolidMechanicsApp", AbaqusCreepMaterial);
+
 InputParameters
-validParams<AbaqusCreepMaterial>()
+AbaqusCreepMaterial::validParams()
 {
-  InputParameters params = validParams<SolidModel>();
+  InputParameters params = SolidModel::validParams();
   params.addRequiredParam<FileName>("plugin",
                                     "The path to the compiled dynamic library for the "
                                     "plugin you want to use (without -opt.plugin or "
@@ -88,6 +94,7 @@ AbaqusCreepMaterial::AbaqusCreepMaterial(const InputParameters & parameters)
   _elasticity_tensor[2] = _eg;
 
   // Open the library
+#ifdef LIBMESH_HAVE_DLOPEN
   _handle = dlopen(_plugin.c_str(), RTLD_LAZY);
 
   if (!_handle)
@@ -115,13 +122,18 @@ AbaqusCreepMaterial::AbaqusCreepMaterial(const InputParameters & parameters)
     error << "Cannot load symbol 'creep_': " << dlsym_error << '\n';
     mooseError(error.str());
   }
+#else
+  mooseError("AbaqusCreepMaterial is not supported on Windows.");
+#endif
 }
 
 AbaqusCreepMaterial::~AbaqusCreepMaterial()
 {
   delete _STATEV;
 
+#ifdef LIBMESH_HAVE_DLOPEN
   dlclose(_handle);
+#endif
 }
 
 void

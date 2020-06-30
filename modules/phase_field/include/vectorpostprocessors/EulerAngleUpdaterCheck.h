@@ -1,24 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef EULERANGLEUPDATERCHECK_H
-#define EULERANGLEUPDATERCHECK_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GeneralVectorPostprocessor.h"
 
 // Forward declaration
-class EulerAngleUpdaterCheck;
 class EulerAngleUpdater;
 class EulerAngleProvider;
 class GrainTrackerInterface;
 class GrainForceAndTorqueInterface;
 class RotationTensor;
-
-template <>
-InputParameters validParams<EulerAngleUpdaterCheck>();
 
 /**
  * This is a unit test to check the correctness of the updated euler angles
@@ -28,6 +26,8 @@ InputParameters validParams<EulerAngleUpdaterCheck>();
 class EulerAngleUpdaterCheck : public GeneralVectorPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   EulerAngleUpdaterCheck(const InputParameters & parameters);
 
   virtual void initialize() override;
@@ -47,5 +47,3 @@ protected:
   std::vector<RealVectorValue> _angles;
   std::vector<RealVectorValue> _angles_old;
 };
-
-#endif // EULERANGLEUPDATERCHECK_H

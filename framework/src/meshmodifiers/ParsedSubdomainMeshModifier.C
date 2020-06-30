@@ -1,31 +1,31 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "ParsedSubdomainMeshModifier.h"
 #include "Conversion.h"
 #include "MooseMesh.h"
 
-// libmesh includes
 #include "libmesh/fparser_ad.hh"
+#include "libmesh/elem.h"
+
+registerMooseObjectReplaced("MooseApp",
+                            ParsedSubdomainMeshModifier,
+                            "11/30/2019 00:00",
+                            ParsedSubdomainMeshGenerator);
 
 template <>
 InputParameters
 validParams<ParsedSubdomainMeshModifier>()
 {
   InputParameters params = validParams<MeshModifier>();
-  params += validParams<FunctionParserUtils>();
+  params += FunctionParserUtils<false>::validParams();
   params.addRequiredParam<std::string>("combinatorial_geometry",
                                        "Function expression encoding a combinatorial geometry");
   params.addRequiredParam<SubdomainID>("block_id",
@@ -55,7 +55,7 @@ ParsedSubdomainMeshModifier::ParsedSubdomainMeshModifier(const InputParameters &
     _excluded_ids(parameters.get<std::vector<SubdomainID>>("excluded_subdomain_ids"))
 {
   // base function object
-  _func_F = ADFunctionPtr(new ADFunction());
+  _func_F = std::make_shared<SymFunction>();
 
   // set FParser internal feature flags
   setParserFeatureFlags(_func_F);
@@ -85,23 +85,17 @@ ParsedSubdomainMeshModifier::modify()
     mooseError(
         "_mesh_ptr must be initialized before calling ParsedSubdomainMeshModifier::modify()");
 
-  // Reference the the libMesh::MeshBase
-  MeshBase & mesh = _mesh_ptr->getMesh();
-
   // Loop over the elements
-  for (MeshBase::element_iterator el = mesh.active_elements_begin();
-       el != mesh.active_elements_end();
-       ++el)
+  for (const auto & elem : _mesh_ptr->getMesh().active_element_ptr_range())
   {
-    _func_params[0] = (*el)->centroid()(0);
-    _func_params[1] = (*el)->centroid()(1);
-    _func_params[2] = (*el)->centroid()(2);
+    _func_params[0] = elem->centroid()(0);
+    _func_params[1] = elem->centroid()(1);
+    _func_params[2] = elem->centroid()(2);
     bool contains = evaluate(_func_F);
 
-    if (contains &&
-        std::find(_excluded_ids.begin(), _excluded_ids.end(), (*el)->subdomain_id()) ==
-            _excluded_ids.end())
-      (*el)->subdomain_id() = _block_id;
+    if (contains && std::find(_excluded_ids.begin(), _excluded_ids.end(), elem->subdomain_id()) ==
+                        _excluded_ids.end())
+      elem->subdomain_id() = _block_id;
   }
 
   // Assign block name, if provided

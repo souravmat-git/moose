@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "EFAElement2D.h"
 
@@ -230,7 +232,7 @@ EFAfragment::commonNodesWithEdge(EFAEdge & other_edge)
   std::vector<EFAnode*> common_nodes;
   for (unsigned int i = 0; i < 2; ++i)
   {
-    EFAnode* edge_node = other_edge.get_node(i);
+    EFAnode* edge_node = other_edge.node_ptr(i);
     if (containsNode(edge_node))
       common_nodes.push_back(edge_node);
   }

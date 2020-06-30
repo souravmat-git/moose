@@ -1,35 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef PARSEDODEKERNEL_H
-#define PARSEDODEKERNEL_H
+#pragma once
 
 #include "ODEKernel.h"
 #include "FunctionParserUtils.h"
 
-// Forward Declarations
-class ParsedODEKernel;
-
-template <>
-InputParameters validParams<ODEKernel>();
-
 /**
- *
+ * Parsed ODE function kernel
  */
-class ParsedODEKernel : public ODEKernel, public FunctionParserUtils
+class ParsedODEKernel : public ODEKernel, public FunctionParserUtils<false>
 {
 public:
+  static InputParameters validParams();
+
   ParsedODEKernel(const InputParameters & parameters);
 
 protected:
@@ -48,18 +38,21 @@ protected:
   std::vector<std::string> _arg_names;
 
   /// function parser object for the residual and on-diagonal Jacobian
-  ADFunctionPtr _func_F;
-  ADFunctionPtr _func_dFdu;
+  SymFunctionPtr _func_F;
+  SymFunctionPtr _func_dFdu;
 
   /// function parser objects for the Jacobian
-  std::vector<ADFunctionPtr> _func_dFdarg;
+  std::vector<SymFunctionPtr> _func_dFdarg;
 
   /// number of non-linear variables in the problem
   const unsigned int _number_of_nl_variables;
+
+  /// coupled postprocessors
+  std::vector<const PostprocessorValue *> _pp;
+
+  usingFunctionParserUtilsMembers(false);
 
 private:
   /// Vector to look up the internal coupled variable index into _arg_*  through the libMesh variable number
   std::vector<unsigned int> _arg_index;
 };
-
-#endif /* PARSEDODEKERNEL_H */

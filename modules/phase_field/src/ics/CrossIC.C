@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CrossIC.h"
 
 // Portions of this code Copyright 2007-2009 Roy Stogner
@@ -24,11 +27,12 @@
 // TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 // SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-template <>
+registerMooseObject("PhaseFieldApp", CrossIC);
+
 InputParameters
-validParams<CrossIC>()
+CrossIC::validParams()
 {
-  InputParameters params = validParams<C1ICBase>();
+  InputParameters params = C1ICBase::validParams();
   params.addClassDescription("Cross-shaped initial condition");
   params.addParam<Real>("x1", 0.0, "The x coordinate of the lower left-hand corner of the box");
   params.addParam<Real>("y1", 0.0, "The y coordinate of the lower left-hand corner of the box");

@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PFCElementEnergyIntegral.h"
 
 // MOOSE includes
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", PFCElementEnergyIntegral);
+
 InputParameters
-validParams<PFCElementEnergyIntegral>()
+PFCElementEnergyIntegral::validParams()
 {
-  InputParameters params = validParams<ElementIntegralPostprocessor>();
+  InputParameters params = ElementIntegralPostprocessor::validParams();
   params.addRequiredParam<VariableName>("variable",
                                         "The name of the variable that this object operates on");
   params.addParam<Real>("temp", 1833.0, "Temperature of simulation");
@@ -23,8 +26,12 @@ validParams<PFCElementEnergyIntegral>()
 
 PFCElementEnergyIntegral::PFCElementEnergyIntegral(const InputParameters & parameters)
   : ElementIntegralPostprocessor(parameters),
-    MooseVariableInterface(this, false),
-    _var(_subproblem.getVariable(_tid, parameters.get<VariableName>("variable"))),
+    MooseVariableInterface<Real>(this,
+                                 false,
+                                 "variable",
+                                 Moose::VarKindType::VAR_ANY,
+                                 Moose::VarFieldType::VAR_FIELD_STANDARD),
+    _var(_subproblem.getStandardVariable(_tid, parameters.get<VariableName>("variable"))),
     _u(_var.sln()),
     _grad_u(_var.gradSln()),
     _u_dot(_var.uDot()),

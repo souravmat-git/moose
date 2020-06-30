@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MixedSwitchingFunctionMaterial.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", MixedSwitchingFunctionMaterial);
+
 InputParameters
-validParams<MixedSwitchingFunctionMaterial>()
+MixedSwitchingFunctionMaterial::validParams()
 {
-  InputParameters params = validParams<OrderParameterFunctionMaterial>();
+  InputParameters params = OrderParameterFunctionMaterial::validParams();
   params.addClassDescription("Helper material to provide h(eta) and its derivative in one of two "
                              "polynomial forms. MIX234 and MIX246");
   MooseEnum h_order("MIX234=0 MIX246", "MIX234");

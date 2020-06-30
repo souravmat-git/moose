@@ -1,18 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "GrainCentersPostprocessor.h"
 #include "ComputeGrainCenterUserObject.h"
 
-template <>
 InputParameters
-validParams<GrainCentersPostprocessor>()
+GrainCentersPostprocessor::validParams()
 {
-  InputParameters params = validParams<VectorPostprocessor>();
-  params.addClassDescription("Outputs the values from GrainCentersPostprocessor");
+  InputParameters params = VectorPostprocessor::validParams();
+  params.addClassDescription("Outputs the values from ComputeGrainCenterUserObject");
   params.addParam<UserObjectName>(
       "grain_data", "Specify user object that gives center of mass and volume of grains");
   return params;

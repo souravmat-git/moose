@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeMultiPlasticityStress.h"
 #include "MultiPlasticityDebugger.h"
 #include "MatrixTools.h"
@@ -13,12 +16,13 @@
 
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeMultiPlasticityStress);
+
 InputParameters
-validParams<ComputeMultiPlasticityStress>()
+ComputeMultiPlasticityStress::validParams()
 {
-  InputParameters params = validParams<ComputeStressBase>();
-  params += validParams<MultiPlasticityDebugger>();
+  InputParameters params = ComputeStressBase::validParams();
+  params += MultiPlasticityDebugger::validParams();
   params.addClassDescription("Base class for multi-surface finite-strain plasticity");
   params.addRangeCheckedParam<unsigned int>("max_NR_iterations",
                                             20,
@@ -114,6 +118,8 @@ ComputeMultiPlasticityStress::ComputeMultiPlasticityStress(const InputParameters
 
     _perform_finite_strain_rotations(getParam<bool>("perform_finite_strain_rotations")),
 
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _plastic_strain(declareProperty<RankTwoTensor>("plastic_strain")),
     _plastic_strain_old(getMaterialPropertyOld<RankTwoTensor>("plastic_strain")),
     _intnl(declareProperty<std::vector<Real>>("plastic_internal_parameter")),
@@ -147,20 +153,20 @@ ComputeMultiPlasticityStress::ComputeMultiPlasticityStress(const InputParameters
     // disregards block restrictions.
     _cosserat(hasMaterialProperty<RankTwoTensor>("curvature") &&
               hasMaterialProperty<RankFourTensor>("elastic_flexural_rigidity_tensor")),
-    _curvature(_cosserat ? &getMaterialPropertyByName<RankTwoTensor>("curvature") : NULL),
+    _curvature(_cosserat ? &getMaterialPropertyByName<RankTwoTensor>("curvature") : nullptr),
     _elastic_flexural_rigidity_tensor(
         _cosserat ? &getMaterialPropertyByName<RankFourTensor>("elastic_flexural_rigidity_tensor")
-                  : NULL),
-    _couple_stress(_cosserat ? &declareProperty<RankTwoTensor>("couple_stress") : NULL),
-    _couple_stress_old(_cosserat ? &getMaterialPropertyOld<RankTwoTensor>("couple_stress") : NULL),
+                  : nullptr),
+    _couple_stress(_cosserat ? &declareProperty<RankTwoTensor>("couple_stress") : nullptr),
+    _couple_stress_old(_cosserat ? &getMaterialPropertyOld<RankTwoTensor>("couple_stress")
+                                 : nullptr),
     _Jacobian_mult_couple(_cosserat ? &declareProperty<RankFourTensor>("couple_Jacobian_mult")
-                                    : NULL),
+                                    : nullptr),
 
     _my_elasticity_tensor(RankFourTensor()),
     _my_strain_increment(RankTwoTensor()),
     _my_flexural_rigidity_tensor(RankFourTensor()),
-    _my_curvature(RankTwoTensor()),
-    _step_one(declareRestartableData<bool>("step_one", true))
+    _my_curvature(RankTwoTensor())
 {
   if (_epp_tol <= 0)
     mooseError("ComputeMultiPlasticityStress: ep_plastic_tolerance must be positive");
@@ -436,7 +442,7 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old,
           for (unsigned surface = 0; surface < _f[custom_model]->numberSurfaces(); ++surface)
             custom_model_pm.push_back(cumulative_pm[_surfaces_given_model[custom_model][surface]]);
           consistent_tangent_operator =
-              _f[custom_model]->consistentTangentOperator(stress_old,
+              _f[custom_model]->consistentTangentOperator(stress_old + E_ijkl * strain_increment,
                                                           intnl_old[custom_model],
                                                           stress,
                                                           intnl[custom_model],
@@ -495,9 +501,6 @@ ComputeMultiPlasticityStress::plasticStep(const RankTwoTensor & stress_old,
   Real step_size = 1.0;
   Real time_simulated = 0.0;
 
-  if (_t_step >= 2)
-    _step_one = false;
-
   // the "good" variables hold the latest admissible stress
   // and internal parameters.
   RankTwoTensor stress_good = stress_old;
@@ -510,12 +513,6 @@ ComputeMultiPlasticityStress::plasticStep(const RankTwoTensor & stress_old,
   // Following is necessary because I want strain_increment to be "const"
   // but I also want to be able to subdivide an initial_stress
   RankTwoTensor this_strain_increment = strain_increment;
-  if (isParamValid("initial_stress") && _step_one)
-  {
-    RankFourTensor E_inv = E_ijkl.invSymm();
-    this_strain_increment += E_inv * stress_old;
-    stress_good = RankTwoTensor();
-  }
 
   RankTwoTensor dep = step_size * this_strain_increment;
 
@@ -692,7 +689,7 @@ ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old,
 
   iter = 0;
 
-  // Initialise the set of active constraints
+  // Initialize the set of active constraints
   // At this stage, the active constraints are
   // those that exceed their _f_tol
   // active constraints.

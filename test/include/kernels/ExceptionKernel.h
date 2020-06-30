@@ -1,26 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef EXCEPTIONKERNEL_H
-#define EXCEPTIONKERNEL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
-
-// Forward Declaration
-class ExceptionKernel;
-
-template <>
-InputParameters validParams<ExceptionKernel>();
 
 /**
  * Kernel that generates MooseException
@@ -28,6 +17,8 @@ InputParameters validParams<ExceptionKernel>();
 class ExceptionKernel : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   ExceptionKernel(const InputParameters & parameters);
 
 protected:
@@ -44,6 +35,9 @@ protected:
   // Determine whether we should throw an exception or just trigger an error (abort)
   const bool _should_throw;
 
+  // Determine the type of exception to throw (something not normally caught versus normally caught)
+  const bool _throw_std_exception;
+
   // The rank to isolate the exception to if valid
   const processor_id_type _rank;
 
@@ -56,5 +50,3 @@ protected:
   /// Function which returns true if it's time to throw
   bool time_to_throw() const;
 };
-
-#endif /* EXCEPTIONKERNEL_H */

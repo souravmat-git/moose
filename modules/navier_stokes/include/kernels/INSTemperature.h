@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INSTEMPERATURE_H
-#define INSTEMPERATURE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 
 // Forward Declarations
-class INSTemperature;
-
-template <>
-InputParameters validParams<INSTemperature>();
 
 /**
  * This class computes the residual and Jacobian contributions for the
@@ -22,6 +20,8 @@ InputParameters validParams<INSTemperature>();
 class INSTemperature : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   INSTemperature(const InputParameters & parameters);
 
   virtual ~INSTemperature() {}
@@ -46,5 +46,3 @@ protected:
   const MaterialProperty<Real> & _k;
   const MaterialProperty<Real> & _cp;
 };
-
-#endif // INSTEMPERATURE_H

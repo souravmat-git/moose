@@ -1,34 +1,23 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "KernelValue.h"
-
-// MOOSE includes
 #include "Assembly.h"
-#include "MooseVariable.h"
-#include "SubProblem.h"
 #include "SystemBase.h"
-
-// libMesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+defineLegacyParams(KernelValue);
+
 InputParameters
-validParams<KernelValue>()
+KernelValue::validParams()
 {
-  InputParameters params = validParams<Kernel>();
-  return params;
+  return Kernel::validParams();
 }
 
 KernelValue::KernelValue(const InputParameters & parameters) : Kernel(parameters) {}
@@ -90,25 +79,30 @@ KernelValue::computeJacobian()
 }
 
 void
-KernelValue::computeOffDiagJacobian(unsigned int jvar)
+KernelValue::computeOffDiagJacobian(MooseVariableFEBase & jvar)
 {
-  if (jvar == _var.number())
+  size_t jvar_num = jvar.number();
+  if (jvar_num == _var.number())
     computeJacobian();
   else
   {
-    DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), jvar);
+    DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), jvar_num);
 
-    for (_j = 0; _j < _phi.size(); _j++)
+    // This (undisplaced) jvar could potentially yield the wrong phi size if this object is acting
+    // on the displaced mesh
+    auto phi_size = _sys.getVariable(_tid, jvar.number()).dofIndices().size();
+
+    for (_j = 0; _j < phi_size; _j++)
       for (_qp = 0; _qp < _qrule->n_points(); _qp++)
         for (_i = 0; _i < _test.size(); _i++)
-          ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(jvar);
+          ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(jvar_num);
   }
 }
 
 Real
 KernelValue::computeQpResidual()
 {
-  return 0.0;
+  mooseError("Override precomputeQpResidual() in your KernelValue derived class!");
 }
 
 Real

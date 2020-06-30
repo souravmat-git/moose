@@ -4,65 +4,30 @@
 
 [GlobalParams]
   displacements = 'disp_x disp_y disp_z'
-  order = second
 []
 
 [Mesh]
-  file = necking_quad4.e
-  uniform_refine = 0
-  second_order = true
-[]
-
-[MeshModifiers]
-  [./extrude]
-    type = MeshExtruder
+  [file_mesh]
+    type = FileMeshGenerator
+    file = necking_quad4.e
+  []
+  [extrude]
+    type = MeshExtruderGenerator
     extrusion_vector = '0 0 0.5'
     num_layers = 2
     bottom_sideset = 'back'
     top_sideset = 'front'
-  [../]
+    input = file_mesh
+  []
+  uniform_refine = 0
+  second_order = true
 []
 
-[Variables]
-  [./disp_x]
-  [../]
-  [./disp_y]
-  [../]
-  [./disp_z]
-  [../]
-[]
-
-[Kernels]
-  [./TensorMechanics]
-    use_displaced_mesh = true
-  [../]
-[]
-
-[AuxVariables]
-  [./stress_zz]
-    family = MONOMIAL
-    order = CONSTANT
-  [../]
-  [./strain_zz]
-    family = MONOMIAL
-    order = CONSTANT
-  [../]
-[]
-
-[AuxKernels]
-  [./stress_zz]
-    type = RankTwoAux
-    variable = stress_zz
-    rank_two_tensor = stress
-    index_i = 1
-    index_j = 1
-  [../]
-  [./strain_zz]
-    type = RankTwoAux
-    variable = strain_zz
-    rank_two_tensor = total_strain
-    index_i = 1
-    index_j = 1
+[Modules/TensorMechanics/Master]
+  [./block1]
+    strain = FINITE
+    add_variables = true
+    generate_output = 'stress_yy strain_yy'
   [../]
 []
 
@@ -71,9 +36,6 @@
     type = ComputeIsotropicElasticityTensor
     youngs_modulus = 2.1e5
     poissons_ratio = 0.3
-  [../]
-  [./strain]
-    type = ComputeFiniteStrain
   [../]
   [./stress]
     type = ComputeMultiPlasticityStress
@@ -100,27 +62,27 @@
 
 [BCs]
   [./left]
-    type = PresetBC
-    variable = disp_x
-    boundary = left
+    type = DirichletBC
+    variable = disp_x #change the variable to reflect the new displacement names
+    boundary = 1
     value = 0.0
   [../]
   [./back]
-    type = PresetBC
-    variable = disp_z
+    type = DirichletBC
+    variable = disp_z #change the variable to reflect the new displacement names
     boundary = back
     value = 0.0
   [../]
   [./bottom]
-    type = PresetBC
-    variable = disp_y
-    boundary = bottom
+    type = DirichletBC
+    variable = disp_y #change the variable to reflect the new displacement names
+    boundary = 3
     value = 0.0
   [../]
   [./top]
-    type = FunctionPresetBC
-    variable = disp_y
-    boundary = top
+    type = FunctionDirichletBC
+    variable = disp_y #change the variable to reflect the new displacement names
+    boundary = 4
     function = '0.0007*t'
   [../]
 []
@@ -147,19 +109,19 @@
 [Postprocessors]
   [./ave_stress_bottom]
     type = SideAverageValue
-    variable = stress_zz
-    boundary = bottom
+    variable = stress_yy
+    boundary = 3
   [../]
   [./ave_strain_bottom]
     type = SideAverageValue
-    variable = strain_zz
-    boundary = bottom
+    variable = strain_yy
+    boundary = 3
   [../]
 []
 
 [Outputs]
   exodus = true
-  print_perf_log = true
+  perf_graph = true
   csv = true
   print_linear_residuals = false
 []

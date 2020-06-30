@@ -1,20 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSSTAGNATIONPRESSUREBC_H
-#define NSSTAGNATIONPRESSUREBC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "NSStagnationBC.h"
 
 // Forward Declarations
-class NSStagnationPressureBC;
 
 // Specialization required of all user-level Moose objects
-template <>
-InputParameters validParams<NSStagnationPressureBC>();
 
 /**
  * This Dirichlet condition imposes the condition p_0 = p_0_desired,
@@ -24,6 +23,8 @@ InputParameters validParams<NSStagnationPressureBC>();
 class NSStagnationPressureBC : public NSStagnationBC
 {
 public:
+  static InputParameters validParams();
+
   NSStagnationPressureBC(const InputParameters & parameters);
 
 protected:
@@ -38,5 +39,3 @@ protected:
   // Required paramters
   const Real _desired_stagnation_pressure;
 };
-
-#endif // NSSTAGNATIONPRESSUREBC_H

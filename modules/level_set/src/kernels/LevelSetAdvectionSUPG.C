@@ -1,40 +1,36 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LevelSetAdvectionSUPG.h"
 
-template <>
+registerMooseObject("LevelSetApp", LevelSetAdvectionSUPG);
+
 InputParameters
-validParams<LevelSetAdvectionSUPG>()
+LevelSetAdvectionSUPG::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = ADKernelGrad::validParams();
   params.addClassDescription(
       "SUPG stablization term for the advection portion of the level set equation.");
-  params += validParams<LevelSetVelocityInterface<>>();
+  params.addRequiredCoupledVar("velocity", "Velocity vector variable.");
   return params;
 }
 
 LevelSetAdvectionSUPG::LevelSetAdvectionSUPG(const InputParameters & parameters)
-  : LevelSetVelocityInterface<Kernel>(parameters)
+  : ADKernelGrad(parameters), _velocity(adCoupledVectorValue("velocity"))
 {
 }
 
-Real
-LevelSetAdvectionSUPG::computeQpResidual()
+ADRealVectorValue
+LevelSetAdvectionSUPG::precomputeQpResidual()
 {
-  computeQpVelocity();
-  Real tau = _current_elem->hmin() / (2 * _velocity.norm());
-  return (tau * _velocity * _grad_test[_i][_qp]) * (_velocity * _grad_u[_qp]);
-}
-
-Real
-LevelSetAdvectionSUPG::computeQpJacobian()
-{
-  computeQpVelocity();
-  Real tau = _current_elem->hmin() / (2 * _velocity.norm());
-  return (tau * _velocity * _grad_test[_i][_qp]) * (_velocity * _grad_phi[_j][_qp]);
+  ADReal tau =
+      _current_elem->hmin() /
+      (2 * (_velocity[_qp] + RealVectorValue(libMesh::TOLERANCE * libMesh::TOLERANCE)).norm());
+  return (tau * _velocity[_qp]) * (_velocity[_qp] * _grad_u[_qp]);
 }

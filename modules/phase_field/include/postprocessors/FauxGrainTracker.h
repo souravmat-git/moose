@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef FAUXGRAINTRACKER_H
-#define FAUXGRAINTRACKER_H
+#pragma once
 
 #include "FeatureFloodCount.h"
 #include "GrainTrackerInterface.h"
-
-class FauxGrainTracker;
-
-template <>
-InputParameters validParams<FauxGrainTracker>();
 
 /**
  * This class is a fake grain tracker object, it will not actually track grains nor remap them
@@ -25,6 +21,8 @@ InputParameters validParams<FauxGrainTracker>();
 class FauxGrainTracker : public FeatureFloodCount, public GrainTrackerInterface
 {
 public:
+  static InputParameters validParams();
+
   FauxGrainTracker(const InputParameters & parameters);
   virtual ~FauxGrainTracker();
 
@@ -76,5 +74,3 @@ private:
   /// The centroid of the feature (average of coordinates from entities participating in the volume calculation)
   std::map<unsigned int, Point> _centroid;
 };
-
-#endif

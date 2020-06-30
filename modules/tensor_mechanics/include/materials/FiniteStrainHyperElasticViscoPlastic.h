@@ -1,22 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef FINITESTRAINHYPERELASTICVISCOPLASTIC_H
-#define FINITESTRAINHYPERELASTICVISCOPLASTIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ComputeStressBase.h"
 #include "HEVPFlowRateUOBase.h"
 #include "HEVPStrengthUOBase.h"
 #include "HEVPInternalVarUOBase.h"
 #include "HEVPInternalVarRateUOBase.h"
-
-class FiniteStrainHyperElasticViscoPlastic;
-
-template <>
-InputParameters validParams<FiniteStrainHyperElasticViscoPlastic>();
 
 /**
  * This class solves the viscoplastic flow rate equations in the total form
@@ -31,6 +28,8 @@ InputParameters validParams<FiniteStrainHyperElasticViscoPlastic>();
 class FiniteStrainHyperElasticViscoPlastic : public ComputeStressBase
 {
 public:
+  static InputParameters validParams();
+
   FiniteStrainHyperElasticViscoPlastic(const InputParameters & parameters);
 
 protected:
@@ -194,6 +193,10 @@ protected:
   const MaterialProperty<RankTwoTensor> & _fp_old;
   MaterialProperty<RankTwoTensor> & _ce;
 
+  /// Name of the elasticity tensor material property
+  const std::string _elasticity_tensor_name;
+  /// Elasticity tensor material property
+  const MaterialProperty<RankFourTensor> & _elasticity_tensor;
   const MaterialProperty<RankTwoTensor> & _deformation_gradient;
   const MaterialProperty<RankTwoTensor> & _deformation_gradient_old;
   const MaterialProperty<RankTwoTensor> & _rotation_increment;
@@ -237,5 +240,3 @@ protected:
 
   Real _dt_substep;
 };
-
-#endif // FINITESTRAINHYPERELASTICVISCOPLASTIC_H

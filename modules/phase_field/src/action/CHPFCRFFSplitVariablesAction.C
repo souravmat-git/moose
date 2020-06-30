@@ -1,23 +1,26 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CHPFCRFFSplitVariablesAction.h"
 #include "Factory.h"
 #include "FEProblem.h"
 #include "Conversion.h"
 #include "AddVariableAction.h"
 
-// libMesh includes
 #include "libmesh/string_to_enum.h"
 
-template <>
+registerMooseAction("PhaseFieldApp", CHPFCRFFSplitVariablesAction, "add_variable");
+
 InputParameters
-validParams<CHPFCRFFSplitVariablesAction>()
+CHPFCRFFSplitVariablesAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   MooseEnum familyEnum = AddVariableAction::getNonlinearVariableFamilies();
   params.addParam<MooseEnum>(
       "family",
@@ -51,23 +54,23 @@ CHPFCRFFSplitVariablesAction::CHPFCRFFSplitVariablesAction(const InputParameters
 void
 CHPFCRFFSplitVariablesAction::act()
 {
-  MultiMooseEnum execute_options(SetupInterface::getExecuteOptions());
-  execute_options = "timestep_begin";
+  ExecFlagEnum execute_options = MooseUtils::getDefaultExecFlagEnum();
+  execute_options = EXEC_TIMESTEP_BEGIN;
 
   // Setup MultiApp
   InputParameters poly_params = _factory.getValidParams("TransientMultiApp");
   poly_params.set<MooseEnum>("app_type") = "PhaseFieldApp";
-  poly_params.set<MultiMooseEnum>("execute_on") = execute_options;
+  poly_params.set<ExecFlagEnum>("execute_on") = execute_options;
   poly_params.set<std::vector<FileName>>("input_files") = _sub_filenames;
   poly_params.set<unsigned int>("max_procs_per_app") = 1;
   poly_params.set<std::vector<Point>>("positions") = {Point()};
   _problem->addMultiApp("TransientMultiApp", "HHEquationSolver", poly_params);
 
   poly_params = _factory.getValidParams("MultiAppNearestNodeTransfer");
-  poly_params.set<MooseEnum>("direction") = "to_multiapp";
-  poly_params.set<MultiMooseEnum>("execute_on") = execute_options;
-  poly_params.set<AuxVariableName>("variable") = _n_name;
-  poly_params.set<VariableName>("source_variable") = _n_name;
+  poly_params.set<MultiMooseEnum>("direction") = "to_multiapp";
+  poly_params.set<ExecFlagEnum>("execute_on") = execute_options;
+  poly_params.set<std::vector<AuxVariableName>>("variable") = {_n_name};
+  poly_params.set<std::vector<VariableName>>("source_variable") = {_n_name};
   poly_params.set<MultiAppName>("multi_app") = "HHEquationSolver";
   _problem->addTransfer("MultiAppNearestNodeTransfer", _n_name + "_trans", poly_params);
 
@@ -86,9 +89,9 @@ CHPFCRFFSplitVariablesAction::act()
                Utility::string_to_enum<FEFamily>(getParam<MooseEnum>("family"))));
 
     poly_params = _factory.getValidParams("MultiAppNearestNodeTransfer");
-    poly_params.set<MooseEnum>("direction") = "from_multiapp";
-    poly_params.set<AuxVariableName>("variable") = real_name;
-    poly_params.set<VariableName>("source_variable") = real_name;
+    poly_params.set<MultiMooseEnum>("direction") = "from_multiapp";
+    poly_params.set<std::vector<AuxVariableName>>("variable") = {real_name};
+    poly_params.set<std::vector<VariableName>>("source_variable") = {real_name};
     poly_params.set<MultiAppName>("multi_app") = "HHEquationSolver";
     _problem->addTransfer("MultiAppNearestNodeTransfer", real_name + "_trans", poly_params);
 
@@ -103,9 +106,9 @@ CHPFCRFFSplitVariablesAction::act()
                  Utility::string_to_enum<FEFamily>(getParam<MooseEnum>("family"))));
 
       poly_params = _factory.getValidParams("MultiAppNearestNodeTransfer");
-      poly_params.set<MooseEnum>("direction") = "from_multiapp";
-      poly_params.set<AuxVariableName>("variable") = imag_name;
-      poly_params.set<VariableName>("source_variable") = imag_name;
+      poly_params.set<MultiMooseEnum>("direction") = "from_multiapp";
+      poly_params.set<std::vector<AuxVariableName>>("variable") = {imag_name};
+      poly_params.set<std::vector<VariableName>>("source_variable") = {imag_name};
       poly_params.set<MultiAppName>("multi_app") = "HHEquationSolver";
       _problem->addTransfer("MultiAppNearestNodeTransfer", imag_name + "_trans", poly_params);
     }

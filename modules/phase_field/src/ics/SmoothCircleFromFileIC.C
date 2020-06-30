@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "SmoothCircleFromFileIC.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", SmoothCircleFromFileIC);
+
 InputParameters
-validParams<SmoothCircleFromFileIC>()
+SmoothCircleFromFileIC::validParams()
 {
-  InputParameters params = validParams<SmoothCircleBaseIC>();
+  InputParameters params = SmoothCircleBaseIC::validParams();
   params.addClassDescription("Multiple smooth circles read from a text file");
   params.addRequiredParam<FileName>("file_name", "File containing circle centers and radii");
 
@@ -21,13 +25,13 @@ SmoothCircleFromFileIC::SmoothCircleFromFileIC(const InputParameters & parameter
   : SmoothCircleBaseIC(parameters),
     _data(0),
     _file_name(getParam<FileName>("file_name")),
-    _txt_reader(_file_name, true, " ", &_communicator),
+    _txt_reader(_file_name, &_communicator),
     _n_circles(0)
 {
   // Read names and vectors from file
   _txt_reader.read();
-  _col_names = _txt_reader.getColumnNames();
-  _data = _txt_reader.getColumnData();
+  _col_names = _txt_reader.getNames();
+  _data = _txt_reader.getData();
   _n_circles = _data[0].size();
 
   // Check that the file has all the correct information

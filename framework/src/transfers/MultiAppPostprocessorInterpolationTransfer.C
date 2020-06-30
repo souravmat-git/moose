@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiAppPostprocessorInterpolationTransfer.h"
 
@@ -20,17 +15,21 @@
 #include "MooseTypes.h"
 #include "MultiApp.h"
 
-// libMesh includes
 #include "libmesh/meshfree_interpolation.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/system.h"
 #include "libmesh/radial_basis_interpolation.h"
 
-template <>
+registerMooseObject("MooseApp", MultiAppPostprocessorInterpolationTransfer);
+
+defineLegacyParams(MultiAppPostprocessorInterpolationTransfer);
+
 InputParameters
-validParams<MultiAppPostprocessorInterpolationTransfer>()
+MultiAppPostprocessorInterpolationTransfer::validParams()
 {
-  InputParameters params = validParams<MultiAppTransfer>();
+  InputParameters params = MultiAppTransfer::validParams();
+  params.addClassDescription("Transfer postprocessor data from sub-application into field data on "
+                             "the master application.");
   params.addRequiredParam<AuxVariableName>(
       "variable", "The auxiliary variable to store the transferred values in.");
   params.addRequiredParam<PostprocessorName>("postprocessor", "The Postprocessor to interpolate.");
@@ -62,6 +61,8 @@ MultiAppPostprocessorInterpolationTransfer::MultiAppPostprocessorInterpolationTr
     _interp_type(getParam<MooseEnum>("interp_type")),
     _radius(getParam<Real>("radius"))
 {
+  if (_directions.contains(TO_MULTIAPP))
+    paramError("Can't interpolate to a MultiApp!");
 }
 
 void
@@ -69,7 +70,7 @@ MultiAppPostprocessorInterpolationTransfer::execute()
 {
   _console << "Beginning PostprocessorInterpolationTransfer " << name() << std::endl;
 
-  switch (_direction)
+  switch (_current_direction)
   {
     case TO_MULTIAPP:
     {
@@ -128,13 +129,8 @@ MultiAppPostprocessorInterpolationTransfer::execute()
 
         vars.push_back(_to_var_name);
 
-        MeshBase::const_node_iterator node_it = mesh.localNodesBegin();
-        MeshBase::const_node_iterator node_end = mesh.localNodesEnd();
-
-        for (; node_it != node_end; ++node_it)
+        for (const auto & node : as_range(mesh.localNodesBegin(), mesh.localNodesEnd()))
         {
-          Node * node = *node_it;
-
           if (node->n_dofs(sys_num, var_num) > 0) // If this variable has dofs at this node
           {
             std::vector<Point> pts;

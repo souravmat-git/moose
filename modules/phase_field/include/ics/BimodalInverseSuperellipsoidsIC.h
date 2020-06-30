@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef BIMODALINVERSESUPERELLIPSOIDSIC_H
-#define BIMODALINVERSESUPERELLIPSOIDSIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "BimodalSuperellipsoidsIC.h"
 
 // Forward Declarations
-class BimodalInverseSuperellipsoidsIC;
-
-template <>
-InputParameters validParams<BimodalInverseSuperellipsoidsIC>();
 
 /**
  * BimodalInverseSuperellipsoidsIC takes a specified number of superellipsoids, each with given
@@ -27,6 +25,8 @@ InputParameters validParams<BimodalInverseSuperellipsoidsIC>();
 class BimodalInverseSuperellipsoidsIC : public BimodalSuperellipsoidsIC
 {
 public:
+  static InputParameters validParams();
+
   BimodalInverseSuperellipsoidsIC(const InputParameters & parameters);
 
   /// Have to do things slightly different from SmoothSuperellipsoidBaseIC because of the inverse structure
@@ -35,5 +35,3 @@ public:
   virtual void initialSetup();
   virtual void computeSuperellipsoidCenters();
 };
-
-#endif // BIMODALINVERSESUPERELLIPSOIDSIC_H

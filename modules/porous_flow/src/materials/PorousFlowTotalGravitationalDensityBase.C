@@ -1,17 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowTotalGravitationalDensityBase.h"
 
-template <>
 InputParameters
-validParams<PorousFlowTotalGravitationalDensityBase>()
+PorousFlowTotalGravitationalDensityBase::validParams()
 {
-  InputParameters params = validParams<PorousFlowMaterialVectorBase>();
+  InputParameters params = PorousFlowMaterialVectorBase::validParams();
+  params.set<std::string>("pf_material_type") = "gravitational_density";
   params.addClassDescription("Base class Material for porous medium density");
   return params;
 }

@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSMULTIPHASEPROBLEM_H
-#define RICHARDSMULTIPHASEPROBLEM_H
+#pragma once
 
 #include "FEProblem.h"
-
-class RichardsMultiphaseProblem;
-
-template <>
-InputParameters validParams<RichardsMultiphaseProblem>();
 
 /**
  * Allows a constraint u>=v to be enforced during
@@ -23,6 +19,8 @@ InputParameters validParams<RichardsMultiphaseProblem>();
 class RichardsMultiphaseProblem : public FEProblem
 {
 public:
+  static InputParameters validParams();
+
   RichardsMultiphaseProblem(const InputParameters & params);
   virtual ~RichardsMultiphaseProblem();
 
@@ -56,5 +54,3 @@ protected:
   /// internal moose variable number associated with _lower_var
   unsigned int _lower_var_num;
 };
-
-#endif /* RICHARDSMULTIPHASEPROBLEM_H */

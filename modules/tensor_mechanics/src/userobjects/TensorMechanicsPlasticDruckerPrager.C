@@ -1,17 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "TensorMechanicsPlasticDruckerPrager.h"
+#include "RankFourTensor.h"
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", TensorMechanicsPlasticDruckerPrager);
+
 InputParameters
-validParams<TensorMechanicsPlasticDruckerPrager>()
+TensorMechanicsPlasticDruckerPrager::validParams()
 {
-  InputParameters params = validParams<TensorMechanicsPlasticModel>();
+  InputParameters params = TensorMechanicsPlasticModel::validParams();
   MooseEnum mc_interpolation_scheme("outer_tip=0 inner_tip=1 lode_zero=2 inner_edge=3 native=4",
                                     "lode_zero");
   params.addParam<MooseEnum>(
@@ -19,11 +24,12 @@ validParams<TensorMechanicsPlasticDruckerPrager>()
       mc_interpolation_scheme,
       "Scheme by which the Drucker-Prager cohesion, friction angle and dilation angle are set from "
       "the Mohr-Coulomb parameters mc_cohesion, mc_friction_angle and mc_dilation_angle.  Consider "
-      "the DP and MC yield surfaces on the devatoric (octahedral) plane.  Outer_tip: the DP circle "
-      "touches the outer tips of the MC hex.  Inner_tip: the DP circle touches the inner tips of "
-      "the MC hex.  Lode_zero: the DP circle intersects the MC hex at lode angle=0.  Inner_edge: "
-      "the DP circle is the largest circle that wholey fits inside the MC hex.  Native: The DP "
-      "cohesion, friction angle and dilation angle are set equal to the mc_ parameters entered.");
+      "the DP and MC yield surfaces on the deviatoric (octahedral) plane.  Outer_tip: the DP "
+      "circle touches the outer tips of the MC hex.  Inner_tip: the DP circle touches the inner "
+      "tips of the MC hex.  Lode_zero: the DP circle intersects the MC hex at lode angle=0.  "
+      "Inner_edge: the DP circle is the largest circle that wholly fits inside the MC hex.  "
+      "Native: The DP cohesion, friction angle and dilation angle are set equal to the mc_ "
+      "parameters entered.");
   params.addRequiredParam<UserObjectName>(
       "mc_cohesion",
       "A TensorMechanicsHardening UserObject that defines hardening of the "
@@ -226,14 +232,16 @@ TensorMechanicsPlasticDruckerPrager::dbothAB(Real intnl, Real & daaa, Real & dbb
   switch (_mc_interpolation_scheme)
   {
     case 0: // outer_tip
-      daaa = 2.0 * std::sqrt(3.0) * (dC * cosphi / (3.0 - sinphi) + C * dcosphi / (3.0 - sinphi) +
-                                     C * cosphi * dsinphi / Utility::pow<2>(3.0 - sinphi));
+      daaa = 2.0 * std::sqrt(3.0) *
+             (dC * cosphi / (3.0 - sinphi) + C * dcosphi / (3.0 - sinphi) +
+              C * cosphi * dsinphi / Utility::pow<2>(3.0 - sinphi));
       dbbb = 2.0 / std::sqrt(3.0) *
              (dsinphi / (3.0 - sinphi) + sinphi * dsinphi / Utility::pow<2>(3.0 - sinphi));
       break;
     case 1: // inner_tip
-      daaa = 2.0 * std::sqrt(3.0) * (dC * cosphi / (3.0 + sinphi) + C * dcosphi / (3.0 + sinphi) -
-                                     C * cosphi * dsinphi / Utility::pow<2>(3.0 + sinphi));
+      daaa = 2.0 * std::sqrt(3.0) *
+             (dC * cosphi / (3.0 + sinphi) + C * dcosphi / (3.0 + sinphi) -
+              C * cosphi * dsinphi / Utility::pow<2>(3.0 + sinphi));
       dbbb = 2.0 / std::sqrt(3.0) *
              (dsinphi / (3.0 + sinphi) - sinphi * dsinphi / Utility::pow<2>(3.0 + sinphi));
       break;

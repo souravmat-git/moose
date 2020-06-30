@@ -1,55 +1,40 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef DARCYPRESSURE_H
-#define DARCYPRESSURE_H
+#pragma once
 
-// Including the "Diffusion" Kernel here so we can extend it
-#include "Diffusion.h"
-
-class DarcyPressure;
-
-template <>
-InputParameters validParams<DarcyPressure>();
+// Including the "ADKernel" Kernel here so we can extend it
+#include "ADKernel.h"
 
 /**
  * Computes the residual contribution: K / mu * grad_u * grad_phi.
- *
- * We are inheriting from Diffusion instead of from Kernel because the
- * grad_u * grad_phi is already coded in there and all we need to do
- * is specialize that calculation by multiplying by K / mu.
  */
-class DarcyPressure : public Diffusion
+class DarcyPressure : public ADKernel
 {
 public:
+  static InputParameters validParams();
+
   DarcyPressure(const InputParameters & parameters);
 
 protected:
-  /**
-   * Kernels _must_ override computeQpResidual()
-   */
-  virtual Real computeQpResidual() override;
+  /// ADKernel objects must override precomputeQpResidual
+  virtual ADReal computeQpResidual() override;
 
-  /**
-   * This is optional (but recommended!)
-   */
-  virtual Real computeQpJacobian() override;
+  // References to be set from Material system
 
-  /// These references will be set by the initialization list so that
-  /// values can be pulled from the Material system.
-  const MaterialProperty<Real> & _permeability;
-  const MaterialProperty<Real> & _viscosity;
+  /// The permeability. Note that this is declared as a \p MaterialProperty. This means that if
+  /// calculation of this property in the producing \p Material depends on non-linear variables, the
+  /// derivative information will be lost here in the consumer and the non-linear solve will suffer
+  const ADMaterialProperty<Real> & _permeability;
+
+  /// The viscosity. This is declared as an \p ADMaterialProperty, meaning any derivative
+  /// information coming from the producing \p Material will be preserved and the integrity of the
+  /// non-linear solve will be likewise preserved
+  const ADMaterialProperty<Real> & _viscosity;
 };
-
-#endif // DARCYPRESSURE_H

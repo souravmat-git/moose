@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef EIGENEXECUTIONERBASE_H
-#define EIGENEXECUTIONERBASE_H
+#pragma once
 
 #include "Executioner.h"
 
@@ -37,6 +31,8 @@ public:
    * @param parameters The parameters object holding data for the class to use.
    * @return Whether or not the solve was successful.
    */
+  static InputParameters validParams();
+
   EigenExecutionerBase(const InputParameters & parameters);
 
   virtual void init() override;
@@ -70,8 +66,9 @@ public:
    * @param tol_x Tolerance on the difference of the solution norm of two successive iterations.
    * @param k Eigenvalue, input as the initial guess.
    * @param initial_res The initial residual.
+   * @return true solve converges, otherwise false.
    */
-  virtual void inversePowerIteration(unsigned int min_iter,
+  virtual bool inversePowerIteration(unsigned int min_iter,
                                      unsigned int max_iter,
                                      Real pfactor,
                                      bool cheb_on,
@@ -114,8 +111,9 @@ public:
    * @param abs_tol Absolute tolerance on system residual.
    * @param pfactor The factor on reducing the residual norm of each linear iteration.
    * @param k Eigenvalue, input as the initial guess.
+   * @return true solve converges, otherwise false.
    */
-  virtual void nonlinearSolve(Real rel_tol, Real abs_tol, Real pfactor, Real & k);
+  virtual bool nonlinearSolve(Real rel_tol, Real abs_tol, Real pfactor, Real & k);
 
   /**
    * A method for returning the eigenvalue computed by the executioner
@@ -134,7 +132,7 @@ protected:
   MooseEigenSystem & _eigen_sys;
 
   /// Storage for the eigenvalue computed by the executioner
-  Real & _eigenvalue;
+  PostprocessorValue & _eigenvalue;
 
   // postprocessor for eigenvalue
   const Real & _source_integral;
@@ -142,7 +140,9 @@ protected:
 
   /// Postprocessor for normalization
   const Real & _normalization;
-  ExecFlagType _norm_execflag;
+  ExecFlagEnum _norm_exec;
+
+  PerfID _final_timer;
 
   // Chebyshev acceleration
   class Chebyshev_Parameters
@@ -168,5 +168,3 @@ protected:
                  unsigned int iter,
                  const PostprocessorValue * solution_diff);
 };
-
-#endif // EIGENEXECUTIONERBASE_H

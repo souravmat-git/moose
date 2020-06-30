@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef THERMALCONDUCTIVITY_H
-#define THERMALCONDUCTIVITY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "SideAverageValue.h"
 
 // Forward Declarations
-class ThermalConductivity;
-
-template <>
-InputParameters validParams<ThermalConductivity>();
 
 /**
  * This postprocessor computes the thermal conductivity of the bulk.
@@ -21,6 +19,8 @@ InputParameters validParams<ThermalConductivity>();
 class ThermalConductivity : public SideAverageValue
 {
 public:
+  static InputParameters validParams();
+
   ThermalConductivity(const InputParameters & parameters);
 
   virtual Real getValue();
@@ -39,5 +39,3 @@ private:
   /// data:  if we restart, the code will not think it is the zero timestep again.
   bool & _step_zero;
 };
-
-#endif // THERMALCONDUCTIVITY_H

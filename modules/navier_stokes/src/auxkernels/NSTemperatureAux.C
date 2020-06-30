@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // Navier-Stokes inclues
 #include "NSTemperatureAux.h"
@@ -15,11 +17,12 @@
 // MOOSE includes
 #include "MooseMesh.h"
 
-template <>
+registerMooseObject("NavierStokesApp", NSTemperatureAux);
+
 InputParameters
-validParams<NSTemperatureAux>()
+NSTemperatureAux::validParams()
 {
-  InputParameters params = validParams<AuxKernel>();
+  InputParameters params = AuxKernel::validParams();
 
   params.addClassDescription("Temperature is an auxiliary value computed from the total energy "
                              "based on the FluidProperties.");
@@ -38,10 +41,12 @@ NSTemperatureAux::NSTemperatureAux(const InputParameters & parameters)
     _internal_energy(coupledValue(NS::internal_energy)),
     _fp(getUserObject<IdealGasFluidProperties>("fluid_properties"))
 {
+  mooseDeprecated("The NSTemperatureAux aux kernel has been replaced by the "
+                  "TemperatureAux kernel in the fluid properties module.");
 }
 
 Real
 NSTemperatureAux::computeValue()
 {
-  return _fp.temperature(_specific_volume[_qp], _internal_energy[_qp]);
+  return _fp.T_from_v_e(_specific_volume[_qp], _internal_energy[_qp]);
 }

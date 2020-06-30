@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSPLOTQUANTITY_H
-#define RICHARDSPLOTQUANTITY_H
+#pragma once
 
 #include "GeneralPostprocessor.h"
 
-class RichardsPlotQuantity;
 class RichardsSumQuantity;
-
-template <>
-InputParameters validParams<RichardsPlotQuantity>();
 
 /**
  * Extracts the value from RichardsSumQuantity userobject
@@ -22,6 +19,8 @@ InputParameters validParams<RichardsPlotQuantity>();
 class RichardsPlotQuantity : public GeneralPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   RichardsPlotQuantity(const InputParameters & parameters);
   virtual ~RichardsPlotQuantity();
 
@@ -35,5 +34,3 @@ protected:
   /// the RichardsSumQuantity userobject
   const RichardsSumQuantity & _total_mass;
 };
-
-#endif /* RICHARDSPLOTQUANTITY_H */

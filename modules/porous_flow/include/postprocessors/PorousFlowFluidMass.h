@@ -1,21 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWFLUIDMASS_H
-#define POROUSFLOWFLUIDMASS_H
+#pragma once
 
 #include "ElementIntegralVariablePostprocessor.h"
 #include "PorousFlowDictator.h"
-
-// Forward Declarations
-class PorousFlowFluidMass;
-
-template <>
-InputParameters validParams<PorousFlowFluidMass>();
 
 /**
  * Postprocessor produces the mass of a given fluid component in a region
@@ -23,13 +18,15 @@ InputParameters validParams<PorousFlowFluidMass>();
 class PorousFlowFluidMass : public ElementIntegralPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowFluidMass(const InputParameters & parameters);
 
 protected:
   virtual Real computeIntegral() override;
   virtual Real computeQpIntegral() override;
 
-  /// Holds info on the PorousFlow variables
+  /// PorousFlowDictator UserObject
   const PorousFlowDictator & _dictator;
   /// The fluid component index that this Postprocessor applies to
   const unsigned int _fluid_component;
@@ -45,8 +42,6 @@ protected:
   const MaterialProperty<std::vector<std::vector<Real>>> & _mass_fraction;
   /// Saturation threshold - only fluid mass at saturations below this are calculated
   const Real _saturation_threshold;
-  /// the variable for the corresponding PorousFlowMassTimeDerivative Kernel: this provides test functions
+  /// The variable for the corresponding PorousFlowMassTimeDerivative Kernel: this provides test functions
   MooseVariable * const _var;
 };
-
-#endif // POROUSFLOWFLUIDMASS_H

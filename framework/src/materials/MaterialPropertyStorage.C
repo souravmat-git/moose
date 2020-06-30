@@ -1,23 +1,18 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MaterialPropertyStorage.h"
+#include "MaterialProperty.h"
 #include "Material.h"
 #include "MaterialData.h"
 #include "MooseMesh.h"
 
-// libmesh includes
 #include "libmesh/fe_interface.h"
 #include "libmesh/quadrature.h"
 
@@ -64,41 +59,57 @@ shallowCopyDataBack(const std::vector<unsigned int> & stateful_prop_ids,
 MaterialPropertyStorage::MaterialPropertyStorage()
   : _has_stateful_props(false), _has_older_prop(false)
 {
-  _props_elem = new HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>;
-  _props_elem_old = new HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>;
-  _props_elem_older = new HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>;
+  _props_elem =
+      libmesh_make_unique<HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>>();
+  _props_elem_old =
+      libmesh_make_unique<HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>>();
+  _props_elem_older =
+      libmesh_make_unique<HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>>();
 }
 
-MaterialPropertyStorage::~MaterialPropertyStorage()
-{
-  releaseProperties();
-
-  delete _props_elem;
-  delete _props_elem_old;
-  delete _props_elem_older;
-}
+MaterialPropertyStorage::~MaterialPropertyStorage() { releaseProperties(); }
 
 void
 MaterialPropertyStorage::releaseProperties()
 {
   for (auto & i : *_props_elem)
-    for (auto & j : i.second)
-      j.second.destroy();
+    releasePropertyMap(i.second);
 
   for (auto & i : *_props_elem_old)
-    for (auto & j : i.second)
-      j.second.destroy();
+    releasePropertyMap(i.second);
 
   for (auto & i : *_props_elem_older)
-    for (auto & j : i.second)
-      j.second.destroy();
+    releasePropertyMap(i.second);
+}
+
+void
+MaterialPropertyStorage::releasePropertyMap(HashMap<unsigned int, MaterialProperties> & inner_map)
+{
+  for (auto & i : inner_map)
+    i.second.destroy();
+}
+
+void
+MaterialPropertyStorage::eraseProperty(const Elem * elem)
+{
+  if (_props_elem->contains(elem))
+    releasePropertyMap((*_props_elem)[elem]);
+  _props_elem->erase(elem);
+
+  if (_props_elem_old->contains(elem))
+    releasePropertyMap((*_props_elem_old)[elem]);
+  _props_elem_old->erase(elem);
+
+  if (_props_elem_older->contains(elem))
+    releasePropertyMap((*_props_elem_older)[elem]);
+  _props_elem_older->erase(elem);
 }
 
 void
 MaterialPropertyStorage::prolongStatefulProps(
     const std::vector<std::vector<QpMap>> & refinement_map,
-    QBase & qrule,
-    QBase & qrule_face,
+    const QBase & qrule,
+    const QBase & qrule_face,
     MaterialPropertyStorage & parent_material_props,
     MaterialData & child_material_data,
     const Elem & elem,
@@ -141,7 +152,7 @@ MaterialPropertyStorage::prolongStatefulProps(
     if (input_child == -1 && input_child_side != -1 && !elem.is_child_on_side(child, parent_side))
       continue;
 
-    const Elem * child_elem = elem.child(child);
+    const Elem * child_elem = elem.child_ptr(child);
 
     mooseAssert(child < refinement_map.size(), "Refinement_map vector not initialized");
     const std::vector<QpMap> & child_map = refinement_map[child];
@@ -173,8 +184,8 @@ void
 MaterialPropertyStorage::restrictStatefulProps(
     const std::vector<std::pair<unsigned int, QpMap>> & coarsening_map,
     const std::vector<const Elem *> & coarsened_element_children,
-    QBase & qrule,
-    QBase & qrule_face,
+    const QBase & qrule,
+    const QBase & qrule_face,
     MaterialData & material_data,
     const Elem & elem,
     int input_side)
@@ -228,7 +239,7 @@ MaterialPropertyStorage::restrictStatefulProps(
 
 void
 MaterialPropertyStorage::initStatefulProps(MaterialData & material_data,
-                                           const std::vector<std::shared_ptr<Material>> & mats,
+                                           const std::vector<std::shared_ptr<MaterialBase>> & mats,
                                            unsigned int n_qpoints,
                                            const Elem & elem,
                                            unsigned int side /* = 0*/)
@@ -274,19 +285,53 @@ MaterialPropertyStorage::initStatefulProps(MaterialData & material_data,
 }
 
 void
-MaterialPropertyStorage::shift()
+MaterialPropertyStorage::shift(const FEProblemBase & fe_problem)
 {
+  /**
+   * Shift properties back in time and reuse older data for current (save reallocations etc.)
+   * With current, old, and older this can be accomplished by two swaps:
+   * older <-> old
+   * old <-> current
+   */
   if (_has_older_prop)
+    std::swap(_props_elem_older, _props_elem_old);
+
+  // Intentional fall through for case above and for handling just using old properties
+  std::swap(_props_elem_old, _props_elem);
+
+  // We swapped current and old props. If we're doing AD, that means what was formerly an
+  // ADMaterialProperty in current is now a MaterialProperty, and what was formerly a
+  // MaterialProperty in old is now an ADMaterialProperty. We need to run through and make sure what
+  // needs to be AD in current is AD (to preserve Jacobian accuracy) and that every property in old
+  // is a regular MaterialProperty (to save memory)
+  if (fe_problem.usingADMatProps())
   {
-    // shift the properties back in time and reuse older for current (save reallocations etc.)
-    HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>> * tmp = _props_elem_older;
-    _props_elem_older = _props_elem_old;
-    _props_elem_old = _props_elem;
-    _props_elem = tmp;
-  }
-  else
-  {
-    std::swap(_props_elem, _props_elem_old);
+    for (auto & elem_pair : (*_props_elem_old))
+      for (auto & side_pair : elem_pair.second)
+      {
+        auto & old_mat_props_vec = side_pair.second;
+        auto & current_mat_props_vec = (*_props_elem)[elem_pair.first][side_pair.first];
+        for (MooseIndex(old_mat_props_vec) i = 0; i < old_mat_props_vec.size(); ++i)
+        {
+          PropertyValue * possibly_ad_old_prop = old_mat_props_vec[i];
+          if (possibly_ad_old_prop->isAD())
+          {
+            // Make the old property regular
+            PropertyValue * regular_old_prop = possibly_ad_old_prop->makeRegularProperty();
+            delete possibly_ad_old_prop;
+            old_mat_props_vec[i] = regular_old_prop;
+
+            // Make the current property AD
+            PropertyValue * regular_current_prop = current_mat_props_vec[i];
+            mooseAssert(!regular_current_prop->isAD(),
+                        "We must have somehow had an old material property that was an "
+                        "ADMaterialProperty. That's not right");
+            PropertyValue * ad_current_prop = regular_current_prop->makeADProperty();
+            delete regular_current_prop;
+            current_mat_props_vec[i] = ad_current_prop;
+          }
+        }
+      }
   }
 }
 
@@ -400,6 +445,10 @@ MaterialPropertyStorage::initProps(MaterialData & material_data,
 {
   material_data.resize(n_qpoints);
   auto n = _stateful_prop_id_to_prop_id.size();
+
+  // In some special cases, material_data might be larger than n_qpoints
+  if (material_data.isOnlyResizeIfSmaller())
+    n_qpoints = material_data.nQPoints();
 
   if (props(&elem, side).size() < n)
     props(&elem, side).resize(n, nullptr);

@@ -1,44 +1,51 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef HEATCONDUCTIONMATERIAL_H
-#define HEATCONDUCTIONMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
+#include "MooseTypes.h"
 
 // Forward Declarations
-class HeatConductionMaterial;
 class Function;
-
-template <>
-InputParameters validParams<HeatConductionMaterial>();
 
 /**
  * Simple material with constant properties.
  */
-class HeatConductionMaterial : public Material
+template <bool is_ad>
+class HeatConductionMaterialTempl : public Material
 {
 public:
-  HeatConductionMaterial(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  HeatConductionMaterialTempl(const InputParameters & parameters);
 
 protected:
   virtual void computeProperties();
 
   const bool _has_temp;
   const VariableValue & _temperature;
+  const ADVariableValue & _ad_temperature;
 
   const Real _my_thermal_conductivity;
   const Real _my_specific_heat;
 
-  MaterialProperty<Real> & _thermal_conductivity;
+  GenericMaterialProperty<Real, is_ad> & _thermal_conductivity;
   MaterialProperty<Real> & _thermal_conductivity_dT;
-  Function * _thermal_conductivity_temperature_function;
+  const Function * const _thermal_conductivity_temperature_function;
 
-  MaterialProperty<Real> & _specific_heat;
-  Function * _specific_heat_temperature_function;
+  GenericMaterialProperty<Real, is_ad> & _specific_heat;
+  const Function * const _specific_heat_temperature_function;
+
+private:
+  void setDerivatives(GenericReal<is_ad> & prop, Real dprop_dT, const ADReal & ad_T);
 };
 
-#endif // HEATCONDUCTIONMATERIAL_H
+typedef HeatConductionMaterialTempl<false> HeatConductionMaterial;
+typedef HeatConductionMaterialTempl<true> ADHeatConductionMaterial;

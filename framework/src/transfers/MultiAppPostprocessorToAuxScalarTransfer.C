@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiAppPostprocessorToAuxScalarTransfer.h"
 
@@ -21,16 +16,19 @@
 #include "MultiApp.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/meshfree_interpolation.h"
 #include "libmesh/system.h"
 
 // Define the input parameters
-template <>
+registerMooseObject("MooseApp", MultiAppPostprocessorToAuxScalarTransfer);
+
+defineLegacyParams(MultiAppPostprocessorToAuxScalarTransfer);
+
 InputParameters
-validParams<MultiAppPostprocessorToAuxScalarTransfer>()
+MultiAppPostprocessorToAuxScalarTransfer::validParams()
 {
-  InputParameters params = validParams<MultiAppTransfer>();
+  InputParameters params = MultiAppTransfer::validParams();
+  params.addClassDescription("Transfers from a postprocessor to an scalar auxiliary variable.");
   params.addRequiredParam<PostprocessorName>(
       "from_postprocessor",
       "The name of the Postprocessor in the Master to transfer the value from.");
@@ -46,6 +44,8 @@ MultiAppPostprocessorToAuxScalarTransfer::MultiAppPostprocessorToAuxScalarTransf
     _from_pp_name(getParam<PostprocessorName>("from_postprocessor")),
     _to_aux_name(getParam<VariableName>("to_aux_scalar"))
 {
+  if (_directions.size() != 1)
+    paramError("direction", "This transfer is only unidirectional");
 }
 
 void
@@ -54,7 +54,7 @@ MultiAppPostprocessorToAuxScalarTransfer::execute()
   _console << "Beginning PostprocessorToAuxScalarTransfer " << name() << std::endl;
 
   // Perform action based on the transfer direction
-  switch (_direction)
+  switch (_current_direction)
   {
     // MasterApp -> SubApp
     case TO_MULTIAPP:
@@ -97,7 +97,7 @@ MultiAppPostprocessorToAuxScalarTransfer::execute()
       scalar.reinit();
 
       // The dof indices for the scalar variable of interest
-      std::vector<dof_id_type> & dof = scalar.dofIndices();
+      auto && dof = scalar.dofIndices();
 
       // Error if there is a size mismatch between the scalar AuxVariable and the number of sub apps
       if (num_apps != scalar.sln().size())

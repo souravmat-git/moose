@@ -1,18 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef COMPUTEPOLYCRYSTALELASTICITYTENSOR_H
-#define COMPUTEPOLYCRYSTALELASTICITYTENSOR_H
+#pragma once
 
 #include "ComputeElasticityTensorBase.h"
 #include "GrainDataTracker.h"
 
 // Forward Declarations
-class ComputePolycrystalElasticityTensor;
 class EulerAngleProvider;
 
 /**
@@ -21,6 +21,8 @@ class EulerAngleProvider;
 class ComputePolycrystalElasticityTensor : public ComputeElasticityTensorBase
 {
 public:
+  static InputParameters validParams();
+
   ComputePolycrystalElasticityTensor(const InputParameters & parameters);
 
 protected:
@@ -44,5 +46,3 @@ protected:
   /// Conversion factor from J to eV
   const Real _JtoeV;
 };
-
-#endif // COMPUTEPOLYCRYSTALELASTICITYTENSOR_H

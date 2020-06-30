@@ -1,21 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "DiscreteNucleationMap.h"
 #include "MooseMesh.h"
 
-// libmesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", DiscreteNucleationMap);
+
 InputParameters
-validParams<DiscreteNucleationMap>()
+DiscreteNucleationMap::validParams()
 {
-  InputParameters params = validParams<ElementUserObject>();
+  InputParameters params = ElementUserObject::validParams();
   params.addClassDescription("Generates a spatial smoothed map of all nucleation sites with the "
                              "data of the DiscreteNucleationInserter for use by the "
                              "DiscreteNucleation material.");
@@ -24,18 +26,16 @@ validParams<DiscreteNucleationMap>()
   params.addRequiredParam<UserObjectName>("inserter", "DiscreteNucleationInserter user object");
   params.addCoupledVar("periodic",
                        "Use the periodicity settings of this variable to populate the grain map");
-  MultiMooseEnum setup_options(SetupInterface::getExecuteOptions());
   // the mapping needs to run at timestep begin, which is after the adaptivity
   // run of the previous timestep.
-  setup_options = "timestep_begin";
-  params.set<MultiMooseEnum>("execute_on") = setup_options;
+  params.set<ExecFlagEnum>("execute_on") = EXEC_TIMESTEP_BEGIN;
   return params;
 }
 
 DiscreteNucleationMap::DiscreteNucleationMap(const InputParameters & parameters)
   : ElementUserObject(parameters),
     _mesh_changed(false),
-    _inserter(getUserObject<DiscreteNucleationInserter>("inserter")),
+    _inserter(getUserObject<DiscreteNucleationInserterBase>("inserter")),
     _periodic(isCoupled("periodic") ? coupled("periodic") : -1),
     _radius(getParam<Real>("radius")),
     _int_width(getParam<Real>("int_width")),

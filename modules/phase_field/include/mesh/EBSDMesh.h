@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef EBSDMESH_H
-#define EBSDMESH_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "GeneratedMesh.h"
 
 #include <array>
-
-class EBSDMesh;
-
-template <>
-InputParameters validParams<EBSDMesh>();
 
 /**
  * Mesh generated from parameters
@@ -22,6 +19,8 @@ InputParameters validParams<EBSDMesh>();
 class EBSDMesh : public GeneratedMesh
 {
 public:
+  static InputParameters validParams();
+
   EBSDMesh(const InputParameters & parameters);
   virtual ~EBSDMesh();
 
@@ -53,5 +52,3 @@ protected:
   /// EBSD data file mesh information
   EBSDMeshGeometry _geometry;
 };
-
-#endif // EBSDMESH_H

@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ACINTERFACEKOBAYASHI2_H
-#define ACINTERFACEKOBAYASHI2_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "KernelGrad.h"
 #include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
-
-class ACInterfaceKobayashi2;
-
-template <>
-InputParameters validParams<ACInterfaceKobayashi2>();
 
 /**
  * Kernel 2 of 2 for interfacial energy anisotropy in the Allen-Cahn equation as
@@ -25,6 +22,8 @@ InputParameters validParams<ACInterfaceKobayashi2>();
 class ACInterfaceKobayashi2 : public DerivativeMaterialInterface<JvarMapKernelInterface<KernelGrad>>
 {
 public:
+  static InputParameters validParams();
+
   ACInterfaceKobayashi2(const InputParameters & parameters);
 
 protected:
@@ -44,5 +43,3 @@ protected:
   std::vector<const MaterialProperty<Real> *> _dLdarg;
   std::vector<const MaterialProperty<Real> *> _depsdarg;
 };
-
-#endif // ACINTERFACEKOBAYASHI2_H

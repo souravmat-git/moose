@@ -1,17 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowEffectiveFluidPressure.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlowEffectiveFluidPressure);
+
 InputParameters
-validParams<PorousFlowEffectiveFluidPressure>()
+PorousFlowEffectiveFluidPressure::validParams()
 {
-  InputParameters params = validParams<PorousFlowMaterialVectorBase>();
+  InputParameters params = PorousFlowMaterialVectorBase::validParams();
+  params.set<std::string>("pf_material_type") = "effective_pressure";
   params.addClassDescription("This Material calculates an effective fluid pressure: "
                              "effective_stress = total_stress + "
                              "biot_coeff*effective_fluid_pressure.  The effective_fluid_pressure = "
@@ -25,9 +29,6 @@ PorousFlowEffectiveFluidPressure::PorousFlowEffectiveFluidPressure(
     _porepressure(_nodal_material
                       ? getMaterialProperty<std::vector<Real>>("PorousFlow_porepressure_nodal")
                       : getMaterialProperty<std::vector<Real>>("PorousFlow_porepressure_qp")),
-    _porepressure_old(
-        _nodal_material ? getMaterialPropertyOld<std::vector<Real>>("PorousFlow_porepressure_nodal")
-                        : getMaterialPropertyOld<std::vector<Real>>("PorousFlow_porepressure_qp")),
     _dporepressure_dvar(_nodal_material ? getMaterialProperty<std::vector<std::vector<Real>>>(
                                               "dPorousFlow_porepressure_nodal_dvar")
                                         : getMaterialProperty<std::vector<std::vector<Real>>>(
@@ -35,9 +36,6 @@ PorousFlowEffectiveFluidPressure::PorousFlowEffectiveFluidPressure(
     _saturation(_nodal_material
                     ? getMaterialProperty<std::vector<Real>>("PorousFlow_saturation_nodal")
                     : getMaterialProperty<std::vector<Real>>("PorousFlow_saturation_qp")),
-    _saturation_old(_nodal_material
-                        ? getMaterialPropertyOld<std::vector<Real>>("PorousFlow_saturation_nodal")
-                        : getMaterialPropertyOld<std::vector<Real>>("PorousFlow_saturation_qp")),
     _dsaturation_dvar(_nodal_material ? getMaterialProperty<std::vector<std::vector<Real>>>(
                                             "dPorousFlow_saturation_nodal_dvar")
                                       : getMaterialProperty<std::vector<std::vector<Real>>>(

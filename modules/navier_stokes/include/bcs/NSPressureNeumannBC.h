@@ -1,21 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef NSPRESSURENEUMANNBC_H
-#define NSPRESSURENEUMANNBC_H
+#pragma once
 
 #include "NSIntegratedBC.h"
 #include "NSPressureDerivs.h"
 
 // Forward Declarations
-class NSPressureNeumannBC;
-
-template <>
-InputParameters validParams<NSPressureNeumannBC>();
 
 /**
  * This kernel is appropriate for use with a "zero normal flow"
@@ -31,6 +28,8 @@ InputParameters validParams<NSPressureNeumannBC>();
 class NSPressureNeumannBC : public NSIntegratedBC
 {
 public:
+  static InputParameters validParams();
+
   NSPressureNeumannBC(const InputParameters & parameters);
 
   virtual ~NSPressureNeumannBC() {}
@@ -59,5 +58,3 @@ private:
   // in the canonical ordering.
   Real computeJacobianHelper(unsigned m);
 };
-
-#endif // PRESSURENEUMANNBC_H

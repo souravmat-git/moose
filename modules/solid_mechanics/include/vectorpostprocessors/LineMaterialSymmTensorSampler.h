@@ -1,21 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef LINEMATERIALTENSORSAMPLER_H
-#define LINEMATERIALTENSORSAMPLER_H
+#pragma once
 
 #include "LineMaterialSamplerBase.h"
 #include "MaterialTensorCalculator.h"
 
 // Forward Declarations
-class LineMaterialSymmTensorSampler;
-
-template <>
-InputParameters validParams<LineMaterialSymmTensorSampler>();
 
 /**
  * This class samples SymmTensor material properties for the integration points
@@ -31,6 +28,8 @@ public:
    * Sets up variables for output based on the properties to be output
    * @param parameters The input parameters
    */
+  static InputParameters validParams();
+
   LineMaterialSymmTensorSampler(const InputParameters & parameters);
 
   virtual ~LineMaterialSymmTensorSampler() {}
@@ -45,5 +44,3 @@ public:
    */
   virtual Real getScalarFromProperty(const SymmTensor & property, const Point & curr_point);
 };
-
-#endif

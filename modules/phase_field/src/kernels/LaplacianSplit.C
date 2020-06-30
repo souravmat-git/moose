@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "LaplacianSplit.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", LaplacianSplit);
+
 InputParameters
-validParams<LaplacianSplit>()
+LaplacianSplit::validParams()
 {
-  InputParameters params = validParams<KernelGrad>();
+  InputParameters params = KernelGrad::validParams();
   params.addClassDescription(
       "Split with a variable that holds the Laplacian of a phase field variable.");
   params.addRequiredCoupledVar("c", "Field variable to take the Laplacian of");

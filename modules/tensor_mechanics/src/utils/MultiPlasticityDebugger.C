@@ -1,17 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MultiPlasticityDebugger.h"
+#include "RankFourTensor.h"
 #include "libmesh/utility.h"
 
-template <>
 InputParameters
-validParams<MultiPlasticityDebugger>()
+MultiPlasticityDebugger::validParams()
 {
-  InputParameters params = validParams<MultiPlasticityLinearSystem>();
+  InputParameters params = MultiPlasticityLinearSystem::validParams();
   MooseEnum debug_fspb_type("none crash jacobian jacobian_and_linear_system", "none");
   params.addParam<MooseEnum>("debug_fspb",
                              debug_fspb_type,

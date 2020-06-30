@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef VOLUMEDEFORMGRADCORRECTEDSTRESS_H
-#define VOLUMEDEFORMGRADCORRECTEDSTRESS_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "RankTwoTensor.h"
@@ -20,6 +22,8 @@
 class VolumeDeformGradCorrectedStress : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   VolumeDeformGradCorrectedStress(const InputParameters & parameters);
 
 protected:
@@ -29,10 +33,9 @@ protected:
 
   const MaterialProperty<RankTwoTensor> & _pre_stress;
   const MaterialProperty<RankTwoTensor> & _deformation_gradient;
-  const MaterialProperty<RankFourTensor> * _pre_Jacobian_mult;
+  const MaterialProperty<RankFourTensor> * const _pre_Jacobian_mult;
 
+  /// The stress tensor transformed to the current configuration
   MaterialProperty<RankTwoTensor> & _stress;
-  MaterialProperty<RankFourTensor> * _Jacobian_mult;
+  MaterialProperty<RankFourTensor> * const _Jacobian_mult;
 };
-
-#endif

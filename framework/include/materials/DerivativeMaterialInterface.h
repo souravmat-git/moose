@@ -1,31 +1,28 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef DERIVATIVEMATERIALINTERFACE_H
-#define DERIVATIVEMATERIALINTERFACE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxiliarySystem.h"
 #include "BlockRestrictable.h"
 #include "BoundaryRestrictable.h"
 #include "DerivativeMaterialPropertyNameInterface.h"
 #include "KernelBase.h"
+#include "BoundaryCondition.h"
 #include "Material.h"
-#include "MaterialProperty.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 #include "NonlinearSystem.h"
 
 // Forward declarations
 class FEProblemBase;
+template <typename>
+class MaterialProperty;
 
 /**
  * Interface class ("Veneer") to provide generator methods for derivative
@@ -41,12 +38,13 @@ public:
    * Fetch a material property if it exists, otherwise return getZeroMaterialProperty.
    * @param name The input parameter key of type MaterialPropertyName
    */
-  template <typename U>
-  const MaterialProperty<U> & getDefaultMaterialProperty(const std::string & name);
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> & getDefaultMaterialProperty(const std::string & name);
 
   /// Fetch a material property by name if it exists, otherwise return getZeroMaterialProperty
-  template <typename U>
-  const MaterialProperty<U> & getDefaultMaterialPropertyByName(const std::string & name);
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
+  getDefaultMaterialPropertyByName(const std::string & name);
 
   ///@{
   /**
@@ -55,14 +53,15 @@ public:
    * @param base The name of the property to take the derivative of
    * @param c The variable(s) to take the derivatives with respect to
    */
-  template <typename U>
-  MaterialProperty<U> & declarePropertyDerivative(const std::string & base,
-                                                  const std::vector<VariableName> & c);
-  template <typename U>
-  MaterialProperty<U> & declarePropertyDerivative(const std::string & base,
-                                                  const VariableName & c1,
-                                                  const VariableName & c2 = "",
-                                                  const VariableName & c3 = "");
+  template <typename U, bool is_ad = false>
+  GenericMaterialProperty<U, is_ad> &
+  declarePropertyDerivative(const std::string & base, const std::vector<VariableName> & c);
+
+  template <typename U, bool is_ad = false>
+  GenericMaterialProperty<U, is_ad> & declarePropertyDerivative(const std::string & base,
+                                                                const VariableName & c1,
+                                                                const VariableName & c2 = "",
+                                                                const VariableName & c3 = "");
   ///@}
 
   ///@{
@@ -72,14 +71,36 @@ public:
    * @param base The name of the property to take the derivative of
    * @param c The variable(s) to take the derivatives with respect to
    */
-  template <typename U>
-  const MaterialProperty<U> & getMaterialPropertyDerivative(const std::string & base,
-                                                            const std::vector<VariableName> & c);
-  template <typename U>
-  const MaterialProperty<U> & getMaterialPropertyDerivative(const std::string & base,
-                                                            const VariableName & c1,
-                                                            const VariableName & c2 = "",
-                                                            const VariableName & c3 = "");
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
+  getMaterialPropertyDerivative(const std::string & base, const std::vector<VariableName> & c);
+
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
+  getMaterialPropertyDerivative(const std::string & base,
+                                const VariableName & c1,
+                                const VariableName & c2 = "",
+                                const VariableName & c3 = "");
+  ///@}
+
+  /**
+   *@{ Convenience methods fro retrieving derivative material properties based
+   *   on a mix of variable names `c` and indices `v` into the
+   *   _coupled_standard_moose_vars vector.
+   */
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
+  getMaterialPropertyDerivative(const std::string & base,
+                                const VariableName & c1,
+                                unsigned int v2,
+                                unsigned int v3 = libMesh::invalid_uint);
+
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
+  getMaterialPropertyDerivative(const std::string & base,
+                                unsigned int v1,
+                                unsigned int v2 = libMesh::invalid_uint,
+                                unsigned int v3 = libMesh::invalid_uint);
   ///@}
 
   ///@{
@@ -89,15 +110,16 @@ public:
    * @param base The name of the property to take the derivative of
    * @param c The variable(s) to take the derivatives with respect to
    */
-  template <typename U>
-  const MaterialProperty<U> &
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
   getMaterialPropertyDerivativeByName(const MaterialPropertyName & base,
                                       const std::vector<VariableName> & c);
-  template <typename U>
-  const MaterialProperty<U> & getMaterialPropertyDerivativeByName(const MaterialPropertyName & base,
-                                                                  const VariableName & c1,
-                                                                  const VariableName & c2 = "",
-                                                                  const VariableName & c3 = "");
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
+  getMaterialPropertyDerivativeByName(const MaterialPropertyName & base,
+                                      const VariableName & c1,
+                                      const VariableName & c2 = "",
+                                      const VariableName & c3 = "");
   ///@}
 
   ///@{
@@ -109,11 +131,13 @@ public:
   void validateCoupling(const MaterialPropertyName & base,
                         const std::vector<VariableName> & c,
                         bool validate_aux = true);
+
   template <typename U>
   void validateCoupling(const MaterialPropertyName & base,
                         const VariableName & c1 = "",
                         const VariableName & c2 = "",
                         const VariableName & c3 = "");
+
   template <typename U>
   void validateNonlinearCoupling(const MaterialPropertyName & base,
                                  const VariableName & c1 = "",
@@ -127,12 +151,12 @@ public:
    * If the base property name has a typo all derivatives will be set to zero without the
    * user ever knowing.
    */
-  template <typename U>
+  template <typename U, bool is_ad = false>
   void validateDerivativeMaterialPropertyBase(const std::string & base);
 
 private:
   /// Check if a material property is present with the applicable restrictions
-  template <typename U>
+  template <typename U, bool is_ad = false>
   bool haveMaterialProperty(const std::string & prop_name);
 
   /// helper method to combine multiple VariableNames into a vector (if they are != "")
@@ -148,7 +172,7 @@ private:
 
   // check if the speciified variable name is not the variable this kernel is acting on (always true
   // for any other type of object)
-  bool isNotKernelVariable(const VariableName & name);
+  bool isNotObjectVariable(const VariableName & name);
 
   /// Reference to FEProblemBase
   FEProblemBase & _dmi_fe_problem;
@@ -162,7 +186,7 @@ DerivativeMaterialInterface<T>::DerivativeMaterialInterface(const InputParameter
 }
 
 template <>
-template <typename U>
+template <typename U, bool is_ad>
 bool
 DerivativeMaterialInterface<Material>::haveMaterialProperty(const std::string & prop_name)
 {
@@ -172,7 +196,7 @@ DerivativeMaterialInterface<Material>::haveMaterialProperty(const std::string & 
 }
 
 template <class T>
-template <typename U>
+template <typename U, bool is_ad>
 bool
 DerivativeMaterialInterface<T>::haveMaterialProperty(const std::string & prop_name)
 {
@@ -186,62 +210,64 @@ DerivativeMaterialInterface<T>::haveMaterialProperty(const std::string & prop_na
 }
 
 template <class T>
-template <typename U>
-const MaterialProperty<U> &
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getDefaultMaterialProperty(const std::string & name)
 {
   // get the base property name
   std::string prop_name = this->deducePropertyName(name);
 
   // Check if it's just a constant
-  const MaterialProperty<U> * default_property =
-      this->template defaultMaterialProperty<U>(prop_name);
+  const auto * default_property =
+      this->template defaultGenericMaterialProperty<U, is_ad>(prop_name);
   if (default_property)
     return *default_property;
 
   // if found return the requested property
-  return getDefaultMaterialPropertyByName<U>(prop_name);
+  return getDefaultMaterialPropertyByName<U, is_ad>(prop_name);
 }
 
 template <class T>
-template <typename U>
-const MaterialProperty<U> &
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getDefaultMaterialPropertyByName(const std::string & prop_name)
 {
   // if found return the requested property
   if (haveMaterialProperty<U>(prop_name))
-    return this->template getMaterialPropertyByName<U>(prop_name);
+    return this->template getGenericMaterialPropertyByName<U, is_ad>(prop_name);
 
-  return this->template getZeroMaterialProperty<U>(prop_name);
+  return this->template getGenericZeroMaterialProperty<U, is_ad>(prop_name);
 }
 
 template <class T>
-template <typename U>
-MaterialProperty<U> &
+template <typename U, bool is_ad>
+GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::declarePropertyDerivative(const std::string & base,
                                                           const std::vector<VariableName> & c)
 {
-  return this->template declareProperty<U>(propertyName(base, c));
+  return this->template declareGenericProperty<U, is_ad>(derivativePropertyName(base, c));
 }
 
 template <class T>
-template <typename U>
-MaterialProperty<U> &
+template <typename U, bool is_ad>
+GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::declarePropertyDerivative(const std::string & base,
                                                           const VariableName & c1,
                                                           const VariableName & c2,
                                                           const VariableName & c3)
 {
   if (c3 != "")
-    return this->template declareProperty<U>(propertyNameThird(base, c1, c2, c3));
+    return this->template declareGenericProperty<U, is_ad>(
+        derivativePropertyNameThird(base, c1, c2, c3));
   if (c2 != "")
-    return this->template declareProperty<U>(propertyNameSecond(base, c1, c2));
-  return this->template declareProperty<U>(propertyNameFirst(base, c1));
+    return this->template declareGenericProperty<U, is_ad>(
+        derivativePropertyNameSecond(base, c1, c2));
+  return this->template declareGenericProperty<U, is_ad>(derivativePropertyNameFirst(base, c1));
 }
 
 template <class T>
-template <typename U>
-const MaterialProperty<U> &
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
                                                               const std::vector<VariableName> & c)
 {
@@ -252,15 +278,15 @@ DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string 
    * Check if base is a default property and shortcut to returning zero, as
    * derivatives of constants are zero.
    */
-  if (this->template defaultMaterialProperty<U>(prop_name))
-    return this->template getZeroMaterialProperty<U>(prop_name + "_zeroderivative");
+  if (this->template defaultGenericMaterialProperty<U, is_ad>(prop_name))
+    return this->template getGenericZeroMaterialProperty<U, is_ad>(prop_name + "_zeroderivative");
 
-  return getDefaultMaterialPropertyByName<U>(propertyName(prop_name, c));
+  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyName(prop_name, c));
 }
 
 template <class T>
-template <typename U>
-const MaterialProperty<U> &
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
                                                               const VariableName & c1,
                                                               const VariableName & c2,
@@ -273,28 +299,60 @@ DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string 
    * Check if base is a default property and shortcut to returning zero, as
    * derivatives of constants are zero.
    */
-  if (this->template defaultMaterialProperty<U>(prop_name))
+  if (this->template defaultGenericMaterialProperty<U, is_ad>(prop_name))
     return this->template getZeroMaterialProperty<U>(prop_name + "_zeroderivative");
 
   if (c3 != "")
-    return getDefaultMaterialPropertyByName<U>(propertyNameThird(prop_name, c1, c2, c3));
+    return getDefaultMaterialPropertyByName<U, is_ad>(
+        derivativePropertyNameThird(prop_name, c1, c2, c3));
   if (c2 != "")
-    return getDefaultMaterialPropertyByName<U>(propertyNameSecond(prop_name, c1, c2));
-  return getDefaultMaterialPropertyByName<U>(propertyNameFirst(prop_name, c1));
+    return getDefaultMaterialPropertyByName<U, is_ad>(
+        derivativePropertyNameSecond(prop_name, c1, c2));
+  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyNameFirst(prop_name, c1));
 }
 
 template <class T>
-template <typename U>
-const MaterialProperty<U> &
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
+DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
+                                                              const VariableName & c1,
+                                                              unsigned int v2,
+                                                              unsigned int v3)
+{
+  return getMaterialPropertyDerivative<U, is_ad>(
+      base,
+      c1,
+      this->_coupled_standard_moose_vars[v2]->name(),
+      v3 == libMesh::invalid_uint ? "" : this->_coupled_standard_moose_vars[v3]->name());
+}
+
+template <class T>
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
+DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
+                                                              unsigned int v1,
+                                                              unsigned int v2,
+                                                              unsigned int v3)
+{
+  return getMaterialPropertyDerivative<U, is_ad>(
+      base,
+      this->_coupled_standard_moose_vars[v1]->name(),
+      v2 == libMesh::invalid_uint ? "" : this->_coupled_standard_moose_vars[v2]->name(),
+      v3 == libMesh::invalid_uint ? "" : this->_coupled_standard_moose_vars[v3]->name());
+}
+
+template <class T>
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivativeByName(
     const MaterialPropertyName & base, const std::vector<VariableName> & c)
 {
-  return getDefaultMaterialPropertyByName<U>(propertyName(base, c));
+  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyName(base, c));
 }
 
 template <class T>
-template <typename U>
-const MaterialProperty<U> &
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivativeByName(
     const MaterialPropertyName & base,
     const VariableName & c1,
@@ -302,10 +360,11 @@ DerivativeMaterialInterface<T>::getMaterialPropertyDerivativeByName(
     const VariableName & c3)
 {
   if (c3 != "")
-    return getDefaultMaterialPropertyByName<U>(propertyNameThird(base, c1, c2, c3));
+    return getDefaultMaterialPropertyByName<U, is_ad>(
+        derivativePropertyNameThird(base, c1, c2, c3));
   if (c2 != "")
-    return getDefaultMaterialPropertyByName<U>(propertyNameSecond(base, c1, c2));
-  return getDefaultMaterialPropertyByName<U>(propertyNameFirst(base, c1));
+    return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyNameSecond(base, c1, c2));
+  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyNameFirst(base, c1));
 }
 
 template <class T>
@@ -316,7 +375,7 @@ DerivativeMaterialInterface<T>::validateCouplingHelper(const MaterialPropertyNam
                                                        const System & system,
                                                        std::vector<VariableName> & missing)
 {
-  unsigned int ncoupled = this->_coupled_moose_vars.size();
+  unsigned int ncoupled = this->_coupled_standard_moose_vars.size();
 
   // iterate over all variables in the current system (in groups)
   for (unsigned int i = 0; i < system.n_variable_groups(); ++i)
@@ -329,13 +388,13 @@ DerivativeMaterialInterface<T>::validateCouplingHelper(const MaterialPropertyNam
       cj.push_back(jname);
 
       // if the derivative exists make sure the variable is coupled
-      if (haveMaterialProperty<U>(propertyName(base, cj)))
+      if (haveMaterialProperty<U>(derivativePropertyName(base, cj)))
       {
-        // kernels to not have the variable they are acting on in coupled_moose_vars
-        bool is_missing = isNotKernelVariable(jname);
+        // kernels and BCs to not have the variable they are acting on in coupled_moose_vars
+        bool is_missing = isNotObjectVariable(jname);
 
         for (unsigned int k = 0; k < ncoupled; ++k)
-          if (this->_coupled_moose_vars[k]->name() == jname)
+          if (this->_coupled_standard_moose_vars[k]->name() == jname)
           {
             is_missing = false;
             break;
@@ -424,7 +483,7 @@ DerivativeMaterialInterface<T>::validateNonlinearCoupling(const MaterialProperty
 }
 
 template <class T>
-template <typename U>
+template <typename U, bool is_ad>
 void
 DerivativeMaterialInterface<T>::validateDerivativeMaterialPropertyBase(const std::string & base)
 {
@@ -434,7 +493,7 @@ DerivativeMaterialInterface<T>::validateDerivativeMaterialPropertyBase(const std
   // check if the material property does not exist on the blocks of the current object,
   // and check if it is not a plain number in the input file
   if (!haveMaterialProperty<U>(prop_name) &&
-      this->template defaultMaterialProperty<U>(prop_name) == 0)
+      this->template defaultGenericMaterialProperty<U, is_ad>(prop_name) == 0)
     mooseWarning("The material property '",
                  prop_name,
                  "' does not exist. The kernel '",
@@ -444,17 +503,18 @@ DerivativeMaterialInterface<T>::validateDerivativeMaterialPropertyBase(const std
 
 template <class T>
 inline bool
-DerivativeMaterialInterface<T>::isNotKernelVariable(const VariableName & name)
+DerivativeMaterialInterface<T>::isNotObjectVariable(const VariableName & name)
 {
   // try to cast this to a Kernel pointer
-  KernelBase * k = dynamic_cast<KernelBase *>(this);
+  KernelBase * kernel_ptr = dynamic_cast<KernelBase *>(this);
+  if (kernel_ptr != nullptr)
+    return kernel_ptr->variable().name() != name;
 
-  // This interface is not templated on a class derived from Kernel
-  if (k == NULL)
-    return true;
+  // try to cast this to a BoundaryCondition pointer
+  BoundaryCondition * bc_ptr = dynamic_cast<BoundaryCondition *>(this);
+  if (bc_ptr != nullptr)
+    return bc_ptr->variable().name() != name;
 
-  // We are templated on a kernel class, so we check if the kernel variable
-  return k->variable().name() != name;
+  // This interface is not templated on a class derived from either Kernel or BC
+  return true;
 }
-
-#endif // DERIVATIVEMATERIALINTERFACE_H

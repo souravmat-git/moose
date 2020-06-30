@@ -1,19 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowPeacemanBorehole.h"
 #include "RotationMatrix.h"
 #include "Function.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlowPeacemanBorehole);
+
 InputParameters
-validParams<PorousFlowPeacemanBorehole>()
+PorousFlowPeacemanBorehole::validParams()
 {
-  InputParameters params = validParams<PorousFlowLineSink>();
+  InputParameters params = PorousFlowLineSink::validParams();
   params.addRequiredParam<FunctionName>(
       "character",
       "If zero then borehole does nothing.  If positive the borehole acts as a sink "
@@ -52,9 +55,13 @@ validParams<PorousFlowPeacemanBorehole>()
                         "However, if this parameter is given as a positive number then this "
                         "number is used instead of the internal calculation.  This speeds up "
                         "computation marginally.  re_constant becomes irrelevant");
-  params.addClassDescription("Approximates a borehole in the mesh using the Peaceman approach, ie "
-                             "using a number of point sinks with given radii whose positions are "
-                             "read from a file");
+  params.addClassDescription(
+      "Approximates a borehole in the mesh using the Peaceman approach, ie "
+      "using a number of point sinks with given radii whose positions are "
+      "read from a file.  NOTE: if you are using PorousFlowPorosity that depends on volumetric "
+      "strain, you should set strain_at_nearest_qp=true in your GlobalParams, to ensure the nodal "
+      "Porosity Material uses the volumetric strain at the Dirac quadpoints, and can therefore be "
+      "computed");
   return params;
 }
 
@@ -184,8 +191,9 @@ PorousFlowPeacemanBorehole::wellConstant(const RealTensorValue & perm,
   else if (eig_val2 <= 0.0)
     r0 = _re_constant * ll2;
   else
-    r0 = _re_constant * std::sqrt(std::sqrt(eig_val1 / eig_val2) * std::pow(ll2, 2) +
-                                  std::sqrt(eig_val2 / eig_val1) * std::pow(ll1, 2)) /
+    r0 = _re_constant *
+         std::sqrt(std::sqrt(eig_val1 / eig_val2) * std::pow(ll2, 2) +
+                   std::sqrt(eig_val2 / eig_val1) * std::pow(ll1, 2)) /
          (std::pow(eig_val1 / eig_val2, 0.25) + std::pow(eig_val2 / eig_val1, 0.25));
 
   const Real effective_perm = (det2D >= 0.0 ? std::sqrt(det2D) : 0.0);

@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MOOSEAPP_H
-#define MOOSEAPP_H
+#pragma once
 
 // MOOSE includes
 #include "Moose.h"
@@ -24,14 +18,19 @@
 #include "OutputWarehouse.h"
 #include "RestartableData.h"
 #include "ConsoleStreamInterface.h"
+#include "PerfGraph.h"
+#include "TheWarehouse.h"
+#include "RankMap.h"
 
-// libMesh includes
 #include "libmesh/parallel_object.h"
+#include "libmesh/mesh_base.h"
+#include "libmesh/point.h"
 
 // C++ includes
 #include <list>
 #include <map>
 #include <set>
+#include <unordered_set>
 
 // Forward declarations
 class Executioner;
@@ -39,9 +38,11 @@ class MooseApp;
 class Backup;
 class FEProblemBase;
 class MeshModifier;
+class MeshGenerator;
 class InputParameterWarehouse;
 class SystemInfo;
 class CommandLine;
+class RelationshipManager;
 
 template <>
 InputParameters validParams<MooseApp>();
@@ -59,13 +60,29 @@ InputParameters validParams<MooseApp>();
 class MooseApp : public ConsoleStreamInterface, public libMesh::ParallelObject
 {
 public:
+  static const RestartableDataMapName MESH_META_DATA;
+
+  static InputParameters validParams();
+
   virtual ~MooseApp();
 
+  TheWarehouse & theWarehouse() { return *_the_warehouse; }
+
   /**
-   * Get the name of the object
+   * Get the name of the object. In the case of MooseApp, the name of the object is *NOT* the name
+   * of the application. It's the name of the created application which is usually "main". If you
+   * have subapps, then each individual subapp will have a unique name which typically comes from
+   * the input file (e.g. sub0, sub1, etc...).
    * @return The name of the object
    */
-  const std::string & name() { return _name; }
+  const std::string & name() const { return _name; }
+
+  virtual void checkRegistryLabels();
+
+  /**
+   * Get printable name of the application.
+   */
+  virtual std::string getPrintableName() const { return "Application"; }
 
   /**
    * Get the parameters of the object
@@ -74,10 +91,22 @@ public:
   InputParameters & parameters() { return _pars; }
 
   /**
-   * Get the type of this object as a string
+   * Get the type of this object as a string. This is a string version of the class name (e.g.
+   * MooseTestApp).
    * @return The the type of the object
    */
   const std::string & type() const { return _type; }
+
+  /**
+   * The RankMap is a useful object for determining how the processes
+   * are laid out on the physical nodes of the cluster
+   */
+  const RankMap & rankMap() { return _rank_map; }
+
+  /**
+   * Get the PerfGraph for this app
+   */
+  PerfGraph & perfGraph() { return _perf_graph; }
 
   ///@{
   /**
@@ -100,58 +129,100 @@ public:
   virtual void run();
 
   /**
+   * Returns the framework version.
+   */
+  std::string getFrameworkVersion() const;
+
+  /**
+   * Returns the current version of the framework or application (default: framework version).
+   */
+  virtual std::string getVersion() const;
+
+  /**
+   * Non-virtual method for printing out the version string in a consistent format.
+   */
+  std::string getPrintableVersion() const;
+
+  /**
    * Setup options based on InputParameters.
    */
   virtual void setupOptions();
 
+  /**
+   * Return a writable reference to the ActionWarehouse associated with this app
+   */
   ActionWarehouse & actionWarehouse() { return _action_warehouse; }
 
+  /**
+   * Returns a writable reference to the parser
+   */
   Parser & parser() { return _parser; }
 
+  /**
+   * Returns a writable reference to the syntax object.
+   */
   Syntax & syntax() { return _syntax; }
 
   /**
    * Set the input file name.
    */
-  void setInputFileName(std::string input_file_name);
+  void setInputFileName(const std::string & input_file_name);
 
   /**
    * Returns the input file name that was set with setInputFileName
    */
-  std::string getInputFileName() { return _input_filename; }
+  std::string getInputFileName() const { return _input_filename; }
 
   /**
    * Override the selection of the output file base name.
+   * Note: This method is supposed to be called by MultiApp only.
    */
-  void setOutputFileBase(std::string output_file_base) { _output_file_base = output_file_base; }
+  void setOutputFileBase(const std::string & output_file_base)
+  {
+    _output_file_base = output_file_base;
+    _file_base_set_by_user = true;
+  }
 
   /**
-   * Override the selection of the output file base name.
+   * Get the output file base name.
+   * @param for_non_moose_build_output True for getting the file base for outputs generated with
+   *                                   Outputs/[outputname] input syntax.
+   * @return The file base name used by output objects
+   * Note: for_non_moose_build_output does not affect the returned value when this is a subapp.
+   *       for_non_moose_build_output also does not affect the returned value when Outputs/file_base
+   *       parameter is available. When for_non_moose_build_output does affect the returned value,
+   *       i.e. master without Outputs/file_base, the suffix _out is removed.
    */
-  std::string getOutputFileBase();
+  std::string getOutputFileBase(bool for_non_moose_build_output = false) const;
 
   /**
    * Tell the app to output in a specific position.
    */
-  void setOutputPosition(Point p);
+  void setOutputPosition(const Point & p);
+
+  /**
+   * Get all checkpoint directories
+   * @return A Set of checkpoint directories
+   */
+  std::list<std::string> getCheckpointDirectories() const;
 
   /**
    * Extract all possible checkpoint file names
-   * @param files A Set of checkpoint filenames to populate
+   * @return A Set of checkpoint filenames
    */
-  std::list<std::string> getCheckpointFiles();
+  std::list<std::string> getCheckpointFiles() const;
 
   /**
    * Whether or not an output position has been set.
    * @return True if it has
    */
-  bool hasOutputPosition() { return _output_position_set; }
+  bool hasOutputPosition() const { return _output_position_set; }
 
   /**
    * Get the output position.
    * @return The position offset for the output.
    */
-  Point getOutputPosition() { return _output_position; }
+  Point getOutputPosition() const { return _output_position; }
 
   /**
    * Set the starting time for the simulation.  This will override any choice
@@ -159,32 +230,34 @@ public:
    *
    * @param time The start time for the simulation.
    */
-  void setStartTime(const Real time);
+  void setStartTime(Real time);
 
   /**
    * @return Whether or not a start time has been programmatically set using setStartTime()
    */
-  bool hasStartTime() { return _start_time_set; }
+  bool hasStartTime() const { return _start_time_set; }
 
   /**
    * @return The start time
    */
-  Real getStartTime() { return _start_time; }
+  Real getStartTime() const { return _start_time; }
 
   /**
    * Each App has it's own local time.  The "global" time of the whole problem might be
    * different.  This offset is how far off the local App time is from the global time.
    */
-  void setGlobalTimeOffset(const Real offset) { _global_time_offset = offset; }
+  void setGlobalTimeOffset(Real offset) { _global_time_offset = offset; }
 
   /**
    * Each App has it's own local time.  The "global" time of the whole problem might be
    * different.  This offset is how far off the local App time is from the global time.
    */
-  Real getGlobalTimeOffset() { return _global_time_offset; }
+  Real getGlobalTimeOffset() const { return _global_time_offset; }
 
   /**
    * Return the filename that was parsed
+   * Note: When stripLeadingPath is false, this function returns the same name as
+   *       getInputFileName() method when the input file is not a link.
    */
   std::string getFileName(bool stripLeadingPath = true) const;
 
@@ -207,37 +280,47 @@ public:
   /**
    * Retrieve the Executioner for this App
    */
-  Executioner * getExecutioner() { return _executioner.get(); }
+  Executioner * getExecutioner() const { return _executioner.get(); }
 
   /**
-   * Retrieve the Executioner shared pointer for this App
+   * Set the Executioner for this App
    */
-  std::shared_ptr<Executioner> & executioner() { return _executioner; }
+  void setExecutioner(std::shared_ptr<Executioner> && executioner) { _executioner = executioner; }
 
   /**
-   * Set a Boolean indicating whether this app will use a Nonlinear or Eigen System.
+   * Returns a writable Boolean indicating whether this app will use a Nonlinear or Eigen System.
    */
   bool & useNonlinear() { return _use_nonlinear; }
 
   /**
-   * Retrieve the Factory associated with this App.
+   * Returns a writable Boolean indicating whether this app will use an eigenvalue executioner.
+   */
+  bool & useEigenvalue() { return _use_eigen_value; }
+
+  /**
+   * Retrieve a writable reference to the Factory associated with this App.
    */
   Factory & getFactory() { return _factory; }
 
   /**
-   * Retrieve the ActionFactory associated with this App.
+   * Retrieve a writable reference to the ActionFactory associated with this App.
    */
   ActionFactory & getActionFactory() { return _action_factory; }
+
+  /**
+   * Returns the MPI processor ID of the current processor.
+   */
+  processor_id_type processor_id() const { return _comm->rank(); }
 
   /**
    * Get the command line
    * @return The reference to the command line object
    * Setup options based on InputParameters.
    */
-  std::shared_ptr<CommandLine> commandLine() { return _command_line; }
+  std::shared_ptr<CommandLine> commandLine() const { return _command_line; }
 
   /**
-   * This method is here so we can determine whether or not we need to
+   * Returns a writable Boolean to determine whether or not we need to
    * use a separate reader to read the mesh BEFORE we create the mesh.
    */
   bool & setFileRestart() { return _initial_from_file; }
@@ -260,16 +343,6 @@ public:
   bool getDistributedMeshOnCommandLine() const { return _distributed_mesh_on_command_line; }
 
   /**
-   * Deprecated.  Call getDistributedMeshOnCommandLine() instead.
-   */
-  bool getParallelMeshOnCommandLine() const
-  {
-    mooseDeprecated("getParallelMeshOnCommandLine() is deprecated, call "
-                    "getDistributedMeshOnCommandLine() instead.");
-    return getDistributedMeshOnCommandLine();
-  }
-
-  /**
    * Whether or not this is a "recover" calculation.
    */
   bool isRecovering() const;
@@ -280,35 +353,65 @@ public:
   bool isRestarting() const;
 
   /**
+   * Whether or not this is a split mesh operation.
+   */
+  bool isSplitMesh() const;
+
+  /**
+   * Whether or not we are running with pre-split (distributed mesh)
+   */
+  bool isUseSplit() const;
+
+  ///@{
+  /**
    * Return true if the recovery file base is set
    */
-  bool hasRecoverFileBase();
+  bool hasRestartRecoverFileBase() const;
+  bool hasRecoverFileBase() const;
+  ///@}
 
+  ///@{
   /**
    * The file_base for the recovery file.
    */
-  std::string getRecoverFileBase() { return _recover_base; }
+  std::string getRestartRecoverFileBase() const { return _restart_recover_base; }
+  std::string getRecoverFileBase() const
+  {
+    mooseDeprecated("MooseApp::getRecoverFileBase is deprecated, use "
+                    "MooseApp::getRestartRecoverFileBase() instead.");
+    return _restart_recover_base;
+  }
+  ///@}
 
   /**
    * mutator for recover_base (set by RecoverBaseAction)
    */
-  void setRecoverFileBase(std::string recover_base) { _recover_base = recover_base; }
+  void setRestartRecoverFileBase(const std::string & file_base)
+  {
+    if (file_base.empty())
+      _restart_recover_base = MooseUtils::getLatestAppCheckpointFileBase(getCheckpointFiles());
+    else
+      _restart_recover_base = file_base;
+  }
 
   /**
    * The suffix for the recovery file.
    */
-  std::string getRecoverFileSuffix() { return _recover_suffix; }
+  std::string getRestartRecoverFileSuffix() const { return _restart_recover_suffix; }
 
   /**
    * mutator for recover_suffix
    */
-  void setRecoverFileSuffix(std::string recover_suffix) { _recover_suffix = recover_suffix; }
+  void setRestartRecoverFileSuffix(const std::string & file_suffix)
+  {
+    _restart_recover_suffix = file_suffix;
+  }
 
   /**
    *  Whether or not this simulation should only run half its transient (useful for testing
    * recovery)
    */
-  bool halfTransient() { return _half_transient; }
+  bool halfTransient() const { return _half_transient; }
 
   /**
    * Store a map of outputter names and file numbers
@@ -318,7 +421,7 @@ public:
    *
    * @see MultiApp TransientMultiApp OutputWarehouse
    */
-  void setOutputFileNumbers(std::map<std::string, unsigned int> numbers)
+  void setOutputFileNumbers(const std::map<std::string, unsigned int> & numbers)
   {
     _output_file_numbers = numbers;
   }
@@ -330,12 +433,10 @@ public:
    *
    * @see MultiApp TransientMultiApp
    */
-  std::map<std::string, unsigned int> & getOutputFileNumbers() { return _output_file_numbers; }
-
-  /**
-   * Return true if the output position has been set
-   */
-  bool hasOutputWarehouse() { return _output_position_set; }
+  const std::map<std::string, unsigned int> & getOutputFileNumbers() const
+  {
+    return _output_file_numbers;
+  }
 
   /**
    * Get the OutputWarehouse objects
@@ -354,14 +455,15 @@ public:
    * attempts to load a dynamic library and register it when it is needed. Throws an error if
    * no suitable library is found that contains the app_name in question.
    */
-  void dynamicObjectRegistration(const std::string & app_name,
-                                 Factory * factory,
-                                 std::string library_path);
-  void dynamicAppRegistration(const std::string & app_name, std::string library_path);
-  void dynamicSyntaxAssociation(const std::string & app_name,
-                                Syntax * syntax,
-                                ActionFactory * action_factory,
-                                std::string library_path);
+  void dynamicAllRegistration(const std::string & app_name,
+                              Factory * factory,
+                              ActionFactory * action_factory,
+                              Syntax * syntax,
+                              std::string library_path,
+                              const std::string & library_name);
+  void dynamicAppRegistration(const std::string & app_name,
+                              std::string library_path,
+                              const std::string & library_name);
   ///@}
 
   /**
@@ -378,7 +480,7 @@ public:
   std::string libNameToAppName(const std::string & library_name) const;
 
   /**
-   * Return the loaded library filenames in a std::vector
+   * Return the loaded library filenames in a std::set
    */
   std::set<std::string> getLoadedLibraryPaths() const;
 
@@ -394,36 +496,61 @@ public:
    * @param name The full (unique) name.
    * @param data The actual data object.
    * @param tid The thread id of the object.  Use 0 if the object is not threaded.
+   * @param read_only Restrict the data for read-only
+   * @param metaname (optional) register the data to the meta data storage (tid must be 0)
    */
-  virtual void
-  registerRestartableData(std::string name, RestartableDataValue * data, THREAD_ID tid);
+  RestartableDataValue & registerRestartableData(const std::string & name,
+                                                 std::unique_ptr<RestartableDataValue> data,
+                                                 THREAD_ID tid,
+                                                 bool read_only,
+                                                 const RestartableDataMapName & metaname = "");
 
   /**
-   * Return reference to the restatable data object
-   * @return A const reference to the restatable data object
+   * Return reference to the restartable data object
+   * @return A const reference to the restartable data object
    */
-  const RestartableDatas & getRestartableData() { return _restartable_data; }
+  const RestartableDataMaps & getRestartableData() const { return _restartable_data; }
+
+  /**
+   * Return a reference to restartable data for the specific type flag.
+   */
+  const RestartableDataMap & getRestartableDataMap(const RestartableDataMapName & name) const;
+
+  /**
+   * Reserve a location for storing custom RestartableDataMap objects.
+   *
+   * This should be called in the constructor of an application.
+   *
+   * @param name A key to use for accessing the data object
+   * @param suffix The suffix to use when appending to checkpoint output, if not supplied the
+   *               given name is used to generate the suffix (MyMetaData -> _mymetadata)
+   */
+  void registerRestartableDataMapName(const RestartableDataMapName & name, std::string suffix = "");
 
   /**
    * Return a reference to the recoverable data object
    * @return A const reference to the recoverable data
    */
-  std::set<std::string> & getRecoverableData() { return _recoverable_data; }
+  const DataNames & getRecoverableData() const { return _recoverable_data_names; }
 
   /**
-   * Create a Backup from the current App.  A Backup contains all the data necessary to be able
-   * to restore the state of an App.
+   * Create a Backup from the current App. A Backup contains all the data necessary to be able to
+   * restore the state of an App.
+   *
+   * This method should be overridden in external or MOOSE-wrapped applications.
    */
-  std::shared_ptr<Backup> backup();
+  virtual std::shared_ptr<Backup> backup();
 
   /**
-   * Restore a Backup.  This sets the App's state.
+   * Restore a Backup. This sets the App's state.
    *
    * @param backup The Backup holding the data for the app
    * @param for_restart Whether this restoration is explicitly for the first restoration of restart
-   * data
+   * data.
+   *
+   * This method should be overridden in external or MOOSE-wrapped applications.
    */
-  void restore(std::shared_ptr<Backup> backup, bool for_restart = false);
+  virtual void restore(std::shared_ptr<Backup> backup, bool for_restart = false);
 
   /**
    * Returns a string to be printed at the beginning of a simulation
@@ -448,6 +575,16 @@ public:
   bool isUltimateMaster() { return !_multiapp_level; }
 
   /**
+   * Returns a pointer to the master mesh
+   */
+  const MooseMesh * masterMesh() const { return _master_mesh; }
+
+  /**
+   * Returns a pointer to the master mesh
+   */
+  const MooseMesh * masterDisplacedMesh() const { return _master_displaced_mesh; }
+
+  /**
    * Add a mesh modifier that will act on the meshes in the system
    */
   void addMeshModifier(const std::string & modifier_name,
@@ -460,6 +597,15 @@ public:
   const MeshModifier & getMeshModifier(const std::string & name) const;
 
   /**
+   * Get names of all mesh modifiers
+   * Note: This function should be called after all mesh modifiers are added with the
+   * 'add_mesh_modifier' task. The returned value will be undefined and depends on the ordering that
+   * mesh modifiers are added by MOOSE if the function is called during the 'add_mesh_modifier'
+   * task.
+   */
+  std::vector<std::string> getMeshModifierNames() const;
+
+  /**
    * Clear all mesh modifers
    */
   void clearMeshModifiers();
@@ -469,23 +615,185 @@ public:
    */
   void executeMeshModifiers();
 
+  /**
+   * Set final mesh generator name
+   */
+  void setFinalMeshGeneratorName(const std::string & generator_name);
+
+  /**
+   * Add a mesh generator that will act on the meshes in the system
+   */
+  void addMeshGenerator(const std::string & generator_name,
+                        const std::string & name,
+                        InputParameters parameters);
+
+  /**
+   * Get a mesh generator with its name
+   */
+  const MeshGenerator & getMeshGenerator(const std::string & name) const;
+
+  /**
+   * Get names of all mesh generators
+   * Note: This function should be called after all mesh generators are added with the
+   * 'add_mesh_generator' task. The returned value will be undefined and depends on the ordering
+   * that mesh generators are added by MOOSE if the function is called during the
+   * 'add_mesh_generator' task.
+   */
+  std::vector<std::string> getMeshGeneratorNames() const;
+
+  /**
+   * Get a refernce to a pointer that will be the output of the
+   * MeshGenerator named name
+   */
+  std::unique_ptr<MeshBase> & getMeshGeneratorOutput(const std::string & name);
+
+  /**
+   * Append a mesh generator that will act on the final mesh generator in the system
+   * Note: This function must be called after add_mesh_generator task.
+   */
+  void appendMeshGenerator(const std::string & generator_name,
+                           const std::string & name,
+                           InputParameters parameters);
+
+  /**
+   * Clear all mesh modifers
+   */
+  void clearMeshGenerators();
+
+  /**
+   * Execute and clear the Mesh Generators data structure
+   */
+  void executeMeshGenerators();
+
+  /**
+   * Get the generated mesh generated by executeMeshGenerators();
+   */
+  std::unique_ptr<MeshBase> getMeshGeneratorMesh(bool check_unique = true);
+
   ///@{
   /**
    * Sets the restart/recover flags
    * @param state The state to set the flag to
    */
-  void setRestart(const bool & value);
-  void setRecover(const bool & value);
+  void setRestart(bool value);
+  void setRecover(bool value);
   ///@}
 
   /// Returns whether the Application is running in check input mode
   bool checkInput() const { return _check_input; }
 
+  /// Returns whether FPE trapping is turned on (either because of debug or user requested)
+  bool getFPTrapFlag() const { return _trap_fpe; }
+
+  /**
+   * WARNING: This is an internal method for MOOSE, if you need the add new ExecFlagTypes then
+   * use the registerExecFlag macro as done in Moose.C/h.
+   *
+   * @param flag The flag to add as available to the app level ExecFlagEnum.
+   */
+  void addExecFlag(const ExecFlagType & flag);
+
+  /**
+   * Returns a Boolean indicating whether a RelationshipManater exists with the same name.
+   */
+  bool hasRelationshipManager(const std::string & name) const;
+
+  /**
+   * Transfers ownership of a RelationshipManager to the application for lifetime management.
+   * The RelationshipManager will NOT be duplicately added if an equivalent RelationshipManager
+   * is already active. In that case, it's possible that the object will be destroyed if the
+   * reference count drops to zero.
+   */
+  bool addRelationshipManager(std::shared_ptr<RelationshipManager> relationship_manager);
+
+  /**
+   * Attach the relationship managers of the given type
+   * Note: Geometric relationship managers that are supposed to be attached late
+   * will be attached when Algebraic are attached.
+   */
+  void attachRelationshipManagers(Moose::RelationshipManagerType rm_type);
+
+  /**
+   * Retrieve the relationship managers
+   */
+  const std::vector<std::shared_ptr<RelationshipManager>> & getReleationshipManagers();
+
+  /**
+   * Returns the Relationship managers info suitable for printing.
+   */
+  std::vector<std::pair<std::string, std::string>> getRelationshipManagerInfo() const;
+
+  /**
+   * Return the app level ExecFlagEnum, this contains all the available flags for the app.
+   */
+  const ExecFlagEnum & getExecuteOnEnum() const { return _execute_flags; }
+
+  /**
+   * Method for setting the backup object to be restored at a later time. This method is called
+   * during simulation restart or recover before the application is completely setup. The backup
+   * object set here, will be restored when needed by a call to restoreCachedBackup().
+   *
+   * @param backup The Backup holding the data for the app.
+   */
+  void setBackupObject(std::shared_ptr<Backup> backup);
+
+  /**
+   * Whether to enable automatic scaling by default
+   */
+  bool defaultAutomaticScaling() const { return _automatic_automatic_scaling; }
+
+  // Return the communicator for this application
+  const std::shared_ptr<Parallel::Communicator> getCommunicator() const { return _comm; }
+
+  /**
+   * Return the container of relationship managers
+   */
+  const std::vector<std::shared_ptr<RelationshipManager>> & relationshipManagers() const
+  {
+    return _relationship_managers;
+  }
+
+  /**
+   * Loop through RMs and call dofmap_reinit
+   */
+  void dofMapReinitForRMs();
+
+  /**
+   * Loop through RMs and call mesh_reinit
+   */
+  void meshReinitForRMs();
+
+  /**
+   * Function to check the integrity of the restartable meta data structure
+   */
+  void checkMetaDataIntegrity() const;
+
+  ///@{
+  /**
+   * Iterator based access to the extra RestartableDataMap objects; see Checkpoint.C for use case.
+   *
+   * These are MOOSE internal functions and should not be used otherwise.
+   */
+  std::unordered_map<RestartableDataMapName,
+                     std::pair<RestartableDataMap, std::string>>::const_iterator
+  getRestartableDataMapBegin() const
+  {
+    return _restartable_meta_data.begin();
+  }
+
+  std::unordered_map<RestartableDataMapName,
+                     std::pair<RestartableDataMap, std::string>>::const_iterator
+  getRestartableDataMapEnd() const
+  {
+    return _restartable_meta_data.end();
+  }
+  ///@}
+
 protected:
   /**
    * Whether or not this MooseApp has cached a Backup to use for restart / recovery
    */
-  bool hasCachedBackup() { return _cached_backup.get(); }
+  bool hasCachedBackup() const { return _cached_backup.get(); }
 
   /**
    * Restore from a cached backup
@@ -506,23 +814,26 @@ protected:
   /// Constructor is protected so that this object is constructed through the AppFactory object
   MooseApp(InputParameters parameters);
 
-  /// Don't run the simulation, just complete all of the mesh preperation steps and exit
-  virtual void meshOnly(std::string mesh_file_name);
-
   /**
    * NOTE: This is an internal function meant for MOOSE use only!
    *
-   * Register a piece of recoverable data.  This is data that will get
-   * written / read to / from a restart file.
-   *
-   * However, this data will ONLY get read from the restart file during a RECOVERY operation!
+   * Register a piece of restartable data that will be used in a filter in/out during
+   * deserialization. Note however that this data will always be written to the restart file.
    *
    * @param name The full (unique) name.
+   * @param filter The filter name where to direct the name
    */
-  virtual void registerRecoverableData(std::string name);
+  void registerRestartableNameWithFilter(const std::string & name,
+                                         Moose::RESTARTABLE_FILTER filter);
+
+  /**
+   * Runs post-initialization error checking that cannot be run correctly unless the simulation
+   * has been fully set up and initialized.
+   */
+  void errorCheck();
 
   /// The name of this object
-  std::string _name;
+  const std::string _name;
 
   /// Parameters of this object
   InputParameters _pars;
@@ -533,11 +844,20 @@ protected:
   /// The MPI communicator this App is going to use
   const std::shared_ptr<Parallel::Communicator> _comm;
 
+  /// The PerfGraph object for this applciation
+  PerfGraph _perf_graph;
+
+  /// The RankMap is a useful object for determining how
+  const RankMap _rank_map;
+
   /// Input file name used
   std::string _input_filename;
 
   /// The output file basename
   std::string _output_file_base;
+
+  /// Whether or not file base is set through input or setOutputFileBase by MultiApp
+  bool _file_base_set_by_user;
 
   /// Whether or not an output position has been set for this app
   bool _output_position_set;
@@ -581,8 +901,11 @@ protected:
   /// Boolean to indicate whether to use a Nonlinear or EigenSystem (inspected by actions)
   bool _use_nonlinear;
 
+  /// Boolean to indicate whether to use an eigenvalue executioner
+  bool _use_eigen_value;
+
   /// System Information
-  std::shared_ptr<SystemInfo> _sys_info;
+  std::unique_ptr<SystemInfo> _sys_info;
 
   /// Indicates whether warnings, errors, or no output is displayed when unused parameters are detected
   enum UNUSED_CHECK
@@ -610,11 +933,20 @@ protected:
   /// Whether or not this is a restart run
   bool _restart;
 
-  /// The base name to recover from.  If blank then we will find the newest recovery file.
-  std::string _recover_base;
+  /// Whether or not we are performing a split mesh operation (--split-mesh)
+  bool _split_mesh;
 
-  /// The file suffix to recover from.  If blank then we will use "cpr" for binary CheckpointIO.
-  std::string _recover_suffix;
+  /// Whether or not we are using a (pre-)split mesh (automatically DistributedMesh)
+  const bool _use_split;
+
+  /// Whether or not FPE trapping should be turned on.
+  bool _trap_fpe;
+
+  /// The base name to restart/recover from.  If blank then we will find the newest checkpoint file.
+  std::string _restart_recover_base;
+
+  /// The file suffix to restart/recover from.  If blank then we will use the binary restart suffix.
+  std::string _restart_recover_suffix;
 
   /// Whether or not this simulation should only run half its transient (useful for testing recovery)
   bool _half_transient;
@@ -624,6 +956,8 @@ protected:
 
   /// true if we want to just check the input file
   bool _check_input;
+
+  std::vector<std::shared_ptr<RelationshipManager>> _relationship_managers;
 
   /// The library, registration method and the handle to the method
   std::map<std::pair<std::string, std::string>, void *> _lib_handles;
@@ -655,19 +989,33 @@ private:
    */
   void createMinimalApp();
 
-  /// Where the restartable data is held (indexed on tid)
-  RestartableDatas _restartable_data;
+  /**
+   * Create the ordered mesh generators from all mesh generators
+   */
+  void createMeshGeneratorOrder();
 
-  /// Data names that will only be read from the restart file during RECOVERY
-  std::set<std::string> _recoverable_data;
+  /// Where the restartable data is held (indexed on tid)
+  RestartableDataMaps _restartable_data;
+
+  /// General storage for custom RestartableData that can be added to from outside applications
+  std::unordered_map<RestartableDataMapName, std::pair<RestartableDataMap, std::string>>
+      _restartable_meta_data;
+
+  /**
+   * Data names that will only be read from the restart file during RECOVERY.
+   * e.g. these names are _excluded_ during restart.
+   */
+  DataNames _recoverable_data_names;
 
   /// Enumeration for holding the valid types of dynamic registrations allowed
   enum RegistrationType
   {
     APPLICATION,
-    OBJECT,
-    SYNTAX
+    REGALL
   };
+
+  /// The combined warehouse for storing any MooseObject based object
+  std::unique_ptr<TheWarehouse> _the_warehouse;
 
   /// Level of multiapp, the master is level 0. This used by the Console to indent output
   unsigned int _multiapp_level;
@@ -675,11 +1023,57 @@ private:
   /// Numbering in all the sub-apps on the same level
   unsigned int _multiapp_number;
 
+  /// The mesh from master app
+  const MooseMesh * const _master_mesh;
+
+  /// The displaced mesh from master app
+  const MooseMesh * const _master_displaced_mesh;
+
   /// Holds the mesh modifiers until they have completed, then this structure is cleared
   std::map<std::string, std::shared_ptr<MeshModifier>> _mesh_modifiers;
 
+  /// Holds the mesh generators until they have completed, then this structure is cleared
+  std::map<std::string, std::shared_ptr<MeshGenerator>> _mesh_generators;
+
+  /// Holds the ordered mesh generators until they have completed, then this structure is cleared
+  std::vector<std::vector<std::shared_ptr<MeshGenerator>>> _ordered_generators;
+
+  /// Holds the output for each mesh generator - including duplicates needed downstream
+  std::map<std::string, std::list<std::unique_ptr<MeshBase>>> _mesh_generator_outputs;
+
+  /// The final mesh generator name to use
+  std::string _final_generator_name;
+
+  /// The final Mesh that is generated by the generators
+  std::list<std::unique_ptr<MeshBase> *> _final_generated_meshes;
+
   /// Cache for a Backup to use for restart / recovery
   std::shared_ptr<Backup> _cached_backup;
+
+  /// Execution flags for this App
+  ExecFlagEnum _execute_flags;
+
+  /// Timers
+  const PerfID _setup_timer;
+  const PerfID _setup_options_timer;
+  const PerfID _run_input_file_timer;
+  const PerfID _execute_timer;
+  const PerfID _execute_executioner_timer;
+  const PerfID _restore_timer;
+  const PerfID _run_timer;
+  const PerfID _execute_mesh_modifiers_timer;
+  const PerfID _execute_mesh_generators_timer;
+  const PerfID _restore_cached_backup_timer;
+  const PerfID _create_minimal_app_timer;
+
+  /// Whether to turn on automatic scaling by default
+  const bool _automatic_automatic_scaling;
+
+  /// Whether the mesh generator MeshBase has been popped off its storage container and is no
+  /// longer accessible
+  bool _popped_final_mesh_generator;
+
+  bool _profiling = false;
 
   // Allow FEProblemBase to set the recover/restart state, so make it a friend
   friend class FEProblemBase;
@@ -700,5 +1094,3 @@ MooseApp::getParam(const std::string & name) const
 {
   return InputParameters::getParamHelper(name, _pars, static_cast<T *>(0));
 }
-
-#endif /* MOOSEAPP_H */

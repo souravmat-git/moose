@@ -1,35 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef PARSEDAUX_H
-#define PARSEDAUX_H
+#pragma once
 
 #include "AuxKernel.h"
 #include "FunctionParserUtils.h"
 
-// Forward Declarations
-class ParsedAux;
-
-template <>
-InputParameters validParams<AuxKernel>();
-
 /**
  * AuxKernel that evaluates a parsed function expression
  */
-class ParsedAux : public AuxKernel, public FunctionParserUtils
+class ParsedAux : public AuxKernel, public FunctionParserUtils<false>
 {
 public:
+  static InputParameters validParams();
+
   ParsedAux(const InputParameters & parameters);
 
 protected:
@@ -43,7 +33,7 @@ protected:
   std::vector<const VariableValue *> _args;
 
   /// function parser object for the resudual and on-diagonal Jacobian
-  ADFunctionPtr _func_F;
-};
+  SymFunctionPtr _func_F;
 
-#endif /* PARSEDAUX_H */
+  usingFunctionParserUtilsMembers(false);
+};

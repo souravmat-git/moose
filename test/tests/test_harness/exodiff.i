@@ -33,12 +33,11 @@
     type = DirichletBC
     variable = u
     boundary = right
-    value = 1
+    value = 10 # causes a diff
   [../]
 []
 
 [Executioner]
-  # Preconditioned JFNK (default)
   type = Transient
   num_steps = 4 # Gold file only has 4 steps
   dt = 0.1
@@ -49,5 +48,6 @@
 
 [Outputs]
   csv = true
-  print_perf_log = true
+  exodus = true
+  perf_graph = true
 []

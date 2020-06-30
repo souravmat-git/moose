@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICWEAKPLANETENSILEN_H
-#define TENSORMECHANICSPLASTICWEAKPLANETENSILEN_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticWeakPlaneTensile.h"
-
-class TensorMechanicsPlasticWeakPlaneTensileN;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticWeakPlaneTensileN>();
 
 /**
  * Rate-independent associative weak-plane tensile failure
@@ -21,6 +18,8 @@ InputParameters validParams<TensorMechanicsPlasticWeakPlaneTensileN>();
 class TensorMechanicsPlasticWeakPlaneTensileN : public TensorMechanicsPlasticWeakPlaneTensile
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticWeakPlaneTensileN(const InputParameters & parameters);
 
   virtual std::string modelName() const override;
@@ -47,5 +46,3 @@ protected:
   /// This rotation matrix rotates _input_n to (0, 0, 1)
   RealTensorValue _rot;
 };
-
-#endif // TENSORMECHANICSPLASTICWEAKPLANETENSILEN_H

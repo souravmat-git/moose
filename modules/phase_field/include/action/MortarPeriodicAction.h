@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MORTARPERIODICACTION_H
-#define MORTARPERIODICACTION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Action.h"
-
-class MortarPeriodicAction;
-
-template <>
-InputParameters validParams<MortarPeriodicAction>();
 
 /**
  * Set up Mortar based periodicity in an input file with a MortarPeriodicMesh
@@ -20,6 +17,8 @@ InputParameters validParams<MortarPeriodicAction>();
 class MortarPeriodicAction : public Action
 {
 public:
+  static InputParameters validParams();
+
   MortarPeriodicAction(const InputParameters & parameters);
 
   virtual void act();
@@ -30,6 +29,7 @@ protected:
 
   // type of the periodic constraint to apply (value, gradient)
   const unsigned int _periodicity;
-};
 
-#endif // MORTARPERIODICACTION_H
+  // the periodic directions
+  const MultiMooseEnum _periodic_directions;
+};

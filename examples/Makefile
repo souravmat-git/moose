@@ -9,6 +9,7 @@
 ###############################################################################
 MOOSE_DIR          ?= $(shell dirname `pwd`)
 FRAMEWORK_DIR      ?= $(MOOSE_DIR)/framework
+ADDITIONAL_CPPFLAGS += -Wall -Wextra
 ###############################################################################
 
 TEST := test_ignore
@@ -22,7 +23,7 @@ dirlist := $(wildcard ex*/)
 .PHONY: examples test .depend $(dirlist)
 
 ## Moose Examples
-all:: examples
+all: examples
 
 # Build the example programs
 examples: $(dirlist)

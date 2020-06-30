@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef GENERATEDMESH_H
-#define GENERATEDMESH_H
+#pragma once
 
 #include "MooseMesh.h"
 
@@ -28,16 +22,20 @@ InputParameters validParams<GeneratedMesh>();
 class GeneratedMesh : public MooseMesh
 {
 public:
+  static InputParameters validParams();
+
   GeneratedMesh(const InputParameters & parameters);
-  GeneratedMesh(const GeneratedMesh & other_mesh) = default;
+  GeneratedMesh(const GeneratedMesh & /* other_mesh */) = default;
 
   // No copy
   GeneratedMesh & operator=(const GeneratedMesh & other_mesh) = delete;
 
-  virtual MooseMesh & clone() const override;
+  virtual std::unique_ptr<MooseMesh> safeClone() const override;
+
   virtual void buildMesh() override;
   virtual Real getMinInDimension(unsigned int component) const override;
   virtual Real getMaxInDimension(unsigned int component) const override;
+  virtual void prepared(bool state) override;
 
 protected:
   /// The dimension of the mesh
@@ -62,6 +60,8 @@ protected:
   /// _bias_x==1 implies no bias (original mesh unchanged).
   /// _bias_x > 1 implies cells are growing in the x-direction.
   Real _bias_x, _bias_y, _bias_z;
+
+  /// Boolean to indicate that dimensions may have changed
+  bool _dims_may_have_changed;
 };
 
-#endif /* GENERATEDMESH_H */

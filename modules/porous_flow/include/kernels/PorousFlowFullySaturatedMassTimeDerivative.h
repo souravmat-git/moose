@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWFULLYSATURATEDMASSTIMEDERIVATIVE_H
-#define POROUSFLOWFULLYSATURATEDMASSTIMEDERIVATIVE_H
+#pragma once
 
 #include "TimeKernel.h"
 #include "PorousFlowDictator.h"
-
-class PorousFlowFullySaturatedMassTimeDerivative;
-
-template <>
-InputParameters validParams<PorousFlowFullySaturatedMassTimeDerivative>();
 
 /**
  * Time derivative of fluid mass suitable for fully-saturated,
@@ -24,6 +20,8 @@ InputParameters validParams<PorousFlowFullySaturatedMassTimeDerivative>();
 class PorousFlowFullySaturatedMassTimeDerivative : public TimeKernel
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowFullySaturatedMassTimeDerivative(const InputParameters & parameters);
 
 protected:
@@ -34,7 +32,7 @@ protected:
   /// Jacobian contribution for the PorousFlow variable pvar
   Real computeQpJac(unsigned int pvar);
 
-  /// PorousFlow UserObject
+  /// PorousFlowDictator UserObject
   const PorousFlowDictator & _dictator;
 
   /// Whether the Variable for this Kernel is a PorousFlow variable
@@ -96,5 +94,3 @@ protected:
   /// Derivative of strain rate wrt the PorousFlow variables
   const MaterialProperty<std::vector<RealGradient>> * const _dstrain_rate_dvar;
 };
-
-#endif // POROUSFLOWFULLYSATURATEDMASSTIMEDERIVATIVE_H

@@ -1,33 +1,40 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MOOSETYPES_H
-#define MOOSETYPES_H
+#pragma once
 
 #include "Moose.h"
+#include "ADReal.h"
+#include "ADRankTwoTensorForward.h"
+#include "ADRankThreeTensorForward.h"
+#include "ADRankFourTensorForward.h"
 
-// libMesh includes
 #include "libmesh/libmesh.h"
 #include "libmesh/id_types.h"
 #include "libmesh/stored_range.h"
-#include "libmesh/elem.h"
 #include "libmesh/petsc_macro.h"
 #include "libmesh/boundary_info.h"
+#include "libmesh/parameters.h"
+
+// BOOST include
+#include "bitmask_operators.h"
+
+#include "libmesh/ignore_warnings.h"
+#include "Eigen/Core"
+#include "libmesh/restore_warnings.h"
+#include "libmesh/tensor_tools.h"
 
 #include <string>
 #include <vector>
 #include <memory>
+#include <type_traits>
+#include <functional>
 
 // DO NOT USE (Deprecated)
 #define MooseSharedPointer std::shared_ptr
@@ -64,61 +71,446 @@
                beginIndex_2(__VA_ARGS__),                                                          \
                beginIndex_1(__VA_ARGS__),                                                          \
                beginIndex_0(__VA_ARGS__))
+
+/**
+ * MooseIndex Macro for creating an index type of the right type for loops and other places where
+ * type matching is important.
+ * Usage:
+ *
+ * Type t;
+ *
+ * Container type:
+ * for (MooseIndex(t) i = 0; i < t.size(); ++i)
+ *
+ * POD type:
+ * for (MooseIndex(t) i = 0; i < t; ++i)
+ */
+#define MooseIndex(type) decltype(_MooseIndex(type, 0))
+
+// SFINAE templates for type MooseIndex type selection
+template <typename T, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr>
+typename std::remove_const<T>::type
+_MooseIndex(T, int)
+{
+}
+
+template <typename T>
+decltype(std::declval<T>().size())
+_MooseIndex(T &&, int)
+{
+}
+
+template <typename T>
+decltype("NOTE: MooseIndex only works with integers and objects with size()!")
+_MooseIndex(T, double) = delete;
+
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif
 
 /**
- * MOOSE typedefs
+ * forward declarations
+ */
+template <typename>
+class MooseArray;
+template <typename>
+class MaterialProperty;
+template <typename>
+class ADMaterialProperty;
+class InputParameters;
+
+namespace libMesh
+{
+template <typename>
+class VectorValue;
+typedef VectorValue<Real> RealVectorValue;
+typedef Eigen::Matrix<Real, LIBMESH_DIM, 1> RealDIMValue;
+typedef Eigen::Matrix<Real, Eigen::Dynamic, 1> RealEigenVector;
+typedef Eigen::Matrix<Real, Eigen::Dynamic, LIBMESH_DIM> RealVectorArrayValue;
+typedef Eigen::Matrix<Real, Eigen::Dynamic, LIBMESH_DIM * LIBMESH_DIM> RealTensorArrayValue;
+typedef Eigen::Matrix<Real, Eigen::Dynamic, Eigen::Dynamic> RealEigenMatrix;
+template <typename>
+class TypeVector;
+template <typename>
+class TensorValue;
+typedef TensorValue<Real> RealTensorValue;
+template <typename>
+class TypeTensor;
+template <unsigned int, typename>
+class TypeNTensor;
+class Point;
+template <typename>
+class DenseMatrix;
+template <typename>
+class DenseVector;
+
+namespace TensorTools
+{
+template <>
+struct IncrementRank<Eigen::Matrix<Real, Eigen::Dynamic, 1>>
+{
+  typedef Eigen::Matrix<Real, Eigen::Dynamic, LIBMESH_DIM> type;
+};
+
+template <>
+struct IncrementRank<Eigen::Matrix<Real, Eigen::Dynamic, LIBMESH_DIM>>
+{
+  typedef Eigen::Matrix<Real, Eigen::Dynamic, LIBMESH_DIM * LIBMESH_DIM> type;
+};
+
+template <>
+struct DecrementRank<Eigen::Matrix<Real, Eigen::Dynamic, LIBMESH_DIM>>
+{
+  typedef Eigen::Matrix<Real, Eigen::Dynamic, 1> type;
+};
+}
+}
+
+/**
+ * various MOOSE typedefs
  */
 typedef Real PostprocessorValue;
 typedef std::vector<Real> VectorPostprocessorValue;
+typedef Real ScatterVectorPostprocessorValue;
 typedef boundary_id_type BoundaryID;
 typedef unsigned int InterfaceID;
 typedef subdomain_id_type SubdomainID;
 typedef unsigned int MooseObjectID;
 typedef unsigned int THREAD_ID;
+typedef unsigned int TagID;
+typedef unsigned int TagTypeID;
+typedef unsigned int PerfID;
+using RestartableDataMapName = std::string; // see MooseApp.h
 
 typedef StoredRange<std::vector<dof_id_type>::iterator, dof_id_type> NodeIdRange;
 typedef StoredRange<std::vector<const Elem *>::iterator, const Elem *> ConstElemPointerRange;
 
-/// Execution flags - when is the object executed/evaluated
-// Note: If this enum is changed, make sure to modify:
-//   (1) the local function populateExecTypes in Moose.C.
-//   (2) the function in Conversion.C: initExecStoreType()
-//   (3) the method SetupInterface::getExecuteOptions
-//   (4) the function Output::getExecuteOptions
-enum ExecFlagType
+namespace Moose
 {
-  EXEC_NONE = 0x00, // 0
-  /// Object is evaluated only once at the beginning of the simulation
-  EXEC_INITIAL = 0x01, // 1
-  /// Object is evaluated in every residual computation
-  EXEC_LINEAR = 0x02, // 2
-  /// Object is evaluated in every jacobian computation
-  EXEC_NONLINEAR = 0x04, // 4
-  /// Object is evaluated at the end of every time step
-  EXEC_TIMESTEP_END = 0x08, // 8
-  /// Object is evaluated at the beginning of every time step
-  EXEC_TIMESTEP_BEGIN = 0x10, // 16
-  /// Object is evaluated at the end of the simulations (output only)
-  EXEC_FINAL = 0x20, // 32
-  /// Forces execution to occur (output only)
-  EXEC_FORCED = 0x40, // 64
-  /// Forces execution on failed solve (output only)
-  EXEC_FAILED = 0x80, // 128
-  /// For use with custom executioners that want to fire objects at a specific time
-  EXEC_CUSTOM = 0x100, // 256
-  /// Objects is evaluated on subdomain
-  EXEC_SUBDOMAIN = 0x200 // 512
+
+// These are used by MooseVariableData and MooseVariableDataFV
+enum SolutionState
+{
+  Current,
+  Old,
+  Older,
+  PreviousNL
 };
+// These are used by MooseVariableData and MooseVariableDataFV
+enum GeometryType
+{
+  Volume,
+  Face
+};
+
+template <typename OutputType>
+struct ShapeType
+{
+  typedef OutputType type;
+};
+template <>
+struct ShapeType<Eigen::Matrix<Real, Eigen::Dynamic, 1>>
+{
+  typedef Real type;
+};
+
+template <typename OutputType>
+struct DOFType
+{
+  typedef OutputType type;
+};
+template <>
+struct DOFType<RealVectorValue>
+{
+  typedef Real type;
+};
+} // namespace Moose
+
+template <typename OutputType>
+struct OutputTools
+{
+  typedef typename TensorTools::IncrementRank<OutputType>::type OutputGradient;
+  typedef typename TensorTools::IncrementRank<OutputGradient>::type OutputSecond;
+  typedef typename TensorTools::DecrementRank<OutputType>::type OutputDivergence;
+
+  typedef MooseArray<OutputType> VariableValue;
+  typedef MooseArray<OutputGradient> VariableGradient;
+  typedef MooseArray<OutputSecond> VariableSecond;
+  typedef MooseArray<OutputType> VariableCurl;
+  typedef MooseArray<OutputDivergence> VariableDivergence;
+
+  typedef typename Moose::ShapeType<OutputType>::type OutputShape;
+  typedef typename TensorTools::IncrementRank<OutputShape>::type OutputShapeGradient;
+  typedef typename TensorTools::IncrementRank<OutputShapeGradient>::type OutputShapeSecond;
+  typedef typename TensorTools::DecrementRank<OutputShape>::type OutputShapeDivergence;
+
+  typedef MooseArray<std::vector<OutputShape>> VariablePhiValue;
+  typedef MooseArray<std::vector<OutputShapeGradient>> VariablePhiGradient;
+  typedef MooseArray<std::vector<OutputShapeSecond>> VariablePhiSecond;
+  typedef MooseArray<std::vector<OutputShape>> VariablePhiCurl;
+  typedef MooseArray<std::vector<OutputShapeDivergence>> VariablePhiDivergence;
+
+  typedef MooseArray<std::vector<OutputShape>> VariableTestValue;
+  typedef MooseArray<std::vector<OutputShapeGradient>> VariableTestGradient;
+  typedef MooseArray<std::vector<OutputShapeSecond>> VariableTestSecond;
+  typedef MooseArray<std::vector<OutputShape>> VariableTestCurl;
+  typedef MooseArray<std::vector<OutputShapeDivergence>> VariableTestDivergence;
+
+  // DoF value type for the template class OutputType
+  typedef typename Moose::DOFType<OutputType>::type OutputData;
+  typedef MooseArray<OutputData> DoFValue;
+  typedef OutputType OutputValue;
+};
+
+// types for standard variable
+typedef typename OutputTools<Real>::VariableValue VariableValue;
+typedef typename OutputTools<Real>::VariableGradient VariableGradient;
+typedef typename OutputTools<Real>::VariableSecond VariableSecond;
+typedef typename OutputTools<Real>::VariableCurl VariableCurl;
+typedef typename OutputTools<Real>::VariablePhiValue VariablePhiValue;
+typedef typename OutputTools<Real>::VariablePhiGradient VariablePhiGradient;
+typedef typename OutputTools<Real>::VariablePhiSecond VariablePhiSecond;
+typedef typename OutputTools<Real>::VariablePhiCurl VariablePhiCurl;
+typedef typename OutputTools<Real>::VariableTestValue VariableTestValue;
+typedef typename OutputTools<Real>::VariableTestGradient VariableTestGradient;
+typedef typename OutputTools<Real>::VariableTestSecond VariableTestSecond;
+typedef typename OutputTools<Real>::VariableTestCurl VariableTestCurl;
+
+// types for vector variable
+typedef typename OutputTools<RealVectorValue>::VariableValue VectorVariableValue;
+typedef typename OutputTools<RealVectorValue>::VariableGradient VectorVariableGradient;
+typedef typename OutputTools<RealVectorValue>::VariableSecond VectorVariableSecond;
+typedef typename OutputTools<RealVectorValue>::VariableCurl VectorVariableCurl;
+typedef typename OutputTools<RealVectorValue>::VariablePhiValue VectorVariablePhiValue;
+typedef typename OutputTools<RealVectorValue>::VariablePhiGradient VectorVariablePhiGradient;
+typedef typename OutputTools<RealVectorValue>::VariablePhiSecond VectorVariablePhiSecond;
+typedef typename OutputTools<RealVectorValue>::VariablePhiCurl VectorVariablePhiCurl;
+typedef typename OutputTools<RealVectorValue>::VariableTestValue VectorVariableTestValue;
+typedef typename OutputTools<RealVectorValue>::VariableTestGradient VectorVariableTestGradient;
+typedef typename OutputTools<RealVectorValue>::VariableTestSecond VectorVariableTestSecond;
+typedef typename OutputTools<RealVectorValue>::VariableTestCurl VectorVariableTestCurl;
+
+// types for array variable
+typedef typename OutputTools<RealEigenVector>::VariableValue ArrayVariableValue;
+typedef typename OutputTools<RealEigenVector>::VariableGradient ArrayVariableGradient;
+typedef typename OutputTools<RealEigenVector>::VariableSecond ArrayVariableSecond;
+typedef typename OutputTools<RealEigenVector>::VariableCurl ArrayVariableCurl;
+typedef typename OutputTools<RealEigenVector>::VariablePhiValue ArrayVariablePhiValue;
+typedef typename OutputTools<RealEigenVector>::VariablePhiGradient ArrayVariablePhiGradient;
+typedef std::vector<std::vector<Eigen::Map<RealDIMValue>>> MappedArrayVariablePhiGradient;
+typedef typename OutputTools<RealEigenVector>::VariablePhiSecond ArrayVariablePhiSecond;
+typedef typename OutputTools<RealEigenVector>::VariablePhiCurl ArrayVariablePhiCurl;
+typedef typename OutputTools<RealEigenVector>::VariableTestValue ArrayVariableTestValue;
+typedef typename OutputTools<RealEigenVector>::VariableTestGradient ArrayVariableTestGradient;
+typedef typename OutputTools<RealEigenVector>::VariableTestSecond ArrayVariableTestSecond;
+typedef typename OutputTools<RealEigenVector>::VariableTestCurl ArrayVariableTestCurl;
+
+/**
+ * AD typedefs
+ */
+typedef libMesh::VectorValue<ADReal> ADRealVectorValue;
+typedef ADRealVectorValue ADRealGradient;
+typedef libMesh::VectorValue<ADReal> ADPoint;
+typedef libMesh::TensorValue<ADReal> ADRealTensorValue;
+typedef libMesh::DenseMatrix<ADReal> ADDenseMatrix;
+typedef libMesh::DenseVector<ADReal> ADDenseVector;
+typedef MooseArray<ADReal> ADVariableValue;
+typedef MooseArray<ADRealVectorValue> ADVariableGradient;
+typedef MooseArray<ADRealTensorValue> ADVariableSecond;
+typedef MooseArray<ADRealVectorValue> ADVectorVariableValue;
+typedef MooseArray<ADRealTensorValue> ADVectorVariableGradient;
+typedef MooseArray<libMesh::TypeNTensor<3, DualReal>> ADVectorVariableSecond;
 
 namespace Moose
 {
-const SubdomainID ANY_BLOCK_ID = libMesh::Elem::invalid_subdomain_id - 1;
-const SubdomainID INVALID_BLOCK_ID = libMesh::Elem::invalid_subdomain_id;
-const BoundaryID ANY_BOUNDARY_ID = static_cast<BoundaryID>(-1);
-const BoundaryID INVALID_BOUNDARY_ID = libMesh::BoundaryInfo::invalid_id;
+
+// type conversion from regular to AD
+template <typename T>
+struct ADType;
+template <>
+struct ADType<Real>
+{
+  typedef ADReal type;
+};
+template <>
+struct ADType<RankTwoTensor>
+{
+  typedef ADRankTwoTensor type;
+};
+template <>
+struct ADType<RankThreeTensor>
+{
+  typedef ADRankThreeTensor type;
+};
+template <>
+struct ADType<RankFourTensor>
+{
+  typedef ADRankFourTensor type;
+};
+template <template <typename> class W>
+struct ADType<W<Real>>
+{
+  typedef W<ADReal> type;
+};
+template <>
+struct ADType<RealEigenVector>
+{
+  typedef RealEigenVector type;
+};
+template <>
+struct ADType<VariableValue>
+{
+  typedef ADVariableValue type;
+};
+template <>
+struct ADType<VariableGradient>
+{
+  typedef ADVariableGradient type;
+};
+template <>
+struct ADType<VariableSecond>
+{
+  typedef ADVariableSecond type;
+};
+
+} // namespace Moose
+
+/**
+ * some AD typedefs for backwards compatability
+ */
+typedef ADRealVectorValue DualRealVectorValue;
+typedef ADRealTensorValue DualRealTensorValue;
+typedef ADRealGradient DualRealGradient;
+
+template <typename T>
+using ADTemplateVariableValue =
+    typename OutputTools<typename Moose::ADType<T>::type>::VariableValue;
+template <typename T>
+using ADTemplateVariableGradient =
+    typename OutputTools<typename Moose::ADType<T>::type>::VariableGradient;
+template <typename T>
+using ADTemplateVariableSecond =
+    typename OutputTools<typename Moose::ADType<T>::type>::VariableSecond;
+
+typedef VariableTestValue ADVariableTestValue;
+typedef VariableTestGradient ADVariableTestGradient;
+typedef VariableTestSecond ADVariableTestSecond;
+typedef VectorVariableTestValue ADVectorVariableTestValue;
+typedef VectorVariableTestGradient ADVectorVariableTestGradient;
+typedef VectorVariableTestSecond ADVectorVariableTestSecond;
+
+// We can  use the non-ad version for test values because these don't depend on the mesh
+// displacements  (unless the location of the quadrature points depend on the mesh displacements...)
+template <typename T>
+using ADTemplateVariableTestValue = typename OutputTools<T>::VariableTestValue;
+template <typename T>
+using ADTemplateVariablePhiValue = typename OutputTools<T>::VariablePhiValue;
+
+// We need to use the AD version for test gradients and seconds because these *do* depend on the
+// mesh displacements
+template <typename T>
+using ADTemplateVariableTestGradient =
+    typename OutputTools<typename Moose::ADType<T>::type>::VariableTestGradient;
+template <typename T>
+using ADTemplateVariableTestSecond =
+    typename OutputTools<typename Moose::ADType<T>::type>::VariableTestSecond;
+template <typename T>
+using ADTemplateVariablePhiGradient =
+    typename OutputTools<typename Moose::ADType<T>::type>::VariablePhiGradient;
+using ADVariablePhiGradient = ADTemplateVariablePhiGradient<Real>;
+
+// Templated typed to support is_ad templated classes
+namespace Moose
+{
+
+template <typename T, bool is_ad>
+struct GenericStruct
+{
+  typedef T type;
+};
+template <typename T>
+struct GenericStruct<T, true>
+{
+  typedef typename ADType<T>::type type;
+};
+
+} // namespace Moose
+template <bool is_ad>
+using GenericReal = typename Moose::GenericStruct<Real, is_ad>::type;
+template <bool is_ad>
+using GenericRankTwoTensor = typename Moose::GenericStruct<RankTwoTensor, is_ad>::type;
+template <bool is_ad>
+using GenericRankThreeTensor = typename Moose::GenericStruct<RankThreeTensor, is_ad>::type;
+template <bool is_ad>
+using GenericRankFourTensor = typename Moose::GenericStruct<RankFourTensor, is_ad>::type;
+template <bool is_ad>
+using GenericVariableValue = typename Moose::GenericStruct<VariableValue, is_ad>::type;
+template <bool is_ad>
+using GenericVariableGradient = typename Moose::GenericStruct<VariableGradient, is_ad>::type;
+template <bool is_ad>
+using GenericVariableSecond = typename Moose::GenericStruct<VariableSecond, is_ad>::type;
+
+#define declareADValidParams(ADObjectType)                                                         \
+  template <>                                                                                      \
+  InputParameters validParams<ADObjectType>()
+
+#define defineADValidParams(ADObjectType, ADBaseObjectType, addedParamCode)                        \
+  template <>                                                                                      \
+  InputParameters validParams<ADObjectType>()                                                      \
+  {                                                                                                \
+    InputParameters params = validParams<ADBaseObjectType>();                                      \
+    addedParamCode;                                                                                \
+    return params;                                                                                 \
+  }                                                                                                \
+  void mooseClangFormatFunction()
+
+#define defineLegacyParams(ObjectType)                                                             \
+  template <>                                                                                      \
+  InputParameters validParams<ObjectType>()                                                        \
+  {                                                                                                \
+    return ObjectType::validParams();                                                              \
+  }                                                                                                \
+  void mooseClangFormatFunction()
+
+#define defineADLegacyParams(ADObjectType)                                                         \
+  template <>                                                                                      \
+  InputParameters validParams<ADObjectType>()                                                      \
+  {                                                                                                \
+    return ADObjectType::validParams();                                                            \
+  }                                                                                                \
+  void mooseClangFormatFunction()
+
+#define defineADBaseValidParams(ADObjectType, BaseObjectType, addedParamCode)                      \
+  template <>                                                                                      \
+  InputParameters validParams<ADObjectType>()                                                      \
+  {                                                                                                \
+    InputParameters params = validParams<BaseObjectType>();                                        \
+    addedParamCode;                                                                                \
+    return params;                                                                                 \
+  }                                                                                                \
+  void mooseClangFormatFunction()
+
+#define defineADValidParamsFromEmpty(ADObjectType, addedParamCode)                                 \
+  template <>                                                                                      \
+  InputParameters validParams<ADObjectType>()                                                      \
+  {                                                                                                \
+    InputParameters params = emptyInputParameters();                                               \
+    addedParamCode;                                                                                \
+    return params;                                                                                 \
+  }                                                                                                \
+  void mooseClangFormatFunction()
+
+namespace Moose
+{
+extern const processor_id_type INVALID_PROCESSOR_ID;
+extern const SubdomainID ANY_BLOCK_ID;
+extern const SubdomainID INVALID_BLOCK_ID;
+extern const BoundaryID ANY_BOUNDARY_ID;
+extern const BoundaryID INVALID_BOUNDARY_ID;
+extern const TagID INVALID_TAG_ID;
+extern const TagTypeID INVALID_TAG_TYPE_ID;
+const std::set<SubdomainID> EMPTY_BLOCK_IDS = {};
+const std::set<BoundaryID> EMPTY_BOUNDARY_IDS = {};
 
 /**
  * MaterialData types
@@ -130,11 +522,12 @@ enum MaterialDataType
   BLOCK_MATERIAL_DATA,
   BOUNDARY_MATERIAL_DATA,
   FACE_MATERIAL_DATA,
-  NEIGHBOR_MATERIAL_DATA
+  NEIGHBOR_MATERIAL_DATA,
+  INTERFACE_MATERIAL_DATA
 };
 
 /**
- * Flag for AuxKernel related exeuction type.
+ * Flag for AuxKernel related execution type.
  */
 enum AuxGroup
 {
@@ -145,26 +538,22 @@ enum AuxGroup
 };
 
 /**
- * A static list of all the exec types.
- */
-extern const std::vector<ExecFlagType> exec_types;
-
-/**
  * Framework-wide stuff
  */
 enum VarKindType
 {
   VAR_NONLINEAR,
-  VAR_AUXILIARY
+  VAR_AUXILIARY,
+  VAR_ANY
 };
 
-enum KernelType
+enum VarFieldType
 {
-  KT_TIME = 0,
-  KT_NONTIME = 1,
-  KT_NONEIGEN = 2,
-  KT_EIGEN = 3,
-  KT_ALL
+  VAR_FIELD_STANDARD,
+  VAR_FIELD_SCALAR,
+  VAR_FIELD_VECTOR,
+  VAR_FIELD_ARRAY,
+  VAR_FIELD_ANY
 };
 
 enum CouplingType
@@ -200,12 +589,40 @@ enum ConstraintType
   Master = Neighbor
 };
 
+enum class ElementType : unsigned int
+{
+  Element = DGResidualType::Element,
+  Neighbor = DGResidualType::Neighbor,
+  Lower = DGResidualType::Neighbor + 1
+};
+
+enum class MortarType : unsigned int
+{
+  Slave = static_cast<unsigned int>(Moose::ElementType::Element),
+  Master = static_cast<unsigned int>(Moose::ElementType::Neighbor),
+  Lower = static_cast<unsigned int>(Moose::ElementType::Lower)
+};
+
+/**
+ * The filter type applied to a particular piece of "restartable" data. These filters
+ * will be applied during deserialization to include or exclude data as appropriate.
+ */
+enum class RESTARTABLE_FILTER : unsigned char
+{
+  RECOVERABLE
+};
+
 enum ConstraintJacobianType
 {
   SlaveSlave = ElementElement,
   SlaveMaster = ElementNeighbor,
   MasterSlave = NeighborElement,
-  MasterMaster = NeighborNeighbor
+  MasterMaster = NeighborNeighbor,
+  LowerLower,
+  LowerSlave,
+  LowerMaster,
+  SlaveLower,
+  MasterLower
 };
 
 enum CoordinateSystemType
@@ -260,9 +677,7 @@ enum EigenSolveType
   EST_KRYLOVSCHUR,        ///< Krylov-Schur
   EST_JACOBI_DAVIDSON,    ///< Jacobi-Davidson
   EST_NONLINEAR_POWER,    ///< Nonlinear inverse power
-  EST_MF_NONLINEAR_POWER, ///< Matrix-free nonlinear inverse power
-  EST_MONOLITH_NEWTON,    ///< Newton-based eigen solver
-  EST_MF_MONOLITH_NEWTON, ///< Matrix-free Newton-based eigen solver
+  EST_NEWTON,             ///< Newton-based eigen solver
 };
 
 /**
@@ -270,12 +685,13 @@ enum EigenSolveType
  */
 enum EigenProblemType
 {
-  EPT_HERMITIAN,            ///< Hermitian
-  EPT_NON_HERMITIAN,        ///< Non-Hermitian
-  EPT_GEN_HERMITIAN,        ///< Generalized Hermitian
-  EPT_GEN_INDEFINITE,       ///< Generalized Hermitian indefinite
-  EPT_GEN_NON_HERMITIAN,    ///< Generalized Non-Hermitian
-  EPT_POS_GEN_NON_HERMITIAN ///< Generalized Non-Hermitian with positive (semi-)definite B
+  EPT_HERMITIAN,             ///< Hermitian
+  EPT_NON_HERMITIAN,         ///< Non-Hermitian
+  EPT_GEN_HERMITIAN,         ///< Generalized Hermitian
+  EPT_GEN_INDEFINITE,        ///< Generalized Hermitian indefinite
+  EPT_GEN_NON_HERMITIAN,     ///< Generalized Non-Hermitian
+  EPT_POS_GEN_NON_HERMITIAN, ///< Generalized Non-Hermitian with positive (semi-)definite B
+  EPT_SLEPC_DEFAULT          ///< use whatever SLPEC has by default
 };
 
 /**
@@ -292,7 +708,23 @@ enum WhichEigenPairs
   WEP_TARGET_MAGNITUDE,   ///< target magnitude
   WEP_TARGET_REAL,        ///< target real
   WEP_TARGET_IMAGINARY,   ///< target imaginary
-  WEP_ALL_EIGENVALUES     ///< all eigenvalues
+  WEP_ALL_EIGENVALUES,    ///< all eigenvalues
+  WEP_SLEPC_DEFAULT       ///< use whatever we have in SLEPC
+};
+
+/**
+ * Time integrators
+ */
+enum TimeIntegratorType
+{
+  TI_IMPLICIT_EULER,
+  TI_EXPLICIT_EULER,
+  TI_CRANK_NICOLSON,
+  TI_BDF2,
+  TI_EXPLICIT_MIDPOINT,
+  TI_LSTABLE_DIRK2,
+  TI_EXPLICIT_TVD_RK_2,
+  TI_NEWMARK_BETA
 };
 
 /**
@@ -319,13 +751,88 @@ enum LineSearchType
   LS_BASICNONORMS,
 #else
   LS_SHELL,
+  LS_CONTACT,
+  LS_PROJECT,
   LS_L2,
   LS_BT,
   LS_CP
 #endif
 #endif
 };
+
+/**
+ * Type of the matrix-free finite-differencing parameter
+ */
+enum MffdType
+{
+  MFFD_INVALID, ///< means not set
+  MFFD_WP,
+  MFFD_DS
+};
+
+/**
+ * Type of patch update strategy for modeling node-face constraints or contact
+ */
+enum PatchUpdateType
+{
+  Never,
+  Always,
+  Auto,
+  Iteration
+};
+
+/**
+ * Main types of Relationship Managers
+ */
+enum class RelationshipManagerType : unsigned char
+{
+  DEFAULT = 0,
+  GEOMETRIC = 1 << 0,
+  ALGEBRAIC = 1 << 1,
+  COUPLING = 1 << 2
+};
+
+enum RMSystemType
+{
+  NONLINEAR,
+  AUXILIARY,
+  NONE
+};
+
+enum VectorTagType
+{
+  VECTOR_TAG_RESIDUAL = 0,
+  VECTOR_TAG_SOLUTION = 1,
+  VECTOR_TAG_ANY = 2
+};
+
+/**
+ * The type for the callback to set RelationshipManager parameters
+ */
+typedef std::function<void(const InputParameters &, InputParameters &)>
+    RelationshipManagerInputParameterCallback;
+
+std::string stringify(const Moose::RelationshipManagerType & t);
+} // namespace Moose
+
+namespace libMesh
+{
+template <>
+inline void
+print_helper(std::ostream & os, const Moose::RelationshipManagerType * param)
+{
+  // Specialization so that we don't print out unprintable characters
+  os << Moose::stringify(*param);
 }
+
+// End of Moose Namespace
+}
+
+template <>
+struct enable_bitmask_operators<Moose::RelationshipManagerType>
+{
+  static const bool enable = true;
+};
 
 /**
  * This Macro is used to generate std::string derived types useful for
@@ -346,7 +853,10 @@ enum LineSearchType
 
 // Instantiate new Types
 
-/// This type is for expected filenames, it can be used to trigger open file dialogs in the GUI
+/// This type is for expected (i.e. input) file names or paths that your simulation needs.  If
+/// relative paths are assigned to this type, they are treated/modified to be relative to the
+/// location of the simulation's main input file's directory.  It can be used to trigger open file
+/// dialogs in the GUI.
 DerivativeStringClass(FileName);
 
 /// This type is for expected filenames where the extension is unwanted, it can be used to trigger open file dialogs in the GUI
@@ -409,4 +919,11 @@ DerivativeStringClass(MaterialPropertyName);
 /// User for accessing Material objects
 DerivativeStringClass(MaterialName);
 
-#endif // MOOSETYPES_H
+/// Tag Name
+DerivativeStringClass(TagName);
+
+/// Name of MeshGenerators
+DerivativeStringClass(MeshGeneratorName);
+
+/// Name of extra element IDs
+DerivativeStringClass(ExtraElementIDName);

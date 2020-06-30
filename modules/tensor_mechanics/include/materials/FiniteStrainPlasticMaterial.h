@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 // Original class author: A.M. Jokisaari,  O. Heinonen
 
-#ifndef FINITESTRAINPLASTICMATERIAL_H
-#define FINITESTRAINPLASTICMATERIAL_H
-
 #include "ComputeStressBase.h"
-
-class FiniteStrainPlasticMaterial;
-
-template <>
-InputParameters validParams<FiniteStrainPlasticMaterial>();
 
 /**
  * FiniteStrainPlasticMaterial implements rate-independent associative J2 plasticity
@@ -27,20 +23,25 @@ InputParameters validParams<FiniteStrainPlasticMaterial>();
 class FiniteStrainPlasticMaterial : public ComputeStressBase
 {
 public:
+  static InputParameters validParams();
+
   FiniteStrainPlasticMaterial(const InputParameters & parameters);
 
 protected:
   virtual void computeQpStress();
   virtual void initQpStatefulProperties();
-
   std::vector<Real> _yield_stress_vector;
   MaterialProperty<RankTwoTensor> & _plastic_strain;
   const MaterialProperty<RankTwoTensor> & _plastic_strain_old;
   MaterialProperty<Real> & _eqv_plastic_strain;
   const MaterialProperty<Real> & _eqv_plastic_strain_old;
+  /// The old stress tensor
   const MaterialProperty<RankTwoTensor> & _stress_old;
   const MaterialProperty<RankTwoTensor> & _strain_increment;
   const MaterialProperty<RankTwoTensor> & _rotation_increment;
+  /// Name of the elasticity tensor material property
+  const std::string _elasticity_tensor_name;
+  /// Elasticity tensor material property
   const MaterialProperty<RankFourTensor> & _elasticity_tensor;
   Real _rtol;
   Real _ftol;
@@ -134,5 +135,3 @@ protected:
    */
   Real getdYieldStressdPlasticStrain(const Real equivalent_plastic_strain);
 };
-
-#endif // FINITESTRAINPLASTICMATERIAL_H

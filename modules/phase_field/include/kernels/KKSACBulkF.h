@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSACBULKF_H
-#define KKSACBULKF_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "KKSACBulkBase.h"
 
 // Forward Declarations
-class KKSACBulkF;
-
-template <>
-InputParameters validParams<KKSACBulkF>();
 
 /**
  * KKSACBulkBase child class for the free energy difference term
@@ -25,6 +23,8 @@ InputParameters validParams<KKSACBulkF>();
 class KKSACBulkF : public KKSACBulkBase
 {
 public:
+  static InputParameters validParams();
+
   KKSACBulkF(const InputParameters & parameters);
 
 protected:
@@ -39,6 +39,10 @@ protected:
 
   /// Second derivative of the double well function \f$ \frac {d^2}{d\eta^2} g(\eta) \f$
   const MaterialProperty<Real> & _prop_d2g;
-};
 
-#endif // KKSACBULKF_H
+  /// Value of the free energy function \f$ F_b \f$
+  const MaterialProperty<Real> & _prop_Fb;
+
+  /// Derivative of the free energy function \f$ \frac d{d\eta} F_b \f$
+  const MaterialProperty<Real> & _prop_dFb;
+};

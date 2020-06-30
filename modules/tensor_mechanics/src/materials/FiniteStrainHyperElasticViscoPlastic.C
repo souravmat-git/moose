@@ -1,17 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "FiniteStrainHyperElasticViscoPlastic.h"
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", FiniteStrainHyperElasticViscoPlastic);
+
 InputParameters
-validParams<FiniteStrainHyperElasticViscoPlastic>()
+FiniteStrainHyperElasticViscoPlastic::validParams()
 {
-  InputParameters params = validParams<ComputeStressBase>();
+  InputParameters params = ComputeStressBase::validParams();
   params.addParam<Real>(
       "resid_abs_tol", 1e-10, "Absolute Tolerance for flow rate residual equation");
   params.addParam<Real>(
@@ -30,7 +34,7 @@ validParams<FiniteStrainHyperElasticViscoPlastic>()
   params.addParam<std::vector<UserObjectName>>(
       "internal_var_rate_user_objects",
       "List of User object names that computes internal variable rates and derivatives");
-  params.addClassDescription("Material class for hyper-elastic visco-platic flow: Can handle "
+  params.addClassDescription("Material class for hyper-elastic viscoplatic flow: Can handle "
                              "multiple flow models defined by flowratemodel type user objects");
 
   return params;
@@ -61,6 +65,8 @@ FiniteStrainHyperElasticViscoPlastic::FiniteStrainHyperElasticViscoPlastic(
     _fp(declareProperty<RankTwoTensor>(_base_name + "fp")),
     _fp_old(getMaterialPropertyOld<RankTwoTensor>(_base_name + "fp")),
     _ce(declareProperty<RankTwoTensor>(_base_name + "ce")),
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _deformation_gradient(getMaterialProperty<RankTwoTensor>(_base_name + "deformation_gradient")),
     _deformation_gradient_old(
         getMaterialPropertyOld<RankTwoTensor>(_base_name + "deformation_gradient")),
@@ -177,12 +183,9 @@ void
 FiniteStrainHyperElasticViscoPlastic::initQpStatefulProperties()
 {
   _stress[_qp].zero();
-
-  _fp[_qp].zero();
-  _fp[_qp].addIa(1.0);
   _ce[_qp].zero();
-
   _pk2[_qp].zero();
+  _fp[_qp].setToIdentity();
 
   for (unsigned int i = 0; i < _num_flow_rate_uos; ++i)
     (*_flow_rate_prop[i])[_qp] = 0.0;
@@ -220,7 +223,7 @@ FiniteStrainHyperElasticViscoPlastic::computeQpStress()
 
     for (unsigned int istep = 0; istep < num_substep; ++istep)
     {
-      _dfgrd_tmp = (istep + 1) * delta_dfgrd / num_substep + _deformation_gradient_old[_qp];
+      _dfgrd_tmp = (istep + 1.0) * delta_dfgrd / num_substep + _deformation_gradient_old[_qp];
       if (!solveQp())
       {
         converge = false;
@@ -476,8 +479,7 @@ FiniteStrainHyperElasticViscoPlastic::computePK2StressAndDerivative()
 void
 FiniteStrainHyperElasticViscoPlastic::computeElasticStrain()
 {
-  RankTwoTensor iden;
-  iden.addIa(1.0);
+  RankTwoTensor iden(RankTwoTensor::initIdentity);
   _ee = 0.5 * (_ce[_qp] - iden);
 }
 
@@ -500,8 +502,7 @@ FiniteStrainHyperElasticViscoPlastic::computeElasticRightCauchyGreenTensor()
 void
 FiniteStrainHyperElasticViscoPlastic::computeElasticPlasticDeformGrad()
 {
-  RankTwoTensor iden;
-  iden.addIa(1.0);
+  RankTwoTensor iden(RankTwoTensor::initIdentity);
 
   RankTwoTensor val;
   for (unsigned int i = 0; i < _num_flow_rate_uos; ++i)

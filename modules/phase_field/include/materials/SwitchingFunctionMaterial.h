@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SWITCHINGFUNCTIONMATERIAL_H
-#define SWITCHINGFUNCTIONMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "OrderParameterFunctionMaterial.h"
 
 // Forward Declarations
-class SwitchingFunctionMaterial;
-
-template <>
-InputParameters validParams<SwitchingFunctionMaterial>();
 
 /**
  * Material class to provide the switching function \f$ h(\eta) \f$ for
@@ -25,6 +23,8 @@ InputParameters validParams<SwitchingFunctionMaterial>();
 class SwitchingFunctionMaterial : public OrderParameterFunctionMaterial
 {
 public:
+  static InputParameters validParams();
+
   SwitchingFunctionMaterial(const InputParameters & parameters);
 
 protected:
@@ -33,5 +33,3 @@ protected:
   /// Polynomial order of the switching function \f$ h(\eta) \f$
   MooseEnum _h_order;
 };
-
-#endif // SWITCHINGFUNCTIONMATERIAL_H

@@ -1,14 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ComputeFiniteStrain.h"
 #include "Assembly.h"
 
-// libmesh includes
 #include "libmesh/quadrature.h"
 #include "libmesh/utility.h"
 
@@ -18,11 +19,12 @@ ComputeFiniteStrain::decompositionType()
   return MooseEnum("TaylorExpansion EigenSolution", "TaylorExpansion");
 }
 
-template <>
+registerMooseObject("TensorMechanicsApp", ComputeFiniteStrain);
+
 InputParameters
-validParams<ComputeFiniteStrain>()
+ComputeFiniteStrain::validParams()
 {
-  InputParameters params = validParams<ComputeIncrementalStrainBase>();
+  InputParameters params = ComputeIncrementalStrainBase::validParams();
   params.addClassDescription(
       "Compute a strain increment and rotation increment for finite strains.");
   params.addParam<MooseEnum>("decomposition_method",
@@ -124,6 +126,9 @@ ComputeFiniteStrain::computeQpStrain()
       _rotation_increment[_qp] * _mechanical_strain[_qp] * _rotation_increment[_qp].transpose();
   _total_strain[_qp] =
       _rotation_increment[_qp] * _total_strain[_qp] * _rotation_increment[_qp].transpose();
+
+  if (_global_strain)
+    _total_strain[_qp] += (*_global_strain)[_qp];
 }
 
 void
@@ -135,7 +140,7 @@ ComputeFiniteStrain::computeQpIncrements(RankTwoTensor & total_strain_increment,
     case DecompMethod::TaylorExpansion:
     {
       // inverse of _Fhat
-      RankTwoTensor invFhat(_Fhat[_qp].inverse());
+      const RankTwoTensor invFhat = _Fhat[_qp].inverse();
 
       // A = I - _Fhat^-1
       RankTwoTensor A(RankTwoTensor::initIdentity);
@@ -156,9 +161,13 @@ ComputeFiniteStrain::computeQpIncrements(RankTwoTensor & total_strain_increment,
       const Real p = trFhatinv_1 * trFhatinv_1 / 4.0;
 
       // cos theta_a
-      const Real C1 =
-          std::sqrt(p + 3.0 * Utility::pow<2>(p) * (1.0 - (p + q)) / Utility::pow<2>(p + q) -
-                    2.0 * Utility::pow<3>(p) * (1.0 - (p + q)) / Utility::pow<3>(p + q));
+      const Real C1_squared = p +
+                              3.0 * Utility::pow<2>(p) * (1.0 - (p + q)) / Utility::pow<2>(p + q) -
+                              2.0 * Utility::pow<3>(p) * (1.0 - (p + q)) / Utility::pow<3>(p + q);
+      mooseAssert(C1_squared >= 0.0,
+                  "Cannot take square root of a negative number. This may happen when elements "
+                  "become heavily distorted.");
+      const Real C1 = std::sqrt(C1_squared);
 
       Real C2;
       if (q > 0.01)
@@ -169,12 +178,17 @@ ComputeFiniteStrain::computeQpIncrements(RankTwoTensor & total_strain_increment,
         C2 = 0.125 + q * 0.03125 * (Utility::pow<2>(p) - 12.0 * (p - 1.0)) / Utility::pow<2>(p) +
              Utility::pow<2>(q) * (p - 2.0) * (Utility::pow<2>(p) - 10.0 * p + 32.0) /
                  Utility::pow<3>(p) +
-             Utility::pow<3>(q) * (1104.0 - 992.0 * p + 376.0 * Utility::pow<2>(p) -
-                                   72.0 * Utility::pow<3>(p) + 5.0 * Utility::pow<4>(p)) /
+             Utility::pow<3>(q) *
+                 (1104.0 - 992.0 * p + 376.0 * Utility::pow<2>(p) - 72.0 * Utility::pow<3>(p) +
+                  5.0 * Utility::pow<4>(p)) /
                  (512.0 * Utility::pow<4>(p));
-      const Real C3 =
-          0.5 * std::sqrt((p * q * (3.0 - q) + Utility::pow<3>(p) + Utility::pow<2>(q)) /
-                          Utility::pow<3>(p + q)); // sin theta_a/(2 sqrt(q))
+
+      const Real C3_test =
+          (p * q * (3.0 - q) + Utility::pow<3>(p) + Utility::pow<2>(q)) / Utility::pow<3>(p + q);
+      mooseAssert(C3_test >= 0.0,
+                  "Cannot take square root of a negative number. This may happen when elements "
+                  "become heavily distorted.");
+      const Real C3 = 0.5 * std::sqrt(C3_test); // sin theta_a/(2 sqrt(q))
 
       // Calculate incremental rotation. Note that this value is the transpose of that from Rashid,
       // 93, so we transpose it before storing
@@ -211,8 +225,8 @@ ComputeFiniteStrain::computeQpIncrements(RankTwoTensor & total_strain_increment,
       N2.vectorOuterProduct(e_vector.column(1), e_vector.column(1));
       N3.vectorOuterProduct(e_vector.column(2), e_vector.column(2));
 
-      RankTwoTensor Uhat = N1 * lambda1 + N2 * lambda2 + N3 * lambda3;
-      RankTwoTensor invUhat(Uhat.inverse());
+      const RankTwoTensor Uhat = N1 * lambda1 + N2 * lambda2 + N3 * lambda3;
+      const RankTwoTensor invUhat(Uhat.inverse());
 
       rotation_increment = _Fhat[_qp] * invUhat;
 

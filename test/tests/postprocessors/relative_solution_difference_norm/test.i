@@ -28,7 +28,7 @@
     variable = u
   [../]
   [./ffn]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = ffn
   [../]
@@ -60,8 +60,6 @@
   type = Transient
   dt = 1
   num_steps = 2
-  trans_ss_check = true
-  ss_check_tol = 1e-08
 []
 
 [Outputs]

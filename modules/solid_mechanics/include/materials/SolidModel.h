@@ -1,18 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef SOLIDMODEL_H
-#define SOLIDMODEL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "DerivativeMaterialInterface.h"
 #include "SymmTensor.h"
+#include "RankTwoTensor.h"
 
 // Forward declarations
 class ConstitutiveModel;
-class SolidModel;
 class SymmElasticityTensor;
 class PiecewiseLinear;
 class VolumetricModel;
@@ -21,15 +23,14 @@ namespace SolidMechanics
 class Element;
 }
 
-template <>
-InputParameters validParams<SolidModel>();
-
 /**
  * SolidModel is the base class for all this module's solid mechanics material models.
  */
 class SolidModel : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   SolidModel(const InputParameters & parameters);
   virtual ~SolidModel();
 
@@ -49,7 +50,7 @@ public:
     CR_UNKNOWN
   };
 
-  QBase * qrule() { return _qrule; }
+  const QBase * qrule() { return _qrule; }
   const Point & q_point(unsigned i) const { return _q_point[i]; }
   Real JxW(unsigned i) const { return _JxW[i]; }
 
@@ -70,15 +71,15 @@ protected:
   Real _shear_modulus;
   Real _youngs_modulus;
 
-  Function * _youngs_modulus_function;
-  Function * _poissons_ratio_function;
+  const Function * _youngs_modulus_function;
+  const Function * _poissons_ratio_function;
 
   const CRACKING_RELEASE _cracking_release;
   Real _cracking_stress;
   const Real _cracking_residual_stress;
   const Real _cracking_beta;
   const std::string _compute_method;
-  Function * const _cracking_stress_function;
+  const Function * const _cracking_stress_function;
 
   Real _cracking_alpha;
   std::vector<unsigned int> _active_crack_planes;
@@ -92,7 +93,7 @@ protected:
   const VariableValue & _temperature_old;
   const VariableGradient & _temp_grad;
   const Real _alpha;
-  Function * _alpha_function;
+  const Function * _alpha_function;
   PiecewiseLinear * _piecewise_linear_alpha_function;
   bool _has_stress_free_temp;
   Real _stress_free_temp;
@@ -138,17 +139,22 @@ protected:
   // The derivative of the stress with respect to Temperature
   MaterialProperty<SymmTensor> & _d_stress_dT;
 
+  /// Total strain increment, including mechanical strains and eigenstrains
   SymmTensor _total_strain_increment;
+  /// Mechanical strain increment, which is the total strain increment minus eigenstrains
+  SymmTensor _mechanical_strain_increment;
+  /// In most models, this is the mechanical strain increment, but for
+  /// inelastic models, it has the inelastic component subtracted from it, so it
+  /// is the elastic strain increment
   SymmTensor _strain_increment;
 
   const bool _compute_JIntegral;
   const bool _compute_InteractionIntegral;
-  bool _store_stress_older;
 
   // These are used in calculation of the J integral
   MaterialProperty<Real> * _SED;
   const MaterialProperty<Real> * _SED_old;
-  MaterialProperty<ColumnMajorMatrix> * _Eshelby_tensor;
+  MaterialProperty<RankTwoTensor> * _Eshelby_tensor;
   MaterialProperty<RealVectorValue> * _J_thermal_term_vec;
 
   // This is used in calculation of the J Integral and Interaction Integral
@@ -263,5 +269,3 @@ private:
 
   SymmElasticityTensor * _local_elasticity_tensor;
 };
-
-#endif

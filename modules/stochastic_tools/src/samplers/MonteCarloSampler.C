@@ -1,35 +1,49 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MonteCarloSampler.h"
+#include "Distribution.h"
 
-template <>
+registerMooseObjectAliased("StochasticToolsApp", MonteCarloSampler, "MonteCarlo");
+registerMooseObjectReplaced("StochasticToolsApp",
+                            MonteCarloSampler,
+                            "07/01/2020 00:00",
+                            MonteCarlo);
+
 InputParameters
-validParams<MonteCarloSampler>()
+MonteCarloSampler::validParams()
 {
-  InputParameters params = validParams<Sampler>();
+  InputParameters params = Sampler::validParams();
   params.addClassDescription("Monte Carlo Sampler.");
-  params.addRequiredParam<unsigned int>(
-      "n_samples", "Number of Monte Carlo samples to perform for each distribution.");
+  params.addRequiredParam<dof_id_type>("num_rows", "The number of rows per matrix to generate.");
+  params.addRequiredParam<std::vector<DistributionName>>(
+      "distributions",
+      "The distribution names to be sampled, the number of distributions provided defines the "
+      "number of columns per matrix.");
   return params;
 }
 
 MonteCarloSampler::MonteCarloSampler(const InputParameters & parameters)
-  : Sampler(parameters), _num_samples(getParam<unsigned int>("n_samples"))
+  : Sampler(parameters),
+    _distribution_names(getParam<std::vector<DistributionName>>("distributions")),
+    _perf_compute_sample(registerTimedSection("computeSample", 4))
 {
+  for (const DistributionName & name : _distribution_names)
+    _distributions.push_back(&getDistributionByName(name));
+
+  setNumberOfRows(getParam<dof_id_type>("num_rows"));
+  setNumberOfCols(_distributions.size());
 }
 
-std::vector<DenseMatrix<Real>>
-MonteCarloSampler::sample()
+Real
+MonteCarloSampler::computeSample(dof_id_type /*row_index*/, dof_id_type col_index)
 {
-  std::vector<DenseMatrix<Real>> output(1);
-  output[0].resize(_num_samples, _distributions.size());
-  for (std::size_t i = 0; i < _num_samples; ++i)
-    for (auto j = beginIndex(_distributions); j < _distributions.size(); ++j)
-      output[0](i, j) = _distributions[j]->quantile(rand());
-  return output;
+  TIME_SECTION(_perf_compute_sample);
+  return _distributions[col_index]->quantile(getRand());
 }

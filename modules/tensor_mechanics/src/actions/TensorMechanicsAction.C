@@ -1,9 +1,12 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "Conversion.h"
 #include "FEProblem.h"
 #include "Factory.h"
@@ -14,11 +17,26 @@
 #include "libmesh/string_to_enum.h"
 #include <algorithm>
 
-template <>
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "meta_action");
+
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "setup_mesh_complete");
+
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "validate_coordinate_systems");
+
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "add_variable");
+
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "add_aux_variable");
+
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "add_kernel");
+
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "add_aux_kernel");
+
+registerMooseAction("TensorMechanicsApp", TensorMechanicsAction, "add_material");
+
 InputParameters
-validParams<TensorMechanicsAction>()
+TensorMechanicsAction::validParams()
 {
-  InputParameters params = validParams<TensorMechanicsActionBase>();
+  InputParameters params = TensorMechanicsActionBase::validParams();
   params.addClassDescription("Set up stress divergence kernels with coordinate system aware logic");
 
   // parameters specified here only appear in the input file sub-blocks of the
@@ -34,13 +52,27 @@ validParams<TensorMechanicsAction>()
                                   "Add scalar quantity output for stress and/or strain (will be "
                                   "appended to the list in `generate_output`)");
   params.addParamNamesToGroup("additional_generate_output", "Output");
+  params.addParam<std::string>(
+      "strain_base_name",
+      "The base name used for the strain. If not provided, it will be set equal to base_name");
+  params.addParam<std::vector<TagName>>(
+      "extra_vector_tags",
+      "The tag names for extra vectors that residual data should be saved into");
+  params.addParam<Real>("scaling", "The scaling to apply to the displacement variables");
+  params.addParam<Point>(
+      "cylindrical_axis_point1",
+      "Starting point for direction of axis of rotation for cylindrical stress/strain.");
+  params.addParam<Point>(
+      "cylindrical_axis_point2",
+      "Ending point for direction of axis of rotation for cylindrical stress/strain.");
+  params.addParam<Point>("direction", "Direction stress/strain is calculated in");
 
   return params;
 }
 
 TensorMechanicsAction::TensorMechanicsAction(const InputParameters & params)
   : TensorMechanicsActionBase(params),
-    _displacements(getParam<std::vector<NonlinearVariableName>>("displacements")),
+    _displacements(getParam<std::vector<VariableName>>("displacements")),
     _ndisp(_displacements.size()),
     _coupled_displacements(_ndisp),
     _save_in(getParam<std::vector<AuxVariableName>>("save_in")),
@@ -48,7 +80,13 @@ TensorMechanicsAction::TensorMechanicsAction(const InputParameters & params)
     _subdomain_names(getParam<std::vector<SubdomainName>>("block")),
     _subdomain_ids(),
     _strain(getParam<MooseEnum>("strain").getEnum<Strain>()),
-    _planar_formulation(getParam<MooseEnum>("planar_formulation").getEnum<PlanarFormulation>())
+    _planar_formulation(getParam<MooseEnum>("planar_formulation").getEnum<PlanarFormulation>()),
+    _out_of_plane_direction(
+        getParam<MooseEnum>("out_of_plane_direction").getEnum<OutOfPlaneDirection>()),
+    _base_name(isParamValid("base_name") ? getParam<std::string>("base_name") + "_" : ""),
+    _cylindrical_axis_point1_valid(params.isParamSetByUser("cylindrical_axis_point1")),
+    _cylindrical_axis_point2_valid(params.isParamSetByUser("cylindrical_axis_point2")),
+    _direction_valid(params.isParamSetByUser("direction"))
 {
   // determine if incremental strains are to be used
   if (isParamValid("incremental"))
@@ -85,7 +123,7 @@ TensorMechanicsAction::TensorMechanicsAction(const InputParameters & params)
     _use_displaced_mesh = use_displaced_mesh_param;
   }
 
-  // convert vector of NonlinearVariableName to vector of VariableName
+  // convert vector of VariableName to vector of VariableName
   for (unsigned int i = 0; i < _ndisp; ++i)
     _coupled_displacements[i] = _displacements[i];
 
@@ -99,8 +137,16 @@ TensorMechanicsAction::TensorMechanicsAction(const InputParameters & params)
         _ndisp);
 
   // plane strain consistency check
-  if (_planar_formulation != PlanarFormulation::None && _ndisp != 2)
-    mooseError("Plane strain only works in 2 dimensions");
+  if (_planar_formulation != PlanarFormulation::None)
+  {
+    if (params.isParamSetByUser("out_of_plane_strain") &&
+        _planar_formulation != PlanarFormulation::WeakPlaneStress)
+      mooseError(
+          "out_of_plane_strain should only be specified with planar_formulation=WEAK_PLANE_STRESS");
+    else if (!params.isParamSetByUser("out_of_plane_strain") &&
+             _planar_formulation == PlanarFormulation::WeakPlaneStress)
+      mooseError("out_of_plane_strain must be specified with planar_formulation=WEAK_PLANE_STRESS");
+  }
 
   // convert output variable names to lower case
   for (const auto & out : getParam<MultiMooseEnum>("generate_output"))
@@ -113,33 +159,47 @@ TensorMechanicsAction::TensorMechanicsAction(const InputParameters & params)
   // Error if volumetric locking correction is true for 1D problems
   if (_ndisp == 1 && getParam<bool>("volumetric_locking_correction"))
     mooseError("Volumetric locking correction should be set to false for 1D problems.");
+
+  if (!getParam<bool>("add_variables") && params.isParamSetByUser("scaling"))
+    paramError("scaling",
+               "The scaling parameter has no effect unless add_variables is set to true. Did you "
+               "mean to set 'add_variables = true'?");
+
+  // Get cylindrical axis points if set by user
+  if (_cylindrical_axis_point1_valid && _cylindrical_axis_point2_valid)
+  {
+    _cylindrical_axis_point1 = getParam<Point>("cylindrical_axis_point1");
+    _cylindrical_axis_point2 = getParam<Point>("cylindrical_axis_point2");
+  }
+
+  // Get direction for tensor component if set by user
+  if (_direction_valid)
+    _direction = getParam<Point>("direction");
 }
 
 void
 TensorMechanicsAction::act()
 {
-  //
-  // Consistency check for the coordinate system
-  //
+  std::string ad_prepend = "";
+  if (_use_ad)
+    ad_prepend = "AD";
+
+  // Consistency checks across subdomains
   actSubdomainChecks();
 
-  //
   // Gather info from all other TensorMechanicsAction
-  //
   actGatherActionParameters();
 
-  //
   // Deal with the optional AuxVariable based tensor quantity output
-  //
   actOutputGeneration();
 
-  //
   // Meta action which optionally spawns other actions
-  //
   if (_current_task == "meta_action")
   {
     if (_planar_formulation == PlanarFormulation::GeneralizedPlaneStrain)
     {
+      if (_use_ad)
+        paramError("use_automatic_differentiation", "AD not setup for use with PlaneStrain");
       // Set the action parameters
       const std::string type = "GeneralizedPlaneStrainAction";
       auto action_params = _action_factory.getValidParams(type);
@@ -149,44 +209,42 @@ TensorMechanicsAction::act()
       action_params.set<bool>("use_displaced_mesh") = _use_displaced_mesh;
       if (isParamValid("pressure_factor"))
         action_params.set<Real>("factor") = getParam<Real>("pressure_factor");
-
       // Create and add the action to the warehouse
       auto action = MooseSharedNamespace::static_pointer_cast<MooseObjectAction>(
           _action_factory.create(type, name() + "_gps", action_params));
       _awh.addActionBlock(action);
+      if (isParamValid("extra_vector_tags"))
+        action_params.set<std::vector<TagName>>("extra_vector_tags") =
+            getParam<std::vector<TagName>>("extra_vector_tags");
     }
   }
 
-  //
   // Add variables (optional)
-  //
   else if (_current_task == "add_variable" && getParam<bool>("add_variables"))
   {
+    auto params = _factory.getValidParams("MooseVariable");
     // determine necessary order
     const bool second = _problem->mesh().hasSecondOrderElements();
+
+    params.set<MooseEnum>("order") = second ? "SECOND" : "FIRST";
+    params.set<MooseEnum>("family") = "LAGRANGE";
+    if (isParamValid("scaling"))
+      params.set<std::vector<Real>>("scaling") = {getParam<Real>("scaling")};
 
     // Loop through the displacement variables
     for (const auto & disp : _displacements)
     {
       // Create displacement variables
-      _problem->addVariable(disp,
-                            FEType(Utility::string_to_enum<Order>(second ? "SECOND" : "FIRST"),
-                                   Utility::string_to_enum<FEFamily>("LAGRANGE")),
-                            1.0,
-                            _subdomain_id_union.empty() ? nullptr : &_subdomain_id_union);
+      _problem->addVariable("MooseVariable", disp, params);
     }
   }
 
-  //
-  // Add Strain Materials
-  //
+  // Add Materials
   else if (_current_task == "add_material")
   {
     std::string type;
 
-    //
     // no plane strain
-    //
     if (_planar_formulation == PlanarFormulation::None)
     {
       std::map<std::pair<Moose::CoordinateSystemType, StrainAndIncrement>, std::string> type_map = {
@@ -212,16 +270,28 @@ TensorMechanicsAction::act()
       else
         mooseError("Unsupported strain formulation");
     }
-    else if (_planar_formulation == PlanarFormulation::PlaneStrain ||
+    else if (_planar_formulation == PlanarFormulation::WeakPlaneStress ||
+             _planar_formulation == PlanarFormulation::PlaneStrain ||
              _planar_formulation == PlanarFormulation::GeneralizedPlaneStrain)
     {
-      std::map<StrainAndIncrement, std::string> type_map = {
-          {StrainAndIncrement::SmallTotal, "ComputePlaneSmallStrain"},
-          {StrainAndIncrement::SmallIncremental, "ComputePlaneIncrementalStrain"},
-          {StrainAndIncrement::FiniteIncremental, "ComputePlaneFiniteStrain"}};
+      if (_use_ad && (_planar_formulation == PlanarFormulation::PlaneStrain ||
+                      _planar_formulation == PlanarFormulation::GeneralizedPlaneStrain))
+        paramError("use_automatic_differentiation",
+                   "AD not setup for use with PlaneStrain or GeneralizedPlaneStrain");
+
+      std::map<std::pair<Moose::CoordinateSystemType, StrainAndIncrement>, std::string> type_map = {
+          {{Moose::COORD_XYZ, StrainAndIncrement::SmallTotal}, "ComputePlaneSmallStrain"},
+          {{Moose::COORD_XYZ, StrainAndIncrement::SmallIncremental},
+           "ComputePlaneIncrementalStrain"},
+          {{Moose::COORD_XYZ, StrainAndIncrement::FiniteIncremental}, "ComputePlaneFiniteStrain"},
+          {{Moose::COORD_RZ, StrainAndIncrement::SmallTotal}, "ComputeAxisymmetric1DSmallStrain"},
+          {{Moose::COORD_RZ, StrainAndIncrement::SmallIncremental},
+           "ComputeAxisymmetric1DIncrementalStrain"},
+          {{Moose::COORD_RZ, StrainAndIncrement::FiniteIncremental},
+           "ComputeAxisymmetric1DFiniteStrain"}};
 
       // choose kernel type based on coordinate system
-      auto type_it = type_map.find(_strain_and_increment);
+      auto type_it = type_map.find(std::make_pair(_coord_system, _strain_and_increment));
       if (type_it != type_map.end())
         type = type_it->second;
       else
@@ -231,40 +301,69 @@ TensorMechanicsAction::act()
       mooseError("Unsupported planar formulation");
 
     // set material parameters
-    auto params = _factory.getValidParams(type);
+    auto params = _factory.getValidParams(ad_prepend + type);
     params.applyParameters(parameters(),
-                           {"displacements", "use_displaced_mesh", "scalar_out_of_plane_strain"});
+                           {"displacements",
+                            "use_displaced_mesh",
+                            "out_of_plane_strain",
+                            "scalar_out_of_plane_strain"});
+
+    if (isParamValid("strain_base_name"))
+      params.set<std::string>("base_name") = getParam<std::string>("strain_base_name");
 
     params.set<std::vector<VariableName>>("displacements") = _coupled_displacements;
     params.set<bool>("use_displaced_mesh") = false;
+
     if (isParamValid("scalar_out_of_plane_strain"))
       params.set<std::vector<VariableName>>("scalar_out_of_plane_strain") = {
-          getParam<NonlinearVariableName>("scalar_out_of_plane_strain")};
+          getParam<VariableName>("scalar_out_of_plane_strain")};
 
-    _problem->addMaterial(type, name() + "_strain", params);
+    if (isParamValid("out_of_plane_strain"))
+      params.set<std::vector<VariableName>>("out_of_plane_strain") = {
+          getParam<VariableName>("out_of_plane_strain")};
+
+    _problem->addMaterial(ad_prepend + type, name() + "_strain", params);
   }
 
-  //
-  // Add Stress Divergence Kernels
-  //
+  // Add Stress Divergence (and optionally WeakPlaneStress) Kernels
   else if (_current_task == "add_kernel")
   {
-    auto tensor_kernel_type = getKernelType();
-    auto params = getKernelParameters(tensor_kernel_type);
-
     for (unsigned int i = 0; i < _ndisp; ++i)
     {
+      auto tensor_kernel_type = getKernelType();
+      auto params = getKernelParameters(ad_prepend + tensor_kernel_type);
+
       std::string kernel_name = "TM_" + name() + Moose::stringify(i);
 
+      // Set appropriate components for kernels, including in the cases where a planar model is
+      // running in planes other than the x-y plane (defined by _out_of_plane_strain_direction).
+      if (_out_of_plane_direction == OutOfPlaneDirection::x && i == 0)
+        continue;
+      else if (_out_of_plane_direction == OutOfPlaneDirection::y && i == 1)
+        continue;
+
       params.set<unsigned int>("component") = i;
+
       params.set<NonlinearVariableName>("variable") = _displacements[i];
 
       if (_save_in.size() == _ndisp)
         params.set<std::vector<AuxVariableName>>("save_in") = {_save_in[i]};
       if (_diag_save_in.size() == _ndisp)
         params.set<std::vector<AuxVariableName>>("diag_save_in") = {_diag_save_in[i]};
+      if (isParamValid("out_of_plane_strain"))
+        params.set<std::vector<VariableName>>("out_of_plane_strain") = {
+            getParam<VariableName>("out_of_plane_strain")};
 
-      _problem->addKernel(tensor_kernel_type, kernel_name, params);
+      _problem->addKernel(ad_prepend + tensor_kernel_type, kernel_name, params);
+    }
+
+    if (_planar_formulation == PlanarFormulation::WeakPlaneStress)
+    {
+      auto params = getKernelParameters(ad_prepend + "WeakPlaneStress");
+      std::string wps_kernel_name = "TM_WPS_" + name();
+      params.set<NonlinearVariableName>("variable") = getParam<VariableName>("out_of_plane_strain");
+
+      _problem->addKernel(ad_prepend + "WeakPlaneStress", wps_kernel_name, params);
     }
   }
 }
@@ -272,9 +371,7 @@ TensorMechanicsAction::act()
 void
 TensorMechanicsAction::actSubdomainChecks()
 {
-  //
   // Do the coordinate system check only once the problem is created
-  //
   if (_current_task == "setup_mesh_complete")
   {
     // get subdomain IDs
@@ -296,79 +393,166 @@ TensorMechanicsAction::actSubdomainChecks()
       if (_problem->getCoordSystem(subdomain) != _coord_system)
         mooseError("The TensorMechanics action requires all subdomains to have the same coordinate "
                    "system.");
+
+    if (_coord_system == Moose::COORD_RZ)
+    {
+      if (_out_of_plane_direction != OutOfPlaneDirection::z)
+        mooseError("'out_of_plane_direction' must be 'z' for axisymmetric simulations");
+    }
+    else if (_planar_formulation != PlanarFormulation::None)
+    {
+      if (_out_of_plane_direction == OutOfPlaneDirection::z && _ndisp != 2)
+        mooseError(
+            "Must specify two displacements for plane strain when the out of plane direction is z");
+      else if (_out_of_plane_direction != OutOfPlaneDirection::z && _ndisp != 3)
+        mooseError("Must specify three displacements for plane strain when the out of plane "
+                   "direction is x or y");
+    }
   }
 }
 
 void
 TensorMechanicsAction::actOutputGeneration()
 {
-  //
+  if (_current_task == "add_material")
+    actOutputMatProp();
+
   // Add variables (optional)
-  //
-  if (_current_task == "add_aux_variable" && getParam<bool>("add_variables"))
+  if (_current_task == "add_aux_variable")
   {
+    auto params = _factory.getValidParams("MooseVariableConstMonomial");
+    params.set<MooseEnum>("order") = "CONSTANT";
+    params.set<MooseEnum>("family") = "MONOMIAL";
     // Loop through output aux variables
     for (auto out : _generate_output)
     {
       // Create output helper aux variables
-      _problem->addAuxVariable(out,
-                               FEType(Utility::string_to_enum<Order>("CONSTANT"),
-                                      Utility::string_to_enum<FEFamily>("MONOMIAL")),
-                               _subdomain_id_union.empty() ? nullptr : &_subdomain_id_union);
+      _problem->addAuxVariable("MooseVariableConstMonomial", _base_name + out, params);
     }
   }
 
-  //
   // Add output AuxKernels
-  //
   else if (_current_task == "add_aux_kernel")
   {
+    std::string ad_prepend = _use_ad ? "AD" : "";
     // Loop through output aux variables
+    for (auto out : _generate_output)
+    {
+      InputParameters params = emptyInputParameters();
+      ;
+      params = _factory.getValidParams(ad_prepend + "MaterialRealAux");
+      params.applyParameters(parameters());
+      params.set<MaterialPropertyName>("property") = _base_name + out;
+      params.set<AuxVariableName>("variable") = _base_name + out;
+      params.set<ExecFlagEnum>("execute_on") = EXEC_TIMESTEP_END;
+      _problem->addAuxKernel(
+          ad_prepend + "MaterialRealAux", _base_name + out + '_' + name(), params);
+    }
+  }
+}
+
+void
+TensorMechanicsAction::actOutputMatProp()
+{
+  std::string ad_prepend = _use_ad ? "AD" : "";
+
+  if (_current_task == "add_material")
+  {
+
+    // Add output Materials
     for (auto out : _generate_output)
     {
       std::string type = "";
       InputParameters params = emptyInputParameters();
 
-      // RankTwoAux
-      for (const auto & r2a : _ranktwoaux_table)
+      // RankTwoCartesianComponent
+      for (const auto & r2q : _rank_two_cartesian_component_table)
         for (unsigned int a = 0; a < 3; ++a)
           for (unsigned int b = 0; b < 3; ++b)
-            if (r2a.first + '_' + _component_table[a] + _component_table[b] == out)
+            if (r2q.first + '_' + _component_table[a] + _component_table[b] == out)
             {
-              type = "RankTwoAux";
+              type = ad_prepend + "RankTwoCartesianComponent";
               params = _factory.getValidParams(type);
-              params.set<MaterialPropertyName>("rank_two_tensor") = r2a.second;
+              params.set<MaterialPropertyName>("rank_two_tensor") = _base_name + r2q.second;
               params.set<unsigned int>("index_i") = a;
               params.set<unsigned int>("index_j") = b;
+              params.applyParameters(parameters());
+              params.set<std::string>("property_name") = _base_name + out;
             }
 
-      // RankTwoScalarAux
-      for (const auto & r2sa : _ranktwoscalaraux_table)
-        for (const auto & t : r2sa.second.second)
-          if (r2sa.first + '_' + t == out)
+      // RankTwoDirectionalComponent
+      for (const auto & r2sdq : _rank_two_directional_component_table)
+        for (const auto & t : r2sdq.second.second)
+          if (r2sdq.first + '_' + t == out)
           {
-            const auto r2a = _ranktwoaux_table.find(t);
-            if (r2a != _ranktwoaux_table.end())
+            const auto r2q = _rank_two_cartesian_component_table.find(t);
+            if (r2q != _rank_two_cartesian_component_table.end())
             {
-              type = "RankTwoScalarAux";
+              type = ad_prepend + "RankTwoDirectionalComponent";
               params = _factory.getValidParams(type);
-              params.set<MaterialPropertyName>("rank_two_tensor") = r2a->second;
-              params.set<MooseEnum>("scalar_type") = r2sa.second.first;
+              params.set<MaterialPropertyName>("rank_two_tensor") = _base_name + r2q->second;
+              params.set<MooseEnum>("invariant") = r2sdq.second.first;
+              params.applyParameters(parameters());
+              params.set<std::string>("property_name") = _base_name + out;
             }
             else
               mooseError("Internal error. The permitted tensor shortcuts in "
-                         "'_ranktwoscalaraux_table' must be keys in the '_ranktwoaux_table'.");
+                         "'_rank_two_directional_component_table' must be keys in the "
+                         "'_rank_two_cartesian_component_table'.");
           }
 
-      if (type != "")
+      // RankTwoInvariant
+      for (const auto & r2i : _rank_two_invariant_table)
+        for (const auto & t : r2i.second.second)
+          if (r2i.first + '_' + t == out)
+          {
+            const auto r2q = _rank_two_cartesian_component_table.find(t);
+            if (r2q != _rank_two_cartesian_component_table.end())
+            {
+              type = ad_prepend + "RankTwoInvariant";
+              params = _factory.getValidParams(type);
+              params.set<MaterialPropertyName>("rank_two_tensor") = _base_name + r2q->second;
+              params.set<MooseEnum>("invariant") = r2i.second.first;
+              params.applyParameters(parameters());
+              params.set<std::string>("property_name") = _base_name + out;
+            }
+            else
+              mooseError("Internal error. The permitted tensor shortcuts in "
+                         "'_rank_two_invariant_table' must be keys in the "
+                         "'_rank_two_cartesian_component_table'.");
+          }
+
+      // RankTwoCylindricalComponent
+      for (const auto & r2sdq : _rank_two_cylindrical_component_table)
+        for (const auto & t : r2sdq.second.second)
+          if (r2sdq.first + '_' + t == out)
+          {
+            const auto r2q = _rank_two_cartesian_component_table.find(t);
+            if (r2q != _rank_two_cartesian_component_table.end() &&
+                _coord_system != Moose::COORD_RSPHERICAL)
+            {
+
+              type = ad_prepend + "RankTwoCylindricalComponent";
+              params = _factory.getValidParams(type);
+              params.set<MaterialPropertyName>("rank_two_tensor") = _base_name + r2q->second;
+              params.set<MooseEnum>("cylindrical_component") = r2sdq.second.first;
+              params.applyParameters(parameters());
+              params.set<std::string>("property_name") = _base_name + out;
+            }
+            else
+              mooseError("Internal error. The permitted tensor shortcuts in "
+                         "'_rank_two_cylindrical_component_table' must be keys in the "
+                         "'_rank_two_cartesian_component_table'.");
+          }
+
+      // This material property is already created by creep or plasticity models
+      if (type != "" && (out != "effective_creep_strain" && out != "effective_plastic_strain"))
       {
-        params.applyParameters(parameters());
-        params.set<AuxVariableName>("variable") = out;
-        params.set<MultiMooseEnum>("execute_on") = "timestep_end";
-        _problem->addAuxKernel(type, out + '_' + name(), params);
+        _problem->addMaterial(type, _base_name + out + '_' + name(), params);
       }
-      else
-        mooseError("Unable to add output AuxKernel");
+
+      if (type == "")
+        mooseError("Unable to add output Material");
     }
   }
 }
@@ -376,9 +560,8 @@ TensorMechanicsAction::actOutputGeneration()
 void
 TensorMechanicsAction::actGatherActionParameters()
 {
-  //
+
   // Gather info about all other master actions when we add variables
-  //
   if (_current_task == "validate_coordinate_systems" && getParam<bool>("add_variables"))
   {
     auto actions = _awh.getActions<TensorMechanicsAction>();
@@ -420,8 +603,9 @@ InputParameters
 TensorMechanicsAction::getKernelParameters(std::string type)
 {
   InputParameters params = _factory.getValidParams(type);
-  params.applyParameters(parameters(),
-                         {"displacements", "use_displaced_mesh", "save_in", "diag_save_in"});
+  params.applyParameters(
+      parameters(),
+      {"displacements", "use_displaced_mesh", "save_in", "diag_save_in", "out_of_plane_strain"});
 
   params.set<std::vector<VariableName>>("displacements") = _coupled_displacements;
   params.set<bool>("use_displaced_mesh") = _use_displaced_mesh;

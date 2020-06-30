@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSENERGYINVISCIDUNSPECIFIEDBC_H
-#define NSENERGYINVISCIDUNSPECIFIEDBC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "NSEnergyInviscidBC.h"
 
 // Forward Declarations
-class NSEnergyInviscidUnspecifiedBC;
-
-template <>
-InputParameters validParams<NSEnergyInviscidUnspecifiedBC>();
 
 /**
  * The inviscid energy BC term with specified pressure.
@@ -21,6 +19,8 @@ InputParameters validParams<NSEnergyInviscidUnspecifiedBC>();
 class NSEnergyInviscidUnspecifiedBC : public NSEnergyInviscidBC
 {
 public:
+  static InputParameters validParams();
+
   NSEnergyInviscidUnspecifiedBC(const InputParameters & parameters);
 
 protected:
@@ -35,5 +35,3 @@ private:
   // Helper Jacobian function
   Real computeJacobianHelper(unsigned var_number);
 };
-
-#endif // NSENERGYINVISCIDUNSPECIFIEDBC_H

@@ -48,7 +48,7 @@
     variable = u
   [../]
   [./ffn]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = forcing_fn2
   [../]
@@ -91,7 +91,6 @@
   type = Transient
   scheme = implicit-euler
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 
   start_time = 0.0

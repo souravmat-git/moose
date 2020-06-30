@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef POROUSFLOWFULLYSATURATED_H
-#define POROUSFLOWFULLYSATURATED_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "PorousFlowSinglePhaseBase.h"
-
-class PorousFlowFullySaturated;
-
-template <>
-InputParameters validParams<PorousFlowFullySaturated>();
 
 /**
  * Action for simulation involving a single phase fully saturated fluid.
@@ -20,9 +17,13 @@ InputParameters validParams<PorousFlowFullySaturated>();
 class PorousFlowFullySaturated : public PorousFlowSinglePhaseBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowFullySaturated(const InputParameters & params);
 
-  virtual void act() override;
+protected:
+  virtual void addKernels() override;
+  virtual void addMaterialDependencies() override;
+  virtual void addMaterials() override;
+  virtual void addUserObjects() override;
 };
-
-#endif // POROUSFLOWFULLYSATURATED_H

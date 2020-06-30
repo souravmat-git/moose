@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CAPPEDDRUCKERPRAGERSTRESSUPDATE_H
-#define CAPPEDDRUCKERPRAGERSTRESSUPDATE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TwoParameterPlasticityStressUpdate.h"
 #include "TensorMechanicsHardeningModel.h"
 #include "TensorMechanicsPlasticDruckerPrager.h"
-
-class CappedDruckerPragerStressUpdate;
-
-template <>
-InputParameters validParams<CappedDruckerPragerStressUpdate>();
 
 /**
  * CappedDruckerPragerStressUpdate performs the return-map
@@ -58,12 +55,16 @@ InputParameters validParams<CappedDruckerPragerStressUpdate>();
 class CappedDruckerPragerStressUpdate : public TwoParameterPlasticityStressUpdate
 {
 public:
+  static InputParameters validParams();
+
   CappedDruckerPragerStressUpdate(const InputParameters & parameters);
 
   /**
    * Does the model require the elasticity tensor to be isotropic?
    */
   bool requiresIsotropicTensor() override { return true; }
+
+  bool isIsotropic() override { return true; };
 
 protected:
   /// Hardening model for cohesion, friction and dilation angles
@@ -78,7 +79,7 @@ protected:
   /// The cone vertex is smoothed by this amount
   const Real _small_smoother2;
 
-  /// Initialise the NR proceedure from a guess coming from perfect plasticity
+  /// Initialize the NR proceedure from a guess coming from perfect plasticity
   const bool _perfect_guess;
 
   /**
@@ -128,7 +129,7 @@ protected:
                             const std::vector<Real> & yf,
                             const RankFourTensor & Eijkl) override;
 
-  virtual void initialiseVars(Real p_trial,
+  virtual void initializeVars(Real p_trial,
                               Real q_trial,
                               const std::vector<Real> & intnl_old,
                               Real & p,
@@ -152,7 +153,7 @@ protected:
 
   virtual void computePQ(const RankTwoTensor & stress, Real & p, Real & q) const override;
 
-  virtual void initialiseReturnProcess() override;
+  virtual void initializeReturnProcess() override;
 
   virtual void finalizeReturnProcess(const RankTwoTensor & rotation_increment) override;
 
@@ -187,5 +188,3 @@ protected:
 
   virtual RankFourTensor d2qdstress2(const RankTwoTensor & stress) const override;
 };
-
-#endif // CAPPEDDRUCKERPRAGERSTRESSUPDATE_H

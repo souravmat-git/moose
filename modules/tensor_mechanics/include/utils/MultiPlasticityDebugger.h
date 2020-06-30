@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef MULTIPLASTICITYDEBUGGER_H
-#define MULTIPLASTICITYDEBUGGER_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "MultiPlasticityLinearSystem.h"
-
-class MultiPlasticityDebugger;
-
-template <>
-InputParameters validParams<MultiPlasticityDebugger>();
 
 /**
  * MultiPlasticityDebugger computes various
@@ -22,6 +19,8 @@ InputParameters validParams<MultiPlasticityDebugger>();
 class MultiPlasticityDebugger : public MultiPlasticityLinearSystem
 {
 public:
+  static InputParameters validParams();
+
   MultiPlasticityDebugger(const MooseObject * moose_object);
 
   /**
@@ -145,5 +144,3 @@ private:
 
   bool dof_included(unsigned int dof, const std::vector<bool> & deactivated_due_to_ld);
 };
-
-#endif // MULTIPLASTICITYDEBUGGER_H

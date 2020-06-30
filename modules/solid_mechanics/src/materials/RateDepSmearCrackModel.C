@@ -1,17 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "RateDepSmearCrackModel.h"
 
-template <>
+registerMooseObject("SolidMechanicsApp", RateDepSmearCrackModel);
+
 InputParameters
-validParams<RateDepSmearCrackModel>()
+RateDepSmearCrackModel::validParams()
 {
 
-  InputParameters params = validParams<ConstitutiveModel>();
+  InputParameters params = ConstitutiveModel::validParams();
 
   params.addRequiredParam<Real>("ref_damage_rate", "Reference damage rate");
   params.addRequiredParam<unsigned int>("nstate", "Number of state variables");
@@ -213,9 +217,9 @@ RateDepSmearCrackModel::calcJacobian()
 }
 
 int
-RateDepSmearCrackModel::matrixInversion(std::vector<Real> & A, int n) const
+RateDepSmearCrackModel::matrixInversion(std::vector<Real> & A, int int_n) const
 {
-  int return_value, buffer_size = n * 64;
+  PetscBLASInt return_value, n = int_n, buffer_size = n * 64;
   std::vector<PetscBLASInt> ipiv(n);
   std::vector<PetscScalar> buffer(buffer_size);
 

@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef EFAFRAGMENT3D_H
-#define EFAFRAGMENT3D_H
+#pragma once
 
 #include "EFAFragment.h"
 
@@ -38,6 +39,7 @@ public:
   virtual unsigned int getNumCutNodes() const;
   virtual std::set<EFANode *> getAllNodes() const;
   virtual bool isConnected(EFAFragment * other_fragment) const;
+  virtual bool isEdgeConnected(EFAFragment * other_fragment) const;
   virtual void removeInvalidEmbeddedNodes(std::map<unsigned int, EFANode *> & EmbeddedNodes);
 
   // EFAfragment3D specific methods
@@ -66,5 +68,3 @@ private:
   EFAEdge * loneEdgeOnFace(unsigned int face_id) const;
   void combine_two_faces(unsigned int face_id1, unsigned int face_id2, const EFAFace * elem_face);
 };
-
-#endif

@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef CHMATH_H
-#define CHMATH_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "CHBulk.h"
-
-// Forward Declarations
-class CHMath;
-
-template <>
-InputParameters validParams<CHMath>();
 
 /**Cahn-Hilliard Kernel implementing the free energy f = 1/4(1-c^2)^2, such that grad df/dc = (3 c^2
  *-1) grad_c.
@@ -25,10 +21,10 @@ InputParameters validParams<CHMath>();
 class CHMath : public CHBulk<Real>
 {
 public:
+  static InputParameters validParams();
+
   CHMath(const InputParameters & parameters);
 
 protected:
   virtual RealGradient computeGradDFDCons(PFFunctionType type);
 };
-
-#endif // CHMATH_H

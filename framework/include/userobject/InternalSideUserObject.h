@@ -1,29 +1,20 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef INTERNALSIDEUSEROBJECT_H
-#define INTERNALSIDEUSEROBJECT_H
+#pragma once
 
 #include "UserObject.h"
 #include "BlockRestrictable.h"
 #include "NeighborCoupleable.h"
 #include "TwoMaterialPropertyInterface.h"
 #include "MooseVariableDependencyInterface.h"
-#include "UserObjectInterface.h"
 #include "TransientInterface.h"
-#include "PostprocessorInterface.h"
-#include "ZeroInterface.h"
 
 class InternalSideUserObject;
 
@@ -38,35 +29,40 @@ class InternalSideUserObject : public UserObject,
                                public TwoMaterialPropertyInterface,
                                public NeighborCoupleable,
                                public MooseVariableDependencyInterface,
-                               public UserObjectInterface,
-                               public TransientInterface,
-                               public PostprocessorInterface,
-                               public ZeroInterface
+                               public TransientInterface
 {
 public:
+  static InputParameters validParams();
+
   InternalSideUserObject(const InputParameters & parameters);
 
 protected:
   MooseMesh & _mesh;
 
   const MooseArray<Point> & _q_point;
-  QBase *& _qrule;
+  const QBase * const & _qrule;
   const MooseArray<Real> & _JxW;
   const MooseArray<Real> & _coord;
   const MooseArray<Point> & _normals;
 
-  const Elem *& _current_elem;
-  /// current side of the current element
-  unsigned int & _current_side;
+  /// pointer to the current element object
+  const Elem * const & _current_elem;
 
-  const Elem *& _current_side_elem;
+  /// the volume of the current element
+  const Real & _current_elem_volume;
+
+  /// current side of the current element
+  const unsigned int & _current_side;
+
+  const Elem * const & _current_side_elem;
   const Real & _current_side_volume;
 
   /// The neighboring element
-  const Elem *& _neighbor_elem;
+  const Elem * const & _neighbor_elem;
+
+  /// the neighboring element's volume
+  const Real & _current_neighbor_volume;
 
   /// The volume (or length) of the current neighbor
   const Real & getNeighborElemVolume();
 };
-
-#endif /* INTERNALSIDEUSEROBJECT_H */

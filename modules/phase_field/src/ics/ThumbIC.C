@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ThumbIC.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", ThumbIC);
+
 InputParameters
-validParams<ThumbIC>()
+ThumbIC::validParams()
 {
-  InputParameters params = validParams<InitialCondition>();
+  InputParameters params = InitialCondition::validParams();
   params.addClassDescription("Thumb shaped bicrystal for grain boundary mobility tests");
   params.addRequiredParam<Real>("xcoord", "The x coordinate of the circle center");
   params.addRequiredParam<Real>("width", "The y coordinate of the circle center");

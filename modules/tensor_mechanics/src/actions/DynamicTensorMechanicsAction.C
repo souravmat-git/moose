@@ -1,19 +1,29 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "DynamicTensorMechanicsAction.h"
 #include "Factory.h"
 #include "FEProblem.h"
 #include "Parser.h"
 
-template <>
+registerMooseAction("TensorMechanicsApp", DynamicTensorMechanicsAction, "setup_mesh_complete");
+
+registerMooseAction("TensorMechanicsApp",
+                    DynamicTensorMechanicsAction,
+                    "validate_coordinate_systems");
+
+registerMooseAction("TensorMechanicsApp", DynamicTensorMechanicsAction, "add_kernel");
+
 InputParameters
-validParams<DynamicTensorMechanicsAction>()
+DynamicTensorMechanicsAction::validParams()
 {
-  InputParameters params = validParams<TensorMechanicsAction>();
+  InputParameters params = TensorMechanicsAction::validParams();
   params.addClassDescription("Set up dynamic stress divergence kernels");
   params.addParam<MaterialPropertyName>("zeta",
                                         0.0,
@@ -24,7 +34,7 @@ validParams<DynamicTensorMechanicsAction>()
   params.addParam<bool>("static_initialization",
                         false,
                         "Set to true get the system to "
-                        "equillibrium under gravity by running a "
+                        "equilibrium under gravity by running a "
                         "quasi-static analysis (by solving Ku = F) "
                         "in the first time step.");
   return params;

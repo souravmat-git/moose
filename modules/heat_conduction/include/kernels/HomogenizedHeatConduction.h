@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef HOMOGENIZEDHEATCONDUCTION_H
-#define HOMOGENIZEDHEATCONDUCTION_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 
@@ -17,6 +19,8 @@
 class HomogenizedHeatConduction : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   HomogenizedHeatConduction(const InputParameters & parameters);
 
 protected:
@@ -25,8 +29,3 @@ protected:
   const MaterialProperty<Real> & _diffusion_coefficient;
   const unsigned int _component;
 };
-
-template <>
-InputParameters validParams<HomogenizedHeatConduction>();
-
-#endif // HOMOGENIZEDHEATCONDUCTION_H

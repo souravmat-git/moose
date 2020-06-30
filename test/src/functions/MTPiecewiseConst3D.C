@@ -1,31 +1,27 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MTPiecewiseConst3D.h"
 
-template <>
+registerMooseObject("MooseTestApp", MTPiecewiseConst3D);
+
 InputParameters
-validParams<MTPiecewiseConst3D>()
+MTPiecewiseConst3D::validParams()
 {
-  InputParameters params = validParams<Function>();
+  InputParameters params = Function::validParams();
   return params;
 }
 
 MTPiecewiseConst3D::MTPiecewiseConst3D(const InputParameters & parameters) : Function(parameters) {}
 
 Real
-MTPiecewiseConst3D::value(Real /*t*/, const Point & p)
+MTPiecewiseConst3D::value(Real /*t*/, const Point & p) const
 {
   Real val = 0;
   Real x = p(0);

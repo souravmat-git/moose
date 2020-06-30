@@ -1,18 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "MultiPhaseStressMaterial.h"
 #include "RankTwoTensor.h"
 #include "RankFourTensor.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", MultiPhaseStressMaterial);
+
 InputParameters
-validParams<MultiPhaseStressMaterial>()
+MultiPhaseStressMaterial::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params.addClassDescription("Compute a global stress form multiple phase stresses");
   params.addParam<std::vector<MaterialPropertyName>>(
       "h", "Switching Function Materials that provide h(eta_i)");

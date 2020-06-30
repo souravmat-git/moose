@@ -1,8 +1,20 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 from code import InteractiveConsole
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QEvent, Qt, QSettings
 from PyQt5.QtWidgets import QWidget, QPlainTextEdit, QSizePolicy
 import sys
-from StringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 from peacock.utils import WidgetUtils
 from peacock.base import MooseWidget
 
@@ -76,7 +88,7 @@ class QPythonConsole(QObject, MooseWidget):
         sys.stderr = output
         try:
             # push the line to the interpreter
-            self.more = self.console.push(str(line).decode("utf-8"))
+            self.more = self.console.push(str(line))
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
@@ -209,7 +221,7 @@ class PythonConsoleWidget(QWidget, MooseWidget):
         """
         The user pressed return so process the input line
         """
-        text = unicode(self.input_line.text())
+        text = str(self.input_line.text())
         self.input_line.setText("")
         self.new_line.emit(text)
         if text:

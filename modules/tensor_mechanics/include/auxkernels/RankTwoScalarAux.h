@@ -1,38 +1,37 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef RANKTWOSCALARAUX_H
-#define RANKTWOSCALARAUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#include "AuxKernel.h"
+#pragma once
+
+#include "NodalPatchRecovery.h"
 #include "RankTwoTensor.h"
-
-class RankTwoScalarAux;
-
-template <>
-InputParameters validParams<RankTwoScalarAux>();
 
 /**
  * RankTwoScalarAux uses the namespace RankTwoScalarTools to compute scalar
  * values from Rank-2 tensors.
  */
-class RankTwoScalarAux : public AuxKernel
+template <bool is_ad>
+class RankTwoScalarAuxTempl : public NodalPatchRecovery
 {
 public:
-  RankTwoScalarAux(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  RankTwoScalarAuxTempl(const InputParameters & parameters);
 
 protected:
   virtual Real computeValue();
 
-  const MaterialProperty<RankTwoTensor> & _tensor;
+  const GenericMaterialProperty<RankTwoTensor, is_ad> & _tensor;
 
   /**
    * Determines the information to be extracted from the tensor by using the
-   * RankTwoScalarTools namespace, e.g., vonMisesStress, EquivalentPlasticStrain,
-   * L2norm, MaxPrincipal eigenvalue, etc.
+   * RankTwoScalarTools namespace, e.g., vonMisesStressL2norm, MaxPrincipal eigenvalue, etc.
    */
   MooseEnum _scalar_type;
 
@@ -47,4 +46,5 @@ protected:
   Point _input_direction;
 };
 
-#endif // RANKTWOSCALARAUX_H
+typedef RankTwoScalarAuxTempl<false> RankTwoScalarAux;
+typedef RankTwoScalarAuxTempl<true> ADRankTwoScalarAux;

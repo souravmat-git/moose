@@ -1,25 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef SUMMATERIAL_H
-#define SUMMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
-
-class SumMaterial;
-
-template <>
-InputParameters validParams<SumMaterial>();
 
 /**
  * Adds two material properties together
@@ -27,6 +17,8 @@ InputParameters validParams<SumMaterial>();
 class SumMaterial : public Material
 {
 public:
+  static InputParameters validParams();
+
   SumMaterial(const InputParameters & parameters);
   virtual ~SumMaterial();
 
@@ -44,5 +36,3 @@ protected:
   Real _val_mp1;
   Real _val_mp2;
 };
-
-#endif /* SUMMATERIAL_H */

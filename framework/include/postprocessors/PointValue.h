@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POINTVALUE_H
-#define POINTVALUE_H
+#pragma once
 
 #include "GeneralPostprocessor.h"
 
@@ -32,54 +26,26 @@ InputParameters validParams<PointValue>();
 class PointValue : public GeneralPostprocessor
 {
 public:
-  /**
-   * Constructor.
-   * @param parameters The input file parameters for this object
-   */
+  static InputParameters validParams();
+
   PointValue(const InputParameters & parameters);
 
-  /**
-   * Empty method, no initialization needed
-   */
   virtual void initialize() override {}
-
-  /**
-   * Determines what element contains the specified point
-   */
   virtual void execute() override;
-
-  /**
-   * Returns the value of the variable at the specified location
-   */
+  virtual void finalize() override {}
   virtual Real getValue() override;
 
-  /**
-   * Performs the necessary parallel communication as well as computes
-   * the value to return in the getValue method.
-   */
-  virtual void finalize() override;
-
 protected:
-  /// The variable from which a values is to be extracted
-  MooseVariable & _var;
+  /// The variable number of the variable we are operating on
+  const unsigned int _var_number;
 
-  /// The value of the desired variable
-  const VariableValue & _u;
+  /// A reference to the system containing the variable
+  const System & _system;
 
-  /// A convenience reference to the Mesh this object operates on
-  MooseMesh & _mesh;
-
-  /// The point to locate, stored as a vector for use with reinitElemPhys
-  std::vector<Point> _point_vec;
+  /// The point to locate
+  const Point & _point;
 
   /// The value of the variable at the desired location
   Real _value;
-
-  /// The processor id that owns the element that the point is located
-  processor_id_type _root_id;
-
-  /// The element that contains the located point
-  dof_id_type _elem_id;
 };
 
-#endif /* POINTVALUE_H */

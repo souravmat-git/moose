@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef ACCUMULATEAUX_H
-#define ACCUMULATEAUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxKernel.h"
 
 // Forward Declarations
-class AccumulateAux;
-
-template <>
-InputParameters validParams<AccumulateAux>();
 
 /**
  * Accumulate values from one auxiliary variable into another
@@ -21,6 +19,8 @@ InputParameters validParams<AccumulateAux>();
 class AccumulateAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   AccumulateAux(const InputParameters & parameters);
 
 protected:
@@ -29,5 +29,3 @@ protected:
   // coupled variable values to be aggregated
   std::vector<const VariableValue *> _values;
 };
-
-#endif // ACCUMULATEAUX_H

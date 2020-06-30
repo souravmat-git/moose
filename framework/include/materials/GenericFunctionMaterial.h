@@ -1,24 +1,21 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef GENERICFUNCTIONMATERIAL_H
-#define GENERICFUNCTIONMATERIAL_H
+#pragma once
 
 #include "Material.h"
 
 // Forward Declarations
-class GenericFunctionMaterial;
+template <bool>
+class GenericFunctionMaterialTempl;
+typedef GenericFunctionMaterialTempl<false> GenericFunctionMaterial;
+typedef GenericFunctionMaterialTempl<true> ADGenericFunctionMaterial;
 
 template <>
 InputParameters validParams<GenericFunctionMaterial>();
@@ -31,10 +28,13 @@ InputParameters validParams<GenericFunctionMaterial>();
  * This is not meant to be used in a production capacity... and instead is meant to be used
  * during development phases for ultimate flexibility.
  */
-class GenericFunctionMaterial : public Material
+template <bool is_ad>
+class GenericFunctionMaterialTempl : public Material
 {
 public:
-  GenericFunctionMaterial(const InputParameters & parameters);
+  static InputParameters validParams();
+
+  GenericFunctionMaterialTempl(const InputParameters & parameters);
 
 protected:
   virtual void initQpStatefulProperties() override;
@@ -45,10 +45,10 @@ protected:
 
   unsigned int _num_props;
 
-  std::vector<MaterialProperty<Real> *> _properties;
-  std::vector<MaterialProperty<Real> *> _properties_old;
-  std::vector<MaterialProperty<Real> *> _properties_older;
-  std::vector<Function *> _functions;
+  std::vector<GenericMaterialProperty<Real, is_ad> *> _properties;
+  std::vector<const MaterialProperty<Real> *> _properties_old;
+  std::vector<const MaterialProperty<Real> *> _properties_older;
+  std::vector<const Function *> _functions;
 
 private:
   /**
@@ -59,5 +59,3 @@ private:
   /// Flag for calling declareProperyOld/Older
   bool _enable_stateful;
 };
-
-#endif // GENERICFUNCTIONMATERIAL_H

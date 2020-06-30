@@ -1,3 +1,12 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 from FactorySystem import InputParameters
 import os, sys, shutil
 
@@ -12,17 +21,11 @@ else:
 MOOSE_DIR = os.path.abspath(os.path.join(pathname, '../'))
 FRAMEWORK_DIR = os.path.abspath(os.path.join(pathname, '../../', 'framework'))
 #### See if MOOSE_DIR is already in the environment instead
-if os.environ.has_key("MOOSE_DIR"):
+if os.environ.get("MOOSE_DIR"):
     MOOSE_DIR = os.environ['MOOSE_DIR']
     FRAMEWORK_DIR = os.path.join(MOOSE_DIR, 'framework')
-if os.environ.has_key("FRAMEWORK_DIR"):
+if os.environ.get("FRAMEWORK_DIR"):
     FRAMEWORK_DIR = os.environ['FRAMEWORK_DIR']
-
-# Import the TestHarness and Helper functions from the MOOSE toolkit
-sys.path.append(os.path.join(MOOSE_DIR, 'python'))
-import path_tool
-path_tool.activate_module('TestHarness')
-path_tool.activate_module('FactorySystem')
 
 class Job(object):
     def validParams():

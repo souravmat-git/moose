@@ -1,34 +1,29 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef LEVELSETTIMEDERIVATIVESUPG_H
-#define LEVELSETTIMEDERIVATIVESUPG_H
+#pragma once
 
-// MOOSE includes
-#include "TimeDerivative.h"
-#include "LevelSetVelocityInterface.h"
-
-// Forward declarations
-class LevelSetTimeDerivativeSUPG;
-
-template <>
-InputParameters validParams<LevelSetTimeDerivativeSUPG>();
+#include "ADTimeKernelGrad.h"
 
 /**
  * Applies SUPG stabilization to the time derivative.
  */
-class LevelSetTimeDerivativeSUPG : public LevelSetVelocityInterface<TimeDerivative>
+class LevelSetTimeDerivativeSUPG : public ADTimeKernelGrad
 {
 public:
+  static InputParameters validParams();
+
   LevelSetTimeDerivativeSUPG(const InputParameters & parameters);
 
 protected:
-  Real computeQpResidual() override;
-  Real computeQpJacobian() override;
-};
+  virtual ADRealVectorValue precomputeQpResidual() override;
 
-#endif // LEVELSETTIMEDERIVATIVESUPG_H
+  /// Velocity vector variable
+  const ADVectorVariableValue & _velocity;
+};

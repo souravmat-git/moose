@@ -1,27 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MooseError.h"
 #include "Axisymmetric2D3DSolutionFunction.h"
 #include "SolutionUserObject.h"
 
-template <>
+registerMooseObject("MooseApp", Axisymmetric2D3DSolutionFunction);
+
+defineLegacyParams(Axisymmetric2D3DSolutionFunction);
+
 InputParameters
-validParams<Axisymmetric2D3DSolutionFunction>()
+Axisymmetric2D3DSolutionFunction::validParams()
 {
   // Get the Function input parameters
-  InputParameters params = validParams<Function>();
+  InputParameters params = Function::validParams();
 
   // Add parameters specific to this object
   params.addRequiredParam<UserObjectName>("solution",
@@ -138,7 +136,7 @@ Axisymmetric2D3DSolutionFunction::initialSetup()
 }
 
 Real
-Axisymmetric2D3DSolutionFunction::value(Real t, const Point & p)
+Axisymmetric2D3DSolutionFunction::value(Real t, const Point & p) const
 {
   Point xypoint;
   Point r_dir_2d;

@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // C POSIX includes
 #include <sys/stat.h>
@@ -22,17 +17,22 @@
 #include "MaterialPropertyStorage.h"
 #include "RestartableData.h"
 #include "MooseMesh.h"
+#include "MeshMetaDataInterface.h"
 
-// libMesh includes
 #include "libmesh/checkpoint_io.h"
 #include "libmesh/enum_xdr_mode.h"
+#include "libmesh/utility.h"
 
-template <>
+registerMooseObject("MooseApp", Checkpoint);
+
+defineLegacyParams(Checkpoint);
+
 InputParameters
-validParams<Checkpoint>()
+Checkpoint::validParams()
 {
   // Get the parameters from the base classes
-  InputParameters params = validParams<FileOutput>();
+  InputParameters params = FileOutput::validParams();
+  params.addClassDescription("Output for MOOSE recovery checkpoint files.");
 
   // Typical checkpoint options
   params.addParam<unsigned int>("num_files", 2, "Number of the restart files to save");
@@ -54,9 +54,6 @@ Checkpoint::Checkpoint(const InputParameters & parameters)
     _binary(getParam<bool>("binary")),
     _parallel_mesh(_problem_ptr->mesh().isDistributedMesh()),
     _restartable_data(_app.getRestartableData()),
-    _recoverable_data(_app.getRecoverableData()),
-    _material_property_storage(_problem_ptr->getMaterialPropertyStorage()),
-    _bnd_material_property_storage(_problem_ptr->getBndMaterialPropertyStorage()),
     _restartable_data_io(RestartableDataIO(*_problem_ptr))
 {
 }
@@ -72,7 +69,7 @@ Checkpoint::filename()
 }
 
 std::string
-Checkpoint::directory()
+Checkpoint::directory() const
 {
   return _file_base + "_" + _suffix;
 }
@@ -80,12 +77,9 @@ Checkpoint::directory()
 void
 Checkpoint::output(const ExecFlagType & /*type*/)
 {
-  // Start the performance log
-  Moose::perf_log.push("Checkpoint::output()", "Output");
-
   // Create the output directory
   std::string cp_dir = directory();
-  mkdir(cp_dir.c_str(), S_IRWXU | S_IRGRP);
+  Utility::mkdir(cp_dir.c_str());
 
   // Create the output filename
   std::string current_file = filename();
@@ -94,44 +88,49 @@ Checkpoint::output(const ExecFlagType & /*type*/)
   MeshBase & mesh = _es_ptr->get_mesh();
   CheckpointIO io(mesh, _binary);
 
-  // Set renumbering flag (renumber if adaptivity is on)
-  bool renumber = false;
-  if (_problem_ptr->adaptivity().isOn())
-    renumber = true;
+  // Set libHilbert renumbering flag to false.  We don't support
+  // N-to-M restarts regardless, and if we're *never* going to do
+  // N-to-M restarts then libHilbert is just unnecessary computation
+  // and communication.
+  const bool renumber = false;
 
   // Create checkpoint file structure
-  CheckpointFileNames current_file_struct;
-  if (_binary)
-  {
-    current_file_struct.checkpoint = current_file + "_mesh.cpr";
-    current_file_struct.system = current_file + ".xdr";
-  }
-  else
-  {
-    current_file_struct.checkpoint = current_file + "_mesh.cpa";
-    current_file_struct.system = current_file + ".xda";
-  }
-  current_file_struct.restart = current_file + ".rd";
+  CheckpointFileNames curr_file_struct;
+
+  curr_file_struct.checkpoint = current_file + getMeshFileSuffix(_binary);
+  curr_file_struct.system = current_file + _restartable_data_io.getESFileExtension(_binary);
+  curr_file_struct.restart = current_file + _restartable_data_io.getRestartableDataExt();
 
   // Write the checkpoint file
-  io.write(current_file_struct.checkpoint);
+  io.write(curr_file_struct.checkpoint);
 
-  // Write the xdr
-  _es_ptr->write(current_file_struct.system,
-                 ENCODE,
+  // Write the system data, using ENCODE vs WRITE based on ascii vs binary format
+  _es_ptr->write(curr_file_struct.system,
                  EquationSystems::WRITE_DATA | EquationSystems::WRITE_ADDITIONAL_DATA |
                      EquationSystems::WRITE_PARALLEL_FILES,
                  renumber);
 
   // Write the restartable data
-  _restartable_data_io.writeRestartableData(
-      current_file_struct.restart, _restartable_data, _recoverable_data);
+  _restartable_data_io.writeRestartableDataPerProc(curr_file_struct.restart, _restartable_data);
+
+  // Write out the restartable mesh meta data if there is any (only on processor zero)
+  if (processor_id() == 0)
+  {
+    for (auto & map_pair :
+         libMesh::as_range(_app.getRestartableDataMapBegin(), _app.getRestartableDataMapEnd()))
+    {
+      const RestartableDataMap & meta_data = map_pair.second.first;
+      const std::string & suffix = map_pair.second.second;
+      const std::string filename(current_file + suffix +
+                                 _restartable_data_io.getRestartableDataExt());
+
+      curr_file_struct.restart_meta_data.emplace(filename);
+      _restartable_data_io.writeRestartableData(filename, meta_data);
+    }
+  }
 
   // Remove old checkpoint files
-  updateCheckpointFiles(current_file_struct);
-
-  // Stop the logging
-  Moose::perf_log.pop("Checkpoint::output()", "Output");
+  updateCheckpointFiles(curr_file_struct);
 }
 
 void
@@ -155,46 +154,15 @@ Checkpoint::updateCheckpointFiles(CheckpointFileNames file_struct)
     // Delete checkpoint files (_mesh.cpr)
     if (proc_id == 0)
     {
-      std::ostringstream oss;
-      oss << delete_files.checkpoint;
-      std::string file_name = oss.str();
+      CheckpointIO::cleanup(delete_files.checkpoint, _parallel_mesh ? comm().size() : 1);
+
+      // Delete the system files (xdr and xdr.0000, ...)
+      const auto & file_name = delete_files.system;
       int ret = remove(file_name.c_str());
       if (ret != 0)
         mooseWarning("Error during the deletion of file '", file_name, "': ", std::strerror(ret));
     }
 
-    if (_parallel_mesh)
-    {
-      std::ostringstream oss;
-      oss << delete_files.checkpoint << '-' << n_processors() << '-' << proc_id;
-      std::string file_name = oss.str();
-      int ret = remove(file_name.c_str());
-      if (ret != 0)
-        mooseWarning("Error during the deletion of file '", file_name, "': ", std::strerror(ret));
-    }
-    else
-    {
-      if (proc_id == 0)
-      {
-        std::ostringstream oss;
-        oss << delete_files.checkpoint << "-1-0";
-        std::string file_name = oss.str();
-        int ret = remove(file_name.c_str());
-        if (ret != 0)
-          mooseWarning("Error during the deletion of file '", file_name, "': ", std::strerror(ret));
-      }
-    }
-
-    // Delete the system files (xdr and xdr.0000, ...)
-    if (proc_id == 0)
-    {
-      std::ostringstream oss;
-      oss << delete_files.system;
-      std::string file_name = oss.str();
-      int ret = remove(file_name.c_str());
-      if (ret != 0)
-        mooseWarning("Error during the deletion of file '", file_name, "': ", std::strerror(ret));
-    }
     {
       std::ostringstream oss;
       oss << delete_files.system << "." << std::setw(4) << std::setprecision(0) << std::setfill('0')
@@ -205,21 +173,25 @@ Checkpoint::updateCheckpointFiles(CheckpointFileNames file_struct)
         mooseWarning("Error during the deletion of file '", file_name, "': ", std::strerror(ret));
     }
 
-    unsigned int n_threads = libMesh::n_threads();
+    if (proc_id == 0)
+    {
+      for (const auto & file_name : delete_files.restart_meta_data)
+        remove(file_name.c_str());
+      // This file may not exist so don't worry about checking for success
+    }
 
     // Remove the restart files (rd)
+    unsigned int n_threads = libMesh::n_threads();
+    for (THREAD_ID tid = 0; tid < n_threads; tid++)
     {
-      for (THREAD_ID tid = 0; tid < n_threads; tid++)
-      {
-        std::ostringstream oss;
-        oss << delete_files.restart << "-" << proc_id;
-        if (n_threads > 1)
-          oss << "-" << tid;
-        std::string file_name = oss.str();
-        int ret = remove(file_name.c_str());
-        if (ret != 0)
-          mooseWarning("Error during the deletion of file '", file_name, "': ", std::strerror(ret));
-      }
+      std::ostringstream oss;
+      oss << delete_files.restart << "-" << proc_id;
+      if (n_threads > 1)
+        oss << "-" << tid;
+      std::string file_name = oss.str();
+      int ret = remove(file_name.c_str());
+      if (ret != 0)
+        mooseWarning("Error during the deletion of file '", file_name, "': ", std::strerror(ret));
     }
   }
 }

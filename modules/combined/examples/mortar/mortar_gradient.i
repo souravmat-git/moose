@@ -5,24 +5,40 @@
 #
 
 [Mesh]
-  type = MortarPeriodicMesh
-  dim = 2
-  nx = 40
-  ny = 40
-  periodic_directions = 'x y'
-
-  [./MortarInterfaces]
-    [./left_right]
-      master = 1
-      slave = 3
-      subdomain = 10
-    [../]
-    [./up_down]
-      master = 0
-      slave = 2
-      subdomain = 11
-    [../]
-  [../]
+  [gen]
+    type = GeneratedMeshGenerator
+    dim = 2
+    nx = 40
+    ny = 40
+  []
+  [slave_x]
+    input = gen
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '3'
+    new_block_id = 10
+    new_block_name = "slave_x"
+  []
+  [master_x]
+    input = slave_x
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '1'
+    new_block_id = 12
+    new_block_name = "master_x"
+  []
+  [slave_y]
+    input = master_x
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '0'
+    new_block_id = 11
+    new_block_name = "slave_y"
+  []
+  [master_y]
+    input = slave_y
+    type = LowerDBlockFromSidesetGenerator
+    sidesets = '2'
+    new_block_id = 13
+    new_block_name = "master_y"
+  []
 []
 
 [Functions]
@@ -76,24 +92,24 @@
   [./lm_left_right_x]
     order = FIRST
     family = LAGRANGE
-    block = 10
+    block = "slave_x"
   [../]
   [./lm_left_right_y]
     order = FIRST
     family = LAGRANGE
-    block = 10
+    block = "slave_x"
   [../]
 
   # Lagrange multipliers for gradient component in the vertical directon
   [./lm_up_down_x]
     order = FIRST
     family = LAGRANGE
-    block = 11
+    block = "slave_y"
   [../]
   [./lm_up_down_y]
     order = FIRST
     family = LAGRANGE
-    block = 11
+    block = "slave_y"
   [../]
 []
 
@@ -102,30 +118,36 @@
   [./diff]
     type = Diffusion
     variable = c
+    block = 0
   [../]
   [./dt]
     type = TimeDerivative
     variable = c
+    block = 0
   [../]
 
   # the un-constrained concentration
   [./diff2]
     type = Diffusion
     variable = v
+    block = 0
   [../]
   [./dt2]
     type = TimeDerivative
     variable = v
+    block = 0
   [../]
 
   # the value periodic concentration
   [./diff3]
     type = Diffusion
     variable = p
+    block = 0
   [../]
   [./dt3]
     type = TimeDerivative
     variable = p
+    block = 0
   [../]
 []
 
@@ -133,31 +155,47 @@
   [./equaly_grad_x]
     type = EqualGradientConstraint
     variable = lm_up_down_x
-    interface = up_down
     component = 0
-    master_variable = c
+    slave_variable = c
+    slave_boundary = bottom
+    master_boundary = top
+    slave_subdomain = slave_y
+    master_subdomain = master_y
+    periodic = true
   [../]
   [./equaly_grad_y]
     type = EqualGradientConstraint
     variable = lm_up_down_y
-    interface = up_down
     component = 1
-    master_variable = c
+    slave_variable = c
+    slave_boundary = bottom
+    master_boundary = top
+    slave_subdomain = slave_y
+    master_subdomain = master_y
+    periodic = true
   [../]
 
   [./equalx_grad_x]
     type = EqualGradientConstraint
     variable = lm_left_right_x
-    interface = left_right
     component = 0
-    master_variable = c
+    slave_variable = c
+    slave_boundary = left
+    master_boundary = right
+    slave_subdomain = slave_x
+    master_subdomain = master_x
+    periodic = true
   [../]
   [./equalx_grad_y]
     type = EqualGradientConstraint
     variable = lm_left_right_y
-    interface = left_right
     component = 1
-    master_variable = c
+    slave_variable = c
+    slave_boundary = left
+    master_boundary = right
+    slave_subdomain = slave_x
+    master_subdomain = master_x
+    periodic = true
   [../]
 []
 
@@ -217,18 +255,20 @@
     variable = diff_constraint
     function = 'c-v'
     args = 'c v'
+    block = 0
   [../]
 
   # difference between the periodic gradient constrained diffusion and the flat
   # value period diffusien with a constant slope added. This should be the same,
   # but they aren't quite because the gradient constraint affects the gradient in
   # the entire elements (i.e. a larger volume is affected by the gradient constraint
-  # compared to teh nodal value periodicity)
+  # compared to the nodal value periodicity)
   [./diff_periodic]
     type = ParsedAux
     variable = diff_periodic
     function = 'c-p-slope'
     args = 'c p slope'
+    block = 0
   [../]
 
   # subtract the constant slope from the gradient periodic simulation (should yield
@@ -238,6 +278,7 @@
     variable = diff_slope
     function = 'c-slope'
     args = 'c slope'
+    block = 0
   [../]
 []
 
@@ -260,7 +301,6 @@
   nl_rel_tol = 1e-11
   nl_abs_tol = 1e-10
   l_tol = 1e-10
-  l_abs_step_tol = 1e-11
   dt = 0.01
   num_steps = 20
 []

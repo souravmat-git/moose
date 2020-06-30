@@ -1,21 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SAMPLERDATA_H
-#define SAMPLERDATA_H
+#pragma once
 
 // MOOSE includes
 #include "GeneralVectorPostprocessor.h"
 #include "SamplerInterface.h"
-
-class SamplerData;
-
-template <>
-InputParameters validParams<SamplerData>();
 
 /**
  * A tool for output Sampler data.
@@ -23,15 +19,21 @@ InputParameters validParams<SamplerData>();
 class SamplerData : public GeneralVectorPostprocessor, SamplerInterface
 {
 public:
-  SamplerData(const InputParameters & parameters);
-  void virtual initialize() override;
-  void virtual execute() override;
+  static InputParameters validParams();
 
-  /// Storage for declared vectors
+  SamplerData(const InputParameters & parameters);
+  virtual void initialize() override;
+  virtual void finalize() override;
+  virtual void execute() override;
+  virtual void threadJoin(const UserObject & uo) override;
+
+protected:
+  /// Storage for declared vectors, one for each column
   std::vector<VectorPostprocessorValue *> _sample_vectors;
 
   /// The sampler to extract data
   Sampler & _sampler;
-};
 
-#endif
+  /// The method of data retrival from the Sample
+  const MooseEnum & _sampler_method;
+};

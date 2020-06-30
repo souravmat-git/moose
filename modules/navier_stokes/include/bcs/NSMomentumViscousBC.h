@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSMOMENTUMVISCOUSBC_H
-#define NSMOMENTUMVISCOUSBC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "NSIntegratedBC.h"
 #include "NSViscStressTensorDerivs.h"
 
 // Forward Declarations
-class NSMomentumViscousBC;
-
-template <>
-InputParameters validParams<NSMomentumViscousBC>();
 
 /**
  * This class corresponds to the viscous part of the "natural"
@@ -30,6 +28,8 @@ InputParameters validParams<NSMomentumViscousBC>();
 class NSMomentumViscousBC : public NSIntegratedBC
 {
 public:
+  static InputParameters validParams();
+
   NSMomentumViscousBC(const InputParameters & parameters);
 
 protected:
@@ -52,5 +52,3 @@ protected:
   template <class U>
   friend class NSViscStressTensorDerivs;
 };
-
-#endif // NSMOMENTUMVISCOUSBC_H

@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ParsedODEKernel.h"
 
@@ -18,15 +13,17 @@
 #include "MooseVariableScalar.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/fparser_ad.hh"
 
-template <>
+registerMooseObject("MooseApp", ParsedODEKernel);
+
+defineLegacyParams(ParsedODEKernel);
+
 InputParameters
-validParams<ParsedODEKernel>()
+ParsedODEKernel::validParams()
 {
-  InputParameters params = validParams<ODEKernel>();
-  params += validParams<FunctionParserUtils>();
+  InputParameters params = ODEKernel::validParams();
+  params += FunctionParserUtils<false>::validParams();
   params.addClassDescription("Parsed ODE function kernel.");
 
   params.addRequiredParam<std::string>("function", "function expression");
@@ -36,6 +33,8 @@ validParams<ParsedODEKernel>()
   params.addParam<std::vector<std::string>>(
       "constant_expressions",
       "Vector of values for the constants in constant_names (can be an FParser expression)");
+  params.addParam<std::vector<PostprocessorName>>(
+      "postprocessors", "Vector of postprocessor names used in the function expression");
 
   return params;
 }
@@ -67,8 +66,17 @@ ParsedODEKernel::ParsedODEKernel(const InputParameters & parameters)
       _arg_index[number] = i;
   }
 
+  // add postprocessors
+  auto pp_names = getParam<std::vector<PostprocessorName>>("postprocessors");
+  _pp.resize(pp_names.size());
+  for (unsigned int i = 0; i < pp_names.size(); ++i)
+  {
+    variables += "," + pp_names[i];
+    _pp[i] = &getPostprocessorValueByName(pp_names[i]);
+  }
+
   // base function object
-  _func_F = ADFunctionPtr(new ADFunction());
+  _func_F = std::make_shared<SymFunction>();
 
   // set FParser interneal feature flags
   setParserFeatureFlags(_func_F);
@@ -88,7 +96,7 @@ ParsedODEKernel::ParsedODEKernel(const InputParameters & parameters)
                _func_F->ErrorMsg());
 
   // on-diagonal derivative
-  _func_dFdu = ADFunctionPtr(new ADFunction(*_func_F));
+  _func_dFdu = std::make_shared<SymFunction>(*_func_F);
 
   if (_func_dFdu->AutoDiff(_var.name()) != -1)
     mooseError("Failed to take first derivative w.r.t. ", _var.name());
@@ -96,7 +104,7 @@ ParsedODEKernel::ParsedODEKernel(const InputParameters & parameters)
   // off-diagonal derivatives
   for (unsigned int i = 0; i < _nargs; ++i)
   {
-    _func_dFdarg[i] = ADFunctionPtr(new ADFunction(*_func_F));
+    _func_dFdarg[i] = std::make_shared<SymFunction>(*_func_F);
 
     if (_func_dFdarg[i]->AutoDiff(_arg_names[i]) != -1)
       mooseError("Failed to take first derivative w.r.t. ", _arg_names[i]);
@@ -121,7 +129,7 @@ ParsedODEKernel::ParsedODEKernel(const InputParameters & parameters)
   }
 
   // reserve storage for parameter passing buffer
-  _func_params.resize(_nargs + 1);
+  _func_params.resize(1 + _nargs + _pp.size());
 }
 
 void
@@ -131,6 +139,8 @@ ParsedODEKernel::updateParams()
 
   for (unsigned int j = 0; j < _nargs; ++j)
     _func_params[j + 1] = (*_args[j])[_i];
+  for (unsigned int j = 0; j < _pp.size(); ++j)
+    _func_params[j + 1 + _nargs] = *_pp[j];
 }
 
 Real

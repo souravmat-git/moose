@@ -3,34 +3,35 @@
 #
 
 [Mesh]
-  type = MortarPeriodicMesh
-  dim = 2
-  nx = 50
-  ny = 50
-  xmin = -0.5
-  xmax = 0.5
-  ymin = -0.5
-  ymax = 0.5
-  periodic_directions = 'x y'
+  [gen]
+    type = GeneratedMeshGenerator
+    dim = 2
+    nx = 50
+    ny = 50
+    xmin = -0.5
+    xmax = 0.5
+    ymin = -0.5
+    ymax = 0.5
+  []
+  [./cnode]
+    input = gen
+    type = ExtraNodesetGenerator
+    coord = '0.0 0.0'
+    new_boundary = 100
+  [../]
+  [./anode]
+    input = cnode
+    type = ExtraNodesetGenerator
+    coord = '0.0 0.5'
+    new_boundary = 101
+  [../]
 []
 
 [Modules/PhaseField/MortarPeriodicity]
   [./strain]
     variable = 'disp_x disp_y'
     periodicity = gradient
-  [../]
-[]
-
-[MeshModifiers]
-  [./cnode]
-    type = AddExtraNodeset
-    coord = '0.0 0.0'
-    new_boundary = 100
-  [../]
-  [./anode]
-    type = AddExtraNodeset
-    coord = '0.0 0.5'
-    new_boundary = 101
+    periodic_directions = 'x y'
   [../]
 []
 
@@ -111,7 +112,7 @@
   # declare a few constants, such as mobilities (L,M) and interface gradient prefactors (kappa*)
   [./consts]
     type = GenericConstantMaterial
-    block = '0 10 11'
+    block = '0'
     prop_names  = 'M   kappa_c'
     prop_values = '0.2 0.01   '
   [../]
@@ -168,7 +169,6 @@
     type = ComputeSmallStrain
     block = 0
     displacements = 'disp_x disp_y'
-    eigenstrains = eigenstrain
   [../]
 
   [./eigenstrain]
@@ -234,13 +234,13 @@
 
   # fix center point location
   [./centerfix_x]
-    type = PresetBC
+    type = DirichletBC
     boundary = 100
     variable = disp_x
     value = 0
   [../]
   [./centerfix_y]
-    type = PresetBC
+    type = DirichletBC
     boundary = 100
     variable = disp_y
     value = 0
@@ -248,7 +248,7 @@
 
   # fix side point x coordinate to inhibit rotation
   [./angularfix]
-    type = PresetBC
+    type = DirichletBC
     boundary = 101
     variable = disp_x
     value = 0

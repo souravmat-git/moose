@@ -1,26 +1,21 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef MATERIALPROPERTYSTORAGE_H
-#define MATERIALPROPERTYSTORAGE_H
+#pragma once
 
 #include "Moose.h"
-#include "MaterialProperty.h"
 #include "HashMap.h"
+#include "DataIO.h"
+#include "MaterialProperty.h"
 
 // Forward declarations
-class Material;
+class MaterialBase;
 class MaterialData;
 class QpMap;
 
@@ -28,6 +23,7 @@ class QpMap;
 namespace libMesh
 {
 class QBase;
+class Elem;
 }
 
 /**
@@ -40,8 +36,6 @@ class MaterialPropertyStorage
 public:
   MaterialPropertyStorage();
   virtual ~MaterialPropertyStorage();
-
-  void releaseProperties();
 
   /**
    * Creates storage for newly created elements from mesh Adaptivity.  Also, copies values from the
@@ -80,8 +74,8 @@ public:
    * @param input_child_side - the side on the child where material properties will be prolonged
    */
   void prolongStatefulProps(const std::vector<std::vector<QpMap>> & refinement_map,
-                            QBase & qrule,
-                            QBase & qrule_face,
+                            const QBase & qrule,
+                            const QBase & qrule_face,
                             MaterialPropertyStorage & parent_material_props,
                             MaterialData & child_material_data,
                             const Elem & elem,
@@ -103,8 +97,8 @@ public:
    */
   void restrictStatefulProps(const std::vector<std::pair<unsigned int, QpMap>> & coarsening_map,
                              const std::vector<const Elem *> & coarsened_element_children,
-                             QBase & qrule,
-                             QBase & qrule_face,
+                             const QBase & qrule,
+                             const QBase & qrule_face,
                              MaterialData & material_data,
                              const Elem & elem,
                              int input_side = -1);
@@ -118,7 +112,7 @@ public:
    * @param side Side of the element 'elem' (0 for volumetric material properties)
    */
   void initStatefulProps(MaterialData & material_data,
-                         const std::vector<std::shared_ptr<Material>> & mats,
+                         const std::vector<std::shared_ptr<MaterialBase>> & mats,
                          unsigned int n_qpoints,
                          const Elem & elem,
                          unsigned int side = 0);
@@ -130,7 +124,7 @@ public:
    * properties are
    * reused for computing current properties. This is called when solve succeeded.
    */
-  void shift();
+  void shift(const FEProblemBase & fe_problem);
 
   /**
    * Copy material properties from elem_from to elem_to. Thread safe.
@@ -245,10 +239,20 @@ public:
   }
 
 protected:
+  /// Release all internal data structures
+  void releaseProperties();
+
+  /// Remove the property storage and element pointer from internal data structures
+  void eraseProperty(const Elem * elem);
+
+  /// Internal property storage release helper
+  void releasePropertyMap(HashMap<unsigned int, MaterialProperties> & inner_map);
+
   // indexing: [element][side]->material_properties
-  HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>> * _props_elem;
-  HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>> * _props_elem_old;
-  HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>> * _props_elem_older;
+  std::unique_ptr<HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>> _props_elem;
+  std::unique_ptr<HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>> _props_elem_old;
+  std::unique_ptr<HashMap<const Elem *, HashMap<unsigned int, MaterialProperties>>>
+      _props_elem_older;
 
   /// mapping from property name to property ID
   /// NOTE: this is static so the property numbering is global within the simulation (not just FEProblemBase - should be useful when we will use material properties from
@@ -281,6 +285,9 @@ private:
                  const Elem & elem,
                  unsigned int side,
                  unsigned int n_qpoints);
+
+  // Need to be able to eraseProperty from here
+  friend class ProjectMaterialProperties;
 };
 
 template <>
@@ -304,5 +311,3 @@ dataLoad(std::istream & stream, MaterialPropertyStorage & storage, void * contex
   if (storage.hasOlderProperties())
     dataLoad(stream, storage.propsOlder(), context);
 }
-
-#endif /* MATERIALPROPERTYSTORAGE_H */

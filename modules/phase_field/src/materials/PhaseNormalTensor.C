@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "PhaseNormalTensor.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", PhaseNormalTensor);
+
 InputParameters
-validParams<PhaseNormalTensor>()
+PhaseNormalTensor::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
   params.addClassDescription("Calculate normal tensor of a phase based on gradient");
   params.addRequiredCoupledVar("phase", "Phase variable");
   params.addRequiredParam<MaterialPropertyName>("normal_tensor_name", "Name of normal tensor");

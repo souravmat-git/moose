@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWHALFCUBICSINK_H
-#define POROUSFLOWHALFCUBICSINK_H
+#pragma once
 
 #include "PorousFlowSinkPTDefiner.h"
-
-// Forward Declarations
-class PorousFlowHalfCubicSink;
-
-template <>
-InputParameters validParams<PorousFlowHalfCubicSink>();
 
 /**
  * Applies a flux sink to a boundary.  The base flux
@@ -30,21 +25,21 @@ InputParameters validParams<PorousFlowHalfCubicSink>();
 class PorousFlowHalfCubicSink : public PorousFlowSinkPTDefiner
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowHalfCubicSink(const InputParameters & parameters);
 
 protected:
-  /// maximum of the cubic sink
+  /// Maximum of the cubic sink
   const Real _maximum;
 
   /// Denote x = porepressure - center.  Then Flux out = (max/cutoff^3)*(2x + cutoff)(x - cutoff)^2 for cutoff < x < 0.  Flux out = max for x >= 0.  Flux out = 0 for x <= cutoff.
-  Function & _cutoff;
+  const Function & _cutoff;
 
-  /// center of the cubic sink
+  /// Center of the cubic sink
   const Real _center;
 
   virtual Real multiplier() const override;
 
   virtual Real dmultiplier_dvar(unsigned int pvar) const override;
 };
-
-#endif // POROUSFLOWHALFCUBICSINK_H

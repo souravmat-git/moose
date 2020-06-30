@@ -1,20 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef AEFVUpwindINTERNALSIDEFLUX_H
-#define AEFVUpwindINTERNALSIDEFLUX_H
+#pragma once
 
 #include "InternalSideFluxBase.h"
 
 // Forward Declarations
-class AEFVUpwindInternalSideFlux;
-
-template <>
-InputParameters validParams<AEFVUpwindInternalSideFlux>();
 
 /**
  * Upwind numerical flux scheme
@@ -24,6 +21,8 @@ InputParameters validParams<AEFVUpwindInternalSideFlux>();
 class AEFVUpwindInternalSideFlux : public InternalSideFluxBase
 {
 public:
+  static InputParameters validParams();
+
   AEFVUpwindInternalSideFlux(const InputParameters & parameters);
   virtual ~AEFVUpwindInternalSideFlux();
 
@@ -45,6 +44,6 @@ public:
                             DenseMatrix<Real> & jac2) const override;
 
 protected:
+  /// advective velocity
+  const Real _velocity;
 };
-
-#endif

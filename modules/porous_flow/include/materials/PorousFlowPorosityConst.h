@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWPOROSITYCONST_H
-#define POROUSFLOWPOROSITYCONST_H
+#pragma once
 
 #include "PorousFlowPorosityBase.h"
-
-// Forward Declarations
-class PorousFlowPorosityConst;
-
-template <>
-InputParameters validParams<PorousFlowPorosityConst>();
 
 /**
  * Material to provide a constant value of porosity. This can be specified
@@ -25,6 +20,8 @@ InputParameters validParams<PorousFlowPorosityConst>();
 class PorousFlowPorosityConst : public PorousFlowPorosityBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowPorosityConst(const InputParameters & parameters);
 
 protected:
@@ -34,5 +31,3 @@ protected:
   /// Constant porosity
   const VariableValue & _input_porosity;
 };
-
-#endif // POROUSFLOWPOROSITYCONST_H

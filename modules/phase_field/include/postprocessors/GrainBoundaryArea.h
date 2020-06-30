@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef GRAINBOUNDARYAREA_H
-#define GRAINBOUNDARYAREA_H
+#pragma once
 
 #include "ElementIntegralPostprocessor.h"
-
-class GrainBoundaryArea;
-
-template <>
-InputParameters validParams<GrainBoundaryArea>();
 
 /**
  * Calculate total grain boundary length in 2D and area in 3D.
@@ -21,6 +17,8 @@ InputParameters validParams<GrainBoundaryArea>();
 class GrainBoundaryArea : public ElementIntegralPostprocessor
 {
 public:
+  static InputParameters validParams();
+
   GrainBoundaryArea(const InputParameters & parameters);
 
   virtual Real getValue() override;
@@ -37,5 +35,3 @@ protected:
   /// normalization factor, depending on order parameter range and grains per side
   const Real _factor;
 };
-
-#endif // GRAINBOUNDARYAREA_H

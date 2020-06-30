@@ -1,19 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "Tricrystal2CircleGrainsIC.h"
 #include "MooseRandom.h"
 #include "MooseMesh.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", Tricrystal2CircleGrainsIC);
+
 InputParameters
-validParams<Tricrystal2CircleGrainsIC>()
+Tricrystal2CircleGrainsIC::validParams()
 {
-  InputParameters params = validParams<InitialCondition>();
+  InputParameters params = InitialCondition::validParams();
   params.addClassDescription("Tricrystal with two circles/bubbles");
   params.addRequiredParam<unsigned int>("op_num", "Number of grain order parameters");
   params.addRequiredParam<unsigned int>("op_index", "Index for the current grain order parameter");
@@ -27,7 +30,7 @@ Tricrystal2CircleGrainsIC::Tricrystal2CircleGrainsIC(const InputParameters & par
     _op_index(getParam<unsigned int>("op_index"))
 {
   if (_op_num != 3)
-    mooseError("Tricrystal ICs must have op_num = 3");
+    paramError("op_num", "Tricrystal ICs must have op_num = 3");
 
   // Set up domain bounds with mesh tools
   for (unsigned int i = 0; i < LIBMESH_DIM; i++)

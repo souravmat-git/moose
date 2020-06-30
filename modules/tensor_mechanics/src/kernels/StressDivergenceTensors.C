@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "StressDivergenceTensors.h"
 
@@ -14,14 +16,14 @@
 #include "MooseVariable.h"
 #include "SystemBase.h"
 
-// libMesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", StressDivergenceTensors);
+
 InputParameters
-validParams<StressDivergenceTensors>()
+StressDivergenceTensors::validParams()
 {
-  InputParameters params = validParams<ALEKernel>();
+  InputParameters params = ALEKernel::validParams();
   params.addClassDescription("Stress divergence kernel for the Cartesian coordinate system");
   params.addRequiredParam<unsigned int>("component",
                                         "An integer corresponding to the direction "
@@ -29,7 +31,22 @@ validParams<StressDivergenceTensors>()
                                         "1 for y, 2 for z)");
   params.addRequiredCoupledVar("displacements",
                                "The string of displacements suitable for the problem statement");
-  params.addCoupledVar("temperature", "The temperature");
+  params.addCoupledVar("temperature",
+                       "The name of the temperature variable used in the "
+                       "ComputeThermalExpansionEigenstrain.  (Not required for "
+                       "simulations without temperature coupling.)");
+  params.addParam<std::vector<MaterialPropertyName>>(
+      "eigenstrain_names",
+      "List of eigenstrains used in the strain calculation. Used for computing their derivaties "
+      "for off-diagonal Jacobian terms.");
+  params.addCoupledVar("out_of_plane_strain",
+                       "The name of the out_of_plane_strain variable used in the "
+                       "WeakPlaneStress kernel.");
+  MooseEnum out_of_plane_direction("x y z", "z");
+  params.addParam<MooseEnum>(
+      "out_of_plane_direction",
+      out_of_plane_direction,
+      "The direction of the out_of_plane_strain variable used in the WeakPlaneStress kernel.");
   params.addParam<std::string>("base_name", "Material property base name");
   params.set<bool>("use_displaced_mesh") = false;
   params.addParam<bool>(
@@ -51,6 +68,12 @@ StressDivergenceTensors::StressDivergenceTensors(const InputParameters & paramet
     _disp_var(_ndisp),
     _temp_coupled(isCoupled("temperature")),
     _temp_var(_temp_coupled ? coupled("temperature") : 0),
+    _out_of_plane_strain_coupled(isCoupled("out_of_plane_strain")),
+    _out_of_plane_strain(_out_of_plane_strain_coupled ? &coupledValue("out_of_plane_strain")
+                                                      : nullptr),
+    _out_of_plane_strain_var(_out_of_plane_strain_coupled ? coupled("out_of_plane_strain") : 0),
+    _out_of_plane_direction(getParam<MooseEnum>("out_of_plane_direction")),
+    _use_displaced_mesh(getParam<bool>("use_displaced_mesh")),
     _avg_grad_test(_test.size(), std::vector<Real>(3, 0.0)),
     _avg_grad_phi(_phi.size(), std::vector<Real>(3, 0.0)),
     _volumetric_locking_correction(getParam<bool>("volumetric_locking_correction"))
@@ -58,9 +81,19 @@ StressDivergenceTensors::StressDivergenceTensors(const InputParameters & paramet
   for (unsigned int i = 0; i < _ndisp; ++i)
     _disp_var[i] = coupled("displacements", i);
 
+  if (_temp_coupled)
+  {
+    for (auto eigenstrain_name : getParam<std::vector<MaterialPropertyName>>("eigenstrain_names"))
+      _deigenstrain_dT.push_back(&getMaterialPropertyDerivative<RankTwoTensor>(
+          eigenstrain_name, getVar("temperature", 0)->name()));
+  }
+
   // Checking for consistency between mesh size and length of the provided displacements vector
-  if (_ndisp != _mesh.dimension())
-    mooseError("The number of displacement variables supplied must match the mesh dimension.");
+  if (_out_of_plane_direction != 2 && _ndisp != 3)
+    mooseError("For 2D simulations where the out-of-plane direction is x or y coordinate "
+               "directions the number of supplied displacements must be three.");
+  else if (_out_of_plane_direction == 2 && _ndisp != _mesh.dimension())
+    mooseError("The number of displacement variables supplied must match the mesh dimension");
 
   if (_use_finite_deform_jacobian)
   {
@@ -71,9 +104,15 @@ StressDivergenceTensors::StressDivergenceTensors(const InputParameters & paramet
     _rotation_increment = &getMaterialProperty<RankTwoTensor>(_base_name + "rotation_increment");
   }
 
-  // Error if volumetic locking correction is turned on for 1D problems
+  // Error if volumetric locking correction is turned on for 1D problems
   if (_ndisp == 1 && _volumetric_locking_correction)
     mooseError("Volumetric locking correction should be set to false for 1-D problems.");
+
+  // Generate warning when volumetric locking correction is used with second order elements
+  if (_mesh.hasSecondOrderElements() && _volumetric_locking_correction)
+    mooseWarning("Volumteric locking correction is not required for second order elements. Using "
+                 "volumetric locking with second order elements could cause zigzag patterns in "
+                 "stresses and strains.");
 }
 
 void
@@ -87,9 +126,7 @@ StressDivergenceTensors::initialSetup()
 void
 StressDivergenceTensors::computeResidual()
 {
-  DenseVector<Number> & re = _assembly.residualBlock(_var.number());
-  _local_re.resize(re.size());
-  _local_re.zero();
+  prepareVectorTag(_assembly, _var.number());
 
   if (_volumetric_locking_correction)
     computeAverageGradientTest();
@@ -99,7 +136,7 @@ StressDivergenceTensors::computeResidual()
     for (_qp = 0; _qp < _qrule->n_points(); ++_qp)
       _local_re(_i) += _JxW[_qp] * _coord[_qp] * computeQpResidual();
 
-  re += _local_re;
+  accumulateTaggedLocalResidual();
 
   if (_has_save_in)
   {
@@ -112,11 +149,18 @@ StressDivergenceTensors::computeResidual()
 Real
 StressDivergenceTensors::computeQpResidual()
 {
+
   Real residual = _stress[_qp].row(_component) * _grad_test[_i][_qp];
   // volumetric locking correction
   if (_volumetric_locking_correction)
     residual += _stress[_qp].trace() / 3.0 *
                 (_avg_grad_test[_i][_component] - _grad_test[_i][_qp](_component));
+
+  if (_ndisp != 3 && _out_of_plane_strain_coupled && _use_displaced_mesh)
+  {
+    const Real out_of_plane_thickness = std::exp((*_out_of_plane_strain)[_qp]);
+    residual *= out_of_plane_thickness;
+  }
 
   return residual;
 }
@@ -124,6 +168,12 @@ StressDivergenceTensors::computeQpResidual()
 void
 StressDivergenceTensors::computeJacobian()
 {
+  if (_volumetric_locking_correction)
+  {
+    computeAverageGradientTest();
+    computeAverageGradientPhi();
+  }
+
   if (_use_finite_deform_jacobian)
   {
     _finite_deform_Jacobian_mult.resize(_qrule->n_points());
@@ -134,19 +184,18 @@ StressDivergenceTensors::computeJacobian()
     ALEKernel::computeJacobian();
   }
   else
-  {
-    if (_volumetric_locking_correction)
-    {
-      computeAverageGradientTest();
-      computeAverageGradientPhi();
-    }
     Kernel::computeJacobian();
-  }
 }
 
 void
-StressDivergenceTensors::computeOffDiagJacobian(unsigned int jvar)
+StressDivergenceTensors::computeOffDiagJacobian(MooseVariableFEBase & jvar)
 {
+  if (_volumetric_locking_correction)
+  {
+    computeAverageGradientPhi();
+    computeAverageGradientTest();
+  }
+
   if (_use_finite_deform_jacobian)
   {
     _finite_deform_Jacobian_mult.resize(_qrule->n_points());
@@ -157,14 +206,7 @@ StressDivergenceTensors::computeOffDiagJacobian(unsigned int jvar)
     ALEKernel::computeOffDiagJacobian(jvar);
   }
   else
-  {
-    if (_volumetric_locking_correction)
-    {
-      computeAverageGradientPhi();
-      computeAverageGradientTest();
-    }
     Kernel::computeOffDiagJacobian(jvar);
-  }
 }
 
 Real
@@ -222,6 +264,13 @@ StressDivergenceTensors::computeQpJacobian()
     jacobian += (_Jacobian_mult[_qp] * phi).trace() *
                 (_avg_grad_test[_i][_component] - _grad_test[_i][_qp](_component)) / 3.0;
   }
+
+  if (_ndisp != 3 && _out_of_plane_strain_coupled && _use_displaced_mesh)
+  {
+    const Real out_of_plane_thickness = std::exp((*_out_of_plane_strain)[_qp]);
+    jacobian *= out_of_plane_thickness;
+  }
+
   return jacobian;
 }
 
@@ -232,6 +281,12 @@ StressDivergenceTensors::computeQpOffDiagJacobian(unsigned int jvar)
   for (unsigned int coupled_component = 0; coupled_component < _ndisp; ++coupled_component)
     if (jvar == _disp_var[coupled_component])
     {
+      if (_out_of_plane_direction != 2)
+      {
+        if (coupled_component == _out_of_plane_direction)
+          continue;
+      }
+
       if (_use_finite_deform_jacobian)
         return ElasticityTensorTools::elasticJacobian(_finite_deform_Jacobian_mult[_qp],
                                                       _component,
@@ -278,11 +333,21 @@ StressDivergenceTensors::computeQpOffDiagJacobian(unsigned int jvar)
       return jacobian;
     }
 
+  // off-diagonal Jacobian with respect to a coupled out_of_plane_strain variable
+  if (_out_of_plane_strain_coupled && jvar == _out_of_plane_strain_var)
+    return _Jacobian_mult[_qp](
+               _component, _component, _out_of_plane_direction, _out_of_plane_direction) *
+           _grad_test[_i][_qp](_component) * _phi[_j][_qp];
+
   // off-diagonal Jacobian with respect to a coupled temperature variable
   if (_temp_coupled && jvar == _temp_var)
   {
-    // return _d_stress_dT[_qp].rowDot(_component, _grad_test[_i][_qp]) * _phi[_j][_qp];
-    return 0.0;
+    RankTwoTensor total_deigenstrain_dT;
+    for (const auto deigenstrain_dT : _deigenstrain_dT)
+      total_deigenstrain_dT += (*deigenstrain_dT)[_qp];
+
+    return -((_Jacobian_mult[_qp] * total_deigenstrain_dT) *
+             _grad_test[_i][_qp])(_component)*_phi[_j][_qp];
   }
 
   return 0.0;

@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 //  Holds maps between Richards variables (porepressure, saturations) and the variable number used
 //  by MOOSE.
 //
 #include "RichardsVarNames.h"
 
-template <>
+registerMooseObject("RichardsApp", RichardsVarNames);
+
 InputParameters
-validParams<RichardsVarNames>()
+RichardsVarNames::validParams()
 {
-  InputParameters params = validParams<GeneralUserObject>();
+  InputParameters params = GeneralUserObject::validParams();
   params.addClassDescription("Holds information on the porepressure variable names");
   params.addRequiredCoupledVar("richards_vars",
                                "List of variables that represent the porepressures or "
@@ -34,7 +37,6 @@ validParams<RichardsVarNames>()
 RichardsVarNames::RichardsVarNames(const InputParameters & parameters)
   : GeneralUserObject(parameters),
     Coupleable(this, false),
-    ZeroInterface(parameters),
     _num_v(coupledComponents("richards_vars")),
     _var_types(getParam<MooseEnum>("var_types"))
 {
@@ -55,12 +57,12 @@ RichardsVarNames::RichardsVarNames(const InputParameters & parameters)
                                                              // alias) to a VariableValue, and the &
                                                              // turns it into a pointer
     _moose_var_value_old[i] = (_is_transient ? &coupledValueOld("richards_vars", i) : &_zero);
-    _moose_nodal_var_value[i] = &coupledNodalValue("richards_vars", i); // coupledNodalValue returns
-                                                                        // a reference (an alias) to
-                                                                        // a VariableValue, and the
-                                                                        // & turns it into a pointer
+    _moose_nodal_var_value[i] = &coupledDofValues("richards_vars", i); // coupledDofValues returns
+                                                                       // a reference (an alias) to
+                                                                       // a VariableValue, and the
+                                                                       // & turns it into a pointer
     _moose_nodal_var_value_old[i] =
-        (_is_transient ? &coupledNodalValueOld("richards_vars", i) : &_zero);
+        (_is_transient ? &coupledDofValuesOld("richards_vars", i) : &_zero);
     _moose_grad_var[i] = &coupledGradient("richards_vars", i);
   }
 

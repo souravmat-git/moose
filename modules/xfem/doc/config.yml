@@ -1,0 +1,38 @@
+Content:
+    - framework/doc/content
+    - modules/xfem/doc/content
+    - modules/tensor_mechanics/doc/content
+
+Renderer:
+    type: MooseDocs.base.MaterializeRenderer
+
+Extensions:
+    MooseDocs.extensions.navigation:
+        name: MOOSE XFEM Module
+        repo: https://github.com/idaholab/moose
+        home: /modules/xfem
+    MooseDocs.extensions.appsyntax:
+        executable: ${MOOSE_DIR}/modules/xfem
+        hide:
+            framework: !include framework/doc/hidden.yml
+            xfem: !include modules/xfem/doc/hidden.yml
+            tensor_mechanics: !include modules/tensor_mechanics/doc/hidden.yml
+        remove:
+            framework: !include framework/doc/remove.yml
+            solid_mechanics: !include modules/solid_mechanics/doc/remove.yml
+        includes:
+            - framework/include
+            - modules/xfem/include
+            - modules/tensor_mechanics/include
+    MooseDocs.extensions.common:
+        shortcuts: !include framework/doc/globals.yml
+    MooseDocs.extensions.acronym:
+        acronyms: !include framework/doc/acronyms.yml
+    MooseDocs.extensions.template:
+        active: True
+    MooseDocs.extensions.sqa:
+        active: True
+        categories:
+            framework: !include framework/doc/sqa_framework.yml
+            xfem: !include modules/xfem/doc/sqa_xfem.yml
+            tensor_mechanics: !include modules/tensor_mechanics/doc/sqa_tensor_mechanics.yml

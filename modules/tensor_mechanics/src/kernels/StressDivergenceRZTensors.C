@@ -1,27 +1,30 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "StressDivergenceRZTensors.h"
 #include "Assembly.h"
 #include "ElasticityTensorTools.h"
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", StressDivergenceRZTensors);
+
 InputParameters
-validParams<StressDivergenceRZTensors>()
+StressDivergenceRZTensors::validParams()
 {
-  InputParameters params = validParams<StressDivergenceTensors>();
+  InputParameters params = StressDivergenceTensors::validParams();
   params.addClassDescription(
-      "Calculate stress divergence for an axisymmetric problem in cylinderical coordinates.");
-  params.addRequiredParam<unsigned int>(
+      "Calculate stress divergence for an axisymmetric problem in cylindrical coordinates.");
+  params.addRequiredRangeCheckedParam<unsigned int>(
       "component",
+      "component < 2",
       "An integer corresponding to the direction the variable this kernel acts in. (0 "
-      "for x, 1 for y, 2 for z; note in this kernel disp_x refers to the radial "
-      "displacement and disp_y refers to the axial displacement.)");
+      "refers to the radial and 1 to the axial displacement.)");
   params.set<bool>("use_displaced_mesh") = true;
   return params;
 }
@@ -37,6 +40,9 @@ StressDivergenceRZTensors::initialSetup()
   if (getBlockCoordSystem() != Moose::COORD_RZ)
     mooseError("The coordinate system in the Problem block must be set to RZ for axisymmetric "
                "geometries.");
+
+  if (getBlockCoordSystem() == Moose::COORD_RZ && _fe_problem.getAxisymmetricRadialCoord() != 0)
+    mooseError("rz_coord_axis=Y is the only supported option for StressDivergenceRZTensors");
 }
 
 Real
@@ -85,7 +91,32 @@ StressDivergenceRZTensors::computeQpOffDiagJacobian(unsigned int jvar)
   }
 
   if (_temp_coupled && jvar == _temp_var)
-    return 0.0;
+  {
+    RankTwoTensor total_deigenstrain_dT;
+    for (const auto deigenstrain_dT : _deigenstrain_dT)
+      total_deigenstrain_dT += (*deigenstrain_dT)[_qp];
+
+    Real jac = 0.0;
+    if (_component == 0)
+    {
+      for (unsigned k = 0; k < LIBMESH_DIM; ++k)
+        for (unsigned l = 0; l < LIBMESH_DIM; ++l)
+          jac -= (_grad_test[_i][_qp](0) * _Jacobian_mult[_qp](0, 0, k, l) +
+                  _test[_i][_qp] / _q_point[_qp](0) * _Jacobian_mult[_qp](2, 2, k, l) +
+                  _grad_test[_i][_qp](1) * _Jacobian_mult[_qp](0, 1, k, l)) *
+                 total_deigenstrain_dT(k, l);
+      return jac * _phi[_j][_qp];
+    }
+    else if (_component == 1)
+    {
+      for (unsigned k = 0; k < LIBMESH_DIM; ++k)
+        for (unsigned l = 0; l < LIBMESH_DIM; ++l)
+          jac -= (_grad_test[_i][_qp](1) * _Jacobian_mult[_qp](1, 1, k, l) +
+                  _grad_test[_i][_qp](0) * _Jacobian_mult[_qp](1, 0, k, l)) *
+                 total_deigenstrain_dT(k, l);
+      return jac * _phi[_j][_qp];
+    }
+  }
 
   return 0.0;
 }
@@ -96,8 +127,8 @@ StressDivergenceRZTensors::calculateJacobian(unsigned int ivar, unsigned int jva
   // B^T_i * C * B_j
   RealGradient test, test_z, phi, phi_z;
   Real first_term = 0.0;
-  if (ivar ==
-      0) // Case grad_test for x, requires contributions from stress_xx, stress_xy, and stress_zz
+  if (ivar == 0) // Case grad_test for x, requires contributions from stress_xx, stress_xy, and
+                 // stress_zz
   {
     test(0) = _grad_test[_i][_qp](0);
     test(1) = _grad_test[_i][_qp](1);

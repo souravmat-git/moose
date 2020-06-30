@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef EFAFUNCS_H
-#define EFAFUNCS_H
+#pragma once
 
 #include <map>
 #include <set>
@@ -82,5 +83,3 @@ double linearHexShape3D(unsigned int node_id, std::vector<double> & xi_3d);
 double linearTetShape3D(unsigned int node_id, std::vector<double> & xi_3d);
 
 } // namespace Efa
-
-#endif

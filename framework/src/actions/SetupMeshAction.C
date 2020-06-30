@@ -1,30 +1,42 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "SetupMeshAction.h"
 #include "MooseApp.h"
 #include "MooseMesh.h"
+#include "FileMesh.h"
 #include "FEProblem.h"
 #include "ActionWarehouse.h"
 #include "Factory.h"
+#include "AddMeshGeneratorAction.h"
 
-template <>
+registerMooseAction("MooseApp", SetupMeshAction, "setup_mesh");
+registerMooseAction("MooseApp", SetupMeshAction, "set_mesh_base");
+registerMooseAction("MooseApp", SetupMeshAction, "init_mesh");
+
+defineLegacyParams(SetupMeshAction);
+
 InputParameters
-validParams<SetupMeshAction>()
+SetupMeshAction::validParams()
 {
-  InputParameters params = validParams<MooseObjectAction>();
-  params.set<std::string>("type") = "FileMesh";
+  InputParameters params = MooseObjectAction::validParams();
+
+  // Here we are setting the default type of the mesh to construct to "FileMesh". This is to support
+  // the very long-running legacy syntax where only a file parameter is required to determine the
+  // type of the "Mesh" block. We are re-adding it though so that we can detect whether or not the
+  // user has explicitly set the type in an input file. We do this because we want to support
+  // automatically building a "MeshGeneratorMesh" type when MeshGenerators are added to the
+  // simulation.
+  params.addParam<std::string>(
+      "type",
+      "FileMesh",
+      "A string representing the Moose Object that will be built by this Action");
 
   params.addParam<bool>("second_order",
                         false,
@@ -50,7 +62,14 @@ validParams<SetupMeshAction>()
       "displacements",
       "The variables corresponding to the x y z displacements of the mesh.  If "
       "this is provided then the displacements will be taken into account during "
-      "the computation.");
+      "the computation. Creation of the displaced mesh can be suppressed even if "
+      "this is set by setting 'use_displaced_mesh = false'.");
+  params.addParam<bool>(
+      "use_displaced_mesh",
+      true,
+      "Create the displaced mesh if the 'displacements' "
+      "parameter is set. If this is 'false', a displaced mesh will not be created, "
+      "regardless of whether 'displacements' is set.");
   params.addParam<std::vector<BoundaryName>>("ghosted_boundaries",
                                              "Boundaries to be ghosted if using Nemesis");
   params.addParam<std::vector<Real>>("ghosted_boundaries_inflation",
@@ -154,34 +173,153 @@ SetupMeshAction::setupMesh(MooseMesh * mesh)
     mesh->getMesh().skip_partitioning(getParam<bool>("skip_partitioning"));
 }
 
+std::string
+SetupMeshAction::modifyParamsForUseSplit(InputParameters & moose_object_params) const
+{
+  auto split_file = _app.parameters().get<std::string>("split_file");
+
+  // Get the split_file extension, if there is one, and use that to decide
+  // between .cpr and .cpa
+  std::string split_file_ext;
+  auto pos = split_file.rfind(".");
+  if (pos != std::string::npos)
+    split_file_ext = split_file.substr(pos + 1, std::string::npos);
+
+  // If split_file already has the .cpr or .cpa extension, we go with
+  // that, otherwise we strip off the extension and append ".cpr".
+  if (split_file != "" && split_file_ext != "cpr" && split_file_ext != "cpa")
+    split_file = MooseUtils::stripExtension(split_file) + ".cpr";
+
+  if (_type != "FileMesh")
+  {
+    if (split_file == "")
+    {
+      if (_app.processor_id() == 0)
+        mooseError("Cannot use split mesh for a non-file mesh without specifying --split-file on "
+                   "command line");
+    }
+
+    auto new_pars = FileMesh::validParams();
+
+    // Keep existing parameters where possible
+    new_pars.applyParameters(_moose_object_pars);
+
+    new_pars.set<MeshFileName>("file") = split_file;
+    new_pars.set<MooseApp *>("_moose_app") = moose_object_params.get<MooseApp *>("_moose_app");
+    moose_object_params = new_pars;
+  }
+  else
+  {
+    if (split_file != "")
+      moose_object_params.set<MeshFileName>("file") = split_file;
+    else
+      moose_object_params.set<MeshFileName>("file") =
+          MooseUtils::stripExtension(moose_object_params.get<MeshFileName>("file")) + ".cpr";
+  }
+
+  return "FileMesh";
+}
+
 void
 SetupMeshAction::act()
 {
   // Create the mesh object and tell it to build itself
   if (_current_task == "setup_mesh")
   {
-    _mesh = _factory.create<MooseMesh>(_type, "mesh", _moose_object_pars);
-    if (isParamValid("displacements"))
-      _displaced_mesh = _factory.create<MooseMesh>(_type, "displaced_mesh", _moose_object_pars);
+    if (_app.masterMesh())
+      _mesh = _app.masterMesh()->safeClone();
+    else
+    {
+      const auto & generator_actions = _awh.getActionListByName("add_mesh_generator");
+
+      // If we trigger any actions that can build MeshGenerators, whether through input file
+      // syntax or through custom actions, change the default type to construct. We can't yet
+      // check whether there are any actual MeshGenerator objects because those are added after
+      // setup_mesh
+      if (!generator_actions.empty())
+      {
+        // Check for whether type has been set or whether for the default type (FileMesh) a file has
+        // been provided
+        if (!_pars.isParamSetByUser("type") && !_moose_object_pars.isParamValid("file"))
+        {
+          _type = "MeshGeneratorMesh";
+          auto original_params = _moose_object_pars;
+          _moose_object_pars = _factory.getValidParams("MeshGeneratorMesh");
+
+          // Since we changing the type on the fly, we'll have to manually extract parameters again
+          // from the input file object.
+          _app.parser().extractParams(_registered_identifier, _moose_object_pars);
+        }
+        else if (!_moose_object_pars.get<bool>("_mesh_generator_mesh"))
+        {
+          // There are cases where a custom action may register the "add_mesh_generator" task, but
+          // may not actually add any mesh generators depending on user input. We don't want to risk
+          // giving false warnings in this case. However, if we triggered the "add_mesh_generator"
+          // task through explicit input file syntax, then it is definitely safe to warn
+          for (auto generator_action_ptr : generator_actions)
+            if (dynamic_cast<AddMeshGeneratorAction *>(generator_action_ptr))
+            {
+              mooseWarning("Mesh Generators present but the [Mesh] block is set to construct a \"",
+                           _type,
+                           "\" mesh, which does not use Mesh Generators in constructing the mesh.");
+              break;
+            }
+        }
+      }
+
+      // switch non-file meshes to be a file-mesh if using a pre-split mesh configuration.
+      if (_app.isUseSplit())
+        _type = modifyParamsForUseSplit(_moose_object_pars);
+
+      _mesh = _factory.create<MooseMesh>(_type, "mesh", _moose_object_pars);
+    }
   }
+
+  else if (_current_task == "set_mesh_base")
+  {
+    if (!_app.masterMesh() && !_mesh->hasMeshBase())
+    {
+      // We want to set the MeshBase object to that coming from mesh generators when the following
+      // conditions are met:
+      // 1. We have mesh generators
+      // 2. We are recovering/restarting AND we are not the master application, e.g. we are a
+      //    sub-application
+      if (!_app.getMeshGeneratorNames().empty() &&
+          !((_app.isRecovering() || _app.isRestarting()) && _app.isUltimateMaster()))
+        _mesh->setMeshBase(_app.getMeshGeneratorMesh());
+      else
+        _mesh->setMeshBase(_mesh->buildMeshBaseObject());
+    }
+  }
+
   else if (_current_task == "init_mesh")
   {
-    _mesh->init();
-
-    if (isParamValid("displacements"))
+    if (_app.masterMesh())
     {
-      // Initialize the displaced mesh
-      _displaced_mesh->init();
-
-      std::vector<std::string> displacements = getParam<std::vector<std::string>>("displacements");
-      if (displacements.size() < _displaced_mesh->dimension())
-        mooseError(
-            "Number of displacements must be greater than or equal to the dimension of the mesh!");
+      if (_app.masterDisplacedMesh())
+        _displaced_mesh = _app.masterDisplacedMesh()->safeClone();
     }
+    else
+    {
+      _mesh->init();
 
-    setupMesh(_mesh.get());
+      if (isParamValid("displacements") && getParam<bool>("use_displaced_mesh"))
+      {
+        _displaced_mesh = _mesh->safeClone();
+        _displaced_mesh->getMesh().allow_remote_element_removal(
+            _mesh->getMesh().allow_remote_element_removal());
 
-    if (_displaced_mesh)
-      setupMesh(_displaced_mesh.get());
+        std::vector<std::string> displacements =
+            getParam<std::vector<std::string>>("displacements");
+        if (displacements.size() < _displaced_mesh->dimension())
+          mooseError("Number of displacements must be greater than or equal to the dimension of "
+                     "the mesh!");
+      }
+
+      setupMesh(_mesh.get());
+
+      if (_displaced_mesh)
+        setupMesh(_displaced_mesh.get());
+    }
   }
 }

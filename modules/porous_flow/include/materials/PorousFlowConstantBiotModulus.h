@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWCONSTANTBIOTMODULUS_H
-#define POROUSFLOWCONSTANTBIOTMODULUS_H
+#pragma once
 
 #include "PorousFlowMaterialVectorBase.h"
-
-// Forward Declarations
-class PorousFlowConstantBiotModulus;
-
-template <>
-InputParameters validParams<PorousFlowConstantBiotModulus>();
 
 /**
  * Material designed to provide a time-invariant
@@ -29,6 +24,8 @@ InputParameters validParams<PorousFlowConstantBiotModulus>();
 class PorousFlowConstantBiotModulus : public PorousFlowMaterialVectorBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowConstantBiotModulus(const InputParameters & parameters);
 
 protected:
@@ -53,5 +50,3 @@ protected:
   /// Old value of Biot modulus.  This variable is necessary in order to keep Biot modulus constant even if porosity is changing.
   const MaterialProperty<Real> & _biot_modulus_old;
 };
-
-#endif // POROUSFLOWCONSTANTBIOTMODULUS_H

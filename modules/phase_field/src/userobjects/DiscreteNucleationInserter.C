@@ -1,88 +1,68 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "DiscreteNucleationInserter.h"
 #include "libmesh/parallel_algebra.h"
 
-// libmesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", DiscreteNucleationInserter);
+
 InputParameters
-validParams<DiscreteNucleationInserter>()
+DiscreteNucleationInserter::validParams()
 {
-  InputParameters params = validParams<ElementUserObject>();
+  InputParameters params = DiscreteNucleationInserterBase::validParams();
   params.addClassDescription("Manages the list of currently active nucleation sites and adds new "
                              "sites according to a given probability function.");
   params.addRequiredParam<MaterialPropertyName>(
       "probability", "Probability density for inserting a discrete nucleus");
   params.addRequiredParam<Real>("hold_time", "Time to keep each nucleus active");
-  params.addParam<Point>("test", "Insert a fixed nucleus at a point in the simulation cell");
-  MultiMooseEnum setup_options(SetupInterface::getExecuteOptions());
-  setup_options = "timestep_end";
-  params.set<MultiMooseEnum>("execute_on") = setup_options;
   return params;
 }
 
 DiscreteNucleationInserter::DiscreteNucleationInserter(const InputParameters & parameters)
-  : ElementUserObject(parameters),
+  : DiscreteNucleationInserterBase(parameters),
     _probability(getMaterialProperty<Real>("probability")),
     _hold_time(getParam<Real>("hold_time")),
-    _changes_made(0),
-    _global_nucleus_list(declareRestartableData("global_nucleus_list", NucleusList(0))),
     _local_nucleus_list(declareRestartableData("local_nucleus_list", NucleusList(0)))
 {
-  setRandomResetFrequency(EXEC_TIMESTEP_END);
-
-  // debugging code (this will insert the entry into every processors list, but duplicate entries in
-  // global should be OK)
-  // we also assume that time starts at 0! But hey, this is only for debugging anyways...
-  if (isParamValid("test"))
-    _insert_test = true;
-  else
-    _insert_test = false;
-
-  // force a map rebuild after restart or recover
-  _changes_made = _app.isRecovering() || _app.isRestarting();
 }
 
 void
 DiscreteNucleationInserter::initialize()
 {
-  _changes_made = 0;
+  // clear insertion and deletion counter
+  _changes_made = {0, 0};
 
-  // insert test nucleus once
-  if (_insert_test)
-  {
-    _local_nucleus_list.push_back(NucleusLocation(_hold_time, getParam<Point>("test")));
-    _changes_made++;
-    _insert_test = false;
-  }
-
-  // expire entries from the local nucleus list (if the current timestep converged)
+  // expire entries from the local nucleus list (if the current time step converged)
   if (_fe_problem.converged())
   {
     unsigned int i = 0;
     while (i < _local_nucleus_list.size())
     {
-      if (_local_nucleus_list[i].first + _fe_problem.dt() <= _fe_problem.time())
+      if (_local_nucleus_list[i].first <= _fe_problem.time())
       {
         // remove entry (by replacing with last element and shrinking size by one)
         _local_nucleus_list[i] = _local_nucleus_list.back();
         _local_nucleus_list.pop_back();
-        _changes_made++;
+        _changes_made.second++;
       }
       else
         ++i;
     }
   }
 
-  // we reassemble this list at every timestep
+  // we reassemble this list at every time step
   _global_nucleus_list.clear();
+
+  // clear total nucleation rate
+  _nucleation_rate = 0.0;
 }
 
 void
@@ -91,12 +71,23 @@ DiscreteNucleationInserter::execute()
   // check each qp for potential nucleation
   // TODO: we might as well place the nuclei at random positions within the element...
   for (unsigned int qp = 0; qp < _qrule->n_points(); ++qp)
-    if (getRandomReal() < _probability[qp] * _JxW[qp] * _coord[qp] * _fe_problem.dt())
+  {
+    const Real rate = _probability[qp] * _JxW[qp] * _coord[qp];
+    _nucleation_rate += rate;
+
+    const Real random = getRandomReal();
+
+    // We check the random number against the inverse of the zero probability.
+    // for performance reasons we do a quick check against the linearized form of
+    // that probability, which is always strictly larger than the actual probability.
+    // The expression below should short circuit and the expensive exponential
+    // should rarely get evaluated
+    if (random < rate * _fe_problem.dt() && random < (1.0 - std::exp(-rate * _fe_problem.dt())))
     {
-      _local_nucleus_list.push_back(
-          NucleusLocation(_fe_problem.dt() + _fe_problem.time() + _hold_time, _q_point[qp]));
-      _changes_made++;
+      _local_nucleus_list.push_back(NucleusLocation(_fe_problem.time() + _hold_time, _q_point[qp]));
+      _changes_made.first++;
     }
+  }
 }
 
 void
@@ -106,7 +97,13 @@ DiscreteNucleationInserter::threadJoin(const UserObject & y)
   const DiscreteNucleationInserter & uo = static_cast<const DiscreteNucleationInserter &>(y);
   _global_nucleus_list.insert(
       _global_nucleus_list.end(), uo._local_nucleus_list.begin(), uo._local_nucleus_list.end());
-  _changes_made += uo._changes_made;
+
+  // sum up insertion and deletion counts
+  _changes_made.first += uo._changes_made.first;
+  _changes_made.second += uo._changes_made.second;
+
+  // integrate total nucleation rate
+  _nucleation_rate += uo._nucleation_rate;
 }
 
 void
@@ -147,5 +144,11 @@ DiscreteNucleationInserter::finalize()
   }
 
   // get the global number of changes (i.e. changes to _global_nucleus_list)
-  gatherSum(_changes_made);
+  gatherSum(_changes_made.first);
+  gatherSum(_changes_made.second);
+
+  // gather the total nucleation rate
+  gatherSum(_nucleation_rate);
+
+  _update_required = _changes_made.first > 0 || _changes_made.second > 0;
 }

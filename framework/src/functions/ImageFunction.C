@@ -1,28 +1,26 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ImageFunction.h"
 #include "MooseMesh.h"
 
-template <>
+registerMooseObject("MooseApp", ImageFunction);
+
+defineLegacyParams(ImageFunction);
+
 InputParameters
-validParams<ImageFunction>()
+ImageFunction::validParams()
 {
   // Define the general parameters
-  InputParameters params = validParams<Function>();
-  params += validParams<ImageSampler>();
-  params.addClassDescription("Function with values sampled from a given image stack");
+  InputParameters params = Function::validParams();
+  params += ImageSampler::validParams();
+  params.addClassDescription("Function with values sampled from an image or image stack.");
   return params;
 }
 
@@ -42,7 +40,7 @@ ImageFunction::initialSetup()
 }
 
 Real
-ImageFunction::value(Real /*t*/, const Point & p)
+ImageFunction::value(Real /*t*/, const Point & p) const
 {
   return sample(p);
 }

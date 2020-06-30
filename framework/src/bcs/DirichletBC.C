@@ -1,36 +1,36 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "DirichletBC.h"
 
-template <>
+registerMooseObject("MooseApp", DirichletBC);
+
+defineLegacyParams(DirichletBC);
+
 InputParameters
-validParams<DirichletBC>()
+DirichletBC::validParams()
 {
-  InputParameters p = validParams<NodalBC>();
-  p.addRequiredParam<Real>("value", "Value of the BC");
-  p.declareControllable("value");
-  return p;
+  InputParameters params = DirichletBCBase::validParams();
+  params.addRequiredParam<Real>("value", "Value of the BC");
+  params.declareControllable("value");
+  params.addClassDescription("Imposes the essential boundary condition $u=g$, where $g$ "
+                             "is a constant, controllable value.");
+  return params;
 }
 
 DirichletBC::DirichletBC(const InputParameters & parameters)
-  : NodalBC(parameters), _value(getParam<Real>("value"))
+  : DirichletBCBase(parameters), _value(getParam<Real>("value"))
 {
 }
 
 Real
-DirichletBC::computeQpResidual()
+DirichletBC::computeQpValue()
 {
-  return _u[_qp] - _value;
+  return _value;
 }

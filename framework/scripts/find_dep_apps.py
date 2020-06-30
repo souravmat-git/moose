@@ -1,4 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
 
 # This script finds a file in the herd trunk containing all the possible applications
 # thay may be built with an "up" target.  If passed the value ROOT it will simply
@@ -17,7 +25,7 @@ def findDepApps(dep_names, use_current_only=False):
     p = subprocess.Popen('git rev-parse --show-cdup', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     p.wait()
     if p.returncode == 0:
-        git_dir = p.communicate()[0]
+        git_dir = p.communicate()[0].decode('utf-8')
         root_dir = os.path.abspath(os.path.join(os.getcwd(), git_dir)).rstrip()
 
         # Assume that any application we care about is always a peer
@@ -133,4 +141,4 @@ def findDepApps(dep_names, use_current_only=False):
 if __name__ == '__main__':
     if len(sys.argv) == 2:
         dep_apps = findDepApps(sys.argv[1], False)
-        print dep_apps
+        print(dep_apps)

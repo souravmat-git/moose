@@ -1,17 +1,38 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef BOOSTDISTRIBUTION_H
-#define BOOSTDISTRIBUTION_H
+#pragma once
 
 #include "Distribution.h"
 
 #ifdef LIBMESH_HAVE_EXTERNAL_BOOST
-#include <boost/math/distributions.hpp>
+#include "BoostDistributionInclude.h"
+#else
+class BoostDistributionDummy
+{
+public:
+  BoostDistributionDummy(Real...) {}
+};
+namespace boost
+{
+namespace math
+{
+template <typename T>
+using weibull_distribution = BoostDistributionDummy;
+
+template <typename T>
+using normal_distribution = BoostDistributionDummy;
+
+template <typename T>
+using lognormal_distribution = BoostDistributionDummy;
+}
+}
 #endif
 
 /**
@@ -26,11 +47,12 @@ class BoostDistribution : public Distribution
 public:
   BoostDistribution(const InputParameters & parameters);
 
-protected:
-  virtual Real pdf(const Real & x) override;
-  virtual Real cdf(const Real & x) override;
-  virtual Real quantile(const Real & y) override;
+  virtual Real pdf(const Real & x) const override;
+  virtual Real cdf(const Real & x) const override;
+  virtual Real quantile(const Real & y) const override;
+  virtual Real median() const override;
 
+protected:
   /// This must be defined by the child class in the constructor
   std::unique_ptr<T> _distribution_unique_ptr;
 };
@@ -51,10 +73,11 @@ BoostDistribution<T>::BoostDistribution(const InputParameters & parameters)
 
 template <typename T>
 Real
-BoostDistribution<T>::pdf(const Real & x)
+BoostDistribution<T>::pdf(const Real & x) const
 {
 #ifdef LIBMESH_HAVE_EXTERNAL_BOOST
   mooseAssert(_distribution_unique_ptr, "Boost distribution pointer not defined.");
+  TIME_SECTION(_perf_pdf);
   return boost::math::pdf(*_distribution_unique_ptr, x);
 #else
   return x; // unreachable
@@ -63,10 +86,11 @@ BoostDistribution<T>::pdf(const Real & x)
 
 template <typename T>
 Real
-BoostDistribution<T>::cdf(const Real & x)
+BoostDistribution<T>::cdf(const Real & x) const
 {
 #ifdef LIBMESH_HAVE_EXTERNAL_BOOST
   mooseAssert(_distribution_unique_ptr, "Boost distribution pointer not defined.");
+  TIME_SECTION(_perf_cdf);
   return boost::math::cdf(*_distribution_unique_ptr, x);
 #else
   return x; // unreachable
@@ -75,14 +99,26 @@ BoostDistribution<T>::cdf(const Real & x)
 
 template <typename T>
 Real
-BoostDistribution<T>::quantile(const Real & y)
+BoostDistribution<T>::quantile(const Real & y) const
 {
 #ifdef LIBMESH_HAVE_EXTERNAL_BOOST
   mooseAssert(_distribution_unique_ptr, "Boost distribution pointer not defined.");
+  TIME_SECTION(_perf_quantile);
   return boost::math::quantile(*_distribution_unique_ptr, y);
 #else
   return y; // unreachable
 #endif
 }
 
-#endif // BOOSTDISTRIBUTION_H
+template <typename T>
+Real
+BoostDistribution<T>::median() const
+{
+#ifdef LIBMESH_HAVE_EXTERNAL_BOOST
+  mooseAssert(_distribution_unique_ptr, "Boost distribution pointer not defined.");
+  TIME_SECTION(_perf_median);
+  return boost::math::median(*_distribution_unique_ptr);
+#else
+  return 0; // unreachable
+#endif
+}

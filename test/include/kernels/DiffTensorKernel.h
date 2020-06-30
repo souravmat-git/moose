@@ -1,28 +1,17 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef DIFFTENSORKERNEL_H
-#define DIFFTENSORKERNEL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 #include "MooseParsedVectorFunction.h"
 #include "MaterialProperty.h"
-
-// Forward Declaration
-class DiffTensorKernel;
-
-template <>
-InputParameters validParams<DiffTensorKernel>();
 
 /**
  * A Kernel for Testing ParsedVectorFunction
@@ -30,10 +19,10 @@ InputParameters validParams<DiffTensorKernel>();
 class DiffTensorKernel : public Kernel
 {
 public:
-  /** Class constructor */
+  static InputParameters validParams();
+
   DiffTensorKernel(const InputParameters & parameters);
 
-  /** Class destructor */
   virtual ~DiffTensorKernel() {}
 
 protected:
@@ -42,11 +31,9 @@ protected:
   virtual Real computeQpJacobian();
 
   /// A vector function containing the components of k for the tensor
-  Function & _k_comp;
+  const Function & _k_comp;
 
 private:
   /** Compute the k Tensor from the vector function input */
   RealTensorValue computeConductivity(Real t, const Point & pt);
 };
-
-#endif // DIFFTENSORKERNEL_H

@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWVANGENUCHTEN_H
-#define POROUSFLOWVANGENUCHTEN_H
+#pragma once
 
 #include "MooseTypes.h"
 
@@ -111,6 +112,29 @@ Real dRelativePermeability(Real seff, Real m);
  * @return second derivative of relative permeability wrt effective saturation
  */
 Real d2RelativePermeability(Real seff, Real m);
-}
 
-#endif // POROUSFLOWVANGENUCHTEN_H
+/**
+ * Relative permeability for a non-wetting phase as a function of effective saturation
+ * @param seff effective saturation
+ * @param m van Genuchten exponent
+ * @return relative permeability
+ */
+Real relativePermeabilityNW(Real seff, Real m);
+
+/**
+ * Derivative of relative permeability for a non-wetting phase with respect to effective saturation
+ * @param seff effective saturation
+ * @param m van Genuchten exponent
+ * @return derivative of relative permeability wrt effective saturation
+ */
+Real dRelativePermeabilityNW(Real seff, Real m);
+
+/**
+ * Second derivative of relative permeability for a non-wetting phase with respect to effective
+ * saturation
+ * @param seff effective saturation
+ * @param m van Genuchten exponent
+ * @return second derivative of relative permeability wrt effective saturation
+ */
+Real d2RelativePermeabilityNW(Real seff, Real m);
+}

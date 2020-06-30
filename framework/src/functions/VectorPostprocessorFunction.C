@@ -1,30 +1,24 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "VectorPostprocessorFunction.h"
 
-template <>
+registerMooseObject("MooseApp", VectorPostprocessorFunction);
+
+defineLegacyParams(VectorPostprocessorFunction);
+
 InputParameters
-validParams<VectorPostprocessorFunction>()
+VectorPostprocessorFunction::validParams()
 {
-  InputParameters params = validParams<Function>();
-  params.addRequiredRangeCheckedParam<unsigned int>(
-      "component",
-      "component < 3",
-      "Component of the function evaluation point used to sample the VectorPostprocessor");
+  InputParameters params = Function::validParams();
   params.addRequiredParam<VectorPostprocessorName>(
-      "vectorpostprocessor_name", "The name of the PointValueSampler that you want to use");
+      "vectorpostprocessor_name", "The name of the VectorPostprocessor that you want to use");
   params.addRequiredParam<std::string>(
       "argument_column",
       "VectorPostprocessor column tabulating the abscissa of the sampled function");
@@ -32,18 +26,38 @@ validParams<VectorPostprocessorFunction>()
                                        "VectorPostprocessor column tabulating the "
                                        "ordinate (function values) of the sampled "
                                        "function");
+
+  MooseEnum component("x=0 y=1 z=2 time=3 0=4 1=5 2=6", "time");
+  params.addParam<MooseEnum>(
+      "component",
+      component,
+      "Component of the function evaluation point used to sample the VectorPostprocessor");
+
+  params.addClassDescription(
+      "Provides piecewise linear interpolation of from two columns of a VectorPostprocessor");
+
   return params;
 }
 
 VectorPostprocessorFunction::VectorPostprocessorFunction(const InputParameters & parameters)
   : Function(parameters),
     VectorPostprocessorInterface(this),
-    _component(parameters.get<unsigned int>("component")),
     _argument_column(getVectorPostprocessorValue("vectorpostprocessor_name",
                                                  getParam<std::string>("argument_column"))),
     _value_column(getVectorPostprocessorValue("vectorpostprocessor_name",
-                                              getParam<std::string>("value_column")))
+                                              getParam<std::string>("value_column"))),
+    _deprecated("0 1 2 3"),
+    _component(getParam<MooseEnum>("component") > 3 ? _deprecated
+                                                    : getParam<MooseEnum>("component"))
 {
+  if (&_component == &_deprecated) // are they the same object
+  {
+    paramWarning("component",
+                 "Using an index (0, 1, 2) for the 'component' parameter is deprecated, please use "
+                 "'x', 'y', or 'z'.");
+    _deprecated = getParam<MooseEnum>("component") - 4;
+  }
+
   try
   {
     _linear_interp = libmesh_make_unique<LinearInterpolation>(_argument_column, _value_column);
@@ -55,7 +69,7 @@ VectorPostprocessorFunction::VectorPostprocessorFunction(const InputParameters &
 }
 
 Real
-VectorPostprocessorFunction::value(Real /*t*/, const Point & p)
+VectorPostprocessorFunction::value(Real t, const Point & p) const
 {
   if (_argument_column.empty())
   {
@@ -68,5 +82,6 @@ VectorPostprocessorFunction::value(Real /*t*/, const Point & p)
     // iteration?
     _linear_interp->setData(_argument_column, _value_column);
   }
-  return _linear_interp->sample(p(_component));
+  const Real x = _component == 3 ? t : p(_component);
+  return _linear_interp->sample(x);
 }

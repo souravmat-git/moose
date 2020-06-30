@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSSEFF1VG_H
-#define RICHARDSSEFF1VG_H
+#pragma once
 
 #include "RichardsSeff.h"
 #include "RichardsSeffVG.h"
-
-class RichardsSeff1VG;
-
-template <>
-InputParameters validParams<RichardsSeff1VG>();
 
 /**
  * Effective saturation as a function of porepressure
@@ -25,6 +21,8 @@ InputParameters validParams<RichardsSeff1VG>();
 class RichardsSeff1VG : public RichardsSeff
 {
 public:
+  static InputParameters validParams();
+
   RichardsSeff1VG(const InputParameters & parameters);
 
   /**
@@ -63,5 +61,3 @@ protected:
   /// van Genuchten m parameter
   Real _m;
 };
-
-#endif // RICHARDSSEFF1VG_H

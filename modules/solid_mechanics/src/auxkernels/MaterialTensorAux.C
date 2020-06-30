@@ -1,21 +1,26 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MaterialTensorAux.h"
 #include "SymmTensor.h"
 
-template <>
+registerMooseObject("SolidMechanicsApp", MaterialTensorAux);
+
 InputParameters
-validParams<MaterialTensorAux>()
+MaterialTensorAux::validParams()
 {
-  InputParameters params = validParams<AuxKernel>();
-  params += validParams<MaterialTensorCalculator>();
+  InputParameters params = AuxKernel::validParams();
+  params += MaterialTensorCalculator::validParams();
   params.addRequiredParam<MaterialPropertyName>("tensor", "The material tensor name.");
   params.addParam<unsigned int>("qp_select", "The quad point you want evaluated");
+  params.addClassDescription(
+      "Outputs quantities related to second-order tensors used as material properties");
   return params;
 }
 

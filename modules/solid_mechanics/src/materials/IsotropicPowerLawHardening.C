@@ -1,26 +1,29 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "IsotropicPowerLawHardening.h"
 
 #include "SymmIsotropicElasticityTensor.h"
 
 /**
-* Isotropic power law hardening material model. Before yield, the stress is youngs modulus * strain.
-* After yielding, the stress is K* pow(strain, n) where K is the strength coefficient,  n is the
-*strain
-* hardening exponent and strain is the total strain.
-* Yield stress is the point of intersection of these two curves.
-**/
+ * Isotropic power law hardening material model. Before yield, the stress is youngs modulus *
+ *strain. After yielding, the stress is K* pow(strain, n) where K is the strength coefficient,  n is
+ *the strain hardening exponent and strain is the total strain. Yield stress is the point of
+ *intersection of these two curves.
+ **/
 
-template <>
+registerMooseObject("SolidMechanicsApp", IsotropicPowerLawHardening);
+
 InputParameters
-validParams<IsotropicPowerLawHardening>()
+IsotropicPowerLawHardening::validParams()
 {
-  InputParameters params = validParams<IsotropicPlasticity>();
+  InputParameters params = IsotropicPlasticity::validParams();
 
   params.set<Real>("yield_stress") = 1.0;
   params.set<Real>("hardening_constant") = 1.0;

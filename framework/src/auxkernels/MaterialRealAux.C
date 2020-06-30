@@ -1,34 +1,41 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MaterialRealAux.h"
 
-template <>
+registerMooseObject("MooseApp", MaterialRealAux);
+registerMooseObject("MooseApp", ADMaterialRealAux);
+
+defineLegacyParams(MaterialRealAux);
+
+template <bool is_ad>
 InputParameters
-validParams<MaterialRealAux>()
+MaterialRealAuxTempl<is_ad>::validParams()
 {
-  InputParameters params = validParams<MaterialAuxBase<Real>>();
+  InputParameters params = MaterialAuxBaseTempl<Real, is_ad>::validParams();
+  params.addClassDescription("Outputs element volume-averaged material properties");
   return params;
 }
 
-MaterialRealAux::MaterialRealAux(const InputParameters & parameters)
-  : MaterialAuxBase<Real>(parameters)
+template <bool is_ad>
+MaterialRealAuxTempl<is_ad>::MaterialRealAuxTempl(const InputParameters & parameters)
+  : MaterialAuxBaseTempl<Real, is_ad>(parameters)
 {
 }
 
+template <bool is_ad>
 Real
-MaterialRealAux::getRealValue()
+MaterialRealAuxTempl<is_ad>::getRealValue()
 {
-  return _prop[_qp];
+  // _prop and _qp are members of a dependent template so they need to be qualified with this->
+  return MetaPhysicL::raw_value(this->_prop[this->_qp]);
 }
+
+template class MaterialRealAuxTempl<false>;
+template class MaterialRealAuxTempl<true>;

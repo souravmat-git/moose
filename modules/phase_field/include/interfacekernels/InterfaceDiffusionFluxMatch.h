@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INTERFACEDIFFUSIONFLUXMATCH_H
-#define INTERFACEDIFFUSIONFLUXMATCH_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "InterfaceDiffusionBase.h"
-
-class InterfaceDiffusionFluxMatch;
-
-template <>
-InputParameters validParams<InterfaceDiffusionFluxMatch>();
 
 /**
  * Enforce gradient continuity between two different variables across a
@@ -21,11 +18,11 @@ InputParameters validParams<InterfaceDiffusionFluxMatch>();
 class InterfaceDiffusionFluxMatch : public InterfaceDiffusionBase
 {
 public:
+  static InputParameters validParams();
+
   InterfaceDiffusionFluxMatch(const InputParameters & parameters);
 
 protected:
   virtual Real computeQpResidual(Moose::DGResidualType type) override;
   virtual Real computeQpJacobian(Moose::DGJacobianType type) override;
 };
-
-#endif // INTERFACEDIFFUSIONFLUXMATCH_H

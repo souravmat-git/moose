@@ -16,6 +16,7 @@
 *.toc
 *.snm
 *.csv
+*.csv.*
 *.dylib
 *.so
 *.so.*
@@ -53,6 +54,7 @@ temp_print_trace.*
 *.mpx
 *.btr
 *.xml
+*.xml.*
 *.gmv
 *.plt
 *.slh
@@ -76,6 +78,9 @@ temp_print_trace.*
 *.tiff
 *.ps
 *.bmp
+*.mp4
+*.webm
+*.ico
 *.html
 *.xyz
 *Revision.h
@@ -84,15 +89,19 @@ temp_print_trace.*
 *.processor.*
 .clang_complete
 .failed_tests
+failed-unittest
 compile_commands.json
+build
 
 # Allow certain files in gold directories
 !**/gold/*.e
 !**/gold/*.e-s*
 !**/gold/*.csv
+!**/gold/*.csv.*
 !**/gold/*.vtk
 !**/gold/*.vtu
 !**/gold/*.pvtu
+!**/gold/*.xml*
 
 peacock_run_tmp.i
 yaml_dump*
@@ -125,8 +134,8 @@ framework/contrib/exodiff/exodiff
 .DS_Store
 *.dSYM
 
-# Unit testing stuff
-moose_unit/test_results.xml
+# Unit testing stuffbmoose_unit/test_results.xml
+!unit/data/csv/*.csv
 
 # gcov code coverage files
 *.gcno
@@ -165,29 +174,44 @@ framework/contrib/asio/
 *.cpa-*
 *.cpr-*
 
+# Ignore petsc arch
+petsc/arch-*/*
+
 # phase_field/tests/solution_rasterizer
 out.xyz
 
 # JIT and automatic differentiation cache files
 .jitcache/
 .jitdir/
+tmp_jit_*
 
 # Do not store ipython notebook checkpoints
 *-checkpoint.ipynb*
 
+# HIT
+framework/contrib/hit/hit
+
 # MooseDocs
 site
-*.moose.md
-*.moose.yml
-*.moose.svg
-tmp_*.dot
-docs/.moosedocs
-docs/examples/*.tex
-!docs/index.html
-!docs/templates/**/*.html
-!docs/content/media/**/*.png
-!docs/content/media/**/*.gif
-!python/MooseDocs/tests/**/gold/*.html
+python/MooseDocs/test/output
+!**/doc/content/**/*.md
+!**/doc/content/**/*.jpg
+!**/doc/content/**/*.jpeg
+!**/doc/content/**/*.gif
+!**/doc/content/**/*.png
+!**/doc/content/**/*.svg
+!**/doc/content/**/*.ogg
+!**/doc/content/**/*.webm
+!**/doc/content/**/*.mp4
+!**/doc/content/**/*.css
+!**/doc/content/**/*.js
+!**/doc/content/**/*.bib
+!**/doc/content/**/*.woff
+!**/doc/content/**/*.woff2
+!python/MooseDocs/test/gold/**/*.json
+!python/MooseDocs/test/gold/**/*.html
+!python/MooseDocs/test/gold/**/*.tex
+.ruby-version
 
 # Chigger
 !python/chigger/tests/**/gold/*.png
@@ -197,8 +221,22 @@ docs/examples/*.tex
 
 # Peacock
 python/peacock/tests/exodus_tab/TestOutputPlugin_repr.py
+python/peacock/tests/exodus_tab/TestExodusPluginManager_repr.py
 python/peacock/tests/input_tab/InputFileEditor/fsp_test.i
 python/peacock/tests/postprocessor_tab/TestPostprocessorPluginManager_test_script.py
 !python/peacock/tests/**/gold/*.png
 !python/peacock/icons/**/*.*
 !python/peacock/tests/**/input/*.*
+peacock_tmp_diff.exo
+*.e.diff
+
+# configure
+_configs.sed
+autom4te.cache
+config.status
+*MooseConfig.h
+*MooseConfig.h.tmp
+conf_vars.mk
+
+# GPerf performance
+*.prof

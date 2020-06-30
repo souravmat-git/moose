@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWNEARESTQP_QP
-#define POROUSFLOWNEARESTQP_QP
+#pragma once
 
 #include "PorousFlowMaterial.h"
-
-// Forward Declarations
-class PorousFlowNearestQp;
-
-template <>
-InputParameters validParams<PorousFlowNearestQp>();
 
 /**
  * Material designed to provide the nearest quadpoint to each node
@@ -23,13 +18,13 @@ InputParameters validParams<PorousFlowNearestQp>();
 class PorousFlowNearestQp : public PorousFlowMaterial
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowNearestQp(const InputParameters & parameters);
 
 protected:
   virtual void computeQpProperties() override;
 
-  /// the nearest quadpoint
+  /// The nearest quadpoint
   MaterialProperty<unsigned int> & _nearest_qp;
 };
-
-#endif // POROUSFLOWNEARESTQP_H

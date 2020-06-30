@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "RichardsMaterial.h"
 #include "Assembly.h"
@@ -11,14 +13,14 @@
 
 #include <cmath> // std::sinh and std::cosh
 
-// libmesh includes
 #include "libmesh/quadrature.h"
 
-template <>
+registerMooseObject("RichardsApp", RichardsMaterial);
+
 InputParameters
-validParams<RichardsMaterial>()
+RichardsMaterial::validParams()
 {
-  InputParameters params = validParams<Material>();
+  InputParameters params = Material::validParams();
 
   params.addRequiredParam<Real>(
       "mat_porosity", "The porosity of the material.  Should be between 0 and 1.  Eg, 0.1");
@@ -136,7 +138,8 @@ RichardsMaterial::RichardsMaterial(const InputParameters & parameters)
   // Need to add the variables that the user object is coupled to as dependencies so MOOSE will
   // compute them
   {
-    const std::vector<MooseVariable *> & coupled_vars = _richards_name_UO.getCoupledMooseVars();
+    const std::vector<MooseVariableFEBase *> & coupled_vars =
+        _richards_name_UO.getCoupledMooseVars();
     for (unsigned int i = 0; i < coupled_vars.size(); i++)
       addMooseVariableDependency(coupled_vars[i]);
   }
@@ -479,9 +482,9 @@ RichardsMaterial::computeSUPG()
   // Grab reference to linear Lagrange finite element object pointer,
   // currently this is always a linear Lagrange element, so this might need to
   // be generalized if we start working with higher-order elements...
-  FEBase *& fe(_assembly.getFE(getParam<bool>("linear_shape_fcns") ? FEType(FIRST, LAGRANGE)
+  auto && fe = _assembly.getFE(getParam<bool>("linear_shape_fcns") ? FEType(FIRST, LAGRANGE)
                                                                    : FEType(SECOND, LAGRANGE),
-                               _current_elem->dim()));
+                               _current_elem->dim());
 
   // Grab references to FE object's mapping data from the _subproblem's FE object
   const std::vector<Real> & dxidx(fe->get_dxidx());

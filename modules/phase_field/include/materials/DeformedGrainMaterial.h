@@ -1,20 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef DEFORMEDGRAINMATERIAL_H
-#define DEFORMEDGRAINMATERIAL_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 
 // Forward Declarations
-class DeformedGrainMaterial;
 class GrainTrackerInterface;
-
-template <>
-InputParameters validParams<DeformedGrainMaterial>();
 
 /**
  * Calculates The Deformation Energy associated with a specific dislocation density.
@@ -23,6 +21,8 @@ InputParameters validParams<DeformedGrainMaterial>();
 class DeformedGrainMaterial : public Material
 {
 public:
+  static InputParameters validParams();
+
   DeformedGrainMaterial(const InputParameters & parameters);
 
 protected:
@@ -56,7 +56,6 @@ protected:
   MaterialProperty<Real> & _gamma;
   MaterialProperty<Real> & _L;
   MaterialProperty<Real> & _mu;
-  MaterialProperty<Real> & _tgrad_corr_mult;
 
   /// the prefactor needed to calculate the deformation energy from dislocation density
   MaterialProperty<Real> & _beta;
@@ -80,5 +79,3 @@ protected:
   const Real _kb;
   const Real _JtoeV;
 };
-
-#endif // DEFORMEDGRAINMATERIAL_H

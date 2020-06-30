@@ -1,20 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWMATERIALVECTORBASE_H
-#define POROUSFLOWMATERIALVECTORBASE_H
+#pragma once
 
 #include "PorousFlowMaterial.h"
 #include "DerivativeMaterialInterface.h"
-
-class PorousFlowMaterialVectorBase;
-
-template <>
-InputParameters validParams<PorousFlowMaterialVectorBase>();
 
 /**
  * Base class for all PorousFlow vector materials
@@ -22,6 +18,8 @@ InputParameters validParams<PorousFlowMaterialVectorBase>();
 class PorousFlowMaterialVectorBase : public DerivativeMaterialInterface<PorousFlowMaterial>
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowMaterialVectorBase(const InputParameters & parameters);
 
 protected:
@@ -34,5 +32,3 @@ protected:
   /// Number of PorousFlow variables
   const unsigned int _num_var;
 };
-
-#endif // POROUSFLOWMATERIALVECTORBASE_H

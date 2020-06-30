@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiAppMeshFunctionTransfer.h"
 
@@ -19,29 +14,26 @@
 #include "FEProblem.h"
 #include "MooseMesh.h"
 #include "MooseTypes.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 
-// libMesh includes
 #include "libmesh/meshfree_interpolation.h"
 #include "libmesh/system.h"
 #include "libmesh/mesh_function.h"
 #include "libmesh/mesh_tools.h"
-#include "libmesh/parallel_algebra.h" // for communicator send and recieve stuff
+#include "libmesh/parallel_algebra.h" // for communicator send and receive stuff
 
-template <>
+registerMooseObject("MooseApp", MultiAppMeshFunctionTransfer);
+
+defineLegacyParams(MultiAppMeshFunctionTransfer);
+
 InputParameters
-validParams<MultiAppMeshFunctionTransfer>()
+MultiAppMeshFunctionTransfer::validParams()
 {
-  InputParameters params = validParams<MultiAppTransfer>();
-  params.addRequiredParam<AuxVariableName>(
-      "variable", "The auxiliary variable to store the transferred values in.");
-  params.addRequiredParam<VariableName>("source_variable", "The variable to transfer from.");
-  params.addParam<bool>("displaced_source_mesh",
-                        false,
-                        "Whether or not to use the displaced mesh for the source mesh.");
-  params.addParam<bool>("displaced_target_mesh",
-                        false,
-                        "Whether or not to use the displaced mesh for the target mesh.");
+  InputParameters params = MultiAppConservativeTransfer::validParams();
+  params.addClassDescription(
+      "Transfers field data at the MultiApp position using solution the finite element function "
+      "from the master application, via a 'libMesh::MeshFunction' object.");
+
   params.addParam<bool>(
       "error_on_miss",
       false,
@@ -50,30 +42,49 @@ validParams<MultiAppMeshFunctionTransfer>()
 }
 
 MultiAppMeshFunctionTransfer::MultiAppMeshFunctionTransfer(const InputParameters & parameters)
-  : MultiAppTransfer(parameters),
-    _to_var_name(getParam<AuxVariableName>("variable")),
-    _from_var_name(getParam<VariableName>("source_variable")),
-    _error_on_miss(getParam<bool>("error_on_miss"))
+  : MultiAppConservativeTransfer(parameters), _error_on_miss(getParam<bool>("error_on_miss"))
 {
-  _displaced_source_mesh = getParam<bool>("displaced_source_mesh");
-  _displaced_target_mesh = getParam<bool>("displaced_target_mesh");
-}
-
-void
-MultiAppMeshFunctionTransfer::initialSetup()
-{
-  if (_direction == TO_MULTIAPP)
-    variableIntegrityCheck(_to_var_name);
+  if (_to_var_names.size() == _from_var_names.size())
+    _var_size = _to_var_names.size();
   else
-    variableIntegrityCheck(_from_var_name);
+    paramError("variable", "The number of variables to transfer to and from should be equal");
 }
 
 void
 MultiAppMeshFunctionTransfer::execute()
 {
-  Moose::out << "Beginning MeshFunctionTransfer " << name() << std::endl;
+  _console << "Beginning MeshFunctionTransfer " << name() << std::endl;
 
   getAppInfo();
+
+  _send_points.resize(_var_size);
+  _send_evals.resize(_var_size);
+  _send_ids.resize(_var_size);
+  // loop over the vector of variables and make the transfer one by one
+  for (unsigned int i = 0; i < _var_size; ++i)
+    transferVariable(i);
+
+  // Make sure all our sends succeeded.
+  for (unsigned int i = 0; i < _var_size; ++i)
+    for (processor_id_type i_proc = 0; i_proc < n_processors(); ++i_proc)
+    {
+      if (i_proc == processor_id())
+        continue;
+      _send_points[i][i_proc].wait();
+      _send_evals[i][i_proc].wait();
+      if (_current_direction == FROM_MULTIAPP)
+        _send_ids[i][i_proc].wait();
+    }
+
+  _console << "Finished MeshFunctionTransfer " << name() << std::endl;
+
+  postExecute();
+}
+
+void
+MultiAppMeshFunctionTransfer::transferVariable(unsigned int i)
+{
+  mooseAssert(i < _var_size, "The variable of index " << i << " does not exist");
 
   /**
    * For every combination of global "from" problem and local "to" problem, find
@@ -84,34 +95,34 @@ MultiAppMeshFunctionTransfer::execute()
    */
 
   // Get the bounding boxes for the "from" domains.
-  std::vector<MeshTools::BoundingBox> bboxes = getFromBoundingBoxes();
+  std::vector<BoundingBox> bboxes = getFromBoundingBoxes();
 
   // Figure out how many "from" domains each processor owns.
   std::vector<unsigned int> froms_per_proc = getFromsPerProc();
 
   std::vector<std::vector<Point>> outgoing_points(n_processors());
-  std::vector<std::map<std::pair<unsigned int, unsigned int>, unsigned int>> point_index_map(
+  std::vector<std::map<std::pair<unsigned int, dof_id_type>, dof_id_type>> point_index_map(
       n_processors());
   // point_index_map[i_to, element_id] = index
   // outgoing_points[index] is the first quadrature point in element
 
-  for (unsigned int i_to = 0; i_to < _to_problems.size(); i_to++)
+  for (unsigned int i_to = 0; i_to < _to_problems.size(); ++i_to)
   {
-    System * to_sys = find_sys(*_to_es[i_to], _to_var_name);
+    System * to_sys = find_sys(*_to_es[i_to], _to_var_names[i]);
     unsigned int sys_num = to_sys->number();
-    unsigned int var_num = to_sys->variable_number(_to_var_name);
+    unsigned int var_num = to_sys->variable_number(_to_var_names[i]);
     MeshBase * to_mesh = &_to_meshes[i_to]->getMesh();
-    bool is_nodal = to_sys->variable_type(var_num).family == LAGRANGE;
+    auto & fe_type = to_sys->variable_type(var_num);
+    bool is_constant = fe_type.order == CONSTANT;
+    bool is_nodal = fe_type.family == LAGRANGE;
+
+    if (fe_type.order > FIRST && !is_nodal)
+      mooseError("We don't currently support second order or higher elemental variable ");
 
     if (is_nodal)
     {
-      MeshBase::const_node_iterator node_it = to_mesh->local_nodes_begin();
-      MeshBase::const_node_iterator node_end = to_mesh->local_nodes_end();
-
-      for (; node_it != node_end; ++node_it)
+      for (const auto & node : to_mesh->local_node_ptr_range())
       {
-        Node * node = *node_it;
-
         // Skip this node if the variable has no dofs at it.
         if (node->n_dofs(sys_num, var_num) < 1)
           continue;
@@ -121,15 +132,15 @@ MultiAppMeshFunctionTransfer::execute()
         // i_proc.
         unsigned int from0 = 0;
         for (processor_id_type i_proc = 0; i_proc < n_processors();
-             from0 += froms_per_proc[i_proc], i_proc++)
+             from0 += froms_per_proc[i_proc], ++i_proc)
         {
           bool point_found = false;
           for (unsigned int i_from = from0; i_from < from0 + froms_per_proc[i_proc] && !point_found;
-               i_from++)
+               ++i_from)
           {
             if (bboxes[i_from].contains_point(*node + _to_positions[i_to]))
             {
-              std::pair<unsigned int, unsigned int> key(i_to, node->id());
+              std::pair<unsigned int, dof_id_type> key(i_to, node->id());
               point_index_map[i_proc][key] = outgoing_points[i_proc].size();
               outgoing_points[i_proc].push_back(*node + _to_positions[i_to]);
               point_found = true;
@@ -140,40 +151,64 @@ MultiAppMeshFunctionTransfer::execute()
     }
     else // Elemental
     {
-      MeshBase::const_element_iterator elem_it = to_mesh->local_elements_begin();
-      MeshBase::const_element_iterator elem_end = to_mesh->local_elements_end();
-
-      for (; elem_it != elem_end; ++elem_it)
+      std::vector<Point> points;
+      std::vector<dof_id_type> point_ids;
+      for (auto & elem : as_range(to_mesh->local_elements_begin(), to_mesh->local_elements_end()))
       {
-        Elem * elem = *elem_it;
-
-        Point centroid = elem->centroid();
-
         // Skip this element if the variable has no dofs at it.
         if (elem->n_dofs(sys_num, var_num) < 1)
           continue;
 
-        // Loop over the "froms" on processor i_proc.  If the elem is found in
-        // any of the "froms", add that elem to the vector that will be sent to
-        // i_proc.
-        unsigned int from0 = 0;
-        for (processor_id_type i_proc = 0; i_proc < n_processors();
-             from0 += froms_per_proc[i_proc], i_proc++)
+        points.clear();
+        point_ids.clear();
+        // grap sample points
+        // for constant shape function, we take the element centroid
+        if (is_constant)
         {
-          bool point_found = false;
-          for (unsigned int i_from = from0; i_from < from0 + froms_per_proc[i_proc] && !point_found;
-               i_from++)
-          {
-            if (bboxes[i_from].contains_point(centroid + _to_positions[i_to]))
-            {
-              std::pair<unsigned int, unsigned int> key(i_to, elem->id());
-              point_index_map[i_proc][key] = outgoing_points[i_proc].size();
-              outgoing_points[i_proc].push_back(centroid + _to_positions[i_to]);
-              point_found = true;
-            }
-          }
+          points.push_back(elem->centroid());
+          point_ids.push_back(elem->id());
         }
-      }
+
+        // for higher order method, we take all nodes of element
+        // this works for the first order L2 Lagrange.
+        else
+          for (auto & node : elem->node_ref_range())
+          {
+            points.push_back(node);
+            point_ids.push_back(node.id());
+          }
+
+        unsigned int offset = 0;
+        for (auto & point : points)
+        {
+          // Loop over the "froms" on processor i_proc.  If the elem is found in
+          // any of the "froms", add that elem to the vector that will be sent to
+          // i_proc.
+          unsigned int from0 = 0;
+          for (processor_id_type i_proc = 0; i_proc < n_processors();
+               from0 += froms_per_proc[i_proc], ++i_proc)
+          {
+            bool point_found = false;
+            for (unsigned int i_from = from0;
+                 i_from < from0 + froms_per_proc[i_proc] && !point_found;
+                 ++i_from)
+            {
+              if (bboxes[i_from].contains_point(point + _to_positions[i_to]))
+              {
+                std::pair<unsigned int, dof_id_type> key(i_to, point_ids[offset]);
+                if (point_index_map[i_proc].find(key) != point_index_map[i_proc].end())
+                  continue;
+
+                point_index_map[i_proc][key] = outgoing_points[i_proc].size();
+                outgoing_points[i_proc].push_back(point + _to_positions[i_to]);
+                point_found = true;
+              } // if
+            }   // i_from
+          }     //  i_proc
+          offset++;
+        } // point
+
+      } // else
     }
   }
 
@@ -183,18 +218,18 @@ MultiAppMeshFunctionTransfer::execute()
    */
 
   // Get the local bounding boxes.
-  std::vector<MeshTools::BoundingBox> local_bboxes(froms_per_proc[processor_id()]);
+  std::vector<BoundingBox> local_bboxes(froms_per_proc[processor_id()]);
   {
     // Find the index to the first of this processor's local bounding boxes.
     unsigned int local_start = 0;
     for (processor_id_type i_proc = 0; i_proc < n_processors() && i_proc != processor_id();
-         i_proc++)
+         ++i_proc)
     {
       local_start += froms_per_proc[i_proc];
     }
 
     // Extract the local bounding boxes.
-    for (unsigned int i_from = 0; i_from < froms_per_proc[processor_id()]; i_from++)
+    for (unsigned int i_from = 0; i_from < froms_per_proc[processor_id()]; ++i_from)
     {
       local_bboxes[i_from] = bboxes[local_start + i_from];
     }
@@ -202,10 +237,14 @@ MultiAppMeshFunctionTransfer::execute()
 
   // Setup the local mesh functions.
   std::vector<std::shared_ptr<MeshFunction>> local_meshfuns;
-  for (unsigned int i_from = 0; i_from < _from_problems.size(); i_from++)
+  for (unsigned int i_from = 0; i_from < _from_problems.size(); ++i_from)
   {
     FEProblemBase & from_problem = *_from_problems[i_from];
-    MooseVariable & from_var = from_problem.getVariable(0, _from_var_name);
+    MooseVariableFEBase & from_var =
+        from_problem.getVariable(0,
+                                 _from_var_names[i],
+                                 Moose::VarKindType::VAR_ANY,
+                                 Moose::VarFieldType::VAR_FIELD_STANDARD);
     System & from_sys = from_var.sys().system();
     unsigned int from_var_num = from_sys.variable_number(from_var.name());
 
@@ -229,24 +268,25 @@ MultiAppMeshFunctionTransfer::execute()
   // Send points to other processors.
   std::vector<std::vector<Real>> incoming_evals(n_processors());
   std::vector<std::vector<unsigned int>> incoming_app_ids(n_processors());
-  std::vector<Parallel::Request> send_points(n_processors());
-  for (processor_id_type i_proc = 0; i_proc < n_processors(); i_proc++)
+  _send_points[i].resize(n_processors());
+  for (processor_id_type i_proc = 0; i_proc < n_processors(); ++i_proc)
   {
     if (i_proc == processor_id())
       continue;
-    _communicator.send(i_proc, outgoing_points[i_proc], send_points[i_proc]);
+
+    _communicator.send(i_proc, outgoing_points[i_proc], _send_points[i][i_proc]);
   }
 
-  // Recieve points from other processors, evaluate mesh frunctions at those
+  // Receive points from other processors, evaluate mesh functions at those
   // points, and send the values back.
-  std::vector<Parallel::Request> send_evals(n_processors());
-  std::vector<Parallel::Request> send_ids(n_processors());
+  _send_evals[i].resize(n_processors());
+  _send_ids[i].resize(n_processors());
 
   // Create these here so that they live the entire life of this function
   // and are NOT reused per processor.
   std::vector<std::vector<Real>> processor_outgoing_evals(n_processors());
 
-  for (processor_id_type i_proc = 0; i_proc < n_processors(); i_proc++)
+  for (processor_id_type i_proc = 0; i_proc < n_processors(); ++i_proc)
   {
     std::vector<Point> incoming_points;
     if (i_proc == processor_id())
@@ -258,7 +298,7 @@ MultiAppMeshFunctionTransfer::execute()
     outgoing_evals.resize(incoming_points.size(), OutOfMeshValue);
 
     std::vector<unsigned int> outgoing_ids(incoming_points.size(), -1); // -1 = largest unsigned int
-    for (unsigned int i_pt = 0; i_pt < incoming_points.size(); i_pt++)
+    for (unsigned int i_pt = 0; i_pt < incoming_points.size(); ++i_pt)
     {
       Point pt = incoming_points[i_pt];
 
@@ -266,12 +306,12 @@ MultiAppMeshFunctionTransfer::execute()
       // the quadrature point.
       for (unsigned int i_from = 0;
            i_from < _from_problems.size() && outgoing_evals[i_pt] == OutOfMeshValue;
-           i_from++)
+           ++i_from)
       {
         if (local_bboxes[i_from].contains_point(pt))
         {
           outgoing_evals[i_pt] = (*local_meshfuns[i_from])(pt - _from_positions[i_from]);
-          if (_direction == FROM_MULTIAPP)
+          if (_current_direction == FROM_MULTIAPP)
             outgoing_ids[i_pt] = _local2global_map[i_from];
         }
       }
@@ -280,14 +320,14 @@ MultiAppMeshFunctionTransfer::execute()
     if (i_proc == processor_id())
     {
       incoming_evals[i_proc] = outgoing_evals;
-      if (_direction == FROM_MULTIAPP)
+      if (_current_direction == FROM_MULTIAPP)
         incoming_app_ids[i_proc] = outgoing_ids;
     }
     else
     {
-      _communicator.send(i_proc, outgoing_evals, send_evals[i_proc]);
-      if (_direction == FROM_MULTIAPP)
-        _communicator.send(i_proc, outgoing_ids, send_ids[i_proc]);
+      _communicator.send(i_proc, outgoing_evals, _send_evals[i][i_proc]);
+      if (_current_direction == FROM_MULTIAPP)
+        _communicator.send(i_proc, outgoing_ids, _send_ids[i][i_proc]);
     }
   }
 
@@ -298,47 +338,45 @@ MultiAppMeshFunctionTransfer::execute()
    * In that case, we'll try to use the value from the app with the lowest id.
    */
 
-  for (processor_id_type i_proc = 0; i_proc < n_processors(); i_proc++)
+  for (processor_id_type i_proc = 0; i_proc < n_processors(); ++i_proc)
   {
     if (i_proc == processor_id())
       continue;
 
     _communicator.receive(i_proc, incoming_evals[i_proc]);
-    if (_direction == FROM_MULTIAPP)
+    if (_current_direction == FROM_MULTIAPP)
       _communicator.receive(i_proc, incoming_app_ids[i_proc]);
   }
 
-  for (unsigned int i_to = 0; i_to < _to_problems.size(); i_to++)
+  for (unsigned int i_to = 0; i_to < _to_problems.size(); ++i_to)
   {
-    System * to_sys = find_sys(*_to_es[i_to], _to_var_name);
+    System * to_sys = find_sys(*_to_es[i_to], _to_var_names[i]);
 
     unsigned int sys_num = to_sys->number();
-    unsigned int var_num = to_sys->variable_number(_to_var_name);
+    unsigned int var_num = to_sys->variable_number(_to_var_names[i]);
 
     NumericVector<Real> * solution = nullptr;
-    switch (_direction)
+    switch (_current_direction)
     {
       case TO_MULTIAPP:
-        solution = &getTransferVector(i_to, _to_var_name);
+        solution = &getTransferVector(i_to, _to_var_names[i]);
         break;
       case FROM_MULTIAPP:
         solution = to_sys->solution.get();
         break;
+      default:
+        mooseError("Unknown direction");
     }
 
     MeshBase * to_mesh = &_to_meshes[i_to]->getMesh();
-
-    bool is_nodal = to_sys->variable_type(var_num).family == LAGRANGE;
+    auto & fe_type = to_sys->variable_type(var_num);
+    bool is_constant = fe_type.order == CONSTANT;
+    bool is_nodal = fe_type.family == LAGRANGE;
 
     if (is_nodal)
     {
-      MeshBase::const_node_iterator node_it = to_mesh->local_nodes_begin();
-      MeshBase::const_node_iterator node_end = to_mesh->local_nodes_end();
-
-      for (; node_it != node_end; ++node_it)
+      for (const auto & node : to_mesh->local_node_ptr_range())
       {
-        Node * node = *node_it;
-
         // Skip this node if the variable has no dofs at it.
         if (node->n_dofs(sys_num, var_num) < 1)
           continue;
@@ -346,17 +384,17 @@ MultiAppMeshFunctionTransfer::execute()
         unsigned int lowest_app_rank = libMesh::invalid_uint;
         Real best_val = 0.;
         bool point_found = false;
-        for (unsigned int i_proc = 0; i_proc < incoming_evals.size(); i_proc++)
+        for (unsigned int i_proc = 0; i_proc < incoming_evals.size(); ++i_proc)
         {
           // Skip this proc if the node wasn't in it's bounding boxes.
-          std::pair<unsigned int, unsigned int> key(i_to, node->id());
+          std::pair<unsigned int, dof_id_type> key(i_to, node->id());
           if (point_index_map[i_proc].find(key) == point_index_map[i_proc].end())
             continue;
           unsigned int i_pt = point_index_map[i_proc][key];
 
           // Ignore this proc if it's app has a higher rank than the
           // previously found lowest app rank.
-          if (_direction == FROM_MULTIAPP)
+          if (_current_direction == FROM_MULTIAPP)
           {
             if (incoming_app_ids[i_proc][i_pt] >= lowest_app_rank)
               continue;
@@ -379,65 +417,83 @@ MultiAppMeshFunctionTransfer::execute()
     }
     else // Elemental
     {
-      MeshBase::const_element_iterator elem_it = to_mesh->local_elements_begin();
-      MeshBase::const_element_iterator elem_end = to_mesh->local_elements_end();
-
-      for (; elem_it != elem_end; ++elem_it)
+      std::vector<Point> points;
+      std::vector<dof_id_type> point_ids;
+      for (auto & elem : as_range(to_mesh->local_elements_begin(), to_mesh->local_elements_end()))
       {
-        Elem * elem = *elem_it;
-
         // Skip this element if the variable has no dofs at it.
         if (elem->n_dofs(sys_num, var_num) < 1)
           continue;
 
-        unsigned int lowest_app_rank = libMesh::invalid_uint;
-        Real best_val = 0;
-        bool point_found = false;
-        for (unsigned int i_proc = 0; i_proc < incoming_evals.size(); i_proc++)
+        points.clear();
+        point_ids.clear();
+        // grap sample points
+        // for constant shape function, we take the element centroid
+        if (is_constant)
         {
-          // Skip this proc if the elem wasn't in it's bounding boxes.
-          std::pair<unsigned int, unsigned int> key(i_to, elem->id());
-          if (point_index_map[i_proc].find(key) == point_index_map[i_proc].end())
-            continue;
-          unsigned int i_pt = point_index_map[i_proc][key];
-
-          // Ignore this proc if it's app has a higher rank than the
-          // previously found lowest app rank.
-          if (_direction == FROM_MULTIAPP)
+          points.push_back(elem->centroid());
+          point_ids.push_back(elem->id());
+        }
+        // for higher order method, we take all nodes of element
+        // this works for the first order L2 Lagrange. Might not work
+        // with something higher than the first order
+        else
+        {
+          for (auto & node : elem->node_ref_range())
           {
-            if (incoming_app_ids[i_proc][i_pt] >= lowest_app_rank)
-              continue;
+            points.push_back(node);
+            point_ids.push_back(node.id());
           }
-
-          // Ignore this proc if the point was actually outside its meshes.
-          if (incoming_evals[i_proc][i_pt] == OutOfMeshValue)
-            continue;
-
-          best_val = incoming_evals[i_proc][i_pt];
-          point_found = true;
         }
 
-        if (_error_on_miss && !point_found)
-          mooseError("Point not found! ", elem->centroid() + _to_positions[i_to]);
+        auto n_points = points.size();
+        unsigned int n_comp = elem->n_comp(sys_num, var_num);
+        // We assume each point corresponds to one component of elemental variable
+        if (n_points != n_comp)
+          mooseError(" Number of points ",
+                     n_points,
+                     " does not equal to number of variable components ",
+                     n_comp);
+        for (unsigned int offset = 0; offset < n_points; offset++)
+        {
+          unsigned int lowest_app_rank = libMesh::invalid_uint;
+          Real best_val = 0;
+          bool point_found = false;
+          for (unsigned int i_proc = 0; i_proc < incoming_evals.size(); ++i_proc)
+          {
+            // Skip this proc if the elem wasn't in it's bounding boxes.
+            std::pair<unsigned int, dof_id_type> key(i_to, point_ids[offset]);
+            if (point_index_map[i_proc].find(key) == point_index_map[i_proc].end())
+              continue;
 
-        dof_id_type dof = elem->dof_number(sys_num, var_num, 0);
-        solution->set(dof, best_val);
-      }
+            unsigned int i_pt = point_index_map[i_proc][key];
+
+            // Ignore this proc if it's app has a higher rank than the
+            // previously found lowest app rank.
+            if (_current_direction == FROM_MULTIAPP)
+            {
+              if (incoming_app_ids[i_proc][i_pt] >= lowest_app_rank)
+                continue;
+            }
+
+            // Ignore this proc if the point was actually outside its meshes.
+            if (incoming_evals[i_proc][i_pt] == OutOfMeshValue)
+              continue;
+
+            best_val = incoming_evals[i_proc][i_pt];
+            point_found = true;
+          }
+
+          if (_error_on_miss && !point_found)
+            mooseError("Point not found! ", elem->centroid() + _to_positions[i_to]);
+
+          // Get the value for a dof
+          dof_id_type dof = elem->dof_number(sys_num, var_num, offset);
+          solution->set(dof, best_val);
+        } // point
+      }   // element
     }
     solution->close();
     to_sys->update();
   }
-
-  // Make sure all our sends succeeded.
-  for (processor_id_type i_proc = 0; i_proc < n_processors(); i_proc++)
-  {
-    if (i_proc == processor_id())
-      continue;
-    send_points[i_proc].wait();
-    send_evals[i_proc].wait();
-    if (_direction == FROM_MULTIAPP)
-      send_ids[i_proc].wait();
-  }
-
-  _console << "Finished MeshFunctionTransfer " << name() << std::endl;
 }

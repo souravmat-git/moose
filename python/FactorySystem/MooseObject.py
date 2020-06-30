@@ -1,4 +1,13 @@
-from InputParameters import InputParameters
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
+from .InputParameters import InputParameters
 
 # This is the base class from which all objects should inherit
 class MooseObject(object):
@@ -14,12 +23,11 @@ class MooseObject(object):
     #   MooseObject(name, params)
     #   MooseObject(params)
     def __init__(self, *args, **kwargs):
-
-        if len(args) == 1 and isinstance(args[0], InputParameters):
+        if len(args) == 1:
             self._name = None
             self._pars = args[0]
 
-        elif len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], InputParameters):
+        elif len(args) == 2:
             self._name = args[0]
             self._pars = args[1]
 

@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "OversampleOutput.h"
@@ -18,19 +13,21 @@
 #include "DisplacedProblem.h"
 #include "FileMesh.h"
 #include "MooseApp.h"
+#include "TimedPrint.h"
 
-// libMesh includes
 #include "libmesh/distributed_mesh.h"
 #include "libmesh/equation_systems.h"
 #include "libmesh/mesh_function.h"
+#include "libmesh/explicit_system.h"
 
-template <>
+defineLegacyParams(OversampleOutput);
+
 InputParameters
-validParams<OversampleOutput>()
+OversampleOutput::validParams()
 {
 
   // Get the parameters from the parent object
-  InputParameters params = validParams<AdvancedOutput>();
+  InputParameters params = AdvancedOutput::validParams();
   params.addParam<unsigned int>("refinements",
                                 0,
                                 "Number of uniform refinements for oversampling "
@@ -61,8 +58,6 @@ validParams<OversampleOutput>()
 
 OversampleOutput::OversampleOutput(const InputParameters & parameters)
   : AdvancedOutput(parameters),
-    _mesh_ptr(getParam<bool>("use_displaced") ? &_problem_ptr->getDisplacedProblem()->mesh()
-                                              : &_problem_ptr->mesh()),
     _refinements(getParam<unsigned int>("refinements")),
     _oversample(_refinements > 0 || isParamValid("file")),
     _change_position(isParamValid("position")),
@@ -72,6 +67,12 @@ OversampleOutput::OversampleOutput(const InputParameters & parameters)
   // ** DEPRECATED SUPPORT **
   if (getParam<bool>("append_oversample"))
     _file_base += "_oversample";
+}
+
+void
+OversampleOutput::initialSetup()
+{
+  AdvancedOutput::initialSetup();
 
   // Creates and initializes the oversampled mesh
   initOversample();
@@ -80,6 +81,8 @@ OversampleOutput::OversampleOutput(const InputParameters & parameters)
 void
 OversampleOutput::outputStep(const ExecFlagType & type)
 {
+  CONSOLE_TIMED_PRINT("Outputting ", name());
+
   // Output is not allowed
   if (!_allow_output && type != EXEC_FORCED)
     return;
@@ -96,6 +99,7 @@ OversampleOutput::outputStep(const ExecFlagType & type)
   // FileOutput)
   if (shouldOutput(type))
   {
+    TIME_SECTION(_output_step_timer);
     updateOversample();
     output(type);
   }
@@ -125,10 +129,8 @@ OversampleOutput::initOversample()
 
   // Re-position the oversampled mesh
   if (_change_position)
-    for (MeshBase::node_iterator nd = _mesh_ptr->getMesh().nodes_begin();
-         nd != _mesh_ptr->getMesh().nodes_end();
-         ++nd)
-      *(*nd) += _position;
+    for (auto & node : _mesh_ptr->getMesh().node_ptr_range())
+      *node += _position;
 
   // Perform the mesh refinement
   if (_oversample)
@@ -159,15 +161,8 @@ OversampleOutput::initOversample()
   DistributedMesh * dist_mesh = dynamic_cast<DistributedMesh *>(&source_es.get_mesh());
   if (dist_mesh)
   {
-    for (MeshBase::element_iterator it = dist_mesh->active_local_elements_begin(),
-                                    end = dist_mesh->active_local_elements_end();
-         it != end;
-         ++it)
-    {
-      Elem * elem = *it;
-
+    for (auto & elem : dist_mesh->active_local_element_ptr_range())
       dist_mesh->add_extra_ghost_elem(elem);
-    }
   }
 
   // Initialize the _mesh_functions vector
@@ -254,14 +249,12 @@ OversampleOutput::updateOversample()
       }
 
       // Now loop over the nodes of the oversampled mesh setting values for each variable.
-      for (MeshBase::const_node_iterator nd = _mesh_ptr->localNodesBegin();
-           nd != _mesh_ptr->localNodesEnd();
-           ++nd)
+      for (const auto & node : as_range(_mesh_ptr->localNodesBegin(), _mesh_ptr->localNodesEnd()))
         for (unsigned int var_num = 0; var_num < _mesh_functions[sys_num].size(); ++var_num)
-          if ((*nd)->n_dofs(sys_num, var_num))
-            dest_sys.solution->set(
-                (*nd)->dof_number(sys_num, var_num, 0),
-                (*_mesh_functions[sys_num][var_num])(**nd - _position)); // 0 value is for component
+          if (node->n_dofs(sys_num, var_num))
+            dest_sys.solution->set(node->dof_number(sys_num, var_num, 0),
+                                   (*_mesh_functions[sys_num][var_num])(
+                                       *node - _position)); // 0 value is for component
 
       dest_sys.solution->close();
     }
@@ -279,7 +272,7 @@ OversampleOutput::cloneMesh()
   if (isParamValid("file"))
   {
     InputParameters mesh_params = emptyInputParameters();
-    mesh_params += _problem_ptr->mesh().parameters();
+    mesh_params += _mesh_ptr->parameters();
     mesh_params.set<MeshFileName>("file") = getParam<MeshFileName>("file");
     mesh_params.set<bool>("nemesis") = false;
     mesh_params.set<bool>("skip_partitioning") = false;
@@ -298,7 +291,7 @@ OversampleOutput::cloneMesh()
       mooseWarning("Recovering or Restarting with Oversampling may not work (especially with "
                    "adapted meshes)!!  Refs #2295");
 
-    _cloned_mesh_ptr.reset(&(_problem_ptr->mesh().clone()));
+    _cloned_mesh_ptr = _mesh_ptr->safeClone();
   }
 
   // Make sure that the mesh pointer points to the newly cloned mesh

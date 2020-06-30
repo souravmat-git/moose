@@ -1,33 +1,21 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef NODALBC_H
-#define NODALBC_H
+#pragma once
 
-#include "BoundaryCondition.h"
+#include "NodalBCBase.h"
 #include "RandomInterface.h"
 #include "CoupleableMooseVariableDependencyIntermediateInterface.h"
+#include "MooseVariableInterface.h"
 
 // Forward declarations
 class NodalBC;
-
-// libMesh forward declarations
-namespace libMesh
-{
-template <typename T>
-class NumericVector;
-}
 
 template <>
 InputParameters validParams<NodalBC>();
@@ -35,44 +23,35 @@ InputParameters validParams<NodalBC>();
 /**
  * Base class for deriving any boundary condition that works at nodes
  */
-class NodalBC : public BoundaryCondition,
-                public RandomInterface,
-                public CoupleableMooseVariableDependencyIntermediateInterface
+class NodalBC : public NodalBCBase, public MooseVariableInterface<Real>
 {
 public:
+  static InputParameters validParams();
+
   NodalBC(const InputParameters & parameters);
 
-  virtual void computeResidual(NumericVector<Number> & residual);
-  virtual void computeJacobian();
-  virtual void computeOffDiagJacobian(unsigned int jvar);
-
-  void setBCOnEigen(bool iseigen) { _is_eigen = iseigen; }
+  /**
+   * Gets the variable this BC is active on
+   * @return the variable
+   */
+  virtual MooseVariable & variable() override { return _var; }
+  virtual void computeResidual() override;
+  virtual void computeJacobian() override;
+  virtual void computeOffDiagJacobian(unsigned int jvar) override;
 
 protected:
-  /// current node being processed
-  const Node *& _current_node;
+  MooseVariable & _var;
 
-  /// Quadrature point index
-  unsigned int _qp;
+  /// current node being processed
+  const Node * const & _current_node;
+
+  /// Pseudo-"quadrature point" index (Always zero for the current node)
+  const unsigned int _qp = 0;
+
   /// Value of the unknown variable this BC is acting on
   const VariableValue & _u;
 
-  /// The aux variables to save the residual contributions to
-  bool _has_save_in;
-  std::vector<MooseVariable *> _save_in;
-  std::vector<AuxVariableName> _save_in_strings;
-
-  /// The aux variables to save the diagonal Jacobian contributions to
-  bool _has_diag_save_in;
-  std::vector<MooseVariable *> _diag_save_in;
-  std::vector<AuxVariableName> _diag_save_in_strings;
-
-  /// Indicate whether or not the boundary condition is applied to the right
-  /// hand side of eigenvalue problems
-  bool _is_eigen;
-
   virtual Real computeQpResidual() = 0;
-
   /**
    * The user can override this function to compute the "on-diagonal"
    * Jacobian contribution for this NodalBC.  If not overriden,
@@ -86,5 +65,3 @@ protected:
    */
   virtual Real computeQpOffDiagJacobian(unsigned int jvar);
 };
-
-#endif /* NODALBC_H */

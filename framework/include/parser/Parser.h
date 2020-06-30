@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef PARSER_H
-#define PARSER_H
+#pragma once
 
 // MOOSE includes
 #include "ConsoleStreamInterface.h"
@@ -21,8 +15,11 @@
 #include "InputParameters.h"
 #include "Syntax.h"
 
-// libMesh include
-#include "libmesh/getpot.h"
+#include "hit.h"
+
+#include <vector>
+#include <string>
+#include <iomanip>
 
 // Forward declarations
 class ActionWarehouse;
@@ -33,12 +30,26 @@ class ActionFactory;
 class GlobalParamsAction;
 class JsonSyntaxTree;
 
+class FuncParseEvaler : public hit::Evaler
+{
+public:
+  virtual std::string
+  eval(hit::Field * n, const std::list<std::string> & args, hit::BraceExpander & exp);
+};
+
+class UnitsConversionEvaler : public hit::Evaler
+{
+public:
+  virtual std::string
+  eval(hit::Field * n, const std::list<std::string> & args, hit::BraceExpander & exp);
+};
+
 /**
  * Class for parsing input files. This class utilizes the GetPot library for actually tokenizing and
  * parsing files. It is not currently designed for extensibility. If you wish to build your own
  * parser, please contact the MOOSE team for guidance.
  */
-class Parser : public ConsoleStreamInterface
+class Parser : public ConsoleStreamInterface, public hit::Walker
 {
 public:
   enum SyntaxFormatterType
@@ -51,27 +62,16 @@ public:
 
   virtual ~Parser();
 
-  /// Retrieve the Syntax associated with the passed Action and task
-  std::string getSyntaxByAction(const std::string & action, const std::string & task)
-  {
-    return _syntax.getSyntaxByAction(action, task);
-  }
-
   /**
    * Return the filename that was parsed
    */
   std::string getFileName(bool stripLeadingPath = true) const;
 
   /**
-   * Parse an input file consisting of getpot syntax and setup objects
+   * Parse an input file consisting of hit syntax and setup objects
    * in the MOOSE derived application
    */
   void parse(const std::string & input_filename);
-
-  /**
-   * Return a reference to the getpot object to extract options from the input file
-   */
-  const GetPot * getPotHandle() const;
 
   /**
    * This function attempts to extract values from the input file based on the contents of
@@ -95,76 +95,31 @@ public:
    */
   void buildJsonSyntaxTree(JsonSyntaxTree & tree) const;
 
-  /**
-   * This function checks to see if there are unidentified variables in the input file (i.e. unused)
-   * If the warn_is_error is set, then the program will abort if unidentified parameters are found
-   */
-  void checkUnidentifiedParams(std::vector<std::string> & all_vars,
-                               bool error_on_warn,
-                               bool in_input_file,
-                               std::shared_ptr<FEProblemBase> fe_problem) const;
+  void walk(const std::string & fullpath, const std::string & nodepath, hit::Node * n);
+
+  void errorCheck(const Parallel::Communicator & comm, bool warn_unused, bool err_unused);
+
+  std::vector<std::string> listValidParams(std::string & section_name);
 
   /**
-   * This function checks to see if there were any overridden parameters in the input file.
-   * (i.e. supplied more than once)
-   * @param error_on_warn a Boolean that will trigger an error if this case is detected
+   * Marks MOOSE hit syntax from supplied command-line arguments
    */
-  void checkOverriddenParams(bool error_on_warn) const;
+  std::string hitCLIFilter(std::string appname, const std::vector<std::string> & argv);
 
 protected:
-  /// Helper struct to hold the active and inactive lists for each parsed block
-  struct BlockLists
-  {
-    BlockLists(std::vector<std::string> && active_list, std::vector<std::string> && inactive_list)
-      : active(std::move(active_list)), inactive(std::move(inactive_list))
-    {
-    }
-
-    const std::vector<std::string> active;
-    const std::vector<std::string> inactive;
-  };
-
-  /**
-   * Determines whether a particular block is marked as active
-   * in the input file
-   */
-  bool isSectionActive(const std::string & section_name,
-                       const std::map<std::string, BlockLists> & block_lists) const;
-
-  /**
-   * This function checks to make sure that the active lists (active=*) are used up in the supplied
-   * input file.
-   */
-  void checkExplicitBlocksUsed(std::vector<std::string> & sections,
-                               const std::map<std::string, BlockLists> & block_lists) const;
-
-  /**
-   * Appends sections from the CLI Reorders section names so that Debugging options can be enabled
-   * before parsing begins.
-   */
-  void appendAndReorderSectionNames(std::vector<std::string> & section_names);
-
-  /**
-   * Reorders specified tasks in the section names list (helper method called from
-   * appednAndReorderSectionNames).
-   */
-  void reorderHelper(std::vector<std::string> & section_names,
-                     const std::string & action,
-                     const std::string & task) const;
-
   /**
    * Helper functions for setting parameters of arbitrary types - bodies are in the .C file
    * since they are called only from this Object
    */
   /// Template method for setting any scalar type parameter read from the input file or command line
-  template <typename T>
+  template <typename T, typename Base>
   void setScalarParameter(const std::string & full_name,
                           const std::string & short_name,
                           InputParameters::Parameter<T> * param,
                           bool in_global,
                           GlobalParamsAction * global_block);
 
-  template <typename T, typename UP_T>
+  template <typename T, typename UP_T, typename Base>
   void setScalarValueTypeParameter(const std::string & full_name,
                                    const std::string & short_name,
                                    InputParameters::Parameter<T> * param,
@@ -172,13 +127,36 @@ protected:
                                    GlobalParamsAction * global_block);
 
   /// Template method for setting any vector type parameter read from the input file or command line
-  template <typename T>
+  template <typename T, typename Base>
   void setVectorParameter(const std::string & full_name,
                           const std::string & short_name,
                           InputParameters::Parameter<std::vector<T>> * param,
                           bool in_global,
                           GlobalParamsAction * global_block);
 
+  /**
+   * Sets an input parameter representing a file path using input file data.  The file path is
+   * modified to be relative to the directory this application's input file is in.
+   */
+  template <typename T>
+  void setFilePathParam(const std::string & full_name,
+                        const std::string & short_name,
+                        InputParameters::Parameter<T> * param,
+                        InputParameters & params,
+                        bool in_global,
+                        GlobalParamsAction * global_block);
+
+  /**
+   * Sets an input parameter representing a vector of file paths using input file data.  The file
+   * paths are modified to be relative to the directory this application's input file is in.
+   */
+  template <typename T>
+  void setVectorFilePathParam(const std::string & full_name,
+                              const std::string & short_name,
+                              InputParameters::Parameter<std::vector<T>> * param,
+                              InputParameters & params,
+                              bool in_global,
+                              GlobalParamsAction * global_block);
   /**
    * Template method for setting any double indexed type parameter read from the input file or
    * command line.
@@ -212,6 +190,10 @@ protected:
                                    bool in_global,
                                    GlobalParamsAction * global_block);
 
+  std::unique_ptr<hit::Node> _cli_root = nullptr;
+  std::unique_ptr<hit::Node> _root = nullptr;
+  std::vector<std::string> _secs_need_first;
+
   /// The MooseApp this Parser is part of
   MooseApp & _app;
   /// The Factory associated with that MooseApp
@@ -225,21 +207,6 @@ protected:
 
   /// Object for holding the syntax parse tree
   std::unique_ptr<SyntaxTree> _syntax_formatter;
-
-  /**
-   * Contains all of the sections that are not active during the parse phase so that blocks nested
-   * more than one level deep can detect that the grandparent is not active.
-   */
-  std::set<std::string> _inactive_strings;
-
-  /// Boolean indicating whether the getpot parser has been initialized
-  bool _getpot_initialized;
-
-  /// The getpot object used for extracting parameters
-  GetPot _getpot_file;
-
-  /// The getpot object used for testing
-  GetPot _getpot_file_error_checking;
 
   /// The input file name that is used for parameter extraction
   std::string _input_filename;
@@ -255,6 +222,9 @@ protected:
 
   /// The current stream object used for capturing errors during extraction
   std::ostringstream * _current_error_stream;
-};
 
-#endif // PARSER_H
+private:
+  std::string _errmsg;
+  std::string _warnmsg;
+  void walkRaw(std::string fullpath, std::string nodepath, hit::Node * n);
+};

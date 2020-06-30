@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CoupledSwitchingTimeDerivative.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", CoupledSwitchingTimeDerivative);
+
 InputParameters
-validParams<CoupledSwitchingTimeDerivative>()
+CoupledSwitchingTimeDerivative::validParams()
 {
-  InputParameters params = validParams<CoupledTimeDerivative>();
+  InputParameters params = CoupledTimeDerivative::validParams();
   params.addClassDescription(
       "Coupled time derivative Kernel that multiplies the time derivative by "
       "$\\frac{dh_\\alpha}{d\\eta_i} F_\\alpha + \\frac{dh_\\beta}{d\\eta_i} F_\\beta + \\dots)");
@@ -24,7 +28,6 @@ validParams<CoupledSwitchingTimeDerivative>()
 
 CoupledSwitchingTimeDerivative::CoupledSwitchingTimeDerivative(const InputParameters & parameters)
   : DerivativeMaterialInterface<JvarMapKernelInterface<CoupledTimeDerivative>>(parameters),
-    _nvar(_coupled_moose_vars.size()), // number of coupled variables
     _v_name(getVar("v", 0)->name()),
     _Fj_names(getParam<std::vector<MaterialPropertyName>>("Fj_names")),
     _num_j(_Fj_names.size()),
@@ -38,8 +41,7 @@ CoupledSwitchingTimeDerivative::CoupledSwitchingTimeDerivative(const InputParame
 {
   // check passed in parameter vectors
   if (_num_j != _hj_names.size())
-    mooseError("Need to pass in as many hj_names as Fj_names in CoupledSwitchingTimeDerivative ",
-               name());
+    paramError("hj_names", "Need to pass in as many hj_names as Fj_names");
 
   // reserve space and set phase material properties
   for (unsigned int n = 0; n < _num_j; ++n)
@@ -47,22 +49,20 @@ CoupledSwitchingTimeDerivative::CoupledSwitchingTimeDerivative(const InputParame
     // get phase free energy and derivatives
     _prop_Fj[n] = &getMaterialPropertyByName<Real>(_Fj_names[n]);
     _prop_dFjdv[n] = &getMaterialPropertyDerivative<Real>(_Fj_names[n], _var.name());
-    _prop_dFjdarg[n].resize(_nvar);
+    _prop_dFjdarg[n].resize(_n_args);
 
     // get switching function and derivatives wrt eta_i, the nonlinear variable
     _prop_dhjdetai[n] = &getMaterialPropertyDerivative<Real>(_hj_names[n], _v_name);
     _prop_d2hjdetai2[n] = &getMaterialPropertyDerivative<Real>(_hj_names[n], _v_name, _v_name);
-    _prop_d2hjdetaidarg[n].resize(_nvar);
+    _prop_d2hjdetaidarg[n].resize(_n_args);
 
-    for (unsigned int i = 0; i < _nvar; ++i)
+    for (unsigned int i = 0; i < _n_args; ++i)
     {
-      MooseVariable * cvar = _coupled_moose_vars[i];
       // Get derivatives of all Fj wrt all coupled variables
-      _prop_dFjdarg[n][i] = &getMaterialPropertyDerivative<Real>(_Fj_names[n], cvar->name());
+      _prop_dFjdarg[n][i] = &getMaterialPropertyDerivative<Real>(_Fj_names[n], i);
 
       // Get second derivatives of all hj wrt eta_i and all coupled variables
-      _prop_d2hjdetaidarg[n][i] =
-          &getMaterialPropertyDerivative<Real>(_hj_names[n], _v_name, cvar->name());
+      _prop_d2hjdetaidarg[n][i] = &getMaterialPropertyDerivative<Real>(_hj_names[n], _v_name, i);
     }
   }
 }

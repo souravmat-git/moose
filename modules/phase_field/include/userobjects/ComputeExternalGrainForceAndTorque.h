@@ -1,31 +1,31 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTEEXTERNALGRAINFORCEANDTORQUE_H
-#define COMPUTEEXTERNALGRAINFORCEANDTORQUE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ShapeElementUserObject.h"
 #include "GrainForceAndTorqueInterface.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class ComputeExternalGrainForceAndTorque;
 class GrainTrackerInterface;
-
-template <>
-InputParameters validParams<ComputeExternalGrainForceAndTorque>();
 
 /**
  * This class is here to get the force and torque acting on a grain
  */
 class ComputeExternalGrainForceAndTorque
-    : public DerivativeMaterialInterface<ShapeElementUserObject>,
-      public GrainForceAndTorqueInterface
+  : public DerivativeMaterialInterface<ShapeElementUserObject>,
+    public GrainForceAndTorqueInterface
 {
 public:
+  static InputParameters validParams();
+
   ComputeExternalGrainForceAndTorque(const InputParameters & parameters);
 
   virtual void initialize();
@@ -72,5 +72,3 @@ protected:
 
   unsigned int _total_dofs;
 };
-
-#endif // COMPUTEEXTERNALGRAINFORCEANDTORQUE_H

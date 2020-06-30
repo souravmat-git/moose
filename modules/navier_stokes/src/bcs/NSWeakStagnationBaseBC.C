@@ -1,20 +1,23 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "NSWeakStagnationBaseBC.h"
 
 // FluidProperties includes
 #include "IdealGasFluidProperties.h"
 
 // Full specialization of the validParams function for this object
-template <>
+
 InputParameters
-validParams<NSWeakStagnationBaseBC>()
+NSWeakStagnationBaseBC::validParams()
 {
-  InputParameters params = validParams<NSIntegratedBC>();
+  InputParameters params = NSIntegratedBC::validParams();
   params.addClassDescription(
       "This is the base class for 'weakly-imposed' stagnation boundary conditions.");
   params.addRequiredParam<Real>("stagnation_pressure", "The specifed stagnation pressure");
@@ -49,7 +52,7 @@ NSWeakStagnationBaseBC::staticValues(Real & T_s, Real & p_s, Real & rho_s)
         std::pow(_stagnation_temperature / T_s, -_fp.gamma() / (_fp.gamma() - 1.));
 
   // Compute static rho from static pressure and temperature using equation of state.
-  rho_s = _fp.rho(p_s, T_s);
+  rho_s = _fp.rho_from_p_T(p_s, T_s);
 }
 
 Real

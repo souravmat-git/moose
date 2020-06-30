@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef INSPRESSUREPOISSON_H
-#define INSPRESSUREPOISSON_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
 
 // Forward Declarations
-class INSPressurePoisson;
-
-template <>
-InputParameters validParams<INSPressurePoisson>();
 
 /**
  * This class computes the pressure Poisson solve which is part of
@@ -25,6 +23,8 @@ InputParameters validParams<INSPressurePoisson>();
 class INSPressurePoisson : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   INSPressurePoisson(const InputParameters & parameters);
 
   virtual ~INSPressurePoisson() {}
@@ -47,5 +47,3 @@ protected:
   // Material properties
   const MaterialProperty<Real> & _rho;
 };
-
-#endif // INSPRESSUREPOISSON_H

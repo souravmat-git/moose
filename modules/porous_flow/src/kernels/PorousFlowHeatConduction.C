@@ -1,20 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowHeatConduction.h"
 
-// MOOSE includes
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlowHeatConduction);
+
 InputParameters
-validParams<PorousFlowHeatConduction>()
+PorousFlowHeatConduction::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addRequiredParam<UserObjectName>(
       "PorousFlowDictator", "The UserObject that holds the list of PorousFlow variable names");
   params.addClassDescription("Heat conduction in the Porous Flow module");
@@ -53,7 +55,7 @@ PorousFlowHeatConduction::computeQpOffDiagJacobian(unsigned int jvar)
   if (_dictator.notPorousFlowVariable(jvar))
     return 0.0;
 
-  /// The PorousFlow variable index corresponding to the variable number jvar
+  // The PorousFlow variable index corresponding to the variable number jvar
   const unsigned int pvar = _dictator.porousFlowVariableNum(jvar);
 
   return _grad_test[_i][_qp] *

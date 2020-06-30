@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "SetupRecoverFileBaseAction.h"
@@ -19,11 +14,15 @@
 #include "Checkpoint.h"
 #include "MooseObjectAction.h"
 
-template <>
+registerMooseAction("MooseApp", SetupRecoverFileBaseAction, "setup_recover_file_base");
+registerMooseAction("MooseApp", SetupRecoverFileBaseAction, "recover_meta_data");
+
+defineLegacyParams(SetupRecoverFileBaseAction);
+
 InputParameters
-validParams<SetupRecoverFileBaseAction>()
+SetupRecoverFileBaseAction::validParams()
 {
-  InputParameters params = validParams<Action>();
+  InputParameters params = Action::validParams();
   return params;
 }
 
@@ -32,26 +31,37 @@ SetupRecoverFileBaseAction::SetupRecoverFileBaseAction(InputParameters params) :
 void
 SetupRecoverFileBaseAction::act()
 {
+  // Even during a normal run, we still need to check integrity of the data store to make
+  // sure that all requested properties have been declared.
+  if (_current_task == "recover_meta_data")
+    _app.checkMetaDataIntegrity();
+
   // Do nothing if the App is not recovering
   // Don't look for a checkpoint file unless we're the ultimate master app
   if (!_app.isRecovering() || !_app.isUltimateMaster())
     return;
 
-  // Get the most current file, if it hasn't been set directly
-  if (!_app.hasRecoverFileBase())
+  if (_current_task == "setup_recover_file_base")
   {
-    // Build the list of all possible checkpoint files for recover
-    std::list<std::string> checkpoint_files = _app.getCheckpointFiles();
+    _app.setRestartRecoverFileBase(
+        MooseUtils::convertLatestCheckpoint(_app.getRestartRecoverFileBase()));
 
-    // Grab the most recent one
-    std::string recovery_file_base = MooseUtils::getRecoveryFileBase(checkpoint_files);
-
-    if (recovery_file_base.empty())
-      mooseError("Unable to find suitable recovery file!");
-
-    _app.setRecoverFileBase(recovery_file_base);
+    // Set the recover file base in the App
+    mooseInfo("Using ", _app.getRestartRecoverFileBase(), " for recovery.");
   }
-
-  // Set the recover file base in the App
-  _console << "\nUsing " << _app.getRecoverFileBase() << " for recovery.\n\n";
+  else // recover_meta_data
+  {
+    // Make sure that all of the mesh meta-data attributes have been declared (after the mesh
+    // generators have run.
+    RestartableDataIO restartable(_app);
+    for (auto map_iter = _app.getRestartableDataMapBegin();
+         map_iter != _app.getRestartableDataMapEnd();
+         ++map_iter)
+    {
+      const RestartableDataMap & meta_data = map_iter->second.first;
+      const std::string & suffix = map_iter->second.second;
+      if (restartable.readRestartableDataHeader(false, suffix))
+        restartable.readRestartableData(meta_data, DataNames());
+    }
+  }
 }

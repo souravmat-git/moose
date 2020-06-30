@@ -1,22 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GRADIENTCOMPONENT_H
-#define GRADIENTCOMPONENT_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
-
-class GradientComponent;
-
-template <>
-InputParameters validParams<GradientComponent>();
 
 class GradientComponent : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   GradientComponent(const InputParameters & parameters);
 
 protected:
@@ -33,5 +32,3 @@ protected:
   /// Component of the gradient vector to match
   const unsigned int _component;
 };
-
-#endif // GRADIENTCOMPONENT_H

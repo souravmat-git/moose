@@ -1,19 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSRELPERMBW_H
-#define RICHARDSRELPERMBW_H
+#pragma once
 
 #include "RichardsRelPerm.h"
-
-class RichardsRelPermBW;
-
-template <>
-InputParameters validParams<RichardsRelPermBW>();
 
 /**
  * "Broadbridge-White" form of relative permeability as a function of effective saturation
@@ -23,6 +19,8 @@ InputParameters validParams<RichardsRelPermBW>();
 class RichardsRelPermBW : public RichardsRelPerm
 {
 public:
+  static InputParameters validParams();
+
   RichardsRelPermBW(const InputParameters & parameters);
 
   /**
@@ -62,5 +60,3 @@ protected:
   // (_ks - _kn)*(_c - 1)
   Real _coef;
 };
-
-#endif // RICHARDSRELPERMBW_H

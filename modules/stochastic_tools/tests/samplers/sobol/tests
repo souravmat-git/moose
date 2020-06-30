@@ -1,7 +1,0 @@
-[Tests]
-  [./sobol]
-    type = CSVDiff
-    input = sobol.i
-    csvdiff = 'sobol_out_data_0000.csv'
-  [../]
-[]

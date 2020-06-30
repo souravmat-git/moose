@@ -1,21 +1,27 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "DisplacementAboutAxis.h"
 #include "Function.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", DisplacementAboutAxis);
+
 InputParameters
-validParams<DisplacementAboutAxis>()
+DisplacementAboutAxis::validParams()
 {
-  InputParameters params = validParams<PresetNodalBC>();
+  InputParameters params = DirichletBCBase::validParams();
+  params.addClassDescription("Implements a boundary condition that enforces rotational"
+                             "displacement around an axis on a boundary");
   addDisplacementAboutAxisParams(params);
   params.addRequiredParam<int>("component", "The component for the rotational displacement");
-  params.set<bool>("use_displaced_mesh") = true;
+  params.set<bool>("use_displaced_mesh") = false;
+  params.set<bool>("preset") = true;
   return params;
 }
 
@@ -34,7 +40,7 @@ addDisplacementAboutAxisParams(InputParameters & params)
 }
 
 DisplacementAboutAxis::DisplacementAboutAxis(const InputParameters & parameters)
-  : PresetNodalBC(parameters),
+  : DirichletBCBase(parameters),
     _component(getParam<int>("component")),
     _func(getFunction("function")),
     _angle_units(getParam<MooseEnum>("angle_units")),

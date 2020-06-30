@@ -1,21 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSSPLITCHCRES_H
-#define KKSSPLITCHCRES_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "SplitCHBase.h"
 #include "JvarMapInterface.h"
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class KKSSplitCHCRes;
-
-template <>
-InputParameters validParams<KKSSplitCHCRes>();
 
 /**
  * SplitCHBulk child class that takes all the necessary data from a
@@ -32,6 +30,8 @@ InputParameters validParams<KKSSplitCHCRes>();
 class KKSSplitCHCRes : public DerivativeMaterialInterface<JvarMapKernelInterface<SplitCHBase>>
 {
 public:
+  static InputParameters validParams();
+
   KKSSplitCHCRes(const InputParameters & parameters);
 
 protected:
@@ -41,35 +41,18 @@ protected:
   virtual void initialSetup();
 
 private:
-  /// Number of coupled variables
-  unsigned int _nvar;
-
-  ///@{
-  /// Phase concnetration variables
+  ///@{ Phase concnetration variable
   unsigned int _ca_var;
   VariableName _ca_name;
-  unsigned int _cb_var;
-  VariableName _cb_name;
   ///@}
 
-  /// Derivatives of \f$ dFa/dca \f$ with respect to all coupled variables
+  /// chemical potential
+  const MaterialProperty<Real> & _dFadca;
+
+  /// Second derivatives of fa with respect to all ca and coupled variables
   std::vector<const MaterialProperty<Real> *> _d2Fadcadarg;
-
-  /// h(eta) material property
-  const MaterialProperty<Real> & _prop_h;
-
-  /// Second derivative \f$ d^2Fa/dca^2 \f$
-  const MaterialProperty<Real> & _first_derivative_Fa;
-
-  /// Second derivative \f$ d^2Fa/dca^2 \f$
-  const MaterialProperty<Real> & _second_derivative_Fa;
-
-  /// Second derivative \f$ d^2Fb/dcb^2 \f$
-  const MaterialProperty<Real> & _second_derivative_Fb;
 
   /// Chemical potential
   unsigned int _w_var;
   const VariableValue & _w;
 };
-
-#endif // KKSSPLITCHCRES_H

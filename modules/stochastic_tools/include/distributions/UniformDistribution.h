@@ -1,37 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef UNIFORMDISTRIBUTION_H
-#define UNIFORMDISTRIBUTION_H
+#pragma once
 
-#include "Distribution.h"
+#include "Uniform.h"
 
-class UniformDistribution;
-
-template <>
-InputParameters validParams<UniformDistribution>();
 /**
- * A class used to generate uniform distribution
+ * A deprecated wrapper class used to generate a uniform distribution
  */
-class UniformDistribution : public Distribution
+class UniformDistribution : public Uniform
 {
 public:
+  static InputParameters validParams();
   UniformDistribution(const InputParameters & parameters);
-
-protected:
-  virtual Real pdf(const Real & x) override;
-  virtual Real cdf(const Real & x) override;
-  virtual Real quantile(const Real & y) override;
-
-  /// The lower bound for the uniform distribution
-  const Real & _lower_bound;
-
-  /// The upper bound for the uniform distribution
-  const Real & _upper_bound;
 };
-
-#endif /* UNIFORMDISTRIBUTION_H */

@@ -1,35 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
-#ifndef PHARMONIC_H
-#define PHARMONIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Kernel.h"
-
-// Forward Declarations
-class PHarmonic;
-
-template <>
-InputParameters validParams<PHarmonic>();
 
 /**
  * This kernel implements (grad(v), |grad(u)|^(p-2) grad(u)), where u is the solution
  * and v is the test function. When p=2, this kernel is equivalent with Diffusion.
  */
-
 class PHarmonic : public Kernel
 {
 public:
+  static InputParameters validParams();
+
   PHarmonic(const InputParameters & parameters);
 
 protected:
@@ -38,5 +28,3 @@ protected:
 
   Real _p;
 };
-
-#endif // PHARMONIC_H

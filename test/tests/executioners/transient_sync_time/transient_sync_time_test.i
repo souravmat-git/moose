@@ -32,7 +32,7 @@
   [../]
 
   [./forcing]
-    type = UserForcingFunction
+    type = BodyForce
     variable = u
     function = interior_func
   [../]
@@ -42,6 +42,7 @@
   [./all]
     type = FunctionDirichletBC
     variable = u
+    preset = false
     boundary = '0 1 2 3'
     function = bc_func
   [../]

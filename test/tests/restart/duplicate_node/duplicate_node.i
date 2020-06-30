@@ -1,5 +1,6 @@
 [Mesh]
   type = FileMesh
+  # Contains multiple nodes in the same positions
   file = duplicate_nodes.e
   dim = 2
 []
@@ -37,7 +38,6 @@
 []
 
 [Executioner]
-  # Preconditioned JFNK (default)
   type = Transient
   num_steps = 20
   solve_type = PJFNK

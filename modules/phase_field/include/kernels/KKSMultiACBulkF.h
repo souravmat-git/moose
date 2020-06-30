@@ -1,19 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef KKSMULTIACBULKF_H
-#define KKSMULTIACBULKF_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "KKSMultiACBulkBase.h"
 
 // Forward Declarations
-class KKSMultiACBulkF;
-
-template <>
-InputParameters validParams<KKSMultiACBulkF>();
 
 /**
  * KKSMultiACBulkBase child class for the free energy term
@@ -25,6 +23,8 @@ InputParameters validParams<KKSMultiACBulkF>();
 class KKSMultiACBulkF : public KKSMultiACBulkBase
 {
 public:
+  static InputParameters validParams();
+
   KKSMultiACBulkF(const InputParameters & parameters);
 
 protected:
@@ -40,5 +40,3 @@ protected:
   /// Second derivative of the double well function \f$ \frac {d^2}{d\eta^2} g(\eta) \f$
   const MaterialProperty<Real> & _prop_d2gi;
 };
-
-#endif // KKSMULTIACBULKF_H

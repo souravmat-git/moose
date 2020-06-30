@@ -1,15 +1,24 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 import sys
 from PyQt5 import QtWidgets
 
 import mooseutils
 import peacock
-from PostprocessorViewer import PostprocessorViewer
-from plugins.FigurePlugin import FigurePlugin
-from plugins.MediaControlPlugin import MediaControlPlugin
-from plugins.PostprocessorSelectPlugin import PostprocessorSelectPlugin
-from plugins.AxesSettingsPlugin import AxesSettingsPlugin
-from plugins.AxisTabsPlugin import AxisTabsPlugin
-from plugins.OutputPlugin import OutputPlugin
+from .PostprocessorViewer import PostprocessorViewer
+from .plugins.FigurePlugin import FigurePlugin
+from .plugins.MediaControlPlugin import MediaControlPlugin
+from .plugins.PostprocessorSelectPlugin import PostprocessorSelectPlugin
+from .plugins.AxesSettingsPlugin import AxesSettingsPlugin
+from .plugins.AxisTabsPlugin import AxisTabsPlugin
+from .plugins.OutputPlugin import OutputPlugin
 
 
 class VectorPostprocessorViewer(PostprocessorViewer):

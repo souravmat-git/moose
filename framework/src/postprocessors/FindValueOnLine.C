@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "FindValueOnLine.h"
 
@@ -19,17 +14,29 @@
 #include "MooseUtils.h"
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("MooseApp", FindValueOnLine);
+
+defineLegacyParams(FindValueOnLine);
+
 InputParameters
-validParams<FindValueOnLine>()
+FindValueOnLine::validParams()
 {
-  InputParameters params = validParams<GeneralPostprocessor>();
+  InputParameters params = GeneralPostprocessor::validParams();
   params.addClassDescription("Find a specific target value along a sampling line. The variable "
                              "values along the line should change monotonically. The target value "
                              "is searched using a bisection algorithm.");
   params.addParam<Point>("start_point", "Start point of the sampling line.");
   params.addParam<Point>("end_point", "End point of the sampling line.");
   params.addParam<Real>("target", "Target value to locate.");
+  params.addParam<bool>(
+      "error_if_not_found",
+      true,
+      "If true, stop with error if target value is not found on the line. If false, "
+      "return default_value.");
+  params.addParam<Real>("default_value",
+                        -1,
+                        "Value to return if target value is not found on line and "
+                        "error_if_not_found is false.");
   params.addParam<unsigned int>("depth", 36, "Maximum number of bisections to perform.");
   params.addParam<Real>(
       "tol",
@@ -46,9 +53,11 @@ FindValueOnLine::FindValueOnLine(const InputParameters & parameters)
     _end_point(getParam<Point>("end_point")),
     _length((_end_point - _start_point).norm()),
     _target(getParam<Real>("target")),
+    _error_if_not_found(getParam<bool>("error_if_not_found")),
+    _default_value(getParam<Real>("default_value")),
     _depth(getParam<unsigned int>("depth")),
     _tol(getParam<Real>("tol")),
-    _coupled_var(getVar("v", 0)),
+    _coupled_var(*getVar("v", 0)),
     _position(0.0),
     _mesh(_subproblem.mesh()),
     _point_vec(1)
@@ -79,21 +88,41 @@ FindValueOnLine::execute()
   bool left_to_right = left < right;
   // Initial bounds check
   if ((left_to_right && _target < left) || (!left_to_right && _target < right))
-    mooseError("Target value \"",
-               _target,
-               "\" is less than the minimum sampled value \"",
-               std::min(left, right),
-               "\"");
+  {
+    if (_error_if_not_found)
+    {
+      mooseError("Target value \"",
+                 _target,
+                 "\" is less than the minimum sampled value \"",
+                 std::min(left, right),
+                 "\"");
+    }
+    else
+    {
+      _position = _default_value;
+      return;
+    }
+  }
   if ((left_to_right && _target > right) || (!left_to_right && _target > left))
-    mooseError("Target value \"",
-               _target,
-               "\" is greater than the maximum sampled value \"",
-               std::max(left, right),
-               "\"");
+  {
+    if (_error_if_not_found)
+    {
+      mooseError("Target value \"",
+                 _target,
+                 "\" is greater than the maximum sampled value \"",
+                 std::max(left, right),
+                 "\"");
+    }
+    else
+    {
+      _position = _default_value;
+      return;
+    }
+  }
 
   bool found_it = false;
   Real value = 0;
-  for (auto i = decltype(_depth)(0); i < _depth; ++i)
+  for (unsigned int i = 0; i < _depth; ++i)
   {
     // find midpoint
     s = (s_left + s_right) / 2.0;
@@ -118,6 +147,7 @@ FindValueOnLine::execute()
       s_left = s;
   }
 
+  // Return error if target value (within tol) was not found within depth bisections
   if (!found_it)
     mooseError("Target value \"",
                std::setprecision(10),
@@ -153,7 +183,7 @@ FindValueOnLine::getValueAtPoint(const Point & p)
       // element is local
       _point_vec[0] = p;
       _subproblem.reinitElemPhys(elem, _point_vec, 0);
-      value = _coupled_var->sln()[0];
+      value = _coupled_var.sln()[0];
     }
   }
 

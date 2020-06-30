@@ -1,16 +1,11 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "DT2.h"
@@ -20,7 +15,6 @@
 #include "NonlinearSystemBase.h"
 #include "TimeIntegrator.h"
 
-// libMesh includes
 #include "libmesh/implicit_system.h"
 #include "libmesh/nonlinear_implicit_system.h"
 #include "libmesh/nonlinear_solver.h"
@@ -30,11 +24,14 @@
 // C++ Includes
 #include <iomanip>
 
-template <>
+registerMooseObject("MooseApp", DT2);
+
+defineLegacyParams(DT2);
+
 InputParameters
-validParams<DT2>()
+DT2::validParams()
 {
-  InputParameters params = validParams<TimeStepper>();
+  InputParameters params = TimeStepper::validParams();
   params.addParam<Real>("dt", 1., "The initial time step size.");
   params.addRequiredParam<Real>("e_tol", "Target error tolerance.");
   params.addRequiredParam<Real>("e_max", "Maximum acceptable error.");
@@ -249,7 +246,7 @@ DT2::rejectStep()
 }
 
 bool
-DT2::converged()
+DT2::converged() const
 {
   if (!_converged)
     return false;

@@ -1,21 +1,15 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef PIECEWISECONSTANT_H
-#define PIECEWISECONSTANT_H
+#pragma once
 
-#include "Piecewise.h"
+#include "PiecewiseBase.h"
 
 // Forward declarations
 class PiecewiseConstant;
@@ -27,9 +21,11 @@ InputParameters validParams<PiecewiseConstant>();
  * Function which provides a piecewise continuous constant interpolation
  * of a provided (x,y) point data set.
  */
-class PiecewiseConstant : public Piecewise
+class PiecewiseConstant : public PiecewiseBase
 {
 public:
+  static InputParameters validParams();
+
   PiecewiseConstant(const InputParameters & parameters);
 
   /**
@@ -38,7 +34,7 @@ public:
    * \param pt The point in space (x,y,z) (unused)
    * \return The value of the function at the specified time
    */
-  virtual Real value(Real t, const Point & pt) override;
+  virtual Real value(Real t, const Point & pt) const override;
 
   /**
    * Get the time derivative of the function (based on time only)
@@ -46,11 +42,11 @@ public:
    * \param pt The point in space (x,y,z) (unused)
    * \return The time derivative of the function at the specified time
    */
-  virtual Real timeDerivative(Real t, const Point & pt) override;
+  virtual Real timeDerivative(Real t, const Point & pt) const override;
 
-  virtual Real integral() override;
+  virtual Real integral() const override;
 
-  virtual Real average() override;
+  virtual Real average() const override;
 
 private:
   enum DirectionEnum
@@ -63,5 +59,3 @@ private:
 
   const DirectionEnum _direction;
 };
-
-#endif

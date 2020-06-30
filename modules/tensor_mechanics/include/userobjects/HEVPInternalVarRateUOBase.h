@@ -1,19 +1,16 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef HEVPINTERNALVARRATEUOBASE_H
-#define HEVPINTERNALVARRATEUOBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "DiscreteElementUserObject.h"
 #include "RankTwoTensor.h"
-
-class HEVPInternalVarRateUOBase;
-
-template <>
-InputParameters validParams<HEVPInternalVarRateUOBase>();
 
 /**
  * This user object is a pure virtual base classs
@@ -22,6 +19,8 @@ InputParameters validParams<HEVPInternalVarRateUOBase>();
 class HEVPInternalVarRateUOBase : public DiscreteElementUserObject
 {
 public:
+  static InputParameters validParams();
+
   HEVPInternalVarRateUOBase(const InputParameters & parameters);
 
   virtual bool computeValue(unsigned int, Real &) const = 0;
@@ -31,5 +30,3 @@ protected:
   std::string _flow_rate_prop_name;
   const MaterialProperty<Real> & _flow_rate;
 };
-
-#endif

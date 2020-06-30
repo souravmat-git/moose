@@ -1,18 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "CappedDruckerPragerStressUpdate.h"
 
 #include "libmesh/utility.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", CappedDruckerPragerStressUpdate);
+
 InputParameters
-validParams<CappedDruckerPragerStressUpdate>()
+CappedDruckerPragerStressUpdate::validParams()
 {
-  InputParameters params = validParams<TwoParameterPlasticityStressUpdate>();
+  InputParameters params = TwoParameterPlasticityStressUpdate::validParams();
   params.addClassDescription("Capped Drucker-Prager plasticity stress calculator");
   params.addRequiredParam<UserObjectName>(
       "DP_model",
@@ -34,14 +38,14 @@ validParams<CappedDruckerPragerStressUpdate>()
       "amount.  Typical value is 0.1*cohesion");
   params.addParam<bool>("perfect_guess",
                         true,
-                        "Provide a guess to the Newton-Raphson proceedure "
+                        "Provide a guess to the Newton-Raphson procedure "
                         "that is the result from perfect plasticity.  With "
                         "severe hardening/softening this may be "
                         "suboptimal.");
   params.addParam<bool>("small_dilation",
                         true,
                         "If true, and if the trial stress exceeds the "
-                        "tensile strength, then the user gaurantees that "
+                        "tensile strength, then the user guarantees that "
                         "the returned stress will be independent of the "
                         "compressive strength.");
   return params;
@@ -66,7 +70,7 @@ CappedDruckerPragerStressUpdate::CappedDruckerPragerStressUpdate(const InputPara
 }
 
 void
-CappedDruckerPragerStressUpdate::initialiseReturnProcess()
+CappedDruckerPragerStressUpdate::initializeReturnProcess()
 {
   _stress_return_type = StressReturnType::nothing_special;
 }
@@ -256,7 +260,7 @@ CappedDruckerPragerStressUpdate::computeAllQ(Real p,
 }
 
 void
-CappedDruckerPragerStressUpdate::initialiseVars(Real p_trial,
+CappedDruckerPragerStressUpdate::initializeVars(Real p_trial,
                                                 Real q_trial,
                                                 const std::vector<Real> & intnl_old,
                                                 Real & p,
@@ -361,7 +365,7 @@ CappedDruckerPragerStressUpdate::setIntnlValues(Real p_trial,
 {
   intnl[0] = intnl_old[0] + (q_trial - q) / _Eqq;
   Real tanpsi;
-  _dp.onlyB(intnl_old[0], _dp.dilation, tanpsi);
+  _dp.onlyB(intnl[0], _dp.dilation, tanpsi);
   intnl[1] = intnl_old[1] + (p_trial - p) / _Epp - (q_trial - q) * tanpsi / _Eqq;
 }
 
@@ -430,9 +434,6 @@ CappedDruckerPragerStressUpdate::consistentTangentOperator(const RankTwoTensor &
                                                            bool compute_full_tangent_operator,
                                                            RankFourTensor & cto) const
 {
-  if (!_fe_problem.currentlyComputingJacobian())
-    return;
-
   cto = Eijkl;
   if (!compute_full_tangent_operator)
     return;
@@ -446,8 +447,9 @@ CappedDruckerPragerStressUpdate::consistentTangentOperator(const RankTwoTensor &
       for (unsigned k = 0; k < _tensor_dimensionality; ++k)
         for (unsigned l = 0; l < _tensor_dimensionality; ++l)
         {
-          cto(i, j, k, l) -= (i == j) * (1.0 / 3.0) * (_Epp * (1.0 - _dp_dpt) / 3.0 * (k == l) +
-                                                       s_over_q(k, l) * _Eqq * (-_dp_dqt));
+          cto(i, j, k, l) -=
+              (i == j) * (1.0 / 3.0) *
+              (_Epp * (1.0 - _dp_dpt) / 3.0 * (k == l) + s_over_q(k, l) * _Eqq * (-_dp_dqt));
           cto(i, j, k, l) -= s_over_q(i, j) * (_Epp * (-_dq_dpt) / 3.0 * (k == l) +
                                                s_over_q(k, l) * _Eqq * (1.0 - _dq_dqt));
         }

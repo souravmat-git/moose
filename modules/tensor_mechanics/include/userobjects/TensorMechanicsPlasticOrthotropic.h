@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef TENSORMECHANICSPLASTICORTHOTROPIC_H
-#define TENSORMECHANICSPLASTICORTHOTROPIC_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "TensorMechanicsPlasticIsotropicSD.h"
-
-class TensorMechanicsPlasticOrthotropic;
-
-template <>
-InputParameters validParams<TensorMechanicsPlasticOrthotropic>();
 
 /**
  * Orthotropic plasticity model from Yoon (2013)
@@ -28,6 +25,8 @@ InputParameters validParams<TensorMechanicsPlasticOrthotropic>();
 class TensorMechanicsPlasticOrthotropic : public TensorMechanicsPlasticIsotropicSD
 {
 public:
+  static InputParameters validParams();
+
   TensorMechanicsPlasticOrthotropic(const InputParameters & parameters);
 
 protected:
@@ -55,5 +54,3 @@ protected:
   /// Receives the flag for associative or non-associative and calculates the flow potential accordingly
   RankTwoTensor flowPotential(const RankTwoTensor & stress, Real intnl) const override;
 };
-
-#endif // TENSORMECHANICSPLASTICORTOTHROPIC_H

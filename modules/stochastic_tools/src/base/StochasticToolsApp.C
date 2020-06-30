@@ -1,110 +1,105 @@
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "StochasticToolsApp.h"
 #include "Moose.h"
 #include "AppFactory.h"
 #include "MooseSyntax.h"
 
-#include "StateSimTester.h"
-#include "StateSimRunner.h"
-
-// Distributions
-#include "UniformDistribution.h"
-#include "WeibullDistribution.h"
-
-// Samplers
-#include "MonteCarloSampler.h"
-#include "SobolSampler.h"
-
-// VectorPostprocessors
-#include "SamplerData.h"
-
-// MultiApps
-#include "SamplerMultiApp.h"
-
-// Transfers
-#include "SamplerTransfer.h"
-
-// Controls
-#include "SamplerReceiver.h"
-
-// for test purpose only
-#include "TestDistributionPostprocessor.h"
-#include "TestSampler.h"
-
-template <>
 InputParameters
-validParams<StochasticToolsApp>()
+StochasticToolsApp::validParams()
 {
-  InputParameters params = validParams<MooseApp>();
+  InputParameters params = MooseApp::validParams();
+
+  // Do not use legacy DirichletBC, that is, set DirichletBC default for preset = true
+  params.set<bool>("use_legacy_dirichlet_bc") = false;
+
+  params.set<bool>("use_legacy_material_output") = false;
+
   return params;
 }
 
+registerKnownLabel("StochasticToolsApp");
+
 StochasticToolsApp::StochasticToolsApp(InputParameters parameters) : MooseApp(parameters)
 {
-  Moose::registerObjects(_factory);
-  StochasticToolsApp::registerObjects(_factory);
-
-  Moose::associateSyntax(_syntax, _action_factory);
-  StochasticToolsApp::associateSyntax(_syntax, _action_factory);
+  StochasticToolsApp::registerAll(_factory, _action_factory, _syntax);
 }
 
 StochasticToolsApp::~StochasticToolsApp() {}
 
-// External entry point for dynamic application loading
-extern "C" void
-StochasticToolsApp__registerApps()
+void
+StochasticToolsApp::registerAll(Factory & f, ActionFactory & af, Syntax & syntax)
 {
-  StochasticToolsApp::registerApps();
+  Registry::registerObjectsTo(f, {"StochasticToolsApp"});
+  Registry::registerActionsTo(af, {"StochasticToolsApp"});
+
+  // Adds [Trainers] block
+  registerSyntaxTask("AddSurrogateAction", "Trainers/*", "add_trainer");
+  registerMooseObjectTask("add_trainer", SurrogateTrainer, false);
+  addTaskDependency("add_trainer", "add_user_object");
+
+  // Adds [Surrogates] block
+  registerSyntaxTask("AddSurrogateAction", "Surrogates/*", "add_surrogate");
+  registerMooseObjectTask("add_surrogate", SurrogateModel, false);
+  addTaskDependency("add_surrogate", "add_trainer");
+
+  // Adds action for loading Surrogate data
+  registerTask("load_surrogate_data", true);
+  addTaskDependency("load_surrogate_data", "add_surrogate");
+
+  // General StochasticTools action
+  registerTask("auto_create_mesh", false);
+  registerTask("auto_create_problem", false);
+  registerTask("auto_create_executioner", false);
+  registerSyntaxTask("StochasticToolsAction", "StochasticTools", "auto_create_mesh");
+  registerSyntaxTask("StochasticToolsAction", "StochasticTools", "auto_create_problem");
+  registerSyntaxTask("StochasticToolsAction", "StochasticTools", "auto_create_executioner");
+
+  // StochasticResults
+  registerTask("declare_stochastic_results_vectors", true);
+  addTaskDependency("declare_stochastic_results_vectors", "add_vector_postprocessor");
 }
+
 void
 StochasticToolsApp::registerApps()
 {
   registerApp(StochasticToolsApp);
 }
 
-// External entry point for dynamic object registration
-extern "C" void
-StochasticToolsApp__registerObjects(Factory & factory)
-{
-  StochasticToolsApp::registerObjects(factory);
-}
 void
 StochasticToolsApp::registerObjects(Factory & factory)
 {
-  registerUserObject(StateSimRunner);
-  registerPostprocessor(StateSimTester);
-
-  // Distributions
-  registerDistribution(UniformDistribution);
-  registerDistribution(WeibullDistribution);
-
-  // Samplers
-  registerSampler(MonteCarloSampler);
-  registerSampler(SobolSampler);
-
-  // VectorPostprocessors
-  registerVectorPostprocessor(SamplerData);
-
-  // MultiApps
-  registerMultiApp(SamplerMultiApp);
-
-  // Transfers
-  registerTransfer(SamplerTransfer);
-
-  // Controls
-  registerControl(SamplerReceiver);
-
-  // for test purpose only
-  registerPostprocessor(TestDistributionPostprocessor);
-  registerUserObject(TestSampler);
+  mooseDeprecated("use registerAll instead of registerObjects");
+  Registry::registerObjectsTo(factory, {"StochasticToolsApp"});
 }
 
-// External entry point for dynamic syntax association
-extern "C" void
-StochasticToolsApp__associateSyntax(Syntax & syntax, ActionFactory & action_factory)
-{
-  StochasticToolsApp::associateSyntax(syntax, action_factory);
-}
 void
-StochasticToolsApp::associateSyntax(Syntax & /*syntax*/, ActionFactory & /*action_factory*/)
+StochasticToolsApp::associateSyntax(Syntax & /*syntax*/, ActionFactory & action_factory)
 {
+  mooseDeprecated("use registerAll instead of associateSyntax");
+  Registry::registerActionsTo(action_factory, {"StochasticToolsApp"});
+}
+
+void
+StochasticToolsApp::registerExecFlags(Factory & /*factory*/)
+{
+  mooseDeprecated("use registerAll instead of registerExecFlags");
+}
+
+extern "C" void
+StochasticToolsApp__registerAll(Factory & f, ActionFactory & af, Syntax & s)
+{
+  StochasticToolsApp::registerAll(f, af, s);
+}
+extern "C" void
+StochasticToolsApp__registerApps()
+{
+  StochasticToolsApp::registerApps();
 }

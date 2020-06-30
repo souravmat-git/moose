@@ -12,7 +12,7 @@
 
 [Kernels]
   [./diff]
-    type = MatDiffusion
+    type = MatDiffusionTest
     variable = u
     prop_name = 'diff'
   [../]
@@ -37,12 +37,14 @@
   [./left]
     type = DirichletBC
     variable = u
+    preset = false
     boundary = left
     value = 0
   [../]
   [./right]
     type = DirichletBC
     variable = u
+    preset = false
     boundary = right
     value = 1
   [../]
@@ -61,9 +63,16 @@
 
 [Executioner]
   type = Steady
-  solve_type = 'PJFNK'
-  petsc_options_iname = '-pc_type -pc_hypre_type'
-  petsc_options_value = 'hypre boomeramg'
+# This test counts the number of residual evaluations that
+# may slightly change from a PETSc version to another.
+# For instance, starts from PETSc-3.8.4, the number of
+# residual evaluating is reduced by one in a linear solver
+# for each Newton iteration. This change causes this test
+# fail. It  better to restrict the test
+# count the residual evaluations in the nonlinear level only.
+  solve_type = 'NEWTON'
+  petsc_options_iname = '-pc_type -pc_factor_mat_solver_type'
+  petsc_options_value = 'lu superlu_dist'
 []
 
 [Outputs]

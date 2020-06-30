@@ -1,21 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GRAINTEXTUREVECTORPOSTPROCESSOR
-#define GRAINTEXTUREVECTORPOSTPROCESSOR
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ElementVectorPostprocessor.h"
 #include "SamplerBase.h"
 
 // Forward declarations
 class EulerAngleProvider;
-class GrainTextureVectorPostprocessor;
-
-template <>
-InputParameters validParams<GrainTextureVectorPostprocessor>();
 
 /**
  *  GrainTextureVectorPostprocessor is a VectorPostprocessor that outputs the
@@ -25,6 +23,8 @@ InputParameters validParams<GrainTextureVectorPostprocessor>();
 class GrainTextureVectorPostprocessor : public ElementVectorPostprocessor, protected SamplerBase
 {
 public:
+  static InputParameters validParams();
+
   GrainTextureVectorPostprocessor(const InputParameters & parameters);
   virtual void initialize();
   virtual void execute();
@@ -38,5 +38,3 @@ protected:
   const unsigned int _grain_num;
   std::vector<Real> _sample;
 };
-
-#endif // GRAINTEXTUREVECTORPOSTPROCESSOR_H

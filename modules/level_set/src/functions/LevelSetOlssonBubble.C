@@ -1,18 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
 #include "LevelSetOlssonBubble.h"
 
-template <>
+registerMooseObject("LevelSetApp", LevelSetOlssonBubble);
+
 InputParameters
-validParams<LevelSetOlssonBubble>()
+LevelSetOlssonBubble::validParams()
 {
-  InputParameters params = validParams<Function>();
+  InputParameters params = Function::validParams();
   params.addClassDescription("Implementation of 'bubble' ranging from 0 to 1.");
   params.addParam<RealVectorValue>(
       "center", RealVectorValue(0.5, 0.5, 0), "The center of the bubble.");
@@ -30,16 +33,16 @@ LevelSetOlssonBubble::LevelSetOlssonBubble(const InputParameters & parameters)
 }
 
 Real
-LevelSetOlssonBubble::value(Real /*t*/, const Point & p)
+LevelSetOlssonBubble::value(Real /*t*/, const Point & p) const
 {
-  const Real x = ((p - _center).size() - _radius) / _epsilon;
+  const Real x = ((p - _center).norm() - _radius) / _epsilon;
   return 1.0 / (1 + std::exp(x));
 }
 
 RealGradient
-LevelSetOlssonBubble::gradient(Real /*t*/, const Point & p)
+LevelSetOlssonBubble::gradient(Real /*t*/, const Point & p) const
 {
-  Real norm = (p - _center).size();
+  Real norm = (p - _center).norm();
   Real g = (norm - _radius) / _epsilon;
   RealGradient output;
 
@@ -47,7 +50,7 @@ LevelSetOlssonBubble::gradient(Real /*t*/, const Point & p)
   for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
   {
     g_prime = (p(i) - _center(i)) / (_epsilon * norm);
-    output(i) = (g_prime * std::exp(g)) / ((std::exp(g) + 1) * (std::exp(g) + 1));
+    output(i) = -(g_prime * std::exp(g)) / ((std::exp(g) + 1) * (std::exp(g) + 1));
   }
   return output;
 }

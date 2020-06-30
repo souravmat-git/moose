@@ -1,16 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "NSGravityForce.h"
 
-template <>
+registerMooseObject("NavierStokesApp", NSGravityForce);
+
 InputParameters
-validParams<NSGravityForce>()
+NSGravityForce::validParams()
 {
-  InputParameters params = validParams<NSKernel>();
+  InputParameters params = NSKernel::validParams();
   params.addClassDescription("This class computes the gravity force contribution.");
   // The strength of the acceleration in the _component direction.  Make this
   // value negative if you want force in the -_component direction.

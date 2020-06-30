@@ -1,40 +1,33 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "ElementIndicator.h"
 
 #include "Assembly.h"
-#include "MooseVariable.h"
+#include "MooseVariableFE.h"
 #include "SystemBase.h"
 
-// libmesh includes
 #include "libmesh/threads.h"
 
-template <>
+defineLegacyParams(ElementIndicator);
+
 InputParameters
-validParams<ElementIndicator>()
+ElementIndicator::validParams()
 {
-  InputParameters params = validParams<Indicator>();
-  params += validParams<MaterialPropertyInterface>();
+  InputParameters params = Indicator::validParams();
+  params += MaterialPropertyInterface::validParams();
+  params += TransientInterface::validParams();
   params.addRequiredParam<VariableName>("variable",
                                         "The name of the variable that this Indicator operates on");
-
   std::vector<SubdomainName> everywhere(1, "ANY_BLOCK_ID");
   params.addParam<std::vector<SubdomainName>>(
       "block", everywhere, "block ID or name where the object works");
-
-  params += validParams<TransientInterface>();
   return params;
 }
 
@@ -44,10 +37,12 @@ ElementIndicator::ElementIndicator(const InputParameters & parameters)
     PostprocessorInterface(this),
     Coupleable(this, false),
     ScalarCoupleable(this),
-    MooseVariableInterface(this, false),
-    ZeroInterface(parameters),
-
-    _field_var(_sys.getVariable(_tid, name())),
+    MooseVariableInterface<Real>(this,
+                                 false,
+                                 "variable",
+                                 Moose::VarKindType::VAR_ANY,
+                                 Moose::VarFieldType::VAR_FIELD_STANDARD),
+    _field_var(_subproblem.getStandardVariable(_tid, name())),
 
     _current_elem(_field_var.currentElem()),
     _current_elem_volume(_assembly.elemVolume()),
@@ -56,14 +51,12 @@ ElementIndicator::ElementIndicator(const InputParameters & parameters)
     _JxW(_assembly.JxW()),
     _coord(_assembly.coordTransformation()),
 
-    _var(_subproblem.getVariable(_tid, parameters.get<VariableName>("variable"))),
+    _var(_subproblem.getStandardVariable(_tid, parameters.get<VariableName>("variable"))),
 
     _u(_var.sln()),
-    _grad_u(_var.gradSln()),
-    _u_dot(_var.uDot()),
-    _du_dot_du(_var.duDotDu())
+    _grad_u(_var.gradSln())
 {
-  const std::vector<MooseVariable *> & coupled_vars = getCoupledMooseVars();
+  const std::vector<MooseVariableFEBase *> & coupled_vars = getCoupledMooseVars();
   for (const auto & var : coupled_vars)
     addMooseVariableDependency(var);
 

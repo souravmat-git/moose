@@ -4,57 +4,50 @@
 #include "ModulesApp.h"
 #include "MooseSyntax.h"
 
-template <>
 InputParameters
-validParams<StorkApp>()
+StorkApp::validParams()
 {
-  InputParameters params = validParams<MooseApp>();
+  InputParameters params = MooseApp::validParams();
+
+  // Do not use legacy DirichletBC, that is, set DirichletBC default for preset = true
+  params.set<bool>("use_legacy_dirichlet_bc") = false;
+
   return params;
 }
 
 StorkApp::StorkApp(InputParameters parameters) : MooseApp(parameters)
 {
-  Moose::registerObjects(_factory);
-  ModulesApp::registerObjects(_factory);
-  StorkApp::registerObjects(_factory);
-
-  Moose::associateSyntax(_syntax, _action_factory);
-  ModulesApp::associateSyntax(_syntax, _action_factory);
-  StorkApp::associateSyntax(_syntax, _action_factory);
+  StorkApp::registerAll(_factory, _action_factory, _syntax);
 }
 
 StorkApp::~StorkApp() {}
 
-// External entry point for dynamic application loading
-extern "C" void
-StorkApp__registerApps()
+void
+StorkApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
 {
-  StorkApp::registerApps();
+  ModulesApp::registerAll(f, af, s);
+  Registry::registerObjectsTo(f, {"StorkApp"});
+  Registry::registerActionsTo(af, {"StorkApp"});
+
+  /* register custom execute flags, action syntax, etc. here */
 }
+
 void
 StorkApp::registerApps()
 {
   registerApp(StorkApp);
 }
 
-// External entry point for dynamic object registration
+/***************************************************************************************************
+ *********************** Dynamic Library Entry Points - DO NOT MODIFY ******************************
+ **************************************************************************************************/
 extern "C" void
-StorkApp__registerObjects(Factory & factory)
+StorkApp__registerAll(Factory & f, ActionFactory & af, Syntax & s)
 {
-  StorkApp::registerObjects(factory);
+  StorkApp::registerAll(f, af, s);
 }
-void
-StorkApp::registerObjects(Factory & factory)
-{
-}
-
-// External entry point for dynamic syntax association
 extern "C" void
-StorkApp__associateSyntax(Syntax & syntax, ActionFactory & action_factory)
+StorkApp__registerApps()
 {
-  StorkApp::associateSyntax(syntax, action_factory);
-}
-void
-StorkApp::associateSyntax(Syntax & /*syntax*/, ActionFactory & /*action_factory*/)
-{
+  StorkApp::registerApps();
 }

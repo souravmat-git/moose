@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef EULERANGLEVARIABLES2RGBAUX_H
-#define EULERANGLEVARIABLES2RGBAUX_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "AuxKernel.h"
-
-class EulerAngleVariables2RGBAux;
-
-template <>
-InputParameters validParams<EulerAngleVariables2RGBAux>();
 
 /**
  * Create an encoded RGB triplet from Euler angle data.
@@ -22,6 +19,8 @@ InputParameters validParams<EulerAngleVariables2RGBAux>();
 class EulerAngleVariables2RGBAux : public AuxKernel
 {
 public:
+  static InputParameters validParams();
+
   EulerAngleVariables2RGBAux(const InputParameters & parameters);
 
 protected:
@@ -46,5 +45,3 @@ private:
   /// EBSD Crystal symmetry identifier
   const VariableValue & _sym;
 };
-
-#endif // EULERANGLEVARIABLES2RGBAUX_H

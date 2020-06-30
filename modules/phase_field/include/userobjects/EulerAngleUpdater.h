@@ -1,22 +1,20 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef EULERANGLEUPDATER_H
-#define EULERANGLEUPDATER_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "EulerAngleProvider.h"
 
 // Forward declaration
-class EulerAngleUpdater;
 class RotationTensor;
 class GrainTrackerInterface;
 class GrainForceAndTorqueInterface;
-
-template <>
-InputParameters validParams<EulerAngleUpdater>();
 
 /**
  * Update Euler angles of each grains after rigid body rotation
@@ -34,6 +32,8 @@ InputParameters validParams<EulerAngleUpdater>();
 class EulerAngleUpdater : public EulerAngleProvider
 {
 public:
+  static InputParameters validParams();
+
   EulerAngleUpdater(const InputParameters & parameters);
 
   virtual void initialize() override;
@@ -56,5 +56,3 @@ protected:
   std::vector<EulerAngles> _angles;
   std::vector<EulerAngles> _angles_old;
 };
-
-#endif // EULERANGLEUPDATER_H

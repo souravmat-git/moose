@@ -1,20 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef POROUSFLOWEFFECTIVEFLUIDPRESSURE_H
-#define POROUSFLOWEFFECTIVEFLUIDPRESSURE_H
+#pragma once
 
 #include "PorousFlowMaterialVectorBase.h"
-
-// Forward Declarations
-class PorousFlowEffectiveFluidPressure;
-
-template <>
-InputParameters validParams<PorousFlowEffectiveFluidPressure>();
 
 /**
  * Material designed to calculate the effective fluid pressure
@@ -25,35 +20,29 @@ InputParameters validParams<PorousFlowEffectiveFluidPressure>();
 class PorousFlowEffectiveFluidPressure : public PorousFlowMaterialVectorBase
 {
 public:
+  static InputParameters validParams();
+
   PorousFlowEffectiveFluidPressure(const InputParameters & parameters);
 
 protected:
   virtual void initQpStatefulProperties() override;
   virtual void computeQpProperties() override;
 
-  /// quadpoint or nodal porepressure of each phase
+  /// Quadpoint or nodal porepressure of each phase
   const MaterialProperty<std::vector<Real>> & _porepressure;
-
-  /// old value of quadpoint or nodal porepressure of each phase
-  const MaterialProperty<std::vector<Real>> & _porepressure_old;
 
   /// d(porepressure)/d(PorousFlow variable)
   const MaterialProperty<std::vector<std::vector<Real>>> & _dporepressure_dvar;
 
-  /// quadpoint or nodal saturation of each phase
+  /// Quadpoint or nodal saturation of each phase
   const MaterialProperty<std::vector<Real>> & _saturation;
-
-  /// old value of quadpoint or nodal saturation of each phase
-  const MaterialProperty<std::vector<Real>> & _saturation_old;
 
   /// d(saturation)/d(PorousFlow variable)
   const MaterialProperty<std::vector<std::vector<Real>>> & _dsaturation_dvar;
 
-  /// computed effective fluid pressure (at quadpoints or nodes)
+  /// Computed effective fluid pressure (at quadpoints or nodes)
   MaterialProperty<Real> & _pf;
 
   /// d(_pf)/d(PorousFlow variable)
   MaterialProperty<std::vector<Real>> & _dpf_dvar;
 };
-
-#endif // POROUSFLOWEFFECTIVEFLUIDPRESSURE_H

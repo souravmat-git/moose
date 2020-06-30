@@ -1,24 +1,24 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PointValueSampler.h"
 
-template <>
+#include <numeric>
+
+registerMooseObject("MooseApp", PointValueSampler);
+
+defineLegacyParams(PointValueSampler);
+
 InputParameters
-validParams<PointValueSampler>()
+PointValueSampler::validParams()
 {
-  InputParameters params = validParams<PointSamplerBase>();
+  InputParameters params = PointSamplerBase::validParams();
 
   params.addRequiredParam<std::vector<Point>>(
       "points", "The points where you want to evaluate the variables");
@@ -30,9 +30,21 @@ PointValueSampler::PointValueSampler(const InputParameters & parameters)
   : PointSamplerBase(parameters)
 {
   _points = getParam<std::vector<Point>>("points");
+}
 
-  _ids.resize(_points.size());
+void
+PointValueSampler::initialize()
+{
+  // Generate new Ids if the point vector has grown (non-negative counting numbers)
+  if (_points.size() > _ids.size())
+  {
+    auto old_size = _ids.size();
+    _ids.resize(_points.size());
+    std::iota(_ids.begin() + old_size, _ids.end(), old_size);
+  }
+  // Otherwise sync the ids array to be smaller if the point vector has been shrunk
+  else if (_points.size() < _ids.size())
+    _ids.resize(_points.size());
 
-  for (unsigned int i = 0; i < _points.size(); i++)
-    _ids[i] = i;
+  PointSamplerBase::initialize();
 }

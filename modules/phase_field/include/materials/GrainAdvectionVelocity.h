@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef GRAINADVECTIONVELOCITY_H
-#define GRAINADVECTIONVELOCITY_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Material.h"
 #include "GrainTrackerInterface.h"
@@ -13,10 +15,6 @@
 #include "DerivativeMaterialInterface.h"
 
 // Forward Declarations
-class GrainAdvectionVelocity;
-
-template <>
-InputParameters validParams<GrainAdvectionVelocity>();
 
 /**
  * This Material calculates the advection velocity, it's divergence and
@@ -25,6 +23,8 @@ InputParameters validParams<GrainAdvectionVelocity>();
 class GrainAdvectionVelocity : public DerivativeMaterialInterface<Material>
 {
 public:
+  static InputParameters validParams();
+
   GrainAdvectionVelocity(const InputParameters & parameters);
 
 protected:
@@ -51,10 +51,8 @@ private:
   const unsigned int _op_num;
 
   /// type of force density material
-  std::string _base_name;
+  const std::string _base_name;
 
   /// Material storing advection velocities of grains
   MaterialProperty<std::vector<RealGradient>> & _velocity_advection;
 };
-
-#endif // GRAINADVECTIONVELOCITY_H

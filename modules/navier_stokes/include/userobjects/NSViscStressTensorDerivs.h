@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef NSVISCSTRESSTENSORDERIVS_H
-#define NSVISCSTRESSTENSORDERIVS_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 /**
  * Class outside the Moose hierarchy that contains common
@@ -91,8 +93,9 @@ NSViscStressTensorDerivs<T>::dtau(unsigned k, unsigned ell, unsigned m)
     case 0: // density
     {
       const Real term1 = 2.0 / rho2 * (U(k) * grad_rho(ell) + U(ell) * grad_rho(k)) * phij;
-      const Real term2 = -1.0 / rho * ((gradU[k](ell) + gradU[ell](k)) * phij +
-                                       (U(k) * grad_phij(ell) + U(ell) * grad_phij(k)));
+      const Real term2 = -1.0 / rho *
+                         ((gradU[k](ell) + gradU[ell](k)) * phij +
+                          (U(k) * grad_phij(ell) + U(ell) * grad_phij(k)));
 
       // Kronecker delta terms
       Real term3 = 0.0;
@@ -139,5 +142,3 @@ NSViscStressTensorDerivs<T>::dtau(unsigned k, unsigned ell, unsigned m)
 
   return 0.;
 }
-
-#endif // NSVISCSTRESSTENSORDERIVS_H

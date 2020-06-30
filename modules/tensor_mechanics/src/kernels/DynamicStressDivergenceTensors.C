@@ -1,17 +1,21 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "DynamicStressDivergenceTensors.h"
 #include "ElasticityTensorTools.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", DynamicStressDivergenceTensors);
+
 InputParameters
-validParams<DynamicStressDivergenceTensors>()
+DynamicStressDivergenceTensors::validParams()
 {
-  InputParameters params = validParams<StressDivergenceTensors>();
+  InputParameters params = StressDivergenceTensors::validParams();
   params.addClassDescription(
       "Residual due to stress related Rayleigh damping and HHT time integration terms ");
   params.addParam<MaterialPropertyName>("zeta",
@@ -23,7 +27,7 @@ validParams<DynamicStressDivergenceTensors>()
   params.addParam<bool>("static_initialization",
                         false,
                         "Set to true to get the system to "
-                        "equillibrium under gravity by running a "
+                        "equilibrium under gravity by running a "
                         "quasi-static analysis (by solving Ku = F) "
                         "in the first time step");
   return params;
@@ -43,18 +47,18 @@ Real
 DynamicStressDivergenceTensors::computeQpResidual()
 {
   /**
-  *This kernel needs to be used only if either Rayleigh damping or numerical damping through HHT
-  *time integration scheme needs to be added to the problem thorugh the stiffness dependent damping
-  * parameter _zeta or HHT parameter _alpha, respectively.
-  *
-  * The residual of _zeta*K*[(1+_alpha)vel-_alpha vel_old]+ alpha K [ u - uold] + K u is required
-  * = _zeta*[(1+_alpha)d/dt (Div sigma)-alpha d/dt(Div sigma_old)] +alpha [Div sigma - Div
-  *sigma_old]+ Div sigma
-  * = _zeta*[(1+alpha)(Div sigma - Div sigma_old)/dt - alpha (Div sigma_old - Div sigma_older)/dt]
-  *   + alpha [Div sigma - Div sigma_old] +Div sigma
-  * = [(1+_alpha)*_zeta/dt +_alpha+1]* Div sigma - [(1+2_alpha)*_zeta/dt + _alpha] Div sigma_old +
-  *_alpha*_zeta/dt Div sigma_older
-  */
+   *This kernel needs to be used only if either Rayleigh damping or numerical damping through HHT
+   *time integration scheme needs to be added to the problem through the stiffness dependent damping
+   * parameter _zeta or HHT parameter _alpha, respectively.
+   *
+   * The residual of _zeta*K*[(1+_alpha)vel-_alpha vel_old]+ alpha K [ u - uold] + K u is required
+   * = _zeta*[(1+_alpha)d/dt (Div sigma)-alpha d/dt(Div sigma_old)] +alpha [Div sigma - Div
+   *sigma_old]+ Div sigma
+   * = _zeta*[(1+alpha)(Div sigma - Div sigma_old)/dt - alpha (Div sigma_old - Div sigma_older)/dt]
+   *   + alpha [Div sigma - Div sigma_old] +Div sigma
+   * = [(1+_alpha)*_zeta/dt +_alpha+1]* Div sigma - [(1+2_alpha)*_zeta/dt + _alpha] Div sigma_old +
+   *_alpha*_zeta/dt Div sigma_older
+   */
 
   Real residual = 0.0;
   if (_static_initialization && _t == _dt)
@@ -92,7 +96,8 @@ DynamicStressDivergenceTensors::computeQpJacobian()
   if (_static_initialization && _t == _dt)
     return StressDivergenceTensors::computeQpJacobian();
   else if (_dt > 0)
-    return StressDivergenceTensors::computeQpJacobian() * (1.0 + _alpha + _zeta[_qp] / _dt);
+    return StressDivergenceTensors::computeQpJacobian() *
+           (1.0 + _alpha + (1.0 + _alpha) * _zeta[_qp] / _dt);
   else
     return 0.0;
 }
@@ -112,7 +117,7 @@ DynamicStressDivergenceTensors::computeQpOffDiagJacobian(unsigned int jvar)
       return StressDivergenceTensors::computeQpOffDiagJacobian(jvar);
     else if (_dt > 0)
       return StressDivergenceTensors::computeQpOffDiagJacobian(jvar) *
-             (1.0 + _alpha + _zeta[_qp] / _dt);
+             (1.0 + _alpha + (1.0 + _alpha) * _zeta[_qp] / _dt);
     else
       return 0.0;
   }

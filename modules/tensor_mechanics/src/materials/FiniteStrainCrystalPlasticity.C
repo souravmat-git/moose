@@ -1,18 +1,25 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "FiniteStrainCrystalPlasticity.h"
 #include "petscblaslapack.h"
 #include "libmesh/utility.h"
 
-template <>
+#include <fstream>
+#include <cmath>
+
+registerMooseObject("TensorMechanicsApp", FiniteStrainCrystalPlasticity);
+
 InputParameters
-validParams<FiniteStrainCrystalPlasticity>()
+FiniteStrainCrystalPlasticity::validParams()
 {
-  InputParameters params = validParams<ComputeStressBase>();
+  InputParameters params = ComputeStressBase::validParams();
   params.addClassDescription(
       "Crystal Plasticity base class: FCC system with power law flow rule implemented");
   params.addRequiredParam<int>("nss", "Number of slip systems");
@@ -122,7 +129,7 @@ FiniteStrainCrystalPlasticity::FiniteStrainCrystalPlasticity(const InputParamete
     _fp(declareProperty<RankTwoTensor>("fp")), // Plastic deformation gradient
     _fp_old(getMaterialPropertyOld<RankTwoTensor>(
         "fp")), // Plastic deformation gradient of previous increment
-    _pk2(declareProperty<RankTwoTensor>("pk2")), // 2nd Piola Kirchoff Stress
+    _pk2(declareProperty<RankTwoTensor>("pk2")), // 2nd Piola-Kirchoff Stress
     _pk2_old(getMaterialPropertyOld<RankTwoTensor>(
         "pk2")), // 2nd Piola Kirchoff Stress of previous increment
     _lag_e(declareProperty<RankTwoTensor>("lage")), // Lagrangian strain
@@ -133,12 +140,13 @@ FiniteStrainCrystalPlasticity::FiniteStrainCrystalPlasticity(const InputParamete
         "gss")),                                  // Slip system resistances of previous increment
     _acc_slip(declareProperty<Real>("acc_slip")), // Accumulated slip
     _acc_slip_old(
-        getMaterialPropertyOld<Real>("acc_slip")), // Accumulated alip of previous increment
+        getMaterialPropertyOld<Real>("acc_slip")), // Accumulated slip of previous increment
     _update_rot(declareProperty<RankTwoTensor>(
         "update_rot")), // Rotation tensor considering material rotation and crystal orientation
     _deformation_gradient(getMaterialProperty<RankTwoTensor>("deformation_gradient")),
     _deformation_gradient_old(getMaterialPropertyOld<RankTwoTensor>("deformation_gradient")),
-    _elasticity_tensor(getMaterialProperty<RankFourTensor>("elasticity_tensor")),
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _crysrot(getMaterialProperty<RankTwoTensor>("crysrot")),
     _mo(_nss * LIBMESH_DIM),
     _no(_nss * LIBMESH_DIM),
@@ -181,15 +189,13 @@ FiniteStrainCrystalPlasticity::initQpStatefulProperties()
 {
   _stress[_qp].zero();
 
-  _fp[_qp].zero();
-  _fp[_qp].addIa(1.0);
+  _fp[_qp].setToIdentity();
 
   _pk2[_qp].zero();
   _acc_slip[_qp] = 0.0;
   _lag_e[_qp].zero();
 
-  _update_rot[_qp].zero();
-  _update_rot[_qp].addIa(1.0);
+  _update_rot[_qp].setToIdentity();
 
   initSlipSysProps(); // Initializes slip system related properties
   initAdditionalProps();
@@ -597,8 +603,7 @@ FiniteStrainCrystalPlasticity::postSolveQp()
 
     _Jacobian_mult[_qp] += calcTangentModuli(); // Calculate jacobian for preconditioner
 
-    RankTwoTensor iden;
-    iden.addIa(1.0);
+    RankTwoTensor iden(RankTwoTensor::initIdentity);
 
     _lag_e[_qp] = _deformation_gradient[_qp].transpose() * _deformation_gradient[_qp] - iden;
     _lag_e[_qp] = _lag_e[_qp] * 0.5;
@@ -842,7 +847,7 @@ FiniteStrainCrystalPlasticity::updateGss()
   for (unsigned int i = 0; i < _nss; ++i)
     // hb(i)=val;
     hb(i) = _h0 * std::pow(std::abs(1.0 - _gss_tmp[i] / _tau_sat), a) *
-            copysign(1.0, 1.0 - _gss_tmp[i] / _tau_sat);
+            std::copysign(1.0, 1.0 - _gss_tmp[i] / _tau_sat);
 
   for (unsigned int i = 0; i < _nss; ++i)
   {
@@ -863,7 +868,7 @@ FiniteStrainCrystalPlasticity::updateGss()
         qab = _r;
 
       _gss_tmp[i] += qab * hb(j) * std::abs(_slip_incr(j));
-      _dgss_dsliprate(i, j) = qab * hb(j) * copysign(1.0, _slip_incr(j)) * _dt;
+      _dgss_dsliprate(i, j) = qab * hb(j) * std::copysign(1.0, _slip_incr(j)) * _dt;
     }
   }
 }
@@ -881,10 +886,7 @@ FiniteStrainCrystalPlasticity::calc_resid_jacob(RankTwoTensor & resid, RankFourT
 void
 FiniteStrainCrystalPlasticity::calcResidual(RankTwoTensor & resid)
 {
-  RankTwoTensor iden, ce, ee, ce_pk2, eqv_slip_incr, pk2_new;
-
-  iden.zero();
-  iden.addIa(1.0);
+  RankTwoTensor iden(RankTwoTensor::initIdentity), ce, ee, ce_pk2, eqv_slip_incr, pk2_new;
 
   _fe = _dfgrd_tmp * _fp_prev_inv; // _fp_inv  ==> _fp_prev_inv
 
@@ -958,7 +960,7 @@ FiniteStrainCrystalPlasticity::getSlipIncrements()
   for (unsigned int i = 0; i < _nss; ++i)
   {
     _slip_incr(i) = _a0(i) * std::pow(std::abs(_tau(i) / _gss_tmp[i]), 1.0 / _xm(i)) *
-                    copysign(1.0, _tau(i)) * _dt;
+                    std::copysign(1.0, _tau(i)) * _dt;
     if (std::abs(_slip_incr(i)) > _slip_incr_tol)
     {
       _err_tol = true;

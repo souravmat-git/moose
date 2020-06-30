@@ -1,29 +1,39 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "PresetDisplacement.h"
 #include "Function.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", PresetDisplacement);
+
 InputParameters
-validParams<PresetDisplacement>()
+PresetDisplacement::validParams()
 {
-  InputParameters params = validParams<NodalBC>();
+  InputParameters params = DirichletBCBase::validParams();
   params.addClassDescription(
       "Prescribe the displacement on a given boundary in a given direction.");
+
   params.addParam<Real>("scale_factor", 1, "Scale factor if function is given.");
   params.addParam<FunctionName>("function", "1", "Function describing the displacement.");
   params.addRequiredCoupledVar("velocity", "The velocity variable.");
   params.addRequiredCoupledVar("acceleration", "The acceleration variable.");
   params.addRequiredParam<Real>("beta", "beta parameter for Newmark time integration.");
+
+  // Forcefully preset the BC
+  params.set<bool>("preset") = true;
+  params.suppressParameter<bool>("preset");
+
   return params;
 }
 
 PresetDisplacement::PresetDisplacement(const InputParameters & parameters)
-  : PresetNodalBC(parameters),
+  : DirichletBCBase(parameters),
     _u_old(valueOld()),
     _scale_factor(parameters.get<Real>("scale_factor")),
     _function(getFunction("function")),

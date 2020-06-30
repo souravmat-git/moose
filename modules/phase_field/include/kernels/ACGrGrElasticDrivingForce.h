@@ -1,22 +1,17 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef ACGRGRELASTICDRIVINGFORCE_H
-#define ACGRGRELASTICDRIVINGFORCE_H
+#pragma once
 
 #include "ACBulk.h"
-
-// Forward Declarations
-class ACGrGrElasticDrivingForce;
-class RankTwoTensor;
-class RankFourTensor;
-
-template <>
-InputParameters validParams<ACGrGrElasticDrivingForce>();
+#include "RankTwoTensorForward.h"
+#include "RankFourTensorForward.h"
 
 /**
  * Calculates the porton of the Allen-Cahn equation that results from the deformation energy.
@@ -26,6 +21,8 @@ InputParameters validParams<ACGrGrElasticDrivingForce>();
 class ACGrGrElasticDrivingForce : public ACBulk<Real>
 {
 public:
+  static InputParameters validParams();
+
   ACGrGrElasticDrivingForce(const InputParameters & parameters);
 
 protected:
@@ -35,5 +32,3 @@ private:
   const MaterialProperty<RankFourTensor> & _D_elastic_tensor;
   const MaterialProperty<RankTwoTensor> & _elastic_strain;
 };
-
-#endif // ACGRGRELASTICDRIVINGFORCE_H

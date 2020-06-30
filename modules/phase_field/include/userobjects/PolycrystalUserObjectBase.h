@@ -1,21 +1,18 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef POLYCRYSTALUSEROBJECTBASE_H
-#define POLYCRYSTALUSEROBJECTBASE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
+#pragma once
+
+#include "DenseMatrix.h"
 #include "FeatureFloodCount.h"
 
-#include "libmesh/dense_matrix.h"
-
 // Forward Declarations
-class PolycrystalUserObjectBase;
-
-template <>
-InputParameters validParams<PolycrystalUserObjectBase>();
 
 /**
  * This object provides the base capability for creating proper polycrystal ICs. It is
@@ -25,6 +22,8 @@ InputParameters validParams<PolycrystalUserObjectBase>();
 class PolycrystalUserObjectBase : public FeatureFloodCount
 {
 public:
+  static InputParameters validParams();
+
   PolycrystalUserObjectBase(const InputParameters & parameters);
 
   /**
@@ -105,6 +104,7 @@ protected:
                                              FeatureData *& feature,
                                              Status & status,
                                              unsigned int & new_id) override;
+  virtual void mergeSets() override;
 
   /**
    * Builds a dense adjacency matrix based on the discovery of grain neighbors and halos
@@ -165,6 +165,10 @@ protected:
 private:
   /// Temporary storage area for current grains at a point to avoid memory churn
   std::vector<unsigned int> _prealloc_tmp_grains;
-};
 
-#endif // POLYCRYSTALUSEROBJECTBASE_H
+  std::map<dof_id_type, std::vector<unsigned int>> _entity_to_grain_cache;
+
+  /// Timers
+  const PerfID _execute_timer;
+  const PerfID _finalize_timer;
+};

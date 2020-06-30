@@ -35,7 +35,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'PJFNK'
 
   petsc_options_iname = '-pc_type -pc_hypre_type'
@@ -44,15 +43,15 @@
 
 [Outputs]
   exodus = true
-  print_perf_log = true
+  perf_graph = true
 []
 
 [MultiApps]
-  [./full_solve]
+  [full_solve]
     type = FullSolveMultiApp
-# not setting app_type to use the same app type of master, i.e. MooseTestApp
+    # not setting app_type to use the same app type of master, i.e. MooseTestApp
     execute_on = initial
     positions = '0 0 0'
     input_files = sub.i
-  [../]
+  []
 []

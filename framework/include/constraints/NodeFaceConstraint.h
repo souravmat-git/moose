@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef NODEFACECONSTRAINT_H
-#define NODEFACECONSTRAINT_H
+#pragma once
 
 // MOOSE includes
 #include "Constraint.h"
@@ -42,16 +36,19 @@ InputParameters validParams<NodeFaceConstraint>();
  * This is common for contact algorithms and other constraints.
  */
 class NodeFaceConstraint : public Constraint,
-                           public NeighborCoupleableMooseVariableDependencyIntermediateInterface
+                           public NeighborCoupleableMooseVariableDependencyIntermediateInterface,
+                           public NeighborMooseVariableInterface<Real>
 {
 public:
+  static InputParameters validParams();
+
   NodeFaceConstraint(const InputParameters & parameters);
   virtual ~NodeFaceConstraint();
 
   /**
    * Compute the value the slave node should have at the beginning of a timestep.
    */
-  void computeSlaveValue(NumericVector<Number> & current_solution);
+  virtual void computeSlaveValue(NumericVector<Number> & current_solution);
 
   /**
    * Computes the residual Nodal residual.
@@ -101,9 +98,18 @@ public:
    */
   virtual MooseVariable & masterVariable() { return _master_var; }
 
+  /**
+   * The variable number that this object operates on.
+   */
+  MooseVariable & variable() { return _var; }
+
   // TODO: Make this protected or add an accessor
   // Do the same for all the other public members
   SparseMatrix<Number> * _jacobian;
+
+  Real slaveResidual() const;
+
+  void residualSetup() override;
 
 protected:
   /**
@@ -214,16 +220,18 @@ protected:
   /// Boundary ID for the master surface
   unsigned int _master;
 
+  MooseVariable & _var;
+
   const MooseArray<Point> & _master_q_point;
-  QBase *& _master_qrule;
+  const QBase * const & _master_qrule;
 
 public:
   PenetrationLocator & _penetration_locator;
 
 protected:
   /// current node being processed
-  const Node *& _current_node;
-  const Elem *& _current_master;
+  const Node * const & _current_node;
+  const Elem * const & _current_master;
 
   /// Value of the unknown variable this BC is action on
   const VariableValue & _u_slave;
@@ -266,11 +274,35 @@ protected:
    */
   bool _overwrite_slave_residual;
 
+  /// JxW on the master face
+  const MooseArray<Real> & _master_JxW;
+
+  /// Whether the slave residual has been computed
+  bool _slave_residual_computed;
+
+  /// The value of the slave residual
+  Real _slave_residual;
+
 public:
   std::vector<dof_id_type> _connected_dof_indices;
 
+  /// The Jacobian corresponding to the derivatives of the neighbor/master residual with respect to
+  /// the elemental/slave degrees of freedom.  We want to manually manipulate Kne because of the
+  /// dependence of the master residuals on dofs from all elements connected to the slave node
+  /// (e.g. those held by _connected_dof_indices)
   DenseMatrix<Number> _Kne;
-  DenseMatrix<Number> _Kee;
-};
 
-#endif
+  /// The Jacobian corresponding to the derivatives of the elemental/slave residual with respect to
+  /// the elemental/slave degrees of freedom.  We want to manually manipulate Kee because of the
+  /// dependence of the slave/master residuals on // dofs from all elements connected to the slave
+  /// node (e.g. those held by _connected_dof_indices) // and because when we're overwriting the
+  /// slave residual we traditionally want to use a different // scaling factor from the one
+  /// associated with interior physics
+  DenseMatrix<Number> _Kee;
+
+  /// The Jacobian corresponding to the derivatives of the elemental/slave residual with respect to
+  /// the neighbor/master degrees of freedom.  We want to manually manipulate Ken because when we're
+  /// overwriting the slave residual we traditionally want to use a different scaling factor from the
+  /// one associated with interior physics
+  DenseMatrix<Number> _Ken;
+};

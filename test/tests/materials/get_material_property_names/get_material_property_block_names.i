@@ -1,13 +1,13 @@
 [Mesh]
-  type = GeneratedMesh
-  dim = 2
-  nx = 10
-  ny = 10
-[]
-
-[MeshModifiers]
+  [gen]
+    type = GeneratedMeshGenerator
+    dim = 2
+    nx = 10
+    ny = 10
+  []
   [./add_subdomain]
-    type = SubdomainBoundingBox
+    input = gen
+    type = SubdomainBoundingBoxGenerator
     top_right = '1 1 0'
     bottom_left = '0 0.5 0'
     block_id = 100
@@ -67,7 +67,6 @@
 []
 
 [Executioner]
-  # Preconditioned JFNK (default)
   type = Steady
   solve_type = PJFNK
   petsc_options_iname = '-pc_type -pc_hypre_type'

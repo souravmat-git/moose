@@ -1,13 +1,14 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#include "SolidModel.h"
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef ABAQUSUMATMATERIAL_H
-#define ABAQUSUMATMATERIAL_H
+#pragma once
+#include "SolidModel.h"
 
 typedef void (*umat_t)(Real STRESS[],
                        Real STATEV[],
@@ -48,15 +49,13 @@ typedef void (*umat_t)(Real STRESS[],
                        int * KINC);
 
 // Forward Declaration
-class AbaqusUmatMaterial;
-
-template <>
-InputParameters validParams<AbaqusUmatMaterial>();
 
 // AbaqusUmatMateral class define a property
 class AbaqusUmatMaterial : public SolidModel
 {
 public:
+  static InputParameters validParams();
+
   AbaqusUmatMaterial(const InputParameters & parameters);
   virtual ~AbaqusUmatMaterial();
 
@@ -100,5 +99,3 @@ protected:
   MaterialProperty<Real> & _plastic_dissipation;
   MaterialProperty<Real> & _creep_dissipation;
 };
-
-#endif // ABAQUSUMATMATERIAL_H

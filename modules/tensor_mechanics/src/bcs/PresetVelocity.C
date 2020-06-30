@@ -1,25 +1,35 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "PresetVelocity.h"
 #include "Function.h"
 
-template <>
+registerMooseObject("TensorMechanicsApp", PresetVelocity);
+
 InputParameters
-validParams<PresetVelocity>()
+PresetVelocity::validParams()
 {
-  InputParameters p = validParams<NodalBC>();
-  p.addParam<Real>(
+  InputParameters params = DirichletBCBase::validParams();
+
+  params.addParam<Real>(
       "velocity", 1, "Value of the velocity.  Used as scale factor if function is given.");
-  p.addParam<FunctionName>("function", "1", "Function describing the velocity.");
-  return p;
+  params.addParam<FunctionName>("function", "1", "Function describing the velocity.");
+
+  // Forcefully preset the BC
+  params.set<bool>("preset") = true;
+  params.suppressParameter<bool>("preset");
+
+  return params;
 }
 
 PresetVelocity::PresetVelocity(const InputParameters & parameters)
-  : PresetNodalBC(parameters),
+  : DirichletBCBase(parameters),
     _u_old(valueOld()),
     _velocity(parameters.get<Real>("velocity")),
     _function(getFunction("function"))

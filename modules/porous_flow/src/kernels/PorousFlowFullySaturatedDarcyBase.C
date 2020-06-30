@@ -1,20 +1,22 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "PorousFlowFullySaturatedDarcyBase.h"
 
-// MOOSE includes
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PorousFlowApp", PorousFlowFullySaturatedDarcyBase);
+
 InputParameters
-validParams<PorousFlowFullySaturatedDarcyBase>()
+PorousFlowFullySaturatedDarcyBase::validParams()
 {
-  InputParameters params = validParams<Kernel>();
+  InputParameters params = Kernel::validParams();
   params.addRequiredParam<RealVectorValue>("gravity",
                                            "Gravitational acceleration vector downwards (m/s^2)");
   params.addParam<bool>("multiply_by_density",
@@ -51,10 +53,11 @@ PorousFlowFullySaturatedDarcyBase::PorousFlowFullySaturatedDarcyBase(
         "dPorousFlow_grad_porepressure_qp_dgradvar")),
     _dgrad_p_dvar(getMaterialProperty<std::vector<std::vector<RealGradient>>>(
         "dPorousFlow_grad_porepressure_qp_dvar")),
-    _porousflow_dictator(getUserObject<PorousFlowDictator>("PorousFlowDictator")),
-    _gravity(getParam<RealVectorValue>("gravity"))
+    _dictator(getUserObject<PorousFlowDictator>("PorousFlowDictator")),
+    _gravity(getParam<RealVectorValue>("gravity")),
+    _perm_derivs(_dictator.usePermDerivs())
 {
-  if (_porousflow_dictator.numPhases() != 1)
+  if (_dictator.numPhases() != 1)
     mooseError("PorousFlowFullySaturatedDarcyBase should not be used for multi-phase scenarios as "
                "it does no upwinding and does not include relative-permeability effects");
 }
@@ -78,26 +81,32 @@ PorousFlowFullySaturatedDarcyBase::computeQpJacobian()
 Real
 PorousFlowFullySaturatedDarcyBase::computeQpOffDiagJacobian(unsigned int jvar)
 {
-  if (_porousflow_dictator.notPorousFlowVariable(jvar))
+  if (_dictator.notPorousFlowVariable(jvar))
     return 0.0;
 
   const unsigned ph = 0;
-  const unsigned pvar = _porousflow_dictator.porousFlowVariableNum(jvar);
+  const unsigned pvar = _dictator.porousFlowVariableNum(jvar);
 
   const Real mob = mobility();
   const Real dmob = dmobility(pvar) * _phi[_j][_qp];
-  ;
 
   const RealVectorValue flow =
       _permeability[_qp] * (_grad_p[_qp][ph] - _density[_qp][ph] * _gravity);
-  RealVectorValue dflow = _dpermeability_dvar[_qp][pvar] * _phi[_j][_qp] *
-                          (_grad_p[_qp][ph] - _density[_qp][ph] * _gravity);
-  for (unsigned i = 0; i < LIBMESH_DIM; ++i)
-    dflow += _dpermeability_dgradvar[_qp][i][pvar] * _grad_phi[_j][_qp](i) *
-             (_grad_p[_qp][ph] - _density[_qp][ph] * _gravity);
-  dflow += _permeability[_qp] * (_grad_phi[_j][_qp] * _dgrad_p_dgrad_var[_qp][ph][pvar] -
-                                 _phi[_j][_qp] * _ddensity_dvar[_qp][ph][pvar] * _gravity);
+
+  RealVectorValue dflow =
+      _permeability[_qp] * (_grad_phi[_j][_qp] * _dgrad_p_dgrad_var[_qp][ph][pvar] -
+                            _phi[_j][_qp] * _ddensity_dvar[_qp][ph][pvar] * _gravity);
   dflow += _permeability[_qp] * (_dgrad_p_dvar[_qp][ph][pvar] * _phi[_j][_qp]);
+
+  if (_perm_derivs)
+  {
+    dflow += _dpermeability_dvar[_qp][pvar] * _phi[_j][_qp] *
+             (_grad_p[_qp][ph] - _density[_qp][ph] * _gravity);
+    for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+      dflow += _dpermeability_dgradvar[_qp][i][pvar] * _grad_phi[_j][_qp](i) *
+               (_grad_p[_qp][ph] - _density[_qp][ph] * _gravity);
+  }
+
   return _grad_test[_i][_qp] * (dmob * flow + mob * dflow);
 }
 

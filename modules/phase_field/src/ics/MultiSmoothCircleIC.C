@@ -1,9 +1,11 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MultiSmoothCircleIC.h"
 
@@ -11,11 +13,12 @@
 #include "MooseMesh.h"
 #include "MooseVariable.h"
 
-template <>
+registerMooseObject("PhaseFieldApp", MultiSmoothCircleIC);
+
 InputParameters
-validParams<MultiSmoothCircleIC>()
+MultiSmoothCircleIC::validParams()
 {
-  InputParameters params = validParams<SmoothCircleBaseIC>();
+  InputParameters params = SmoothCircleBaseIC::validParams();
   params.addClassDescription("Random distribution of smooth circles with given minimum spacing");
   params.addRequiredParam<unsigned int>("numbub", "The number of bubbles to place");
   params.addRequiredParam<Real>("bubspac",

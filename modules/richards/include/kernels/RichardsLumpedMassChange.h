@@ -1,12 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef RICHARDSLUMPEDMASSCHANGE
-#define RICHARDSLUMPEDMASSCHANGE
+#pragma once
 
 #include "TimeKernel.h"
 #include "Material.h"
@@ -16,10 +17,6 @@
 #include "RichardsSat.h"
 
 // Forward Declarations
-class RichardsLumpedMassChange;
-
-template <>
-InputParameters validParams<RichardsLumpedMassChange>();
 
 /**
  * d(fluid mass in porespace)/dt with the fluid mass
@@ -30,6 +27,8 @@ InputParameters validParams<RichardsLumpedMassChange>();
 class RichardsLumpedMassChange : public TimeKernel
 {
 public:
+  static InputParameters validParams();
+
   RichardsLumpedMassChange(const InputParameters & parameters);
 
 protected:
@@ -64,19 +63,19 @@ protected:
   const MaterialProperty<Real> & _porosity_old;
 
   /// The userobject that computes effective saturation (as a function of porepressure(s)) for this variable
-  const RichardsSeff * _seff_UO;
+  const RichardsSeff & _seff_UO;
 
   /// The userobject that computes saturation (as a function of effective saturation) for this variable
-  const RichardsSat * _sat_UO;
+  const RichardsSat & _sat_UO;
 
   /// The userobject that computes fluid density (as a function of the porepressure)
-  const RichardsDensity * _density_UO;
+  const RichardsDensity & _density_UO;
 
   /**
    * Holds the values of pressures at all the nodes of the element
    * Eg:
    * _ps_at_nodes[_pvar] is a pointer to this variable's nodal porepressure values
-   * So: (*_ps_at_nodes[_pvar])[i] = _var.nodalSln()[i]
+   * So: (*_ps_at_nodes[_pvar])[i] = _var.dofValues()[i]
    */
   std::vector<const VariableValue *> _ps_at_nodes;
 
@@ -86,5 +85,3 @@ protected:
   /// holds nodal values of d(Seff)/dP_i
   std::vector<Real> _dseff;
 };
-
-#endif // RICHARDSLUMPEDMASSCHANGE

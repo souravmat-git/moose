@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef COMPUTEAXISYMMETRIC1DINCREMENTALSTRAIN_H
-#define COMPUTEAXISYMMETRIC1DINCREMENTALSTRAIN_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "Compute1DIncrementalStrain.h"
 #include "SubblockIndexProvider.h"
@@ -18,11 +20,13 @@
 class ComputeAxisymmetric1DIncrementalStrain : public Compute1DIncrementalStrain
 {
 public:
+  static InputParameters validParams();
+
   ComputeAxisymmetric1DIncrementalStrain(const InputParameters & parameters);
 
-protected:
   void initialSetup() override;
 
+protected:
   /// Computes the current dUy/dy for axisymmetric problems
   Real computeGradDispYY() override;
 
@@ -46,16 +50,25 @@ protected:
   /// the old value of the first component of the displacements vector
   const VariableValue & _disp_old_0;
 
-  const SubblockIndexProvider * _subblock_id_provider;
+  /// A Userobject that carries the subblock ID for all elements
+  const SubblockIndexProvider * const _subblock_id_provider;
 
+  /// Whether an out-of-plane strain variable is coupled
   bool _has_out_of_plane_strain;
+
+  ///{@ Current and old values of the out-of-plane strain variable
   const VariableValue & _out_of_plane_strain;
   const VariableValue & _out_of_plane_strain_old;
+  ///@}
 
+  /// Whether an out-of-plane strain scalar variable is coupled
   bool _has_scalar_out_of_plane_strain;
+
+  /// Number of out-of-plane strain scalar variables
   unsigned int _nscalar_strains;
+
+  ///{@ Current and old values of the out-of-plane strain scalar variable
   std::vector<const VariableValue *> _scalar_out_of_plane_strain;
   std::vector<const VariableValue *> _scalar_out_of_plane_strain_old;
+  ///@}
 };
-
-#endif // COMPUTEAXISYMMETRIC1DINCREMENTALSTRAIN_H

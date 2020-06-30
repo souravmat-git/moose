@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef ADAPTIVITY_H
-#define ADAPTIVITY_H
+#pragma once
 
 #include "libmesh/libmesh_config.h"
 
@@ -23,6 +17,9 @@
 #include "MooseError.h"
 #include "ConsoleStreamInterface.h"
 #include "MooseTypes.h"
+#include "PerfGraphInterface.h"
+
+#include "libmesh/parallel_object.h"
 
 // libMesh
 #include "libmesh/mesh_refinement.h"
@@ -30,7 +27,10 @@
 class FEProblemBase;
 class MooseMesh;
 class DisplacedProblem;
-class MooseVariable;
+template <typename>
+class MooseVariableFE;
+typedef MooseVariableFE<Real> MooseVariable;
+typedef MooseVariableFE<VectorValue<Real>> VectorMooseVariable;
 class MooseEnum;
 
 // Forward declare classes in libMesh
@@ -45,17 +45,19 @@ class ErrorEstimator;
  * Takes care of everything related to mesh adaptivity
  *
  */
-class Adaptivity : public ConsoleStreamInterface
+class Adaptivity : public ConsoleStreamInterface,
+                   public PerfGraphInterface,
+                   public libMesh::ParallelObject
 {
 public:
   Adaptivity(FEProblemBase & subproblem);
   virtual ~Adaptivity();
 
   /**
-   * Initialize the initial adaptivity ;-)
-   *
-   * @param steps TODO: describe me
-   * @param initial_steps number of steps to do in the initial adaptivity
+   * Initialize and turn on adaptivity for the simulation. initial_steps specifies the number of
+   * adaptivity cycles to perform before the simulation starts and steps indicates the
+   * number of adaptivity cycles to run during a steady (not transient) solve.  steps is not used
+   * for transient or eigen solves.
    */
   void init(unsigned int steps, unsigned int initial_steps);
 
@@ -146,7 +148,7 @@ public:
    * MooseMesh object. No solution projection is performed in this
    * version.
    */
-  static void uniformRefine(MooseMesh * mesh);
+  static void uniformRefine(MooseMesh * mesh, unsigned int level = libMesh::invalid_uint);
 
   /**
    * Performs uniform refinement on the meshes in the current
@@ -158,14 +160,22 @@ public:
    * Allow adaptivity to be toggled programatically.
    * @param state The adaptivity state (on/off).
    */
-  void setAdpaptivityOn(bool state) { _mesh_refinement_on = state; }
+  void setAdaptivityOn(bool state);
 
   /**
    * Is adaptivity on?
    *
-   * @return true if we do mesh adaptivity, otherwise false
+   * @return true if mesh adaptivity is on, otherwise false
    */
   bool isOn() { return _mesh_refinement_on; }
+
+  /**
+   * Returns whether or not Adaptivity::init() has ran. Can
+   * be used to indicate if mesh adaptivity is available.
+   *
+   * @return true if the Adaptivity system is ready to be used, otherwise false
+   */
+  bool isInitialized() { return _initialized; }
 
   /**
    * Sets the time when the adaptivity is active
@@ -240,6 +250,8 @@ protected:
 
   /// on/off flag reporting if the adaptivity is being used
   bool _mesh_refinement_on;
+  /// on/off flag reporting if the adaptivity system has been initialized
+  bool _initialized;
   /// A mesh refinement object to be used either with initial refinement or with Adaptivity.
   std::unique_ptr<MeshRefinement> _mesh_refinement;
   /// Error estimator to be used by the apps.
@@ -290,6 +302,12 @@ protected:
 
   /// Stores pointers to ErrorVectors associated with indicator field names
   std::map<std::string, std::unique_ptr<ErrorVector>> _indicator_field_to_error_vector;
+
+  /// Timers
+  PerfID _adapt_mesh_timer;
+  PerfID _uniform_refine_timer;
+  PerfID _uniform_refine_with_projection;
+  PerfID _update_error_vectors;
 };
 
 template <typename T>
@@ -322,5 +340,3 @@ Adaptivity::setParam(const std::string & param_name, const T & param_value)
     mooseError("Invalid Param in adaptivity object");
 }
 #endif // LIBMESH_ENABLE_AMR
-
-#endif /* ADAPTIVITY_H */

@@ -1,25 +1,25 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "SideSetsAroundSubdomain.h"
 #include "InputParameters.h"
 #include "MooseTypes.h"
 #include "MooseMesh.h"
 
-// libMesh includes
 #include "libmesh/mesh.h"
 #include "libmesh/remote_elem.h"
+#include "libmesh/fe_base.h"
+
+registerMooseObjectReplaced("MooseApp",
+                            SideSetsAroundSubdomain,
+                            "11/30/2019 00:00",
+                            SideSetsAroundSubdomainGenerator);
 
 template <>
 InputParameters
@@ -28,7 +28,8 @@ validParams<SideSetsAroundSubdomain>()
   InputParameters params = validParams<AddSideSetsBase>();
   params.addRequiredParam<std::vector<BoundaryName>>(
       "new_boundary", "The list of boundary IDs to create on the supplied subdomain");
-  params.addRequiredParam<SubdomainName>("block", "The block around which to create sidesets");
+  params.addRequiredParam<std::vector<SubdomainName>>("block",
+                                                      "The blocks around which to create sidesets");
   params.addParam<Point>("normal",
                          "If supplied, only faces with normal equal to this, up to "
                          "normal_tol, will be added to the sidesets specified");
@@ -67,7 +68,8 @@ SideSetsAroundSubdomain::modify()
   MeshBase & mesh = _mesh_ptr->getMesh();
 
   // Extract the block ID
-  SubdomainID block_id = _mesh_ptr->getSubdomainID(getParam<SubdomainName>("block"));
+  auto blocks = _mesh_ptr->getSubdomainIDs(getParam<std::vector<SubdomainName>>("block"));
+  std::set<SubdomainID> block_ids(blocks.begin(), blocks.end());
 
   // Create the boundary IDs from the list of names provided (the true flag creates ids from unknown
   // names)
@@ -89,16 +91,12 @@ SideSetsAroundSubdomain::modify()
   std::vector<vec_type> queries(my_n_proc);
 
   // Loop over the elements
-  for (MeshBase::const_element_iterator el = mesh.active_elements_begin(),
-                                        end_el = mesh.active_elements_end();
-       el != end_el;
-       ++el)
+  for (const auto & elem : mesh.active_element_ptr_range())
   {
-    const Elem * elem = *el;
     SubdomainID curr_subdomain = elem->subdomain_id();
 
     // We only need to loop over elements in the source subdomain
-    if (curr_subdomain != block_id)
+    if (block_ids.count(curr_subdomain) == 0)
       continue;
 
     for (unsigned int side = 0; side < elem->n_sides(); ++side)
@@ -112,14 +110,15 @@ SideSetsAroundSubdomain::modify()
       {
         queries[elem->processor_id()].push_back(std::make_pair(elem->id(), side));
       }
-      else if (neighbor == NULL || // element on boundary OR
-               neighbor->subdomain_id() !=
-                   block_id) // neighboring element is on a different subdomain
+      else if (neighbor == nullptr || // element on boundary OR
+               block_ids.count(neighbor->subdomain_id()) ==
+                   0) // neighboring element is on a different subdomain
       {
         if (_using_normal)
         {
+          const std::vector<Point> & normals = _fe_face->get_normals();
           _fe_face->reinit(elem, side);
-          face_normal = _fe_face->get_normals()[0];
+          face_normal = normals[0];
           add_to_bdy = (_normal * face_normal >= 1.0 - _normal_tol);
         }
 
@@ -169,13 +168,15 @@ SideSetsAroundSubdomain::modify()
         const unsigned int side = q.second;
         const Elem * neighbor = elem->neighbor_ptr(side);
 
-        if (neighbor == NULL ||                   // element on boundary OR
-            neighbor->subdomain_id() != block_id) // neighboring element is on a different subdomain
+        if (neighbor == nullptr || // element on boundary OR
+            block_ids.count(neighbor->subdomain_id()) ==
+                0) // neighboring element is on a different subdomain
         {
           if (_using_normal)
           {
+            const std::vector<Point> & normals = _fe_face->get_normals();
             _fe_face->reinit(elem, side);
-            face_normal = _fe_face->get_normals()[0];
+            face_normal = normals[0];
             add_to_bdy = (_normal * face_normal >= 1.0 - _normal_tol);
           }
 

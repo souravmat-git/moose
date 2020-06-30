@@ -1,19 +1,13 @@
-/****************************************************************/
-/*               DO NOT MODIFY THIS HEADER                      */
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*           (c) 2010 Battelle Energy Alliance, LLC             */
-/*                   ALL RIGHTS RESERVED                        */
-/*                                                              */
-/*          Prepared by Battelle Energy Alliance, LLC           */
-/*            Under Contract No. DE-AC07-05ID14517              */
-/*            With the U. S. Department of Energy               */
-/*                                                              */
-/*            See COPYRIGHT for full restrictions               */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef INVERSEPOWERMETHOD_H
-#define INVERSEPOWERMETHOD_H
+#pragma once
 
 #include "EigenExecutionerBase.h"
 
@@ -26,19 +20,21 @@ InputParameters validParams<InversePowerMethod>();
 class InversePowerMethod : public EigenExecutionerBase
 {
 public:
+  static InputParameters validParams();
+
   InversePowerMethod(const InputParameters & parameters);
 
   virtual void init() override;
 
   virtual void execute() override;
 
+  virtual bool lastSolveConverged() const override { return _last_solve_converged; }
+
 protected:
   virtual void takeStep();
 
   /// name of the postprocessor for evaluating |x-xprevious|; empty means that no postprocessor is provided and power iteration will not check convergence based on it
-  std::string _solution_diff_name;
-  /// postprocessor for evaluating |x-xprevious|
-  const PostprocessorValue * _solution_diff;
+  const PostprocessorName & _solution_diff_name;
   /// minimum number of power iterations
   const unsigned int & _min_iter;
   /// maximum number of power iterations
@@ -48,9 +44,9 @@ protected:
   /// convergence tolerance on solution difference
   const Real & _sol_check_tol;
   /// tolerance on each power iteration (always one nonlinear iteration)
-  const Real & _pfactor;
+  const Real & _l_tol;
   /// indicating if Chebyshev acceleration is turned on
   const bool & _cheb_on;
+  /// flag to indicate if inverse power iteration converged
+  bool _last_solve_converged;
 };
-
-#endif // INVERSEPOWERMETHOD_H

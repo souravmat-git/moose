@@ -1,0 +1,57 @@
+[Tests]
+  design = 'CombinerGenerator.md'
+  issues = '#13412'
+
+  [translations]
+    requirement = "The system shall support the ability to combine multiple meshes:"
+
+    [single]
+      type = 'Exodiff'
+      input = 'combiner_generator.i'
+      exodiff = 'combiner_generator_in.e'
+      cli_args = '--mesh-only'
+      recover = false
+
+      detail = 'using a single input mesh at multiple positions,'
+    []
+
+    [multi]
+      type = 'Exodiff'
+      input = 'combiner_multi_input_translate.i'
+      exodiff = 'combiner_multi_input_translate_in.e'
+      cli_args = '--mesh-only'
+      recover = false
+
+      detail = 'using multiple meshes at multiple positions, and'
+    []
+
+    [none]
+      type = 'Exodiff'
+      input = 'combiner_multi_input.i'
+      exodiff = 'combiner_multi_input_in.e'
+      cli_args = '--mesh-only'
+      recover = false
+
+      detail = 'using multiple meshes with no positions.'
+    []
+  []
+
+  [errors]
+    requirement = "The system shall error when trying to combine multiple meshes,"
+    [missing_pos]
+      type = 'RunException'
+      input = 'combiner_generator.i'
+      cli_args = 'Mesh/cmbn/positions=""'
+      expect_err = 'If only one input mesh is given'
+      detail = 'but only one input is supplied with no positions, or'
+    []
+
+    [mismatch_pos]
+      type = 'RunException'
+      input = 'combiner_multi_input.i'
+      cli_args = 'Mesh/cmbn/positions="0 0 0"'
+      expect_err = 'If more than one input mesh'
+      detail = 'the number of meshes and the number of positions is mismatched.'
+    []
+  []
+[]

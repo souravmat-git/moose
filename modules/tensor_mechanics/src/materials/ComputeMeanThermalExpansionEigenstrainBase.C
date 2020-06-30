@@ -1,17 +1,19 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
 #include "ComputeMeanThermalExpansionEigenstrainBase.h"
 #include "Function.h"
 
-template <>
 InputParameters
-validParams<ComputeMeanThermalExpansionEigenstrainBase>()
+ComputeMeanThermalExpansionEigenstrainBase::validParams()
 {
-  InputParameters params = validParams<ComputeThermalExpansionEigenstrainBase>();
+  InputParameters params = ComputeThermalExpansionEigenstrainBase::validParams();
   params.addClassDescription("Base class for models that compute eigenstrain due to mean"
                              "thermal expansion as a function of temperature");
   return params;
@@ -56,9 +58,8 @@ ComputeMeanThermalExpansionEigenstrainBase::computeThermalStrain(Real & thermal_
 
   const Real dalphabar_dT = meanThermalExpansionCoefficientDerivative(current_temp);
   const Real numerator = dalphabar_dT * (current_temp - reference_temperature) + current_alphabar;
-  const Real denominator =
-      1.0 +
-      alphabar_stress_free_temperature * (_stress_free_temperature[_qp] - reference_temperature);
+  const Real denominator = 1.0 + alphabar_stress_free_temperature *
+                                     (_stress_free_temperature[_qp] - reference_temperature);
   if (denominator < small)
     mooseError("Denominator too small in thermal strain calculation");
   instantaneous_cte = numerator / denominator;

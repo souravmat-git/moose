@@ -1,5 +1,18 @@
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
 from PyQt5.QtCore import QSettings, QStandardPaths
-import os, cPickle
+import os
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 import uuid
 
 class FileCache(object):
@@ -50,6 +63,7 @@ class FileCache(object):
                 or self.path_data.get("data_version") != self.data_version
                 or self.stat.st_ctime != self.path_data.get("ctime")
                 or self.stat.st_size != self.path_data.get("size")
+                or not os.path.exists(self.path_data.get("pickle_path"))
                 ):
             self.dirty = True
             return
@@ -66,13 +80,13 @@ class FileCache(object):
 
         try:
             with open(self.path_data["pickle_path"], "r") as f:
-                data = cPickle.load(f)
+                data = pickle.load(f)
                 return data
         except:
             return None
 
     @staticmethod
-    def removeCacheFile( path):
+    def removeCacheFile(path):
         try:
             os.remove(path)
         except:
@@ -107,8 +121,8 @@ class FileCache(object):
 
         filename = uuid.uuid4().hex
         full_path = os.path.join(cache_dir, filename)
-        with open(full_path, "w") as f:
-            cPickle.dump(obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
+        with open(full_path, "wb") as f:
+            pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
         self.path_data = {"ctime": self.stat.st_ctime,
                 "size": self.stat.st_size,
                 "pickle_path": full_path,
@@ -132,3 +146,4 @@ class FileCache(object):
         for key, val in val.items():
             FileCache.removeCacheFile(val["pickle_path"])
         settings.remove(settings_key)
+        settings.sync()

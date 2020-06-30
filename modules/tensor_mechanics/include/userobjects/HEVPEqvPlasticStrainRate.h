@@ -1,18 +1,15 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef HEVPEQVPLASTICSTRAINRATE_H
-#define HEVPEQVPLASTICSTRAINRATE_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "HEVPInternalVarRateUOBase.h"
-
-class HEVPEqvPlasticStrainRate;
-
-template <>
-InputParameters validParams<HEVPEqvPlasticStrainRate>();
 
 /**
  * This user object classs
@@ -21,6 +18,8 @@ InputParameters validParams<HEVPEqvPlasticStrainRate>();
 class HEVPEqvPlasticStrainRate : public HEVPInternalVarRateUOBase
 {
 public:
+  static InputParameters validParams();
+
   HEVPEqvPlasticStrainRate(const InputParameters & parameters);
 
   virtual bool computeValue(unsigned int, Real &) const;
@@ -29,5 +28,3 @@ public:
 protected:
   Real _h;
 };
-
-#endif

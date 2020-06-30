@@ -1,11 +1,13 @@
-/****************************************************************/
-/* MOOSE - Multiphysics Object Oriented Simulation Environment  */
-/*                                                              */
-/*          All contents are licensed under LGPL V2.1           */
-/*             See LICENSE for full restrictions                */
-/****************************************************************/
-#ifndef FINITESTRAINUOBASEDCP_H
-#define FINITESTRAINUOBASEDCP_H
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#pragma once
 
 #include "ComputeStressBase.h"
 
@@ -13,11 +15,6 @@
 #include "CrystalPlasticitySlipResistance.h"
 #include "CrystalPlasticityStateVariable.h"
 #include "CrystalPlasticityStateVarRateComponent.h"
-
-class FiniteStrainUObasedCP;
-
-template <>
-InputParameters validParams<FiniteStrainUObasedCP>();
 
 /**
  * FiniteStrainUObasedCP uses the multiplicative decomposition of deformation gradient
@@ -36,6 +33,8 @@ InputParameters validParams<FiniteStrainUObasedCP>();
 class FiniteStrainUObasedCP : public ComputeStressBase
 {
 public:
+  static InputParameters validParams();
+
   FiniteStrainUObasedCP(const InputParameters & parameters);
 
 protected:
@@ -119,7 +118,7 @@ protected:
 
   /**
    * updates the slip rates.
-  */
+   */
   virtual void getSlipRates();
 
   /**
@@ -192,6 +191,9 @@ protected:
   /// Local state variable
   std::vector<std::vector<Real>> _state_vars_old;
 
+  /// Local stored state variable (for sub-stepping)
+  std::vector<std::vector<Real>> _state_vars_old_stored;
+
   /// Local old state variable
   std::vector<std::vector<Real>> _state_vars_prev;
 
@@ -244,6 +246,10 @@ protected:
   MaterialProperty<RankTwoTensor> & _update_rot;
   const MaterialProperty<RankTwoTensor> & _update_rot_old;
 
+  /// Name of the elasticity tensor material property
+  const std::string _elasticity_tensor_name;
+  /// Elasticity tensor material property
+  const MaterialProperty<RankFourTensor> & _elasticity_tensor;
   const MaterialProperty<RankTwoTensor> & _deformation_gradient;
   const MaterialProperty<RankTwoTensor> & _deformation_gradient_old;
 
@@ -263,5 +269,3 @@ protected:
   /// Scales the substepping increment to obtain deformation gradient at a substep iteration
   Real _dfgrd_scale_factor;
 };
-
-#endif // FINITESTRAINUOBASEDCP_H
