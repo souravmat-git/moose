@@ -45,6 +45,7 @@
       input = master_full_solve.i
       csvdiff = master_full_solve_out_storage_0002.csv
       prereq = batch/exodus_2
+      max_parallel = 1
 
       detail = 'on a single processor,'
     []
@@ -65,7 +66,7 @@
       max_parallel = 2
       min_parallel = 2
       prereq = batch_csv/n2
-      cli_args = MultiApps/runner/batch-restore
+      cli_args = "MultiApps/runner/mode=batch-restore"
 
       detail = 'on multiple processors using in-memory backup.'
     []

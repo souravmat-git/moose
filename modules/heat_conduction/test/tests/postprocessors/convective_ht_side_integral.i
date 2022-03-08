@@ -15,7 +15,7 @@
 
   [./add_iss_1]
     type = SideSetsBetweenSubdomainsGenerator
-    master_block = 1
+    primary_block = 1
     paired_block = 2
     new_boundary = 'interface'
     input = cartesian
@@ -23,7 +23,7 @@
 
   [./block_deleter]
     type = BlockDeletionGenerator
-    block_id = 2
+    block = 2
     input = add_iss_1
   [../]
 []

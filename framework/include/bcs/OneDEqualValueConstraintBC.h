@@ -11,11 +11,6 @@
 
 #include "IntegratedBC.h"
 
-class OneDEqualValueConstraintBC;
-
-template <>
-InputParameters validParams<OneDEqualValueConstraintBC>();
-
 /**
  * This is the \f$ \int \lambda dg\f$ term from the mortar method.
  * This can connect two 1D domains only.
@@ -32,9 +27,9 @@ public:
 protected:
   virtual Real computeQpResidual() override;
   virtual Real computeQpJacobian() override;
-  virtual Real computeQpOffDiagJacobian(unsigned jvar) override;
+  virtual Real computeQpOffDiagJacobianScalar(unsigned int jvar) override;
 
-  VariableValue & _lambda;
+  const VariableValue & _lambda;
   unsigned int _lambda_var_number;
   unsigned int _component;
   Real _vg;

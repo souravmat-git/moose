@@ -1,5 +1,9 @@
 # {{project}} Software Test Plan
 
+*This template follows [!ac](INL) template TEM-141, "Software Test Plan."*
+
+!template field key=pre-intro required=False
+
 ## Test Scope id=test-scope
 
 !template! field key=test-scope
@@ -85,7 +89,7 @@ sufficient, but for a large-scale effort more iterations will be required.
 
 !template-end!
 
-## Test Automation (Scripting)
+## Test Automation (Scripting) id=test-automation
 
 !template field key=test-automation
 If testing tools can be used, then in this section it needs to be clearly defined how and to

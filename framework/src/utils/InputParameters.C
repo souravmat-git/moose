@@ -32,19 +32,23 @@ InputParameters::InputParameters()
     _collapse_nesting(false),
     _moose_object_syntax_visibility(true),
     _show_deprecated_message(true),
-    _allow_copy(true)
+    _allow_copy(true),
+    _from_legacy_construction(true)
 {
 }
 
 InputParameters::InputParameters(const InputParameters & rhs)
-  : Parameters(), _show_deprecated_message(true), _allow_copy(true)
+  : Parameters(),
+    _show_deprecated_message(true),
+    _allow_copy(true),
+    _from_legacy_construction(rhs._from_legacy_construction)
 
 {
   *this = rhs;
 }
 
 InputParameters::InputParameters(const Parameters & rhs)
-  : _show_deprecated_message(true), _allow_copy(true)
+  : _show_deprecated_message(true), _allow_copy(true), _from_legacy_construction(true)
 {
   _params.clear();
   Parameters::operator=(rhs);
@@ -58,10 +62,12 @@ InputParameters::clear()
   Parameters::clear();
   _params.clear();
   _coupled_vars.clear();
+  _new_to_deprecated_coupled_vars.clear();
   _collapse_nesting = false;
   _moose_object_syntax_visibility = true;
   _show_deprecated_message = true;
   _allow_copy = true;
+  _from_legacy_construction = true;
   _block_fullpath = "";
   _block_location = "";
 }
@@ -131,6 +137,7 @@ InputParameters::operator=(const InputParameters & rhs)
   _collapse_nesting = rhs._collapse_nesting;
   _moose_object_syntax_visibility = rhs._moose_object_syntax_visibility;
   _coupled_vars = rhs._coupled_vars;
+  _new_to_deprecated_coupled_vars = rhs._new_to_deprecated_coupled_vars;
   _allow_copy = rhs._allow_copy;
   _block_fullpath = rhs._block_fullpath;
   _block_location = rhs._block_location;
@@ -155,7 +162,27 @@ InputParameters::operator+=(const InputParameters & rhs)
 
   // Collapse nesting and moose object syntax hiding are not modified with +=
   _coupled_vars.insert(rhs._coupled_vars.begin(), rhs._coupled_vars.end());
+  _new_to_deprecated_coupled_vars.insert(rhs._new_to_deprecated_coupled_vars.begin(),
+                                         rhs._new_to_deprecated_coupled_vars.end());
   return *this;
+}
+
+void
+InputParameters::setDeprecatedVarDocString(const std::string & new_name,
+                                           const std::string & doc_string)
+{
+  auto coupled_vars_it = _new_to_deprecated_coupled_vars.find(new_name);
+  if (coupled_vars_it != _new_to_deprecated_coupled_vars.end())
+  {
+    auto params_it = _params.find(coupled_vars_it->second);
+    if (params_it == _params.end())
+      mooseError("There must have been a mistake in the construction of the new to deprecated "
+                 "coupled vars map because the old name ",
+                 coupled_vars_it->second,
+                 " doesn't exist in the parameters data.");
+
+    params_it->second._doc_string = doc_string;
+  }
 }
 
 void
@@ -165,6 +192,9 @@ InputParameters::addCoupledVar(const std::string & name, Real value, const std::
   _coupled_vars.insert(name);
   _params[name]._coupled_default.assign(1, value);
   _params[name]._have_coupled_default = true;
+
+  // Set the doc string for any associated deprecated coupled var
+  setDeprecatedVarDocString(name, doc_string);
 }
 
 void
@@ -177,6 +207,9 @@ InputParameters::addCoupledVar(const std::string & name,
   _coupled_vars.insert(name);
   _params[name]._coupled_default = value;
   _params[name]._have_coupled_default = true;
+
+  // Set the doc string for any associated deprecated coupled var
+  setDeprecatedVarDocString(name, doc_string);
 }
 
 void
@@ -184,6 +217,35 @@ InputParameters::addCoupledVar(const std::string & name, const std::string & doc
 {
   addParam<std::vector<VariableName>>(name, doc_string);
   _coupled_vars.insert(name);
+
+  // Set the doc string for any associated deprecated coupled var
+  setDeprecatedVarDocString(name, doc_string);
+}
+
+void
+InputParameters::addDeprecatedCoupledVar(const std::string & old_name,
+                                         const std::string & new_name,
+                                         const std::string & removal_date /*=""*/)
+{
+  _show_deprecated_message = false;
+
+  // Set the doc string if we are adding the deprecated var after the new var has already been added
+  auto params_it = _params.find(new_name);
+  std::string doc_string;
+  if (params_it != _params.end())
+    doc_string = params_it->second._doc_string;
+
+  addParam<std::vector<VariableName>>(old_name, doc_string);
+  _coupled_vars.insert(old_name);
+  _new_to_deprecated_coupled_vars.emplace(new_name, old_name);
+
+  std::string deprecation_message =
+      "The coupled variable parameter '" + old_name + "' has been deprecated";
+  if (!removal_date.empty())
+    deprecation_message += " and will be removed " + removal_date;
+  deprecation_message += ". Please use the '" + new_name + "' coupled variable parameter instead.";
+  _params[old_name]._deprecation_message = deprecation_message;
+  _show_deprecated_message = true;
 }
 
 void
@@ -422,6 +484,11 @@ InputParameters::checkParams(const std::string & parsing_syntax)
   {
     if (!isParamValid(it.first) && isParamRequired(it.first))
     {
+      // check if an old, deprecated name exists for this parameter that may be specified
+      auto oit = _new_to_deprecated_coupled_vars.find(it.first);
+      if (oit != _new_to_deprecated_coupled_vars.end() && isParamValid(oit->second))
+        continue;
+
       oss << blockLocation() << ": missing required parameter '" << parampath + "/" + it.first
           << "'\n";
       oss << "\tDoc String: \"" + getDocString(it.first) + "\"" << std::endl;
@@ -523,13 +590,16 @@ InputParameters::getAutoBuildVectors() const
 }
 
 std::string
-InputParameters::type(const std::string & name)
+InputParameters::type(const std::string & name) const
 {
+  if (!_values.count(name))
+    mooseError("Parameter \"", name, "\" not found.\n\n", *this);
+
   if (_coupled_vars.find(name) != _coupled_vars.end())
     return "std::vector<VariableName>";
-  else if (_params.count(name) > 0 && !_params[name]._custom_type.empty())
-    return _params[name]._custom_type;
-  return _values[name]->type();
+  else if (_params.count(name) > 0 && !_params.at(name)._custom_type.empty())
+    return _params.at(name)._custom_type;
+  return _values.at(name)->type();
 }
 
 std::string
@@ -630,73 +700,6 @@ InputParameters::getGroupName(const std::string & param_name) const
   if (it != _params.end())
     return it->second._group;
   return std::string();
-}
-
-const PostprocessorValue &
-InputParameters::getDefaultPostprocessorValue(const std::string & name,
-                                              bool suppress_error,
-                                              unsigned int index) const
-{
-  // Check that a default exists, error if it does not
-  auto it = _params.find(name);
-  if (!suppress_error &&
-      (it == _params.end() || !it->second._have_default_postprocessor_val[index]))
-    mooseError("A default PostprcessorValue does not exist for the given name: ", name);
-
-  if (index >= it->second._default_postprocessor_val.size())
-    mooseError("Default postprocessor with parameter name ",
-               name,
-               " requested with index ",
-               index,
-               " but only ",
-               it->second._default_postprocessor_val.size(),
-               " exists.");
-
-  return it->second._default_postprocessor_val[index];
-}
-
-void
-InputParameters::reserveDefaultPostprocessorValueStorage(const std::string & name,
-                                                         unsigned int size)
-{
-  if (_params[name]._default_postprocessor_val.size() >= size)
-    return;
-  _params[name]._default_postprocessor_val.resize(size, 0);
-  _params[name]._have_default_postprocessor_val.resize(size, false);
-}
-
-void
-InputParameters::setDefaultPostprocessorValue(const std::string & name,
-                                              const PostprocessorValue & value,
-                                              unsigned int index)
-{
-  if (_params.at(name)._default_postprocessor_val.size() <= index)
-    mooseError("Attempting to access _default_postprocessor_val with index ",
-               index,
-               " but size is ",
-               _params.at(name)._default_postprocessor_val.size());
-  if (_params.at(name)._have_default_postprocessor_val.size() <= index)
-    mooseError("Attempting to access _have_default_postprocessor_val with index ",
-               index,
-               " but size is ",
-               _params.at(name)._have_default_postprocessor_val.size(),
-               ". This can be caused by trying to assign default postprocessor values "
-               "programmatically (by using set method).");
-  _params.at(name)._default_postprocessor_val[index] = value;
-  _params.at(name)._have_default_postprocessor_val[index] = true;
-}
-
-bool
-InputParameters::hasDefaultPostprocessorValue(const std::string & name, unsigned int index) const
-{
-  if (_params.at(name)._have_default_postprocessor_val.size() <= index)
-    mooseError("Attempting to access _have_default_postprocessor_val with index ",
-               index,
-               " but size is ",
-               _params.at(name)._have_default_postprocessor_val.size(),
-               ". This can be caused by trying to assign default postprocessor values "
-               "programmatically (by using set method).");
-  return _params.count(name) > 0 && _params.at(name)._have_default_postprocessor_val[index];
 }
 
 void
@@ -971,18 +974,10 @@ InputParameters::addDeprecatedParam<std::vector<MooseEnum>>(
 
 template <>
 void
-InputParameters::setParamHelper<PostprocessorName, Real>(const std::string & name,
+InputParameters::setParamHelper<PostprocessorName, Real>(const std::string & /*name*/,
                                                          PostprocessorName & l_value,
                                                          const Real & r_value)
 {
-  mooseAssert(_params[name]._default_postprocessor_val.size() == 1 &&
-                  _params[name]._have_default_postprocessor_val.size() == 1,
-              "Default postprocessor size is not equal to 1.");
-
-  // Store the default value
-  _params[name]._default_postprocessor_val[0] = r_value;
-  _params[name]._have_default_postprocessor_val[0] = true;
-
   // Assign the default value so that it appears in the dump
   std::ostringstream oss;
   oss << r_value;
@@ -991,18 +986,10 @@ InputParameters::setParamHelper<PostprocessorName, Real>(const std::string & nam
 
 template <>
 void
-InputParameters::setParamHelper<PostprocessorName, int>(const std::string & name,
+InputParameters::setParamHelper<PostprocessorName, int>(const std::string & /*name*/,
                                                         PostprocessorName & l_value,
                                                         const int & r_value)
 {
-  mooseAssert(_params[name]._default_postprocessor_val.size() == 1 &&
-                  _params[name]._have_default_postprocessor_val.size() == 1,
-              "Default postprocessor size is not equal to 1.");
-
-  // Store the default value
-  _params[name]._default_postprocessor_val[0] = r_value;
-  _params[name]._have_default_postprocessor_val[0] = true;
-
   // Assign the default value so that it appears in the dump
   std::ostringstream oss;
   oss << r_value;
@@ -1059,9 +1046,26 @@ InputParameters::setParamHelper<MaterialPropertyName, int>(const std::string & /
 
 template <>
 void
-InputParameters::setHelper<std::vector<PostprocessorName>>(const std::string & name)
+InputParameters::setParamHelper<MooseFunctorName, Real>(const std::string & /*name*/,
+                                                        MooseFunctorName & l_value,
+                                                        const Real & r_value)
 {
-  _params[name]._vector_of_postprocessors = true;
+  // Assign the default value so that it appears in the dump
+  std::ostringstream oss;
+  oss << r_value;
+  l_value = oss.str();
+}
+
+template <>
+void
+InputParameters::setParamHelper<MooseFunctorName, int>(const std::string & /*name*/,
+                                                       MooseFunctorName & l_value,
+                                                       const int & r_value)
+{
+  // Assign the default value so that it appears in the dump
+  std::ostringstream oss;
+  oss << r_value;
+  l_value = oss.str();
 }
 
 template <>
@@ -1132,4 +1136,13 @@ InputParameters::getControllableParameters() const
     if (it->second._controllable)
       controllable.emplace(it->first);
   return controllable;
+}
+
+std::string
+InputParameters::errorPrefix(const std::string & param) const
+{
+  auto prefix = param + ":";
+  if (!inputLocation(param).empty())
+    prefix = inputLocation(param) + ": (" + paramFullpath(param) + ")";
+  return prefix;
 }

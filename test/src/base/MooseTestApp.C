@@ -15,6 +15,7 @@
 
 #include "ActionFactory.h"
 #include "AppFactory.h"
+#include "EigenProblem.h"
 
 #include "MooseTestApp.h"
 
@@ -29,6 +30,12 @@ MooseTestApp::validParams()
                                    false,
                                    "Call getRestartableDataMap with a bad name.");
 
+  // Flag for turning how EigenProblem output eigenvalues
+  params.addCommandLineParam<bool>("output_inverse_eigenvalue",
+                                   "--output-inverse-eigenvalue",
+                                   false,
+                                   "True to let EigenProblem output inverse eigenvalue.");
+
   /* MooseTestApp is special because it will have its own
    * binary and we want the default to allow test objects.
    */
@@ -37,11 +44,14 @@ MooseTestApp::validParams()
                                    "--disallow-test-objects",
                                    false,
                                    "Don't register test objects and syntax");
+
+  params.addCommandLineParam<bool>(
+      "test_check_legacy_params",
+      "--test-check-legacy-params",
+      false,
+      "True to test checking for legacy parameter construction with CheckLegacyParamsAction");
+
   params.set<bool>("automatic_automatic_scaling") = false;
-
-  // Do not use legacy DirichletBC, that is, set DirichletBC default for preset = true
-  params.set<bool>("use_legacy_dirichlet_bc") = false;
-
   params.set<bool>("use_legacy_material_output") = false;
 
   return params;
@@ -57,6 +67,21 @@ MooseTestApp::MooseTestApp(const InputParameters & parameters) : MooseApp(parame
 }
 
 MooseTestApp::~MooseTestApp() {}
+
+void
+MooseTestApp::executeExecutioner()
+{
+#ifdef LIBMESH_HAVE_SLEPC
+  if (getParam<bool>("output_inverse_eigenvalue"))
+  {
+    auto eigen_problem = dynamic_cast<EigenProblem *>(&(_executioner->feProblem()));
+    if (eigen_problem)
+      eigen_problem->outputInverseEigenvalue(true);
+  }
+#endif
+
+  MooseApp::executeExecutioner();
+}
 
 void
 MooseTestApp::registerAll(Factory & f, ActionFactory & af, Syntax & s, bool use_test_objs)
@@ -85,6 +110,7 @@ MooseTestApp::registerAll(Factory & f, ActionFactory & af, Syntax & s, bool use_
     registerSyntax("AddDGDiffusion", "DGDiffusionAction");
     registerSyntax("MeshMetaDataDependenceAction", "AutoLineSamplerTest");
     registerSyntax("AppendMeshGeneratorAction", "ModifyMesh/*");
+    registerSyntax("CheckMeshMetaDataAction", "CheckMeshMetaData");
   }
 }
 

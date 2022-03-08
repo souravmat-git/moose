@@ -35,6 +35,7 @@
 
 #include <set>
 #include <limits>
+#include "libmesh/mesh_tools.h"
 
 registerMooseObject("HeatConductionApp", PatchSidesetGenerator);
 
@@ -44,17 +45,18 @@ PatchSidesetGenerator::validParams()
   InputParameters params = MeshGenerator::validParams();
 
   params.addRequiredParam<MeshGeneratorName>("input", "The mesh we want to modify");
-  params.addRequiredParam<boundary_id_type>("sideset",
-                                            "The sideset that will be divided into patches");
+  params.addRequiredParam<BoundaryName>("boundary",
+                                        "The boundary that will be divided into patches");
   params.addRequiredRangeCheckedParam<unsigned int>(
       "n_patches", "n_patches>0", "Number of patches");
 
-  MooseEnum partitioning("default=-3 metis=-2 parmetis=-1 linear=0 centroid hilbert_sfc morton_sfc",
-                         "default");
+  MooseEnum partitioning = MooseMesh::partitioning(); // default MOOSE partitioning
+  partitioning += "grid";                             // ...but also add our own
   params.addParam<MooseEnum>(
       "partitioner",
       partitioning,
       "Specifies a mesh partitioner to use when splitting the mesh for a parallel computation.");
+
   MooseEnum direction("x y z radial");
   params.addParam<MooseEnum>("centroid_partitioner_direction",
                              direction,
@@ -73,7 +75,7 @@ PatchSidesetGenerator::PatchSidesetGenerator(const InputParameters & parameters)
   : MeshGenerator(parameters),
     _input(getMesh("input")),
     _n_patches(getParam<unsigned int>("n_patches")),
-    _sideset(getParam<boundary_id_type>("sideset")),
+    _sideset_name(getParam<BoundaryName>("boundary")),
     _partitioner_name(getParam<MooseEnum>("partitioner"))
 {
 }
@@ -88,12 +90,27 @@ PatchSidesetGenerator::generate()
   // Get a reference to our BoundaryInfo object for later use
   BoundaryInfo & boundary_info = mesh->get_boundary_info();
 
+  // get dimensionality
+  _dim = mesh->mesh_dimension() - 1;
+
   // get a list of all sides; vector of tuples (elem, loc_side, side_set)
   auto side_list = boundary_info.build_active_side_list();
 
+  // check if the provided sideset name is actually a sideset id
+  // if _sideset_name can be converted to integer it's interpreted
+  // as sideset id
+  std::stringstream ss;
+  ss << _sideset_name;
+  ss >> _sideset;
+  if (ss.fail())
+    _sideset = boundary_info.get_id_by_name(_sideset_name);
+
+  // make sure that _sideset exists
+  if (_sideset == BoundaryInfo::invalid_id)
+    paramError("sideset_name", "Not a valid boundary");
+
   // create a dim - 1 dimensional mesh
-  auto boundary_mesh =
-      libmesh_make_unique<libMesh::ReplicatedMesh>(comm(), mesh->mesh_dimension() - 1);
+  auto boundary_mesh = buildReplicatedMesh(mesh->mesh_dimension() - 1);
   boundary_mesh->set_mesh_dimension(mesh->mesh_dimension() - 1);
   boundary_mesh->set_spatial_dimension(mesh->mesh_dimension());
 
@@ -122,7 +139,7 @@ PatchSidesetGenerator::generate()
       std::vector<dof_id_type> bnd_elem_node_ids(boundary_elem->n_nodes());
 
       // loop through the nodes in boundary_elem
-      for (unsigned int j = 0; j < boundary_elem->n_nodes(); ++j)
+      for (MooseIndex(boundary_elem->n_nodes()) j = 0; j < boundary_elem->n_nodes(); ++j)
       {
         const Node * node = boundary_elem->node_ptr(j);
 
@@ -161,7 +178,7 @@ PatchSidesetGenerator::generate()
       // set the nodes & subdomain_id of the new element by looping over the
       // boundary_elem and then inserting its nodes into new_bnd_elem in the
       // same order
-      for (unsigned int j = 0; j < boundary_elem->n_nodes(); ++j)
+      for (MooseIndex(boundary_elem->n_nodes()) j = 0; j < boundary_elem->n_nodes(); ++j)
       {
         dof_id_type old_node_id = boundary_elem->node_ptr(j)->id();
         if (mesh_node_id_to_boundary_node_id.find(old_node_id) ==
@@ -175,8 +192,18 @@ PatchSidesetGenerator::generate()
 
   // partition the boundary mesh
   boundary_mesh->prepare_for_use();
-  MooseMesh::setPartitioner(*boundary_mesh, _partitioner_name, false, _pars, *this);
-  boundary_mesh->partition(_n_patches);
+  _n_boundary_mesh_elems = boundary_mesh->n_elem();
+  if (_partitioner_name == "grid")
+    partition(*boundary_mesh);
+  else
+  {
+    auto partitioner_enum = getParam<MooseEnum>("partitioner");
+    MooseMesh::setPartitioner(*boundary_mesh, partitioner_enum, false, _pars, *this);
+    boundary_mesh->partition(_n_patches);
+  }
+
+  // make sure every partition has at least one element; if not rename and adjust _n_patches
+  checkPartitionAndCompress(*boundary_mesh);
 
   // prepare sideset names and boundary_ids added to mesh
   std::vector<BoundaryName> sideset_names =
@@ -208,13 +235,134 @@ PatchSidesetGenerator::generate()
   }
 
   // make sure new boundary names are set
-  for (unsigned int j = 0; j < boundary_ids.size(); ++j)
+  for (MooseIndex(boundary_ids.size()) j = 0; j < boundary_ids.size(); ++j)
   {
     boundary_info.sideset_name(boundary_ids[j]) = sideset_names[j];
     boundary_info.nodeset_name(boundary_ids[j]) = sideset_names[j];
   }
 
   return mesh;
+}
+
+void
+PatchSidesetGenerator::partition(MeshBase & mesh)
+{
+  if (_partitioner_name == "grid")
+  {
+    // Figure out the physical bounds of the given mesh
+    auto bounding_box = MeshTools::create_bounding_box(mesh);
+    const auto & min = bounding_box.min();
+    const auto & max = bounding_box.max();
+    const auto & delta = max - min;
+
+    // set number of elements
+    std::vector<unsigned int> nelems(3);
+    if (_dim == 1)
+    {
+      // find the largest component in delta
+      unsigned int largest_id = 0;
+      Real largest = delta(0);
+      for (unsigned int j = 1; j < 3; ++j)
+        if (largest < delta(j))
+        {
+          largest = delta(j);
+          largest_id = j;
+        }
+
+      // set nelems now
+      nelems = {1, 1, 1};
+      nelems[largest_id] = _n_patches;
+    }
+    else
+    {
+      // find the smallest component in delta
+      unsigned int smallest_id = 0;
+      Real smallest = delta(0);
+      for (unsigned int j = 1; j < 3; ++j)
+        if (smallest > delta(j))
+        {
+          smallest = delta(j);
+          smallest_id = j;
+        }
+
+      // store the ids for the two larger dimensions
+      unsigned int id1 = 1, id2 = 2;
+      if (smallest_id == 1)
+        id1 = 0;
+      else if (smallest_id == 2)
+        id2 = 0;
+
+      // set number of elements
+      nelems[smallest_id] = 1;
+      nelems[id1] = std::round(std::sqrt(delta(id1) / delta(id2) * _n_patches));
+      nelems[id2] = std::round(std::sqrt(delta(id2) / delta(id1) * _n_patches));
+      unsigned int final_n_patches = nelems[id1] * nelems[id2];
+      // We need to check if the number of requested patches and the number of
+      // actually created patches matches. If the two do not match, then a warning
+      // is printed.
+      if (_n_patches != final_n_patches)
+      {
+        _console << "Note: For creating radiation patches for boundary " << _sideset
+                 << " using grid partitioner number of patches was changed from " << _n_patches
+                 << " to " << final_n_patches << std::endl;
+        _n_patches = final_n_patches;
+      }
+    }
+
+    const Real dx = delta(0) / nelems[0];
+    const Real dy = delta(1) / nelems[1];
+    const Real dz = delta(2) / nelems[2];
+    for (auto & elem_ptr : mesh.active_element_ptr_range())
+    {
+      const Point centroid = elem_ptr->vertex_average();
+      processor_id_type proc_id;
+      const unsigned int ix = std::floor((centroid(0) - min(0)) / dx);
+      const unsigned int iy = std::floor((centroid(1) - min(1)) / dy);
+      const unsigned int iz = std::floor((centroid(2) - min(2)) / dz);
+      proc_id = ix + iy * nelems[0] + iz * nelems[0] * nelems[1];
+      elem_ptr->processor_id() = proc_id;
+    }
+  }
+  else
+    mooseError("Partitioner ", _partitioner_name, " not recognized.");
+}
+
+void
+PatchSidesetGenerator::checkPartitionAndCompress(MeshBase & mesh)
+{
+  std::set<processor_id_type> processor_ids;
+  for (auto & elem_ptr : mesh.active_element_ptr_range())
+    processor_ids.insert(elem_ptr->processor_id());
+
+  if (processor_ids.size() == _n_patches)
+    return;
+
+  // at least one partition does not have an elem assigned to it
+  // adjust _n_patches
+  _console << "Some partitions for side set " << _sideset
+           << " are empty. Adjusting number of patches from " << _n_patches << " to "
+           << processor_ids.size() << std::endl;
+  _n_patches = processor_ids.size();
+
+  // create a vector and sort it
+  std::vector<processor_id_type> processor_ids_vec;
+  for (auto & p : processor_ids)
+    processor_ids_vec.push_back(p);
+  std::sort(processor_ids_vec.begin(), processor_ids_vec.end());
+
+  // now remap the processor ids
+  std::map<processor_id_type, processor_id_type> processor_id_remap;
+  for (MooseIndex(processor_ids_vec.size()) j = 0; j < processor_ids_vec.size(); ++j)
+    processor_id_remap[processor_ids_vec[j]] = j;
+
+  for (auto & elem_ptr : mesh.active_element_ptr_range())
+  {
+    processor_id_type p = elem_ptr->processor_id();
+    const auto & it = processor_id_remap.find(p);
+    if (it == processor_id_remap.end())
+      mooseError("Parition id ", p, " not in processor_id_remap.");
+    elem_ptr->processor_id() = it->second;
+  }
 }
 
 std::vector<BoundaryName>

@@ -11,11 +11,6 @@
 
 #include "ArrayIntegratedBC.h"
 
-class ArrayVacuumBC;
-
-template <>
-InputParameters validParams<ArrayVacuumBC>();
-
 class ArrayVacuumBC : public ArrayIntegratedBC
 {
 public:
@@ -24,7 +19,7 @@ public:
   ArrayVacuumBC(const InputParameters & parameters);
 
 protected:
-  virtual RealEigenVector computeQpResidual() override;
+  virtual void computeQpResidual(RealEigenVector & residual) override;
   virtual RealEigenVector computeQpJacobian() override;
 
   /// Ratio of u to du/dn

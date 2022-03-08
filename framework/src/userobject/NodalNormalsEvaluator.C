@@ -12,17 +12,16 @@
 // MOOSE includes
 #include "AuxiliarySystem.h"
 #include "MooseVariableFE.h"
-
-Threads::spin_mutex nodal_normals_evaluator_mutex;
+#include "NodalNormalsPreprocessor.h"
 
 registerMooseObject("MooseApp", NodalNormalsEvaluator);
-
-defineLegacyParams(NodalNormalsEvaluator);
 
 InputParameters
 NodalNormalsEvaluator::validParams()
 {
   InputParameters params = NodalUserObject::validParams();
+  params.addClassDescription(
+      "Helper object to compute nodal normal values via the NodalNormals input block.");
   params.set<bool>("_dual_restrictable") = true;
   params.set<std::vector<SubdomainName>>("block") = {"ANY_BLOCK_ID"};
   return params;
@@ -47,7 +46,7 @@ NodalNormalsEvaluator::execute()
                                                Moose::VarFieldType::VAR_FIELD_STANDARD)
                                   .number()) > 0)
     {
-      Threads::spin_mutex::scoped_lock lock(nodal_normals_evaluator_mutex);
+      std::scoped_lock lock(NodalNormalsPreprocessor::_nodal_normals_mutex);
 
       dof_id_type dof_x =
           _current_node->dof_number(_aux.number(),

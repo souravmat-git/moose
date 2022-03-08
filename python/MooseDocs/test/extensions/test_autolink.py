@@ -11,45 +11,50 @@
 import mock
 import unittest
 import logging
-import collections
 from MooseDocs.test import MooseDocsTestCase
-from MooseDocs.extensions import core, floats, heading, autolink
+from MooseDocs.extensions import core, floats, heading, autolink, modal
 from MooseDocs import base, common
-from MooseDocs.tree import pages, tokens
 logging.basicConfig()
 
 class TestShortcutLink(MooseDocsTestCase):
-    EXTENSIONS = [core, floats, heading, autolink]
-
-    def setupContent(self):
-        config = [dict(root_dir='python/MooseDocs/test/content', content=['extensions/core.md'])]
-        return common.get_content(config, '.md')
+    EXTENSIONS = [core, floats, heading, autolink, modal]
 
     def testAutoLink(self):
         ast = self.tokenize('[core.md]')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=0, bookmark='', exact=False, optional=False, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=0, page='core.md', bookmark=None,
+                         alternative=None, optional=False, exact=False)
 
         ast = self.tokenize('[core.md#bookmark]')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=0, bookmark='bookmark', exact=False, optional=False, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=0, page='core.md', bookmark='bookmark',
+                         alternative=None, optional=False, exact=False)
+
+        ast = self.tokenize('[core.md alternative=content.md#bookmark]')
+        self.assertSize(ast, 1)
+        self.assertToken(ast(0), 'Paragraph', size=1)
+        self.assertToken(ast(0)(0), 'AutoLink', size=0, page='core.md', bookmark=None,
+                         alternative='content.md#bookmark', optional=False, exact=False)
 
         ast = self.tokenize('[core.md exact=True]')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=0, bookmark='', exact=True, optional=False, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=0, page='core.md', bookmark=None,
+                         alternative=None, optional=False, exact=True)
 
         ast = self.tokenize('[core.md optional=True]')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=0, bookmark='', exact=False, optional=True, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=0, page='core.md', bookmark=None,
+                         alternative=None, optional=True, exact=False)
 
-        ast = self.tokenize('[core.md#bookmark optional=True exact=True]')
+        ast = self.tokenize('[core.md#bookmark alternative=content.md optional=True exact=True]')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=0, bookmark='bookmark', exact=True, optional=True, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=0, page='core.md', bookmark='bookmark',
+                         alternative='content.md', optional=True, exact=True)
 
     def testLocalLink(self):
         ast = self.tokenize('[#bookmark]')
@@ -64,16 +69,10 @@ class TestShortcutLink(MooseDocsTestCase):
 
     def testSourceLink(self):
         ast = self.tokenize('[framework/Makefile]')
-        self.assertSize(ast, 2)
+        self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'SourceLink', size=1)
-        self.assertToken(ast(0)(0)(0), 'Link', string='Makefile')
-
-        url = ast(0)(0)(0)['url']
-        self.assertToken(ast(1), 'ModalLink', size=2, bookmark=url[1:])
-        self.assertToken(ast(1)(0), 'ModalLinkTitle', string='/framework/Makefile')
-        self.assertToken(ast(1)(1), 'ModalLinkContent', size=1)
-        self.assertToken(ast(1)(1)(0), 'Code', size=0)
+        self.assertToken(ast(0)(0), 'ModalSourceLink', size=0,
+                         src=common.check_filenames('framework/Makefile'))
 
         # If a file is not given, it should fall through to a regular link
         ast = self.tokenize('[not_a_file]')
@@ -81,46 +80,50 @@ class TestShortcutLink(MooseDocsTestCase):
         self.assertToken(ast(0), 'Paragraph', size=1)
         self.assertToken(ast(0)(0), 'ShortcutLink', size=0, key='not_a_file')
 
-        with self.assertLogs(None, level='ERROR') as cm:
-            ast = self.tokenize('[Makefile]')
-        self.assertIn('Multiple files match the supplied filename Makefile', cm.output[0])
-
 class TestLink(MooseDocsTestCase):
-    EXTENSIONS = [core, floats, heading, autolink]
-
-    def setupContent(self):
-        config = [dict(root_dir='python/MooseDocs/test/content', content=['extensions/core.md'])]
-        return common.get_content(config, '.md')
+    EXTENSIONS = [core, floats, heading, autolink, modal]
 
     def testAutoLink(self):
         ast = self.tokenize('[core](core.md)')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=1, bookmark='', exact=False, optional=False, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=1, page='core.md', bookmark=None,
+                         alternative=None, optional=False, exact=False)
         self.assertToken(ast(0)(0)(0), 'Word', size=0, content='core')
 
         ast = self.tokenize('[core](core.md#bookmark)')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=1, bookmark='bookmark', exact=False, optional=False, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=1, page='core.md', bookmark='bookmark',
+                         alternative=None, optional=False, exact=False)
+        self.assertToken(ast(0)(0)(0), 'Word', size=0, content='core')
+
+        ast = self.tokenize('[core](core.md alternative=content.md#bookmark)')
+        self.assertSize(ast, 1)
+        self.assertToken(ast(0), 'Paragraph', size=1)
+        self.assertToken(ast(0)(0), 'AutoLink', size=1, page='core.md', bookmark=None,
+                         alternative='content.md#bookmark', optional=False, exact=False)
         self.assertToken(ast(0)(0)(0), 'Word', size=0, content='core')
 
         ast = self.tokenize('[core](core.md exact=True)')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=1, bookmark='', exact=True, optional=False, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=1, page='core.md', bookmark=None,
+                         alternative=None, optional=False, exact=True)
         self.assertToken(ast(0)(0)(0), 'Word', size=0, content='core')
 
         ast = self.tokenize('[core](core.md optional=True)')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=1, bookmark='', exact=False, optional=True, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=1, page='core.md', bookmark=None,
+                         alternative=None, optional=True, exact=False)
         self.assertToken(ast(0)(0)(0), 'Word', size=0, content='core')
 
-        ast = self.tokenize('[core](core.md#bookmark optional=True exact=True)')
+        ast = self.tokenize('[core](core.md#bookmark alternative=content.md optional=True exact=True)')
         self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'AutoLink', size=1, bookmark='bookmark', exact=True, optional=True, page='core.md')
+        self.assertToken(ast(0)(0), 'AutoLink', size=1, page='core.md', bookmark='bookmark',
+                         alternative='content.md', optional=True, exact=True)
         self.assertToken(ast(0)(0)(0), 'Word', size=0, content='core')
 
     def testLocalLink(self):
@@ -138,17 +141,11 @@ class TestLink(MooseDocsTestCase):
 
     def testSourceLink(self):
         ast = self.tokenize('[make](framework/Makefile)')
-        self.assertSize(ast, 2)
+        self.assertSize(ast, 1)
         self.assertToken(ast(0), 'Paragraph', size=1)
-        self.assertToken(ast(0)(0), 'SourceLink', size=1)
-        self.assertToken(ast(0)(0)(0), 'Link', size=1)
-        self.assertToken(ast(0)(0)(0)(0), 'Word', size=0, content='make')
-
-        url = ast(0)(0)(0)['url']
-        self.assertToken(ast(1), 'ModalLink', size=2, bookmark=url[1:])
-        self.assertToken(ast(1)(0), 'ModalLinkTitle', string='/framework/Makefile')
-        self.assertToken(ast(1)(1), 'ModalLinkContent', size=1)
-        self.assertToken(ast(1)(1)(0), 'Code', size=0)
+        self.assertToken(ast(0,0), 'ModalSourceLink', size=1,
+                         src=common.check_filenames('framework/Makefile'))
+        self.assertToken(ast(0,0,0), 'Word', size=0, content='make')
 
         # If a file is not given, it should fall through to a regular link
         ast = self.tokenize('[text](not_a_file)')
@@ -158,7 +155,7 @@ class TestLink(MooseDocsTestCase):
         self.assertToken(ast(0)(0)(0), 'Word', size=0, content='text')
 
 class TestAutoLinkRender(MooseDocsTestCase):
-    EXTENSIONS = [core, floats, heading, autolink]
+    EXTENSIONS = [core, floats, heading, autolink, modal]
 
     def setupContent(self):
         config = [dict(root_dir='python/MooseDocs/test/content', content=['extensions/core.md'])]
@@ -177,10 +174,7 @@ class TestAutoLinkRender(MooseDocsTestCase):
         self.assertLatexString(a(1), ' ')
         self.assertLatexString(a(2), 'Extension')
 
-    def testMinimal(self):
-
-        link = autolink.AutoLink(None, page='core.md')
-
+    def _testLinkHelper(self, link):
         res = self.render(link, renderer=base.HTMLRenderer())
         self.assertHTMLTag(res, 'body', size=1)
         self._assertHTML(res(0))
@@ -192,25 +186,103 @@ class TestAutoLinkRender(MooseDocsTestCase):
         res = self.render(link, renderer=base.RevealRenderer())
         self.assertHTMLTag(res, 'div', size=1)
         self._assertHTML(res(0))
+
+    def _testOptionalHelper(self, link):
+        res = self.render(link, renderer=base.HTMLRenderer())
+        self.assertHTMLTag(res, 'body', string='not_a_file.md')
+
+        res = self.render(link, renderer=base.MaterializeRenderer())
+        self.assertHTMLTag(res, 'div', string='not_a_file.md')
+
+        res = self.render(link, renderer=base.RevealRenderer())
+        self.assertHTMLTag(res, 'div', string='not_a_file.md')
+
+    def _testBookmarkHelper(self, link):
+        res = self.render(link, renderer=base.HTMLRenderer())
+        self.assertHTMLTag(res, 'body', size=1)
+        self.assertHTMLTag(res(0), 'a', size=3, href='extensions/core.html#unordered-nested-lists')
+        self.assertHTMLString(res(0)(0), 'Nested')
+        self.assertHTMLString(res(0)(1), ' ')
+        self.assertHTMLString(res(0)(2), 'lists')
+
+        res = self.render(link, renderer=base.MaterializeRenderer())
+        self.assertHTMLTag(res, 'div', size=1)
+        self.assertHTMLTag(res(0), 'a', size=3, href='extensions/core.html#unordered-nested-lists')
+        self.assertHTMLString(res(0)(0), 'Nested')
+        self.assertHTMLString(res(0)(1), ' ')
+        self.assertHTMLString(res(0)(2), 'lists')
+
+        res = self.render(link, renderer=base.RevealRenderer())
+        self.assertHTMLTag(res, 'div', size=1)
+        self.assertHTMLTag(res(0), 'a', size=3, href='extensions/core.html#unordered-nested-lists')
+        self.assertHTMLString(res(0)(0), 'Nested')
+        self.assertHTMLString(res(0)(1), ' ')
+        self.assertHTMLString(res(0)(2), 'lists')
+
+    def testMinimal(self):
+        link = autolink.AutoLink(None, page='core.md')
+
+        self._testLinkHelper(link)
 
         res = self.render(link, renderer=base.LatexRenderer())
         self.assertSize(res, 1)
         self._assertLatex(res(0))
 
-    def testExact(self):
-        link = autolink.AutoLink(None, page='extensions/core.md', exact=True)
+    def testAlternative(self):
+        link = autolink.AutoLink(None, page='not_a_file.md', alternative='core.md')
+
+        self._testLinkHelper(link)
+
+        res = self.render(link, renderer=base.LatexRenderer())
+        self.assertSize(res, 1)
+        self.assertLatexString(res(0), "Warning: The 'alternative' setting for automatic links " \
+                                       "has no effect on LaTeX renderers.")
+
+    def testLocalLinkAlternative(self):
+        link = autolink.AutoLink(None, page='not_a_file.md', alternative='#bookmark')
 
         res = self.render(link, renderer=base.HTMLRenderer())
         self.assertHTMLTag(res, 'body', size=1)
-        self._assertHTML(res(0))
+        self.assertHTMLTag(res(0), 'a', string='_text_#bookmark')
 
         res = self.render(link, renderer=base.MaterializeRenderer())
         self.assertHTMLTag(res, 'div', size=1)
-        self._assertHTML(res(0))
+        self.assertHTMLTag(res(0), 'a', string='_text_#bookmark')
 
         res = self.render(link, renderer=base.RevealRenderer())
         self.assertHTMLTag(res, 'div', size=1)
-        self._assertHTML(res(0))
+        self.assertHTMLTag(res(0), 'a', string='_text_#bookmark')
+
+    def testURLAlternative(self):
+        link = autolink.AutoLink(None, page='not_a_file.md', alternative='https://www.google.com/')
+        core.Word(link, content='Google')
+
+        res = self.render(link, renderer=base.HTMLRenderer())
+        self.assertHTMLTag(res, 'body', size=1)
+        self.assertHTMLTag(res(0), 'a', href='https://www.google.com/', string='Google')
+
+        res = self.render(link, renderer=base.MaterializeRenderer())
+        self.assertHTMLTag(res, 'div', size=1)
+        self.assertHTMLTag(res(0), 'a', href='https://www.google.com/', string='Google')
+
+        res = self.render(link, renderer=base.RevealRenderer())
+        self.assertHTMLTag(res, 'div', size=1)
+        self.assertHTMLTag(res(0), 'a', href='https://www.google.com/', string='Google')
+
+    @mock.patch.object(common, 'report_error')
+    def testURLAlternativeError(self, mock_log):
+        link = autolink.AutoLink(None, page='not_a_file.md', alternative='https://www.google.com/')
+        res = self.render(link, renderer=base.HTMLRenderer())
+
+        # TODO: Use assertLogs in python 3.4
+        self.assertIn("URLs cannot be used as an alternative for automatic shortcut links. " \
+                      "Please use the '[text](link alternative=foo)' syntax instead.",
+                      mock_log.call_args[0][0])
+
+    def testExact(self):
+        link = autolink.AutoLink(None, page='extensions/core.md', exact=True)
+
+        self._testLinkHelper(link)
 
         res = self.render(link, renderer=base.LatexRenderer())
         self.assertSize(res, 1)
@@ -225,45 +297,31 @@ class TestAutoLinkRender(MooseDocsTestCase):
         self.assertIn("Unable to locate a page that ends with the name 'core.md'",
                       mock_log.call_args[0][0])
 
+    def testExactAlternative(self):
+        link = autolink.AutoLink(None, page='not_a_file.md', alternative='extensions/core.md',
+                                 exact=True)
+
+        self._testLinkHelper(link)
+
     def testOptional(self):
         link = autolink.AutoLink(None, page='not_a_file.md', optional=True)
 
-        res = self.render(link, renderer=base.HTMLRenderer())
-        self.assertHTMLTag(res, 'body', string='_text_')
-
-        res = self.render(link, renderer=base.MaterializeRenderer())
-        self.assertHTMLTag(res, 'div', string='_text_')
-
-        res = self.render(link, renderer=base.RevealRenderer())
-        self.assertHTMLTag(res, 'div', string='_text_')
+        self._testOptionalHelper(link)
 
         res = self.render(link, renderer=base.LatexRenderer())
         self.assertSize(res, 1)
-        self.assertLatexString(res(0), '_text_')
+        self.assertLatexString(res(0), 'not_a_file.md')
+
+    def testOptionalAlternative(self):
+        link = autolink.AutoLink(None, page='not_a_file.md', alternative='not_a_file.md',
+                                 optional=True)
+
+        self._testOptionalHelper(link)
 
     def testBookmark(self):
         link = autolink.AutoLink(None, page='core.md', bookmark='unordered-nested-lists')
 
-        res = self.render(link, renderer=base.HTMLRenderer())
-        self.assertHTMLTag(res, 'body', size=1)
-        self.assertHTMLTag(res(0), 'a', size=3, href='extensions/core.html#unordered-nested-lists')
-        self.assertHTMLString(res(0)(0), 'Nested')
-        self.assertHTMLString(res(0)(1), ' ')
-        self.assertHTMLString(res(0)(2), 'lists')
-
-        res = self.render(link, renderer=base.MaterializeRenderer())
-        self.assertHTMLTag(res, 'div', size=1)
-        self.assertHTMLTag(res(0), 'a', size=3, href='extensions/core.html#unordered-nested-lists')
-        self.assertHTMLString(res(0)(0), 'Nested')
-        self.assertHTMLString(res(0)(1), ' ')
-        self.assertHTMLString(res(0)(2), 'lists')
-
-        res = self.render(link, renderer=base.RevealRenderer())
-        self.assertHTMLTag(res, 'div', size=1)
-        self.assertHTMLTag(res(0), 'a', size=3, href='extensions/core.html#unordered-nested-lists')
-        self.assertHTMLString(res(0)(0), 'Nested')
-        self.assertHTMLString(res(0)(1), ' ')
-        self.assertHTMLString(res(0)(2), 'lists')
+        self._testBookmarkHelper(link)
 
         res = self.render(link, renderer=base.LatexRenderer())
         self.assertSize(res, 1)
@@ -296,8 +354,14 @@ class TestAutoLinkRender(MooseDocsTestCase):
         self.assertSize(res, 1)
         self.assertLatexString(res(0), '_text_')
 
+    def testBookmarkAlternative(self):
+        link = autolink.AutoLink(None, page='not_a_file.md', bookmark='not-a-bookmark',
+                                 alternative='core.md#unordered-nested-lists')
+
+        self._testBookmarkHelper(link)
+
 class TestLocalLinkRender(MooseDocsTestCase):
-    EXTENSIONS = [core, floats, heading, autolink]
+    EXTENSIONS = [core, floats, heading, autolink, modal]
 
     def setupContent(self):
         config = [dict(root_dir='python/MooseDocs/test/content', content=['extensions/core.md'])]
@@ -335,32 +399,6 @@ class TestLocalLinkRender(MooseDocsTestCase):
         self.assertLatex(res(0), 'Command', 'hyperref')
         self.assertLatexArg(res(0), 0, 'Bracket', 'bookmark')
         self.assertLatexString(res(0)(0), 'heading')
-
-class TestSourceLinkRender(MooseDocsTestCase):
-    EXTENSIONS = [core, floats, heading, autolink]
-
-    def setupContent(self):
-        config = [dict(root_dir='python/MooseDocs/test/content', content=['extensions/core.md'])]
-        return common.get_content(config, '.md')
-
-    def testMinimalHTML(self):
-        """SourceLink is just a container for other tokens; by itself it does nothing."""
-
-        link = autolink.SourceLink(None)
-        res = self.render(link, renderer=base.HTMLRenderer())
-        self.assertSize(res, 0)
-        res = self.render(link, renderer=base.MaterializeRenderer())
-        self.assertSize(res, 0)
-        res = self.render(link, renderer=base.RevealRenderer())
-        self.assertSize(res, 0)
-
-    def testMinimalLatex(self):
-        """The link and floats stuff is dropped by the LaTeX renderer"""
-        link = autolink.SourceLink(None)
-        core.Link(link, string='Content', url='something')
-        res = self.render(link, renderer=base.LatexRenderer())
-        self.assertSize(res, 1)
-        self.assertLatexString(res(0), 'Content')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, buffer=False)

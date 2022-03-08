@@ -17,7 +17,6 @@
 #include "Assembly.h"
 #include "FEProblem.h"
 #include "NonlinearSystem.h"
-#include "TimedPrint.h"
 
 #include "libmesh/dof_map.h"
 #include "libmesh/mesh_tools.h"
@@ -227,16 +226,8 @@ FeatureFloodCount::FeatureFloodCount(const InputParameters & parameters)
                                : _real_zero),
     _halo_ids(_maps_size),
     _is_elemental(getParam<MooseEnum>("flood_entity_type") == "ELEMENTAL"),
-    _is_master(processor_id() == 0),
-    _distribute_merge_work(_app.n_processors() >= _maps_size && _maps_size > 1),
-    _execute_timer(registerTimedSection("execute", 1)),
-    _merge_timer(registerTimedSection("mergeFeatures", 2)),
-    _finalize_timer(registerTimedSection("finalize", 1)),
-    _comm_and_merge(registerTimedSection("communicateAndMerge", 2)),
-    _expand_halos(registerTimedSection("expandEdgeHalos", 2)),
-    _update_field_info(registerTimedSection("updateFieldInfo", 2)),
-    _prepare_for_transfer(registerTimedSection("prepareDataForTransfer", 2)),
-    _consolidate_merged_features(registerTimedSection("consolidateMergedFeatures", 2))
+    _is_primary(processor_id() == 0),
+    _distribute_merge_work(_app.n_processors() >= _maps_size && _maps_size > 1)
 {
   if (_var_index_mode)
     _var_index_maps.resize(_maps_size);
@@ -356,8 +347,7 @@ FeatureFloodCount::meshChanged()
 void
 FeatureFloodCount::execute()
 {
-  TIME_SECTION(_execute_timer);
-  CONSOLE_TIMED_PRINT("Flooding Features");
+  TIME_SECTION("execute", 3, "Flooding Features");
 
   // Iterate only over boundaries if restricted
   if (_is_boundary_restricted)
@@ -410,7 +400,7 @@ FeatureFloodCount::execute()
 void
 FeatureFloodCount::communicateAndMerge()
 {
-  TIME_SECTION(_comm_and_merge);
+  TIME_SECTION("communicateAndMerge", 3, "Communicating and Merging");
 
   // First we need to transform the raw data into a usable data structure
   prepareDataForTransfer();
@@ -435,7 +425,7 @@ FeatureFloodCount::communicateAndMerge()
   /**
    * When we distribute merge work, we are reducing computational work by adding more communication.
    * Each of the first _n_vars processors will receive one variable worth of information to merge.
-   * After each of those processors has merged that information, it'll be sent to the master
+   * After each of those processors has merged that information, it'll be sent to the primary
    * processor where final consolidation will occur.
    */
   if (_distribute_merge_work)
@@ -499,7 +489,7 @@ FeatureFloodCount::communicateAndMerge()
       // Merge one variable's worth of data
       mergeSets();
 
-      // Now we need to serialize again to send to the master (only the processors who did work)
+      // Now we need to serialize again to send to the primary (only the processors who did work)
       serialize(send_buffers[0]);
 
       // Free up as much memory as possible here before we do global communication
@@ -515,7 +505,7 @@ FeatureFloodCount::communicateAndMerge()
                                      send_buffers.end(),
                                      std::back_inserter(recv_buffers));
 
-      if (_is_master)
+      if (_is_primary)
       {
         // The root process now needs to deserialize all of the data
         deserialize(recv_buffers);
@@ -531,10 +521,10 @@ FeatureFloodCount::communicateAndMerge()
     }
   }
 
-  // Serialized merging (master does all the work)
+  // Serialized merging (primary does all the work)
   else
   {
-    if (_is_master)
+    if (_is_primary)
       recv_buffers.reserve(_app.n_processors());
 
     serialize(send_buffers[0]);
@@ -552,7 +542,7 @@ FeatureFloodCount::communicateAndMerge()
                                       send_buffers.end(),
                                       std::back_inserter(recv_buffers));
 
-    if (_is_master)
+    if (_is_primary)
     {
       // The root process now needs to deserialize all of the data
       deserialize(recv_buffers);
@@ -571,7 +561,7 @@ FeatureFloodCount::communicateAndMerge()
 void
 FeatureFloodCount::sortAndLabel()
 {
-  mooseAssert(_is_master, "sortAndLabel can only be called on the master");
+  mooseAssert(_is_primary, "sortAndLabel can only be called on the primary");
 
   /**
    * Perform a sort to give a parallel unique sorting to the identified features.
@@ -618,7 +608,7 @@ void
 FeatureFloodCount::buildLocalToGlobalIndices(std::vector<std::size_t> & local_to_global_all,
                                              std::vector<int> & counts) const
 {
-  mooseAssert(_is_master, "This method must only be called on the root processor");
+  mooseAssert(_is_primary, "This method must only be called on the root processor");
 
   counts.assign(_n_procs, 0);
   // Now size the individual counts vectors based on the largest index seen per processor
@@ -640,7 +630,7 @@ FeatureFloodCount::buildLocalToGlobalIndices(std::vector<std::size_t> & local_to
     globalsize += counts[i];
   }
 
-  // Finally populate the master vector
+  // Finally populate the primary vector
   local_to_global_all.resize(globalsize, FeatureFloodCount::invalid_size_t);
   for (const auto & feature : _feature_sets)
   {
@@ -679,14 +669,13 @@ FeatureFloodCount::buildFeatureIdToLocalIndices(unsigned int max_id)
 void
 FeatureFloodCount::finalize()
 {
-  TIME_SECTION(_finalize_timer);
-  CONSOLE_TIMED_PRINT("Finalizing Feature Identification");
+  TIME_SECTION("finalize", 3, "Finalizing Feature Identification");
 
   // Gather all information on processor zero and merge
   communicateAndMerge();
 
   // Sort and label the features
-  if (_is_master)
+  if (_is_primary)
     sortAndLabel();
 
   // Send out the local to global mappings
@@ -718,14 +707,14 @@ FeatureFloodCount::scatterAndUpdateRanks()
   // local to global map (one per processor)
   std::vector<int> counts;
   std::vector<std::size_t> local_to_global_all;
-  if (_is_master)
+  if (_is_primary)
     buildLocalToGlobalIndices(local_to_global_all, counts);
 
   // Scatter local_to_global indices to all processors and store in class member variable
   _communicator.scatter(local_to_global_all, counts, _local_to_global_feature_map);
 
   std::size_t largest_global_index = std::numeric_limits<std::size_t>::lowest();
-  if (!_is_master)
+  if (!_is_primary)
   {
     _feature_sets.resize(_local_to_global_feature_map.size());
 
@@ -1015,7 +1004,7 @@ FeatureFloodCount::getEntityValue(dof_id_type entity_id,
 void
 FeatureFloodCount::prepareDataForTransfer()
 {
-  TIME_SECTION(_prepare_for_transfer);
+  TIME_SECTION("prepareDataForTransfer", 3, "Preparing Data For Transfer");
 
   MeshBase & mesh = _mesh.getMesh();
 
@@ -1098,7 +1087,7 @@ FeatureFloodCount::deserialize(std::vector<std::string> & serialized_buffers, un
      * buffers. This leaves us a choice, either we just duplicate the Features from the original
      * data structure after we've swapped out the buffer, or we go ahead and unpack data that we
      * would normally already have. So during distributed merging, that's exactly what we'll do.
-     * Later however when the master is doing the final consolidating, we'll opt to just skip
+     * Later however when the primary is doing the final consolidating, we'll opt to just skip
      * the local unpacking. To tell the difference, between these two modes, we just need to
      * see if a var_num was passed in.
      */
@@ -1119,7 +1108,7 @@ FeatureFloodCount::deserialize(std::vector<std::string> & serialized_buffers, un
 void
 FeatureFloodCount::mergeSets()
 {
-  TIME_SECTION(_merge_timer);
+  TIME_SECTION("mergeSets", 3, "Merging Sets");
 
   // When working with _distribute_merge_work all of the maps will be empty except for one
   for (MooseIndex(_maps_size) map_num = 0; map_num < _maps_size; ++map_num)
@@ -1174,7 +1163,7 @@ FeatureFloodCount::mergeSets()
 void
 FeatureFloodCount::consolidateMergedFeatures(std::vector<std::list<FeatureData>> * saved_data)
 {
-  TIME_SECTION(_consolidate_merged_features);
+  TIME_SECTION("consilidateMergedFeatures", 3, "Consolidating Merged Features");
 
   /**
    * Now that the merges are complete we need to adjust the centroid, and halos.
@@ -1183,7 +1172,8 @@ FeatureFloodCount::consolidateMergedFeatures(std::vector<std::list<FeatureData>>
    * features and find the max local index seen on any processor
    * Note: This is all occurring on rank 0 only!
    */
-  mooseAssert(_is_master, "cosolidateMergedFeatures() may only be called on the master processor");
+  mooseAssert(_is_primary,
+              "cosolidateMergedFeatures() may only be called on the primary processor");
 
   // Offset where the current set of features with the same variable id starts in the flat vector
   unsigned int feature_offset = 0;
@@ -1382,7 +1372,7 @@ FeatureFloodCount::flood(const DofObject * dof_object, std::size_t current_index
       feature->_vol_count++;
 
       // Sum the centroid values for now, we'll average them later
-      feature->_centroid += elem->centroid();
+      feature->_centroid += elem->vertex_average();
 
       //      // Does the volume intersect the boundary?
       //      if (_all_boundary_entity_ids.find(elem->id()) != _all_boundary_entity_ids.end())
@@ -1432,8 +1422,8 @@ FeatureFloodCount::isNewFeatureOrConnectedRegion(const DofObject * dof_object,
   if (_is_elemental)
   {
     const Elem * elem = static_cast<const Elem *>(dof_object);
-    std::vector<Point> centroid(1, elem->centroid());
-    _subproblem.reinitElemPhys(elem, centroid, 0, /* suppress_displaced_init = */ true);
+    std::vector<Point> centroid(1, elem->vertex_average());
+    _subproblem.reinitElemPhys(elem, centroid, 0);
     entity_value = _vars[current_index]->sln()[0];
   }
   else
@@ -1528,7 +1518,7 @@ FeatureFloodCount::expandEdgeHalos(unsigned int num_layers_to_expand)
   if (num_layers_to_expand == 0)
     return;
 
-  TIME_SECTION(_expand_halos);
+  TIME_SECTION("expandEdgeHalos", 3, "Expanding Edge Halos");
 
   for (auto & list_ref : _partial_feature_sets)
   {
@@ -1601,9 +1591,16 @@ FeatureFloodCount::visitElementalNeighbors(const Elem * elem,
      * of active neighbors
      */
     neighbor_ancestor = elem->neighbor_ptr(i);
+
     if (neighbor_ancestor)
     {
-      if (neighbor_ancestor == libMesh::remote_elem)
+      /**
+       * In general, {evaluable elements} >= {local elements} U {algebraic ghosting elements}. That
+       * is, the number of evaluable elements does NOT necessarily equal to the number of local and
+       * algebraic ghosting elements. The neighbors of evaluable elements can be remote even though
+       * we have two layers of geometric ghosting elements.
+       */
+      if (neighbor_ancestor->is_remote())
         continue;
 
       neighbor_ancestor->active_family_tree_by_neighbor(all_active_neighbors, elem, false);
@@ -1621,6 +1618,15 @@ FeatureFloodCount::visitElementalNeighbors(const Elem * elem,
        */
       if (neighbor_ancestor)
       {
+        /**
+         * In general, {evaluable elements} >= {local elements} U {algebraic ghosting elements}.
+         * That is, the number of evaluable elements does NOT necessarily equal to the number of
+         * local and algebraic ghosting elements. The neighbors of evaluable elements can be remote
+         * even though we have two layers of geometric ghosting elements.
+         */
+        if (neighbor_ancestor->is_remote())
+          continue;
+
         neighbor_ancestor->active_family_tree_by_topological_neighbor(
             all_active_neighbors, elem, mesh, *_point_locator, _pbs, false);
 
@@ -1882,7 +1888,7 @@ FeatureFloodCount::FeatureData::updateBBoxExtremes(MeshBase & mesh)
     _bboxes.resize(num_regions + 1);
 
     decltype(num_regions) region = 1;
-    for (const auto list_ref : disjoint_regions)
+    for (const auto & list_ref : disjoint_regions)
     {
       for (const auto elem_id : list_ref)
         updateBBoxExtremesHelper(_bboxes[region], *mesh.elem_ptr(elem_id));
@@ -2192,7 +2198,7 @@ operator<<(std::ostream & out, const FeatureFloodCount::FeatureData & feature)
     out << "\nVar_index: " << feature._var_index;
     out << "\nMin Entity ID: " << feature._min_entity_id;
   }
-  out << "\n\n";
+  out << "\n" << std::endl;
 
   return out;
 }

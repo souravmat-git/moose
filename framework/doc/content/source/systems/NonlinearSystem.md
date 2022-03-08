@@ -10,10 +10,13 @@ by the PETSc solvers.
 - [#linear_methods]
 - [#augmenting_sparsity]
 
+You may find some additional documentation relevant to both `NonlinearSystem`
+and `NonlinearEigenSystem` in [NonlinearSystemBase.md].
+
 ## Solving Non-linear Systems id=newtons_method
 
 Application of the finite element method converts PDE(s) into a system of
-non-linear equations, $R_i(u_h)=0, \qquad i=1,\ldots, N$
+nonlinear equations, $R_i(u_h)=0, \qquad i=1,\ldots, N$
   to solve for the coefficients $u_j, j=1,\dots,N$.
 
 - Newton's method has good convergence properties, we use it to solve this system of nonlinear equations.
@@ -42,16 +45,16 @@ non-linear equations, $R_i(u_h)=0, \qquad i=1,\ldots, N$
 
 ## Jacobian Definition id=jacobian_definition
 
-An efficient Newton solve, e.g. one that requires few "non-linear" iterations,
+An efficient Newton solve, e.g. one that requires few "nonlinear" iterations,
 requires an accurate Jacobian matrix or an accurate approximation of its action
 on a vector. When no explicit matrix is formed for the Jacobian and only its
 action on a vector is computed, the algorithm is commonly referred to as
 matrix-free (PETSc jargon) or [Jacobian-free](#JFNK) (MOOSE jargon). The default
 solve algorithm in MOOSE is `PJFNK`, or Preconditioned Jacobian-Free
 Newton-Krylov. "Krylov" refers to the *linear* solution algorithm used to solve
-each non-linear iteration of the Newton algorithm. For more information on
+each nonlinear iteration of the Newton algorithm. For more information on
 solving linear systems, please see [#linear_methods]. Even if a Jacobian-free
-non-linear algorithm is chosen, typically a good preconditioning matrix is still
+nonlinear algorithm is chosen, typically a good preconditioning matrix is still
 needed. Building the matrix can be accomplished
 [automatically, using automatic differentiation](#AD) and/or [manually](#hand_coded_jac).
 
@@ -70,7 +73,7 @@ constructor, `adCoupledValue("v")` should be used. `adCoupledGradient` should
 replace `coupledGradient`, etc. An example of coupling in an AD variable can be found in
 [`ADCoupledConvection.C`](test/src/kernels/ADCoupledConvection.C) and
 [`ADCoupledConvection.h`](test/include/kernels/ADCoupledConvection.h). Moreover,
-material properties that may depend on the non-linear variables should be
+material properties that may depend on the nonlinear variables should be
 retrieved using `getADMaterialProperty` instead of `getMaterialProperty`. They
 should be declared in materials using `declareADProperty`. Example AD material
 source and header files can be found
@@ -325,10 +328,10 @@ consequently for MOOSE.
 One such routine is `NonlinearSystemBase::augmentSparsity`, which as its name
 suggests augments the sparsity pattern of the matrix. Currently this method adds
 sparsity coming from MOOSE `Constraint` objects. It does this by querying
-geometric connectivity information between slave and master boundary pairs, and
+geometric connectivity information between secondary and primary boundary pairs, and
 then querying the `DofMap` attached to the `NonlinearSystemBase` (through the
 libMesh `NonlinearImplicitSystem`) for the dof indices that exist on the
-elements attached to the slave/master nodes. The geometric connectivity
+elements attached to the secondary/primary nodes. The geometric connectivity
 information comes from [`NearestNodeLocators`](/NearestNodeLocator.md) held by
 [`GeometricSearchData`](/GeometricSearchData.md) objects in the
 [`FEProblemBase`](/FEProblemBase.md) and

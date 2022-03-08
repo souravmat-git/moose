@@ -9,8 +9,6 @@
 
 #include "InternalSideVectorPostprocessor.h"
 
-defineLegacyParams(InternalSideVectorPostprocessor);
-
 InputParameters
 InternalSideVectorPostprocessor::validParams()
 {
@@ -20,6 +18,6 @@ InternalSideVectorPostprocessor::validParams()
 }
 
 InternalSideVectorPostprocessor::InternalSideVectorPostprocessor(const InputParameters & parameters)
-  : InternalSideUserObject(parameters), VectorPostprocessor(parameters)
+  : InternalSideUserObject(parameters), VectorPostprocessor(this)
 {
 }

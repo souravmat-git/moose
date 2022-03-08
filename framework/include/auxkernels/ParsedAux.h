@@ -29,8 +29,11 @@ protected:
   std::string _function;
 
   /// coupled variables
-  unsigned int _nargs;
-  std::vector<const VariableValue *> _args;
+  const unsigned int _nargs;
+  const std::vector<const VariableValue *> _args;
+
+  /// import coordinates and time
+  const bool _use_xyzt;
 
   /// function parser object for the resudual and on-diagonal Jacobian
   SymFunctionPtr _func_F;

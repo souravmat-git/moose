@@ -23,8 +23,6 @@
 
 registerMooseObject("MooseApp", ImageMeshGenerator);
 
-defineLegacyParams(ImageMeshGenerator);
-
 InputParameters
 ImageMeshGenerator::validParams()
 {
@@ -49,26 +47,26 @@ ImageMeshGenerator::ImageMeshGenerator(const InputParameters & parameters)
     _scale_to_one(getParam<bool>("scale_to_one")),
     _cells_per_pixel(getParam<Real>("cells_per_pixel"))
 {
+  declareMeshProperty("use_distributed_mesh", false);
 }
 
 std::unique_ptr<MeshBase>
 ImageMeshGenerator::generate()
 {
-  auto mesh = libmesh_make_unique<ReplicatedMesh>(comm());
+  auto mesh = buildReplicatedMesh();
 
   // A list of filenames of length 1 means we are building a 2D mesh
   if (_filenames.size() == 1)
-    buildMesh2D(_filenames[0], mesh);
+    buildMesh2D(_filenames[0], *mesh);
 
   else
-    buildMesh3D(_filenames, mesh);
+    buildMesh3D(_filenames, *mesh);
 
   return dynamic_pointer_cast<MeshBase>(mesh);
 }
 
 void
-ImageMeshGenerator::buildMesh3D(const std::vector<std::string> & filenames,
-                                std::unique_ptr<ReplicatedMesh> & mesh)
+ImageMeshGenerator::buildMesh3D(const std::vector<std::string> & filenames, MeshBase & mesh)
 {
   // If the user gave us a "stack" with 0 or 1 files in it, we can't
   // really create a 3D Mesh from that
@@ -124,7 +122,7 @@ ImageMeshGenerator::buildMesh3D(const std::vector<std::string> & filenames,
   _nz = static_cast<int>(_cells_per_pixel * zpixels);
 
   // Actually build the Mesh
-  MeshTools::Generation::build_cube(dynamic_cast<UnstructuredMesh &>(*mesh),
+  MeshTools::Generation::build_cube(dynamic_cast<UnstructuredMesh &>(mesh),
                                     _nx,
                                     _ny,
                                     _nz,
@@ -138,8 +136,7 @@ ImageMeshGenerator::buildMesh3D(const std::vector<std::string> & filenames,
 }
 
 void
-ImageMeshGenerator::buildMesh2D(const std::string & filename,
-                                std::unique_ptr<ReplicatedMesh> & mesh)
+ImageMeshGenerator::buildMesh2D(const std::string & filename, MeshBase & mesh)
 {
   int xpixels = 0, ypixels = 0;
 
@@ -165,7 +162,7 @@ ImageMeshGenerator::buildMesh2D(const std::string & filename,
   _ny = static_cast<int>(_cells_per_pixel * ypixels);
 
   // Actually build the Mesh
-  MeshTools::Generation::build_square(dynamic_cast<UnstructuredMesh &>(*mesh),
+  MeshTools::Generation::build_square(dynamic_cast<UnstructuredMesh &>(mesh),
                                       _nx,
                                       _ny,
                                       /*xmin=*/0.,

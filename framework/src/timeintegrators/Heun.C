@@ -11,13 +11,11 @@
 
 registerMooseObject("MooseApp", Heun);
 
-defineLegacyParams(Heun);
-
 InputParameters
 Heun::validParams()
 {
   InputParameters params = ExplicitRK2::validParams();
-
+  params.addClassDescription("Heun's (aka improved Euler) time integration method.");
   return params;
 }
 

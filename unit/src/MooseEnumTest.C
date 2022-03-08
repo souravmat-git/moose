@@ -171,8 +171,8 @@ TEST(MooseEnum, testErrors)
   catch (const std::exception & e)
   {
     std::string msg(e.what());
-    ASSERT_NE(msg.find("Invalid option"), std::string::npos) << "failed with unexpected error: "
-                                                             << msg;
+    ASSERT_NE(msg.find("Invalid option"), std::string::npos)
+        << "failed with unexpected error: " << msg;
   }
 
   // Whitespace around equals sign
@@ -224,7 +224,7 @@ TEST(MultiMooseEnum, testExecuteOn)
 
   // Checks that names are added and removed
   EXPECT_EQ(exec_enum.getRawNames(),
-            "NONE INITIAL LINEAR NONLINEAR TIMESTEP_END TIMESTEP_BEGIN FINAL CUSTOM");
+            "NONE INITIAL LINEAR NONLINEAR TIMESTEP_END TIMESTEP_BEGIN FINAL CUSTOM ALWAYS");
   std::vector<std::string> opts = {"NONE",
                                    "INITIAL",
                                    "LINEAR",
@@ -232,7 +232,8 @@ TEST(MultiMooseEnum, testExecuteOn)
                                    "TIMESTEP_END",
                                    "TIMESTEP_BEGIN",
                                    "FINAL",
-                                   "CUSTOM"};
+                                   "CUSTOM",
+                                   "ALWAYS"};
   EXPECT_EQ(exec_enum.getNames(), opts);
 
   // Check that added names can be used
@@ -286,7 +287,7 @@ TEST(MultiMooseEnum, testExecuteOn)
   EXPECT_EQ(doc,
             "The list of flag(s) indicating when this object should be executed, the "
             "available options include NONE, INITIAL, LINEAR, NONLINEAR, TIMESTEP_END, "
-            "TIMESTEP_BEGIN, FINAL, FAILED, CUSTOM.");
+            "TIMESTEP_BEGIN, FINAL, FAILED, CUSTOM, ALWAYS.");
 
   // Tests with ExecFlagType assignment operators
   exec_enum = EXEC_FINAL;
@@ -353,6 +354,25 @@ TEST(MooseEnum, operatorEqual)
     ASSERT_NE(msg.find("Invalid id \"3\" in MooseEnum. Valid ids are \"1,2\"."), std::string::npos)
         << "failed with unexpected error: " << msg;
   }
+}
+
+TEST(MooseEnum, operatorPlus)
+{
+  MooseEnum a("a=1 b=2", "a");
+  a += "c=3";
+  a += {"d=4", "e=5"};
+
+  MooseEnum b("a=1 b=2 c=3 d=4 e=5");
+
+  EXPECT_TRUE(a.items() == b.items());
+
+  MultiMooseEnum c("a=1 b=2", "a");
+  c += "c=3";
+  c += {"d=4", "e=5"};
+
+  MultiMooseEnum d("a=1 b=2 c=3 d=4 e=5");
+
+  EXPECT_TRUE(c.items() == d.items());
 }
 
 TEST(MooseEnum, getIDs)

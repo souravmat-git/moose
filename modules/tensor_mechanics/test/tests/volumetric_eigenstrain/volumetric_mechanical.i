@@ -33,7 +33,6 @@
 
 [Modules/TensorMechanics/Master]
   [./master]
-    use_displaced_mesh = true
     strain = FINITE
     decomposition_method = EigenSolution #Necessary for exact solution
   [../]
@@ -128,7 +127,7 @@
     elementid = 0
   [../]
   [./disp_right]
-    type = NodalMaxValue
+    type = NodalExtremeValue
     variable = disp_x
     boundary = right
   [../]

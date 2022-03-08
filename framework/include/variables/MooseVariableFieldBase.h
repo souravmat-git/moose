@@ -22,10 +22,6 @@ class Point;
 
 class FaceInfo;
 
-class MooseVariableFieldBase;
-template <>
-InputParameters validParams<MooseVariableFieldBase>();
-
 /**
  * This class provides an interface for common operations on field variables of
  * both FE and FV types with all their scalar, vector, eigenvector
@@ -166,21 +162,27 @@ public:
   /**
    * Return phi size
    */
-  virtual size_t phiSize() const = 0;
+  virtual std::size_t phiSize() const = 0;
   /**
    * Return phiFace size
    */
-  virtual size_t phiFaceSize() const = 0;
+  virtual std::size_t phiFaceSize() const = 0;
   /**
    * Return phiNeighbor size
    */
-  virtual size_t phiNeighborSize() const = 0;
+  virtual std::size_t phiNeighborSize() const = 0;
   /**
    * Return phiFaceNeighbor size
    */
-  virtual size_t phiFaceNeighborSize() const = 0;
+  virtual std::size_t phiFaceNeighborSize() const = 0;
   /**
    * Return the number of shape functions on the lower dimensional element for this variable
    */
-  virtual size_t phiLowerSize() const = 0;
+  virtual std::size_t phiLowerSize() const = 0;
+
+  /**
+   * The oldest solution state that is requested for this variable
+   * (0 = current, 1 = old, 2 = older, etc).
+   */
+  virtual unsigned int oldestSolutionStateRequested() const = 0;
 };

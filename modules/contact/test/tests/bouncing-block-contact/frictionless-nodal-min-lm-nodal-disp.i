@@ -51,27 +51,27 @@ offset = 1e-2
 [Constraints]
   [./lm]
     type = NormalNodalLMMechanicalContact
-    slave = 10
-    master = 20
+    secondary = 10
+    primary = 20
     variable = normal_lm
-    master_variable = disp_x
+    primary_variable = disp_x
     disp_y = disp_y
   [../]
   [./disp_x]
     type = NormalNodalMechanicalContact
-    slave = 10
-    master = 20
+    secondary = 10
+    primary = 20
     variable = disp_x
-    master_variable = disp_x
+    primary_variable = disp_x
     lambda = normal_lm
     component = x
   [../]
   [./disp_y]
     type = NormalNodalMechanicalContact
-    slave = 10
-    master = 20
+    secondary = 10
+    primary = 20
     variable = disp_y
-    master_variable = disp_y
+    primary_variable = disp_y
     lambda = normal_lm
     component = y
   [../]
@@ -116,6 +116,7 @@ offset = 1e-2
   l_max_its = 30
   nl_max_its = 20
   line_search = 'none'
+  snesmf_reuse_base = false
 []
 
 [Debug]

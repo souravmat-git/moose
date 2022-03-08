@@ -14,11 +14,12 @@
 #include "Restartable.h"
 #include "MeshChangedInterface.h"
 #include "SetupInterface.h"
+#include "PostprocessorInterface.h"
+#include "VectorPostprocessorInterface.h"
+#include "ReporterInterface.h"
 #include "AdvancedOutputUtils.h"
 #include "PerfGraphInterface.h"
 
-// Forward declarations
-class Output;
 class MooseMesh;
 
 // libMesh forward declarations
@@ -26,9 +27,6 @@ namespace libMesh
 {
 class EquationSystems;
 }
-
-template <>
-InputParameters validParams<Output>();
 
 /**
  * Based class for output objects
@@ -42,6 +40,9 @@ class Output : public MooseObject,
                public Restartable,
                public MeshChangedInterface,
                public SetupInterface,
+               public PostprocessorInterface,
+               public VectorPostprocessorInterface,
+               public ReporterInterface,
                public PerfGraphInterface
 {
 public:
@@ -67,11 +68,11 @@ public:
   virtual Real time();
 
   /**
-  * Get the old output time.
-  * @return The old output time, which may be different than the simulation time
-  *
-  * @see time()
-  */
+   * Get the old output time.
+   * @return The old output time, which may be different than the simulation time
+   *
+   * @see time()
+   */
   virtual Real timeOld();
 
   /**
@@ -159,12 +160,6 @@ protected:
    */
   virtual bool onInterval();
 
-  /**
-   * Initialization method.
-   * This populates the various data structures needed to control the output
-   */
-  virtual void initialSetup();
-
   /// Pointer the the FEProblemBase object for output object (use this)
   FEProblemBase * _problem_ptr;
 
@@ -228,9 +223,6 @@ protected:
   /// Flag for only executing at sync times
   bool _sync_only;
 
-  /// True if init() has been called
-  bool _initialized;
-
   /// Flag for disabling output
   bool _allow_output;
 
@@ -243,9 +235,5 @@ protected:
   // the output settings.
   OutputOnWarehouse _advanced_execute_on;
 
-  /// Timers
-  PerfID _output_step_timer;
-
   friend class OutputWarehouse;
 };
-

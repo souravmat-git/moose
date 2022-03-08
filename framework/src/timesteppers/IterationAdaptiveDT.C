@@ -14,9 +14,10 @@
 #include "Transient.h"
 #include "NonlinearSystem.h"
 
-registerMooseObject("MooseApp", IterationAdaptiveDT);
+#include <limits>
+#include <set>
 
-defineLegacyParams(IterationAdaptiveDT);
+registerMooseObject("MooseApp", IterationAdaptiveDT);
 
 InputParameters
 IterationAdaptiveDT::validParams()
@@ -38,9 +39,10 @@ IterationAdaptiveDT::validParams()
                                      "If specified, the postprocessor value "
                                      "is used as an upper limit for the "
                                      "current time step length");
-  params.addParam<FunctionName>("timestep_limiting_function",
-                                "A 'PiecewiseBase' type function used to control the timestep by "
-                                "limiting the change in the function over a timestep");
+  params.addParam<std::vector<FunctionName>>(
+      "timestep_limiting_function",
+      "A list of 'PiecewiseBase' type functions used to control the timestep by "
+      "limiting the change in the function over a timestep");
   params.addParam<Real>(
       "max_function_change",
       "The absolute value of the maximum change in timestep_limiting_function over a timestep");
@@ -93,10 +95,10 @@ IterationAdaptiveDT::IterationAdaptiveDT(const InputParameters & parameters)
     _adaptive_timestepping(false),
     _pps_value(isParamValid("timestep_limiting_postprocessor")
                    ? &getPostprocessorValue("timestep_limiting_postprocessor")
-                         : nullptr),
-    _timestep_limiting_function(nullptr),
-    _piecewise_timestep_limiting_function(nullptr),
-    _piecewise_linear_timestep_limiting_function(nullptr),
+                   : nullptr),
+    _timestep_limiting_functions(),
+    _piecewise_timestep_limiting_functions(),
+    _piecewise_linear_timestep_limiting_functions(),
     _times(0),
     _max_function_change(-1),
     _force_step_every_function_point(getParam<bool>("force_step_every_function_point")),
@@ -149,24 +151,38 @@ IterationAdaptiveDT::init()
 {
   if (isParamValid("timestep_limiting_function"))
   {
-    _timestep_limiting_function =
-        &_fe_problem.getFunction(getParam<FunctionName>("timestep_limiting_function"),
-                                 isParamValid("_tid") ? getParam<THREAD_ID>("_tid") : 0);
-    _piecewise_timestep_limiting_function =
-        dynamic_cast<const PiecewiseBase *>(_timestep_limiting_function);
+    std::set<Real> times;
 
-    if (_piecewise_timestep_limiting_function)
+    const auto tid = isParamValid("_tid") ? getParam<THREAD_ID>("_tid") : 0;
+    for (const auto & name : getParam<std::vector<FunctionName>>("timestep_limiting_function"))
     {
-      _piecewise_linear_timestep_limiting_function =
-          dynamic_cast<const PiecewiseLinear *>(_piecewise_timestep_limiting_function);
-      unsigned int time_size = _piecewise_timestep_limiting_function->functionSize();
-      _times.resize(time_size);
+      const auto * func = &_fe_problem.getFunction(name, tid);
+      _timestep_limiting_functions.push_back(func);
 
-      for (unsigned int i = 0; i < time_size; ++i)
-        _times[i] = _piecewise_timestep_limiting_function->domain(i);
+      const auto * pfunc = dynamic_cast<const PiecewiseBase *>(func);
+      _piecewise_timestep_limiting_functions.push_back(pfunc);
+
+      if (pfunc)
+      {
+        const auto * plfunc = dynamic_cast<const PiecewiseLinear *>(pfunc);
+        _piecewise_linear_timestep_limiting_functions.push_back(plfunc);
+
+        const auto ntimes = pfunc->functionSize();
+        for (unsigned int i = 0; i < ntimes; ++i)
+          times.insert(pfunc->domain(i));
+      }
+      else
+        mooseError("timestep_limiting_function must be a PiecewiseBase function");
     }
-    else
-      mooseError("timestep_limiting_function must be a PiecewiseBase function");
+    _times.resize(times.size());
+    std::copy(times.begin(), times.end(), _times.begin());
+
+    mooseAssert(_timestep_limiting_functions.size() ==
+                    _piecewise_timestep_limiting_functions.size(),
+                "Timestep limiting function count inconsistency");
+    mooseAssert(_piecewise_timestep_limiting_functions.size() ==
+                    _piecewise_linear_timestep_limiting_functions.size(),
+                "Timestep limiting function count inconsistency");
   }
 }
 
@@ -208,9 +224,8 @@ IterationAdaptiveDT::computeDT()
     dt = _time_ipol.sample(_time_old);
 
     if (_verbose)
-    {
-      _console << "Setting dt to value specified by dt function: " << std::setw(9) << dt << '\n';
-    }
+      _console << "Setting dt to value specified by dt function: " << std::setw(9) << dt
+               << std::endl;
   }
   else if (_sync_last_step)
   {
@@ -218,9 +233,7 @@ IterationAdaptiveDT::computeDT()
     dt = _dt_old;
 
     if (_verbose)
-    {
-      _console << "Setting dt to value used before sync: " << std::setw(9) << dt << '\n';
-    }
+      _console << "Setting dt to value used before sync: " << std::setw(9) << dt << std::endl;
   }
   else if (_adaptive_timestepping)
     computeAdaptiveDT(dt);
@@ -253,10 +266,8 @@ IterationAdaptiveDT::constrainStep(Real & dt)
     dt = *_tfunc_times.begin() - _time;
 
     if (_verbose)
-    {
       _console << "Limiting dt to sync with dt function time: " << std::setw(9)
-               << *_tfunc_times.begin() << " dt: " << std::setw(9) << dt << '\n';
-    }
+               << *_tfunc_times.begin() << " dt: " << std::setw(9) << dt << std::endl;
   }
 
   return at_sync_point;
@@ -274,10 +285,11 @@ IterationAdaptiveDT::computeFailedDT()
   if (_verbose)
   {
     _console << "\nSolve failed with dt: " << std::setw(9) << _dt
-             << "\nRetrying with reduced dt: " << std::setw(9) << _dt * _cutback_factor << '\n';
+             << "\nRetrying with reduced dt: " << std::setw(9) << _dt * _cutback_factor
+             << std::endl;
   }
   else
-    _console << "\nSolve failed, cutting timestep.\n";
+    _console << "\nSolve failed, cutting timestep." << std::endl;
 
   return _dt * _cutback_factor;
 }
@@ -318,79 +330,79 @@ void
 IterationAdaptiveDT::limitDTToPostprocessorValue(Real & limitedDT) const
 {
   if (_pps_value && _t_step > 1)
-  {
     if (limitedDT > *_pps_value)
     {
       limitedDT = std::max(_dt_min, *_pps_value);
 
       if (_verbose)
-        _console << "Limiting dt to postprocessor value. dt = " << limitedDT << '\n';
+        _console << "Limiting dt to postprocessor value. dt = " << limitedDT << std::endl;
     }
-  }
 }
 
 void
 IterationAdaptiveDT::limitDTByFunction(Real & limitedDT)
 {
   Real orig_dt = limitedDT;
+  const auto nfunc = _timestep_limiting_functions.size();
+  Real restricted_step = std::numeric_limits<Real>::max();
 
-  // Limit by function change for piecewise linear functions.
-  if (_piecewise_linear_timestep_limiting_function && _max_function_change > 0)
+  for (unsigned int j = 0; j < nfunc; ++j)
   {
-    const auto current_function_value =
-        _piecewise_linear_timestep_limiting_function->value(_time, {});
-
-    for (std::size_t next_time_index = 1; next_time_index < _times.size(); ++next_time_index)
+    // Limit by function change for piecewise linear functions.
+    if (_piecewise_linear_timestep_limiting_functions[j] && _max_function_change > 0)
     {
-      const auto next_time = _times[next_time_index];
+      const auto current_function_value =
+          _piecewise_linear_timestep_limiting_functions[j]->value(_time, {});
 
-      // Skip ahead to find time point that is just past the current time.
-      if (next_time + _timestep_tolerance <= _time)
-        continue;
-
-      // Find out how far we can go without exceeding the max function change.
-      const auto next_function_value =
-          _piecewise_linear_timestep_limiting_function->range(next_time_index);
-      const auto change = std::abs(next_function_value - current_function_value);
-      if (change > _max_function_change)
+      const auto ntimes = _piecewise_linear_timestep_limiting_functions[j]->functionSize();
+      for (std::size_t next_time_index = 1; next_time_index < ntimes; ++next_time_index)
       {
-        // Interpolate to find step.
-        const auto restrictedStep = (_max_function_change / change) * (next_time - _time);
-        if (restrictedStep < limitedDT)
+        const auto next_time =
+            _piecewise_linear_timestep_limiting_functions[j]->domain(next_time_index);
+
+        // Skip ahead to find time point that is just past the current time.
+        if (next_time + _timestep_tolerance <= _time)
+          continue;
+
+        // Find out how far we can go without exceeding the max function change.
+        const auto next_function_value =
+            _piecewise_linear_timestep_limiting_functions[j]->range(next_time_index);
+        const auto change = std::abs(next_function_value - current_function_value);
+        if (change > _max_function_change)
         {
-          limitedDT = std::max(_dt_min, restrictedStep);
+          // Interpolate to find step.
+          restricted_step =
+              std::min(restricted_step, (_max_function_change / change) * (next_time - _time));
+          break;
         }
-        break;
+
+        // Don't keep going if we've already passed the current limited step.
+        if (next_time > _time + limitedDT)
+          break;
       }
-
-      // Don't keep going if we've already passed the current limited step.
-      if (next_time > _time + limitedDT)
-        break;
     }
-  }
-  else if (_timestep_limiting_function)
-  {
-    Point dummyPoint;
-    Real oldValue = _timestep_limiting_function->value(_time_old, dummyPoint);
-    Real newValue = _timestep_limiting_function->value(_time_old + limitedDT, dummyPoint);
-    Real change = std::abs(newValue - oldValue);
-
-    if (_max_function_change > 0.0 && change > _max_function_change)
+    else if (_timestep_limiting_functions[j])
     {
-      do
-      {
-        limitedDT /= 2.0;
-        newValue = _timestep_limiting_function->value(_time_old + limitedDT, dummyPoint);
-        change = std::abs(newValue - oldValue);
-      } while (change > _max_function_change);
+      const Real old_value = _timestep_limiting_functions[j]->value(_time_old);
+      Real new_value = _timestep_limiting_functions[j]->value(_time_old + limitedDT);
+      Real change = std::abs(new_value - old_value);
+
+      if (_max_function_change > 0.0 && change > _max_function_change)
+        do
+        {
+          limitedDT /= 2.0;
+          new_value = _timestep_limiting_functions[j]->value(_time_old + limitedDT);
+          change = std::abs(new_value - old_value);
+        } while (change > _max_function_change);
     }
   }
+
+  if (restricted_step < limitedDT)
+    limitedDT = std::max(_dt_min, restricted_step);
 
   _at_function_point = false;
-  if (_piecewise_timestep_limiting_function && _force_step_every_function_point)
-  {
+  if (_force_step_every_function_point)
     for (unsigned int i = 0; i + 1 < _times.size(); ++i)
-    {
       if (_time >= _times[i] && _time < _times[i + 1])
       {
         if (limitedDT > _times[i + 1] - _time - _timestep_tolerance)
@@ -400,8 +412,6 @@ IterationAdaptiveDT::limitDTByFunction(Real & limitedDT)
         }
         break;
       }
-    }
-  }
 
   if (_verbose && limitedDT != orig_dt)
   {
@@ -410,7 +420,7 @@ IterationAdaptiveDT::limitDTByFunction(Real & limitedDT)
     else
       _console << "Limiting dt to limit change in function. dt = ";
 
-    _console << limitedDT << '\n';
+    _console << limitedDT << std::endl;
   }
 }
 
@@ -433,11 +443,9 @@ IterationAdaptiveDT::computeAdaptiveDT(Real & dt, bool allowToGrow, bool allowTo
     dt *= _growth_factor;
 
     if (_verbose)
-    {
       _console << "Growing dt: nl its = " << _nl_its << " < " << growth_nl_its
                << " && lin its = " << _l_its << " < " << growth_l_its << " old dt: " << std::setw(9)
                << _dt_old << " new dt: " << std::setw(9) << dt << '\n';
-    }
   }
   else if (allowToShrink && (_nl_its > shrink_nl_its || _l_its > shrink_l_its))
   {
@@ -445,12 +453,12 @@ IterationAdaptiveDT::computeAdaptiveDT(Real & dt, bool allowToGrow, bool allowTo
     dt *= _cutback_factor;
 
     if (_verbose)
-    {
       _console << "Shrinking dt: nl its = " << _nl_its << " > " << shrink_nl_its
                << " || lin its = " << _l_its << " > " << shrink_l_its << " old dt: " << std::setw(9)
                << _dt_old << " new dt: " << std::setw(9) << dt << '\n';
-    }
   }
+
+  _console << std::flush;
 }
 
 Real
@@ -463,11 +471,9 @@ IterationAdaptiveDT::computeInterpolationDT()
     dt = _dt_old * _growth_factor;
 
     if (_verbose)
-    {
       _console << "Growing dt to recover from cutback. "
                << " old dt: " << std::setw(9) << _dt_old << " new dt: " << std::setw(9) << dt
-               << '\n';
-    }
+               << std::endl;
   }
 
   return dt;
@@ -502,10 +508,8 @@ IterationAdaptiveDT::acceptStep()
     _sync_last_step = true;
 
     if (_verbose)
-    {
       _console << "Sync point hit in current step, using previous dt for old dt: " << std::setw(9)
-               << _dt_old << '\n';
-    }
+               << _dt_old << std::endl;
   }
   else
     _dt_old = _dt;

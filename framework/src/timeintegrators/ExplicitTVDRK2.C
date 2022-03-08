@@ -14,20 +14,20 @@
 
 registerMooseObject("MooseApp", ExplicitTVDRK2);
 
-defineLegacyParams(ExplicitTVDRK2);
-
 InputParameters
 ExplicitTVDRK2::validParams()
 {
   InputParameters params = TimeIntegrator::validParams();
-
+  params.addClassDescription("Explicit TVD (total-variation-diminishing) second-order Runge-Kutta "
+                             "time integration method.");
   return params;
 }
 
 ExplicitTVDRK2::ExplicitTVDRK2(const InputParameters & parameters)
   : TimeIntegrator(parameters),
     _stage(1),
-    _residual_old(_nl.addVector("residual_old", false, GHOSTED))
+    _residual_old(_nl.addVector("residual_old", false, GHOSTED)),
+    _solution_older(_sys.solutionState(2))
 {
   mooseInfo("ExplicitTVDRK2 and other multistage TimeIntegrators are known not to work with "
             "Materials/AuxKernels that accumulate 'state' and should be used with caution.");
@@ -61,7 +61,9 @@ ExplicitTVDRK2::computeTimeDerivatives()
 }
 
 void
-ExplicitTVDRK2::computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const
+ExplicitTVDRK2::computeADTimeDerivatives(DualReal & ad_u_dot,
+                                         const dof_id_type & dof,
+                                         DualReal & /*ad_u_dotdot*/) const
 {
   computeTimeDerivativeHelper(ad_u_dot, _solution_old(dof), _solution_older(dof));
 }
@@ -82,7 +84,7 @@ ExplicitTVDRK2::solve()
   // non-time Kernels (which should be marked implicit=false) are
   // evaluated at the old solution during this stage.
   _fe_problem.initPetscOutput();
-  _console << "1st solve\n";
+  _console << "1st solve" << std::endl;
   _stage = 2;
   _fe_problem.timeOld() = time_old;
   _fe_problem.time() = time_stage2;
@@ -101,7 +103,7 @@ ExplicitTVDRK2::solve()
   // The "update" stage (which we call stage 3) requires an additional
   // solve with the mass matrix.
   _fe_problem.initPetscOutput();
-  _console << "2nd solve\n";
+  _console << "2nd solve" << std::endl;
   _stage = 3;
   _fe_problem.timeOld() = time_stage2;
   _fe_problem.time() = time_new;

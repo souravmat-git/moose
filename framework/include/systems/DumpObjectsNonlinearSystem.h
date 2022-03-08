@@ -31,14 +31,15 @@ public:
   virtual void stopSolve() override {}
   virtual bool converged() override { return true; }
   virtual NumericVector<Number> & RHS() override { return *_dummy; }
+  virtual SNES getSNES() override { return nullptr; }
 
   virtual unsigned int getCurrentNonlinearIterationNumber() override { return 0; }
   virtual void setupFiniteDifferencedPreconditioner() override {}
   virtual void attachPreconditioner(Preconditioner<Number> * /* preconditioner */) override {}
 
 protected:
-  NumericVector<Number> & solutionOldInternal() const override { return *_dummy; }
-  NumericVector<Number> & solutionOlderInternal() const override { return *_dummy; }
+  void computeScalingJacobian() override {}
+  void computeScalingResidual() override {}
 
   NumericVector<Number> * _dummy;
 };

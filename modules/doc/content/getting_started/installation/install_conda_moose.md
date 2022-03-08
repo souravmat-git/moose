@@ -1,31 +1,35 @@
 ## Install MOOSE Conda Packages id=moosepackages
 
-Install the moose-libmesh and moose-tools package from mooseframework.org, and name your environment 'moose':
+Before we create our virtual conda environment, we first need to initialize mamba.
+For this, execute the following command and +restart your terminal session+.
 
 ```bash
-conda create --name moose moose-libmesh moose-tools
+mamba init
 ```
 
-Activate the moose environment +(do this for any new terminal opened)+:
+Next, create a unique conda environment for moose, named `moose`, and attempt to activate it:
 
 ```bash
-conda activate moose
+mamba create --name moose -q -y
+mamba activate moose
 ```
 
-Some folks may receive additional instructions when attempting to activate a profile. Follow those instructions, and try to activate the moose environment again.
-
-You will have successfully activated the moose environment when you see 'moose' within your prompt.
-
-If you close, and re-open this terminal window, know that you will need to `conda activate moose` again. You will need to do this for each terminal you open. If you wish to make this automatic, you may append `conda activate moose` to your bash or zsh profiles.
-
-## Keeping Conda up to date
-
-The MOOSE team will make periodic updates to the conda packages. To stay up-to-date, activate the moose environment, and perform an update:
+Within the `moose` environment, install the necessary packages:
 
 ```bash
-conda activate moose
-conda update --all
+mamba install moose-tools moose-libmesh
 ```
 
-!alert note title=Keep Conda updates and MOOSE updates in sync
-Know, that after performing a conda update, it is always advisable to update and rebuild MOOSE, and/or your Application(s).
+Once the packages are installed, the `moose` environment needs to be deactivated and
+reactivated to ensure that the environmental variables in the installed
+packages are set properly.
+
+```bash
+mamba deactivate
+mamba activate moose
+```
+
+If you are running into errors, please see our [troubleshooting guide for Conda](troubleshooting.md#condaissues optional=True).
+
+!alert note
+Know that you will need to `mamba activate moose` again for +each terminal window you open+. If you wish to make this automatic, you can add that command to the end of your shell profile.

@@ -12,14 +12,13 @@
 #include "MooseUtils.h"
 #include "Moose.h"
 #include "MooseApp.h"
+#include "RestartableDataIO.h"
 
 #include "libmesh/exodusII_io.h"
 #include "libmesh/nemesis_io.h"
 #include "libmesh/parallel_mesh.h"
 
 registerMooseObject("MooseApp", FileMesh);
-
-defineLegacyParams(FileMesh);
 
 InputParameters
 FileMesh::validParams()
@@ -33,16 +32,12 @@ FileMesh::validParams()
 FileMesh::FileMesh(const InputParameters & parameters)
   : MooseMesh(parameters),
     _file_name(getParam<MeshFileName>("file")),
-    _dim(getParam<MooseEnum>("dim")),
-    _read_mesh_timer(registerTimedSection("readMesh", 2))
+    _dim(getParam<MooseEnum>("dim"))
 {
 }
 
 FileMesh::FileMesh(const FileMesh & other_mesh)
-  : MooseMesh(other_mesh),
-    _file_name(other_mesh._file_name),
-    _dim(other_mesh._dim),
-    _read_mesh_timer(other_mesh._read_mesh_timer)
+  : MooseMesh(other_mesh), _file_name(other_mesh._file_name), _dim(other_mesh._dim)
 {
 }
 
@@ -51,13 +46,13 @@ FileMesh::~FileMesh() {}
 std::unique_ptr<MooseMesh>
 FileMesh::safeClone() const
 {
-  return libmesh_make_unique<FileMesh>(*this);
+  return std::make_unique<FileMesh>(*this);
 }
 
 void
 FileMesh::buildMesh()
 {
-  TIME_SECTION(_read_mesh_timer);
+  TIME_SECTION("buildMesh", 2, "Reading Mesh");
 
   getMesh().set_mesh_dimension(getParam<MooseEnum>("dim"));
 
@@ -83,13 +78,14 @@ FileMesh::buildMesh()
     // the mesh with the exodus reader instead of using mesh.read().  This will read the mesh on
     // every processor
 
-    if (_app.setFileRestart() && (_file_name.rfind(".exd") < _file_name.size() ||
-                                  _file_name.rfind(".e") < _file_name.size()))
+    if (_app.getExodusFileRestart() && (_file_name.rfind(".exd") < _file_name.size() ||
+                                        _file_name.rfind(".e") < _file_name.size()))
     {
       MooseUtils::checkFileReadable(_file_name);
 
-      _exreader = libmesh_make_unique<ExodusII_IO>(getMesh());
-      _exreader->read(_file_name);
+      auto exreader = std::make_shared<ExodusII_IO>(getMesh());
+      _app.setExReaderForRestart(std::move(exreader));
+      exreader->read(_file_name);
 
       getMesh().allow_renumbering(false);
       getMesh().prepare_for_use();
@@ -113,9 +109,20 @@ FileMesh::buildMesh()
         getMesh().allow_renumbering(false);
       }
 
-      if (!MooseUtils::pathExists(_file_name))
-        mooseError("cannot locate mesh file '", _file_name, "'");
+      MooseUtils::checkFileReadable(_file_name);
       getMesh().read(_file_name);
+
+      // we also read declared mesh meta data here if there is meta data file
+      RestartableDataIO restartable(_app);
+      std::string fname = _file_name + "/meta_data_mesh" + restartable.getRestartableDataExt();
+      if (MooseUtils::pathExists(fname))
+      {
+        restartable.setErrorOnLoadWithDifferentNumberOfProcessors(false);
+        // get reference to mesh meta data (created by MooseApp)
+        auto & meta_data = _app.getRestartableDataMap(MooseApp::MESH_META_DATA);
+        if (restartable.readRestartableDataHeaderFromFile(fname, false))
+          restartable.readRestartableData(meta_data, DataNames());
+      }
 
       if (restarting)
       {

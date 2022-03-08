@@ -11,11 +11,6 @@
 
 #include "ArrayNodalBC.h"
 
-class ArrayDirichletBC;
-
-template <>
-InputParameters validParams<ArrayDirichletBC>();
-
 /**
  * Boundary condition of a Dirichlet type
  *
@@ -29,7 +24,7 @@ public:
   ArrayDirichletBC(const InputParameters & parameters);
 
 protected:
-  virtual RealEigenVector computeQpResidual() override;
+  virtual void computeQpResidual(RealEigenVector & residual) override;
 
   /// The value for this BC
   const RealEigenVector & _values;

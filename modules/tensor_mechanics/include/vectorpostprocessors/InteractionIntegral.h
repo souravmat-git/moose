@@ -81,10 +81,10 @@ protected:
   const CrackFrontDefinition * const _crack_front_definition;
   /// Whether to treat a 3D model as 2D for computation of fracture integrals
   bool _treat_as_2d;
-  /// Pointer to the stress tensor computed by the material models
-  const MaterialProperty<RankTwoTensor> * const _stress;
-  /// Pointer to the strain tensor computed by the material models
-  const MaterialProperty<RankTwoTensor> * const _strain;
+  /// Reference to the stress tensor computed by the material models
+  const MaterialProperty<RankTwoTensor> & _stress;
+  /// Reference to the strain tensor computed by the material models
+  const MaterialProperty<RankTwoTensor> & _strain;
   /// Vector of all coupled variables
   std::vector<MooseVariableFEBase *> _fe_vars;
   /// FEType object defining order and family of displacement variables
@@ -144,5 +144,11 @@ protected:
   VectorPostprocessorValue & _z;
   VectorPostprocessorValue & _position;
   VectorPostprocessorValue & _interaction_integral;
+  ///@}
+
+  /// Pointers to optionally-used eigenstrain gradient and body force
+  ///@{
+  const MaterialProperty<RankThreeTensor> * _eigenstrain_gradient;
+  const MaterialProperty<RealVectorValue> * _body_force;
   ///@}
 };

@@ -87,7 +87,7 @@ as shown in [quote-nested-example].
 ### Headings id=headings
 
 Headings can range from level one to six and are specified using the hash (`#`) character, where the
-number of hashes indicate the heading level (see [#heading-basic-example]). The following is required
+number of hashes indicate the heading level (see [heading-basic-example]). The following is required
 to define a heading:
 
 1. the hash(es) must be followed by a single space,
@@ -95,7 +95,7 @@ to define a heading:
 
 
 Settings, as listed in [heading-settings], are be applied after the heading title text and as shown in
-[heading-multiline] headings may also span multiple lines.
+[heading-standard] headings may also span multiple lines as shown in [heading-multiline].
 
 !devel! example caption=Basic use of all six heading levels. id=heading-basic-example
 # Level One
@@ -112,13 +112,12 @@ Settings, as listed in [heading-settings], are be applied after the heading titl
 
 !devel-end!
 
-!devel example caption=Use of settings within heading. id=heading-settings
+!devel example caption=Use of settings within heading. id=heading-standard
 ## Level Two style=font-size:75pt;color:red; id=level-two
 
 !devel example caption=Use of settings within heading. id=heading-multiline
 ## A Heading May Span
-
-Multiple Lines (this is useful if they are really long)
+   Multiple Lines (this is useful if they are really long)
    style=font-size:15pt
    id=level-two
 
@@ -155,7 +154,6 @@ item by two spaces, as shown in [unordered-nested-example].
   ```
 
 - Another item
-!devel-end!
 
 
 - Foo
@@ -163,7 +161,7 @@ item by two spaces, as shown in [unordered-nested-example].
   ```
   bar
   ```
-
+!devel-end!
 
 As mentioned above, lists can contain lists, which can contain lists, etc. A sub-list, which is a
 list in a list, is created by creating by indenting with at the level of the list item which is
@@ -291,7 +289,7 @@ syntax. The available settings for links is include in [link-settings].
 
 Links to shortcuts use the typical [markdown] syntax of a key enclosed in square brackets (`[key]`),
 where the key references a shortcut, which are defined as detailed in the [#shortcuts] section, refer
-to [#shortcut-example] for a demonstration of shortcut and shortcut link use.
+to [shortcut-example] for a demonstration of shortcut and shortcut link use.
 
 In addition to linking to [#shortcuts] created directly, the same syntax is used to reference
 headings that have an "id" setting applied, see [heading-link-example]. When used in this fashion

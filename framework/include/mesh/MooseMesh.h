@@ -16,6 +16,8 @@
 #include "MooseEnum.h"
 #include "PerfGraphInterface.h"
 #include "MooseHashing.h"
+#include "MooseApp.h"
+#include "FaceInfo.h"
 
 #include <memory> //std::unique_ptr
 #include <unordered_map>
@@ -24,15 +26,17 @@
 // libMesh
 #include "libmesh/elem_range.h"
 #include "libmesh/mesh_base.h"
+#include "libmesh/replicated_mesh.h"
+#include "libmesh/distributed_mesh.h"
 #include "libmesh/node_range.h"
 #include "libmesh/nanoflann.hpp"
 #include "libmesh/vector_value.h"
 #include "libmesh/point.h"
+#include "libmesh/partitioner.h"
 
-// forward declaration
-class MooseMesh;
 class Assembly;
 class RelationshipManager;
+class MooseVariableBase;
 
 // libMesh forward declarations
 namespace libMesh
@@ -46,9 +50,6 @@ class BoundingBox;
 }
 // Useful typedefs
 typedef StoredRange<std::set<Node *>::iterator, Node *> SemiLocalNodeRange;
-
-template <>
-InputParameters validParams<MooseMesh>();
 
 /**
  * Helper object for holding qp mapping info.
@@ -66,154 +67,6 @@ public:
 
   /// The distance between them
   Real _distance;
-};
-
-/// This data structure is used to store geometric and variable related
-/// metadata about each cell face in the mesh.  This info is used by face loops
-/// (e.g. for finite volumes method numerical flux loop).  These objects can be
-/// created and cached up front.  Since it only stores information that changes
-/// when the mesh is modified it only needs an update whenever the mesh
-/// changes.
-class FaceInfo
-{
-public:
-  FaceInfo(const Elem * elem, unsigned int side, const Elem * neighbor);
-
-  /// This enum is used to indicate which side(s) of a face a particular
-  /// variable is defined on.  This is important for certain BC-related finite
-  /// volume calculations. Because of the way side-sets and variable
-  /// block-restriction work in MOOSE, there may be boundary conditions applied
-  /// to internal faces on the mesh where a variable is only active on one or
-  /// even zero sides of the face.  For such faces, FV needs to know which
-  /// sides (if any) to add BC residual contributions to.
-  enum class VarFaceNeighbors
-  {
-    BOTH,
-    NEITHER,
-    ELEM,
-    NEIGHBOR
-  };
-
-  /// Returns the face area of face id
-  Real faceArea() const { return _face_area; }
-
-  /// Sets/gets the coordinate transformation factor (for e.g. rz, spherical
-  /// coords) to be used for integration over faces.
-  Real & faceCoord() { return _face_coord; }
-  Real faceCoord() const { return _face_coord; }
-
-  /// Returns the unit normal vector for the face oriented outward from the face's elem element.
-  const Point & normal() const { return _normal; }
-
-  /// Returns true if this face resides on the mesh boundary.
-  bool isBoundary() const { return (_neighbor == nullptr); }
-
-  /// Returns the coordinates of the face centroid.
-  const Point & faceCentroid() const { return _face_centroid; }
-
-  ///@{
-  /// Returns the elem and neighbor elements adjacent to the face.
-  /// If a face is on a mesh boundary, the neighborPtr
-  /// will return nullptr - the elem will never be null.
-  const Elem & elem() const { return *_elem; }
-  const Elem * neighborPtr() const { return _neighbor; }
-  const Elem & neighbor() const
-  {
-    if (!_neighbor)
-      mooseError("FaceInfo object 'const Elem & neighbor()' is called but neighbor element pointer "
-                 "is null. This occurs for faces at the domain boundary");
-    return *_neighbor;
-  }
-  ///@}
-
-  /// Returns the element centroids of the elements on the elem and neighbor sides of the face.
-  /// If no neighbor face is defined, a "ghost" neighbor centroid is calculated by
-  /// reflecting/extrapolating from the elem centroid through the face centroid
-  /// - i.e. the vector from the elem element centroid to the face centroid is
-  /// doubled in length.  The tip of this new vector is the neighbor centroid.
-  /// This is important for FV dirichlet BCs.
-  const Point & elemCentroid() const { return _elem_centroid; }
-  const Point & neighborCentroid() const { return _neighbor_centroid; }
-  ///@}
-
-  ///@{
-  /// Returns the elem and neighbor centroids. If no neighbor element exists, then
-  /// the maximum unsigned int is returned for the neighbor side ID.
-  unsigned int elemSideID() const { return _elem_side_id; }
-  unsigned int neighborSideID() const { return _neighbor_side_id; }
-  ///@}
-
-  ///@{
-  /// This is just a convenient cache of DOF indices (into the solution
-  /// vector) associated with each variable on this face.
-  const std::vector<dof_id_type> & elemDofIndices(const std::string & var_name) const
-  {
-    auto it = _elem_dof_indices.find(var_name);
-    if (it == _elem_dof_indices.end())
-      mooseError("Variable ", var_name, " not found in FaceInfo object");
-    return it->second;
-  }
-  std::vector<dof_id_type> & elemDofIndices(const std::string & var_name)
-  {
-    return _elem_dof_indices[var_name];
-  }
-  const std::vector<dof_id_type> & neighborDofIndices(const std::string & var_name) const
-  {
-    auto it = _neighbor_dof_indices.find(var_name);
-    if (it == _neighbor_dof_indices.end())
-      mooseError("Variable ", var_name, " not found in FaceInfo object");
-    return it->second;
-  }
-  std::vector<dof_id_type> & neighborDofIndices(const std::string & var_name)
-  {
-    return _neighbor_dof_indices[var_name];
-  }
-  ///@}
-
-  /// Returns which side(s) the given variable is defined on for this face.
-  VarFaceNeighbors faceType(const std::string & var_name) const
-  {
-    auto it = _face_types_by_var.find(var_name);
-    if (it == _face_types_by_var.end())
-      mooseError("Variable ", var_name, " not found in variable to VarFaceNeighbors map");
-    return it->second;
-  }
-  /// Mutably returns which side(s) the given variable is defined on for this face.
-  VarFaceNeighbors & faceType(const std::string & var_name) { return _face_types_by_var[var_name]; }
-  const std::set<BoundaryID> & boundaryIDs() const { return _boundary_ids; }
-
-  /// Returns the set of boundary ids for all boundaries that include this face.
-  std::set<BoundaryID> & boundaryIDs() { return _boundary_ids; }
-
-private:
-  Real _face_area;
-  Real _face_coord = 0;
-  Real _elem_volume;
-  Real _neighbor_volume;
-  Point _normal;
-
-  /// the elem and neighbor elems
-  const Elem * _elem;
-  const Elem * _neighbor;
-
-  /// the elem and neighbor local side ids
-  unsigned int _elem_side_id;
-  unsigned int _neighbor_side_id;
-
-  Point _elem_centroid;
-  Point _neighbor_centroid;
-  Point _face_centroid;
-
-  /// cached locations of variables in solution vectors
-  /// TODO: make this more efficient by not using a map if possible
-  std::map<std::string, std::vector<dof_id_type>> _elem_dof_indices;
-  std::map<std::string, std::vector<dof_id_type>> _neighbor_dof_indices;
-
-  /// a map that provides the information what face type this is for each variable
-  std::map<std::string, VarFaceNeighbors> _face_types_by_var;
-
-  /// the set of boundary ids that this face is associated with
-  std::set<BoundaryID> _boundary_ids;
 };
 
 /**
@@ -256,16 +109,35 @@ public:
   virtual std::unique_ptr<MooseMesh> safeClone() const = 0;
 
   /**
-   * Method to construct a libMesh::MeshBase object that is normally set and used by the MooseMesh
-   * object during the "init()" phase.
+   * Determine whether to use a distributed mesh. Should be called during construction
    */
-  std::unique_ptr<MeshBase> buildMeshBaseObject(ParallelType override_type = ParallelType::DEFAULT);
+  void determineUseDistributedMesh();
+
+  /**
+   * Method to construct a libMesh::MeshBase object that is normally set and used by the MooseMesh
+   * object during the "init()" phase. If the parameter \p dim is not
+   * provided, then its value will be taken from the input file mesh block.
+   */
+  std::unique_ptr<MeshBase> buildMeshBaseObject(unsigned int dim = libMesh::invalid_uint);
+
+  /**
+   * Shortcut method to construct a unique pointer to a libMesh mesh instance. The created
+   * derived-from-MeshBase object will have its \p allow_remote_element_removal flag set to whatever
+   * our value is. We will also attach any geometric \p RelationshipManagers that have been
+   * requested by our simulation objects to the \p MeshBase object. If the parameter \p dim is not
+   * provided, then its value will be taken from the input file mesh block.
+   */
+  template <typename T>
+  std::unique_ptr<T> buildTypedMesh(unsigned int dim = libMesh::invalid_uint);
 
   /**
    * Method to set the mesh_base object. If this method is NOT called prior to calling init(), a
    * MeshBase object will be automatically constructed and set.
    */
   void setMeshBase(std::unique_ptr<MeshBase> mesh_base);
+
+  /// returns MooseMesh partitioning options so other classes can use it
+  static MooseEnum partitioning();
 
   /**
    * Initialize the Mesh object.  Most of the time this will turn around
@@ -310,6 +182,11 @@ public:
    * no lowerDElem, nullptr is returned.
    */
   const Elem * getLowerDElem(const Elem *, unsigned short int) const;
+
+  /**
+   * Returns the local side ID of the interior parent aligned with the lower dimensional element.
+   */
+  unsigned int getHigherDSide(const Elem * elem) const;
 
   /**
    * Returns a const reference to a set of all user-specified
@@ -389,7 +266,8 @@ public:
    * Calls BoundaryInfo::build_active_side_list
    * @return A container of active (element, side, id) tuples.
    */
-  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>> buildActiveSideList();
+  std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>>
+  buildActiveSideList() const;
 
   /**
    * Calls BoundaryInfo::side_with_boundary_id().
@@ -399,14 +277,18 @@ public:
   /**
    * Calls local_nodes_begin/end() on the underlying libMesh mesh object.
    */
-  MeshBase::const_node_iterator localNodesBegin();
-  MeshBase::const_node_iterator localNodesEnd();
+  MeshBase::node_iterator localNodesBegin();
+  MeshBase::node_iterator localNodesEnd();
+  MeshBase::const_node_iterator localNodesBegin() const;
+  MeshBase::const_node_iterator localNodesEnd() const;
 
   /**
    * Calls active_local_nodes_begin/end() on the underlying libMesh mesh object.
    */
-  MeshBase::const_element_iterator activeLocalElementsBegin();
-  const MeshBase::const_element_iterator activeLocalElementsEnd();
+  MeshBase::element_iterator activeLocalElementsBegin();
+  const MeshBase::element_iterator activeLocalElementsEnd();
+  MeshBase::const_element_iterator activeLocalElementsBegin() const;
+  const MeshBase::const_element_iterator activeLocalElementsEnd() const;
 
   /**
    * Calls n_nodes/elem() on the underlying libMesh mesh object.
@@ -451,7 +333,7 @@ public:
   virtual const Elem * queryElemPtr(const dof_id_type i) const;
 
   /**
-   * Setter/getter for the _is_prepared flag.
+   * Setter/getter for whether the mesh is prepared
    */
   bool prepared() const;
   virtual void prepared(bool state);
@@ -459,7 +341,7 @@ public:
   /**
    * If this method is called, we will call libMesh's prepare_for_use method when we
    * call Moose's prepare method. This should only be set when the mesh structure is changed
-   * by MeshModifiers (i.e. Element deletion).
+   * by MeshGenerators (i.e. Element deletion).
    */
   void needsPrepareForUse();
 
@@ -584,10 +466,11 @@ public:
   const RealVectorValue & getNormalByBoundaryID(BoundaryID id) const;
 
   /**
-   * Calls prepare_for_use() if force=true on the underlying Mesh object, then communicates various
-   * boundary information on parallel meshes. Also calls update() internally.
+   * Calls prepare_for_use() if the underlying MeshBase object isn't prepared, then communicates
+   * various boundary information on parallel meshes. Also calls update() internally. We maintain
+   * the boolean parameter in order to maintain backwards compatability but it doesn't do anything
    */
-  void prepare(bool force = false);
+  void prepare(bool = false);
 
   /**
    * Calls buildNodeListFromSideList(), buildNodeList(), and buildBndElemList().
@@ -602,7 +485,27 @@ public:
   /**
    * Set uniform refinement level
    */
-  void setUniformRefineLevel(unsigned int);
+  void setUniformRefineLevel(unsigned int, bool deletion = true);
+
+  /**
+   * Return a flag indicating whether or not we should skip remote deletion
+   * and repartition after uniform refinements. If the flag is true, uniform
+   * refinements will run more efficiently, but at the same time, there might
+   * be extra ghosting elements. The number of layers of additional ghosting
+   * elements depends on the number of uniform refinement levels.  This flag
+   * should be used only when you have a "fine enough" coarse mesh and want
+   * to refine the mesh by a few levels. Otherwise, it might introduce an
+   * unbalanced workload and too large ghosting domain.
+   */
+  bool skipDeletionRepartitionAfterRefine() const
+  {
+    return _skip_deletion_repartition_after_refine;
+  }
+
+  /**
+   * Whether or not skip uniform refinements when using a pre-split mesh
+   */
+  bool skipRefineWhenUseSplit() const { return _skip_refine_when_use_split; }
 
   /**
    * This will add the boundary ids to be ghosted to this processor
@@ -629,6 +532,11 @@ public:
    * Actually do the ghosting of boundaries that need to be ghosted to this processor.
    */
   void ghostGhostedBoundaries();
+
+  /**
+   * Whether or not we want to ghost ghosted boundaries
+   */
+  void needGhostGhostedBoundaries(bool needghost) { _need_ghost_ghosted_boundaries = needghost; }
 
   /**
    * Getter for the patch_size parameter.
@@ -673,16 +581,12 @@ public:
    */
   MeshBase & getMesh();
   const MeshBase & getMesh() const;
-
-  /**
-   * Not implemented -- always returns NULL.
-   */
-  virtual ExodusII_IO * exReader() const;
+  const MeshBase * getMeshPtr() const;
 
   /**
    * Calls print_info() on the underlying Mesh.
    */
-  void printInfo(std::ostream & os = libMesh::out) const;
+  void printInfo(std::ostream & os = libMesh::out, const unsigned int verbosity = 0) const;
 
   /**
    * Return list of blocks to which the given node belongs.
@@ -786,7 +690,7 @@ public:
   const std::string & getSubdomainName(SubdomainID subdomain_id);
 
   /**
-   * This method returns a writable reference to a boundary name based on the id parameter
+   * This method sets the boundary name of the boundary based on the id parameter
    */
   void setBoundaryName(BoundaryID boundary_id, BoundaryName name);
 
@@ -927,7 +831,7 @@ public:
    * @param subdomain_id The subdomain ID you want to get the boundary ids for.
    * @return All boundary IDs connected to elements in the give
    */
-  const std::set<BoundaryID> & getSubdomainBoundaryIds(SubdomainID subdomain_id) const;
+  const std::set<BoundaryID> & getSubdomainBoundaryIds(const SubdomainID subdomain_id) const;
 
   /**
    * Get the list of boundaries that contact the given subdomain.
@@ -940,7 +844,7 @@ public:
   /**
    * Get the list of subdomains associated with the given boundary.
    *
-   * @param subdomain_id The boundary ID you want to get the subdomain IDs for.
+   * @param bid The boundary ID you want to get the subdomain IDs for.
    * @return All subdomain IDs associated with given boundary ID
    */
   std::set<SubdomainID> getBoundaryConnectedBlocks(const BoundaryID bid) const;
@@ -948,10 +852,18 @@ public:
   /**
    * Get the list of subdomains contacting the given boundary.
    *
-   * @param subdomain_id The boundary ID you want to get the subdomain IDs for.
+   * @param bid The boundary ID you want to get the subdomain IDs for.
    * @return All subdomain IDs contacting given boundary ID
    */
   std::set<SubdomainID> getInterfaceConnectedBlocks(const BoundaryID bid) const;
+
+  /**
+   * Get the list of subdomains neighboring a given subdomain.
+   *
+   * @param subdomain_id The boundary ID you want to get the subdomain IDs for.
+   * @return All subdomain IDs neighboring a given subdomain
+   */
+  const std::set<SubdomainID> & getBlockConnectedBlocks(const SubdomainID subdomain_id) const;
 
   /**
    * Returns true if the requested node is in the list of boundary nodes, false otherwise.
@@ -997,7 +909,11 @@ public:
   /**
    *  Allow to change parallel type
    */
-  void setParallelType(ParallelType parallel_type) { _parallel_type = parallel_type; }
+  void setParallelType(ParallelType parallel_type)
+  {
+    _parallel_type = parallel_type;
+    determineUseDistributedMesh();
+  }
 
   /*
    * Set/Get the partitioner name
@@ -1068,19 +984,163 @@ public:
   bool needsRemoteElemDeletion() const { return _need_delete; }
 
   /**
+   * Set whether to allow remote element removal
+   */
+  void allowRemoteElementRemoval(bool allow_removal);
+
+  /**
+   * Whether we are allow remote element removal
+   */
+  bool allowRemoteElementRemoval() const { return _allow_remote_element_removal; }
+
+  /**
+   * Delete remote elements
+   */
+  void deleteRemoteElements();
+
+  /**
    * Whether mesh base object was constructed or not
    */
   bool hasMeshBase() const { return _mesh.get() != nullptr; }
 
+  /**
+   * Whether mesh has an extra element integer with a given name
+   */
+  bool hasElementID(const std::string & id_name) const
+  {
+    return getMesh().has_elem_integer(id_name);
+  }
+
+  /**
+   * Return the accessing integer for an extra element integer with its name
+   */
+  unsigned int getElementIDIndex(const std::string & id_name) const
+  {
+    if (!hasElementID(id_name))
+      mooseError("Mesh does not have element ID for ", id_name);
+    return getMesh().get_elem_integer_index(id_name);
+  }
+
+  /**
+   * Return the maximum element ID for an extra element integer with its accessing index
+   */
+  dof_id_type maxElementID(unsigned int elem_id_index) const { return _max_ids[elem_id_index]; }
+
+  /**
+   * Return the minimum element ID for an extra element integer with its accessing index
+   */
+  dof_id_type minElementID(unsigned int elem_id_index) const { return _min_ids[elem_id_index]; }
+
+  /**
+   * Whether or not two extra element integers are identical
+   */
+  bool areElemIDsIdentical(const std::string & id_name1, const std::string & id_name2) const
+  {
+    auto id1 = getElementIDIndex(id_name1);
+    auto id2 = getElementIDIndex(id_name2);
+    return _id_identical_flag[id1][id2];
+  }
+
+  /**
+   * Return all the unique element IDs for an extra element integer with its index
+   */
+  std::set<dof_id_type> getAllElemIDs(unsigned int elem_id_index) const;
+
+  /**
+   * Return all the unique element IDs for an extra element integer with its index on a set of
+   * subdomains
+   */
+  std::set<dof_id_type> getElemIDsOnBlocks(unsigned int elem_id_index,
+                                           const std::set<SubdomainID> & blks) const;
+
   ///@{ accessors for the FaceInfo objects
   unsigned int nFace() const { return _face_info.size(); }
-  std::vector<FaceInfo> & faceInfo()
+  /// Accessor for local \p FaceInfo objects.
+  const std::vector<const FaceInfo *> & faceInfo() const
   {
     buildFaceInfo();
     return _face_info;
   }
-  // const
+  /// Accessor for the local FaceInfo object on the side of one element. Returns null if ghosted.
+  const FaceInfo * faceInfo(const Elem * elem, unsigned int side) const;
+  /// Accessor for all \p FaceInfo objects.
+  const std::vector<FaceInfo> & allFaceInfo() const
+  {
+    buildFaceInfo();
+    return _all_face_info;
+  }
   ///@}
+
+  /**
+   * Cache \p elem and \p neighbor dof indices information for variables in all the local \p
+   * FaceInfo objects to save computational expense
+   */
+  void cacheVarIndicesByFace(const std::vector<const MooseVariableBase *> & moose_vars);
+
+  /**
+   * Compute the face coordinate value for all \p FaceInfo objects. 'Coordinate' here means a
+   * coordinate value associated with the coordinate system. For Cartesian coordinate systems,
+   * 'coordinate' is simply '1'; in RZ, '2*pi*r', and in spherical, '4*pi*r^2'
+   */
+  void computeFaceInfoFaceCoords();
+
+  /**
+   * Set whether this mesh is displaced
+   */
+  void isDisplaced(bool is_displaced) { _is_displaced = is_displaced; }
+
+  /**
+   * whether this mesh is displaced
+   */
+  bool isDisplaced() const { return _is_displaced; }
+
+  /**
+   * @return A map from nodeset ids to the vector of node ids in the nodeset
+   */
+  const std::map<boundary_id_type, std::vector<dof_id_type>> & nodeSetNodes() const
+  {
+    return _node_set_nodes;
+  }
+
+  /**
+   * Get the coordinate system type, e.g. xyz, rz, or r-spherical, for the provided subdomain id \p
+   * sid
+   */
+  Moose::CoordinateSystemType getCoordSystem(SubdomainID sid) const;
+
+  /**
+   * Set the coordinate system for the provided blocks to \p coord_sys
+   */
+  void setCoordSystem(const std::vector<SubdomainName> & blocks, const MultiMooseEnum & coord_sys);
+
+  /**
+   * For axisymmetric simulations, set the symmetry coordinate axis. For r in the x-direction, z in
+   * the y-direction the coordinate axis would be y
+   */
+  void setAxisymmetricCoordAxis(const MooseEnum & rz_coord_axis);
+
+  /**
+   * Returns the desired radial direction for RZ coordinate transformation
+   * @return The coordinate direction for the radial direction
+   */
+  unsigned int getAxisymmetricRadialCoord() const;
+
+  /**
+   * Performs a sanity check for every element in the mesh. If an element dimension is 3 and the
+   * corresponding coordinate system is RZ, then this will error. If an element dimension is greater
+   * than 1 and the corresponding system is RPSHERICAL then this will error
+   */
+  void checkCoordinateSystems();
+
+  /**
+   * Set the coordinate system data to that of \p other_mesh
+   */
+  void setCoordData(const MooseMesh & other_mesh);
+
+  /**
+   * Mark the face information as dirty
+   */
+  void faceInfoDirty() { _face_info_dirty = true; }
 
 protected:
   /// Deprecated (DO NOT USE)
@@ -1127,6 +1187,12 @@ protected:
   /// The level of uniform refinement requested (set to zero if AMR is disabled)
   unsigned int _uniform_refine_level;
 
+  /// Whether or not to skip uniform refinements when using a pre-split mesh
+  bool _skip_refine_when_use_split;
+
+  /// Whether or not skip remote deletion and repartition after uniform refinements
+  bool _skip_deletion_repartition_after_refine;
+
   /// true if mesh is changed (i.e. after adaptivity step)
   bool _is_changed;
 
@@ -1134,10 +1200,7 @@ protected:
   bool _is_nemesis;
 
   /// True if prepare has been called on the mesh
-  bool _is_prepared;
-
-  /// True if prepare_for_use should be called when Mesh is prepared
-  bool _needs_prepare_for_use;
+  bool _moose_mesh_prepared = false;
 
   /// The elements that were just refined.
   std::unique_ptr<ConstElemPointerRange> _refined_elements;
@@ -1249,21 +1312,37 @@ protected:
   /// A vector holding the paired boundaries for a regular orthogonal mesh
   std::vector<std::pair<BoundaryID, BoundaryID>> _paired_boundary;
 
-  /// FaceInfo object storing information for face based loops
-  std::vector<FaceInfo> _face_info;
-
   void cacheInfo();
   void freeBndNodes();
   void freeBndElems();
-  void setPartitionerHelper();
+  void setPartitionerHelper(MeshBase * mesh = nullptr);
 
 private:
-  // true if the _face_info member needs to be rebuilt/updated.
-  bool _face_info_dirty = true;
+  /// FaceInfo object storing information for face based loops. This container holds all the \p
+  /// FaceInfo objects accessible from this process
+  mutable std::vector<FaceInfo> _all_face_info;
 
-  /// Builds the face info vector that stores meta-data needed for looping
-  /// over and doing calculations based on mesh faces.
-  void buildFaceInfo();
+  /// Holds only those \p FaceInfo objects that have \p processor_id equal to this process's id,
+  /// e.g. the local \p FaceInfo objects
+  mutable std::vector<const FaceInfo *> _face_info;
+
+  /// Map from elem-side pair to FaceInfo
+  mutable std::unordered_map<std::pair<const Elem *, unsigned int>, FaceInfo *>
+      _elem_side_to_face_info;
+
+  // true if the _face_info member needs to be rebuilt/updated.
+  mutable bool _face_info_dirty = true;
+
+  /**
+   * Builds the face info vector that stores meta-data needed for looping over and doing
+   * calculations based on mesh faces. We build face information only upon request and only if the
+   * \p _face_info_dirty flag is false, either because this method has yet to be called or
+   * because someone called \p update() indicating the mesh has changed. Face information is only
+   * requested by getters that should appear semantically const. Consequently this method must
+   * also be marked const and so we make it and all associated face information data private to
+   * prevent misuse
+   */
+  void buildFaceInfo() const;
 
   /**
    * A map of vectors indicating which dimensions are periodic in a regular orthogonal mesh for
@@ -1369,6 +1448,9 @@ private:
   std::map<std::pair<int, ElemType>, std::vector<std::pair<unsigned int, QpMap>>>
       _elem_type_to_coarsening_map;
 
+  /// Holds a map from subomdain ids to the neighboring subdomain ids
+  std::unordered_map<SubdomainID, std::set<SubdomainID>> _sub_to_neighbor_subs;
+
   /// Holds a map from subomdain ids to the boundary ids that are attached to it
   std::unordered_map<SubdomainID, std::set<BoundaryID>> _subdomain_boundary_ids;
 
@@ -1378,6 +1460,7 @@ private:
   /// Holds a map from a high-order element side to its corresponding lower-d element
   std::unordered_map<std::pair<const Elem *, unsigned short int>, const Elem *>
       _higher_d_elem_side_to_lower_d_elem;
+  std::unordered_map<const Elem *, unsigned short int> _lower_d_elem_to_higher_d_elem_side;
 
   /// Whether or not this Mesh is allowed to read a recovery file
   bool _allow_recovery;
@@ -1385,40 +1468,59 @@ private:
   /// Whether or not to allow generation of nodesets from sidesets
   bool _construct_node_list_from_side_list;
 
-  /// Timers
-  PerfID _prepare_timer;
-  PerfID _update_timer;
-  PerfID _mesh_changed_timer;
-  PerfID _cache_changed_lists_timer;
-  PerfID _update_active_semi_local_node_range_timer;
-  PerfID _build_node_list_timer;
-  PerfID _build_bnd_elem_list_timer;
-  PerfID _node_to_elem_map_timer;
-  PerfID _node_to_active_semilocal_elem_map_timer;
-  PerfID _get_active_local_element_range_timer;
-  PerfID _get_active_node_range_timer;
-  PerfID _get_local_node_range_timer;
-  PerfID _get_boundary_node_range_timer;
-  PerfID _get_boundary_element_range_timer;
-  PerfID _cache_info_timer;
-  PerfID _build_periodic_node_map_timer;
-  PerfID _build_periodic_node_sets_timer;
-  PerfID _detect_orthogonal_dim_ranges_timer;
-  PerfID _detect_paired_sidesets_timer;
-  PerfID _build_refinement_map_timer;
-  PerfID _build_coarsening_map_timer;
-  PerfID _find_adaptivity_qp_maps_timer;
-  PerfID _build_refinement_and_coarsening_maps_timer;
-  PerfID _change_boundary_id_timer;
-  PerfID _init_timer;
-  PerfID _read_recovered_mesh_timer;
-  PerfID _ghost_ghosted_boundaries_timer;
-
   /// Whether we need to delete remote elements after init'ing the EquationSystems
   bool _need_delete;
 
+  /// Whether to allow removal of remote elements
+  bool _allow_remote_element_removal;
+
   /// Set of elements ghosted by ghostGhostedBoundaries
   std::set<Elem *> _ghost_elems_from_ghost_boundaries;
+
+  /// A parallel mesh generator such as DistributedRectilinearMeshGenerator
+  /// already make everything ready. We do not need to gather all boundaries to
+  /// every single processor. In general, we should avoid using ghostGhostedBoundaries
+  /// when posssible since it is not scalable
+  bool _need_ghost_ghosted_boundaries;
+
+  /// Unique element integer IDs for each subdomain and each extra element integers
+  std::vector<std::unordered_map<SubdomainID, std::set<dof_id_type>>> _block_id_mapping;
+  /// Maximum integer ID for each extra element integer
+  std::vector<dof_id_type> _max_ids;
+  /// Minimum integer ID for each extra element integer
+  std::vector<dof_id_type> _min_ids;
+  /// Flags to indicate whether or not any two extra element integers are the same
+  std::vector<std::vector<bool>> _id_identical_flag;
+
+  /// Whether this mesh is displaced
+  bool _is_displaced;
+
+  /// Build extra data for faster access to the information of extra element integers
+  void buildElemIDInfo();
+
+  /// Build lower-d mesh for all sides
+  void buildLowerDMesh();
+
+  /// Type of coordinate system per subdomain
+  std::map<SubdomainID, Moose::CoordinateSystemType> _coord_sys;
+
+  /// Storage for RZ axis selection
+  unsigned int _rz_coord_axis;
+
+  template <typename T>
+  struct MeshType;
+};
+
+template <>
+struct MooseMesh::MeshType<ReplicatedMesh>
+{
+  static const ParallelType value = ParallelType::REPLICATED;
+};
+
+template <>
+struct MooseMesh::MeshType<DistributedMesh>
+{
+  static const ParallelType value = ParallelType::DISTRIBUTED;
 };
 
 /**
@@ -1513,3 +1615,40 @@ struct MooseMesh::const_bnd_elem_iterator : variant_filter_iterator<MeshBase::Pr
  */
 typedef StoredRange<MooseMesh::const_bnd_node_iterator, const BndNode *> ConstBndNodeRange;
 typedef StoredRange<MooseMesh::const_bnd_elem_iterator, const BndElement *> ConstBndElemRange;
+
+template <typename T>
+std::unique_ptr<T>
+MooseMesh::buildTypedMesh(unsigned int dim)
+{
+  // If the requested mesh type to build doesn't match our current value for _use_distributed_mesh,
+  // then we need to make sure to make our state consistent because other objects, like the periodic
+  // boundary condition action, will be querying isDistributedMesh()
+  if (_use_distributed_mesh != std::is_same<T, DistributedMesh>::value)
+    setParallelType(MeshType<T>::value);
+
+  if (dim == libMesh::invalid_uint)
+    dim = getParam<MooseEnum>("dim");
+
+  auto mesh = std::make_unique<T>(_communicator, dim);
+
+  if (!getParam<bool>("allow_renumbering"))
+    mesh->allow_renumbering(false);
+
+  mesh->allow_remote_element_removal(_allow_remote_element_removal);
+  _app.attachRelationshipManagers(*mesh, *this);
+
+  if (_custom_partitioner_requested)
+  {
+    // Check of partitioner is supplied (not allowed if custom partitioner is used)
+    if (!parameters().isParamSetByAddParam("partitioner"))
+      mooseError("If partitioner block is provided, partitioner keyword cannot be used!");
+    // Set custom partitioner
+    if (!_custom_partitioner.get())
+      mooseError("Custom partitioner requested but not set!");
+    mesh->partitioner() = _custom_partitioner->clone();
+  }
+  else
+    setPartitionerHelper(mesh.get());
+
+  return mesh;
+}

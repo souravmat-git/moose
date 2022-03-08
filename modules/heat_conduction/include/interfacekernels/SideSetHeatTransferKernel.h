@@ -11,8 +11,6 @@
 
 #include "InterfaceKernel.h"
 
-// Forward Declarations
-
 /**
  * DG kernel for interfacing diffusion between two variables on adjacent blocks
  */
@@ -20,6 +18,8 @@ class SideSetHeatTransferKernel : public InterfaceKernel
 {
 public:
   SideSetHeatTransferKernel(const InputParameters & parameters);
+
+  static InputParameters validParams();
 
 protected:
   virtual Real computeQpResidual(Moose::DGResidualType type) override;
@@ -30,7 +30,7 @@ protected:
   /// Bulk temperature of gap
   const VariableValue * const _Tbulk_var;
   const MaterialProperty<Real> * const _Tbulk_mat;
-  /// Convective heat transfer coefficient (master face)
+  /// Convective heat transfer coefficient (primary face)
   const MaterialProperty<Real> & _hp;
   /// Convective heat transfer coefficient (neighbor face)
   const MaterialProperty<Real> & _hm;

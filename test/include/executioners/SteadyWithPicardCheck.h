@@ -21,17 +21,10 @@ public:
 
   SteadyWithPicardCheck(const InputParameters & parameters);
 
-  virtual void init() override;
-
   /**
    * Calls at the beginning of every Picard iterations
    */
   virtual void preSolve() override;
-
-  /**
-   * Additional convergence check to be honored by PicardSolve
-   */
-  virtual bool augmentedPicardConvergenceCheck() const override;
 
 private:
   /// Absolute step tolerance on a designated postprocessor
@@ -41,5 +34,5 @@ private:
   PostprocessorValue _pp_value_old;
 
   /// Reference to the postprocessor value
-  const PostprocessorValue * _pp_value;
+  const PostprocessorValue & _pp_value;
 };

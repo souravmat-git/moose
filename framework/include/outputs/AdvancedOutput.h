@@ -23,11 +23,6 @@ class PetscOutput;
 class Console;
 class TransientMultiApp;
 
-class AdvancedOutput;
-
-template <>
-InputParameters validParams<AdvancedOutput>();
-
 /**
  * Based class for output objects
  *
@@ -146,6 +141,20 @@ public:
   const std::set<std::string> & getVectorPostprocessorOutput();
 
   /**
+   * Returns true if there exists Reporter for output
+   * @return True if Reporter output exists
+   * @see getReporterOutput
+   */
+  bool hasReporterOutput();
+
+  /**
+   * The list of Reporter names that are set for output
+   * @return A vector  containing the names of the Reporter names for output
+   * @see hasReporterOutput
+   */
+  const std::set<std::string> & getReporterOutput();
+
+  /**
    * A method for enabling individual output type control
    * @param names (optional) Space separated of output type names that are supported by this Output
    * object,
@@ -183,11 +192,13 @@ public:
   const OutputOnWarehouse & advancedExecuteOn() const;
 
 protected:
-  /**
-   * Initialization method.
-   * This populates the various data structures needed to control the output
-   */
+  /// Call init() method on setup
   virtual void initialSetup();
+
+  /**
+   * Populates the various data structures needed to control the output
+   */
+  virtual void init();
 
   /**
    * Handles logic for determining if a step should be output
@@ -256,9 +267,19 @@ protected:
   virtual void outputSystemInformation();
 
   /**
+   * Output Reporter values.
+   * The child class must define this method to output the Reporter values as desired
+   * @see CSV::outputReporters
+   */
+  virtual void outputReporters();
+
+  /**
    * Flags to control nodal output
    */
   bool _elemental_as_nodal, _scalar_as_nodal;
+
+  /// Storage for Reporter values
+  const ReporterData & _reporter_data;
 
 private:
   /**
@@ -334,6 +355,9 @@ private:
 
   /// Storage for the last output time for the various output types, this is used to avoid duplicate output when using OUTPUT_FINAL flag
   std::map<std::string, Real> _last_execute_time;
+
+  /// Flags for outputting PP/VPP data as a reporter
+  const bool _postprocessors_as_reporters, _vectorpostprocessors_as_reporters;
 
   // Allow complete access
   friend class OutputWarehouse;

@@ -20,7 +20,6 @@
 #include <string>
 #include <ostream>
 
-class Action;
 class ActionWarehouse;
 class ActionFactory;
 class MooseMesh;
@@ -28,9 +27,6 @@ class FEProblemBase;
 class Executioner;
 class MooseApp;
 class Factory;
-
-template <>
-InputParameters validParams<Action>();
 
 /**
  * Base class for actions.
@@ -63,14 +59,15 @@ private:
    *                                requesting MooseObject's validParams function
    * @param sys_type A RMSystemType that can be used to limit the systems and consequent dof_maps
    *                 that the RM can be attached to
+   * @return Whether a relationship manager was added
    */
-  void
+  bool
   addRelationshipManager(Moose::RelationshipManagerType input_rm_type,
                          const InputParameters & moose_object_pars,
                          std::string rm_name,
                          Moose::RelationshipManagerType rm_type,
                          Moose::RelationshipManagerInputParameterCallback rm_input_parameter_func,
-                         Moose::RMSystemType sys_type);
+                         Moose::RMSystemType sys_type = Moose::RMSystemType::NONE);
 
 protected:
   /**
@@ -82,8 +79,9 @@ protected:
    *        RelationshipManager as early as you'd like. In these cases, your DistributedMesh may
    *        consume more memory during the problem setup.
    * @param moose_object_pars The MooseObject to inspect for RelationshipManagers to add
+   * @return Whether a relationship manager was added
    */
-  void addRelationshipManagers(Moose::RelationshipManagerType when_type,
+  bool addRelationshipManagers(Moose::RelationshipManagerType when_type,
                                const InputParameters & moose_object_pars);
 
 public:
@@ -120,7 +118,6 @@ public:
 
   const std::set<std::string> & getAllTasks() const { return _all_tasks; }
 
-  ///@{
   /**
    * Retrieve a parameter for the object
    * @param name The name of the parameter
@@ -128,7 +125,6 @@ public:
    */
   template <typename T>
   const T & getParam(const std::string & name) const;
-  ///@}
 
   /**
    * Verifies that the requested parameter exists and is not NULL and returns it to the caller.
@@ -138,6 +134,19 @@ public:
   T getCheckedPointerParam(const std::string & name, const std::string & error_string = "") const
   {
     return parameters().getCheckedPointerParam<T>(name, error_string);
+  }
+
+  /**
+   * Retrieve two parameters and provide pair of parameters for the object
+   * @param param1 The name of first parameter
+   * @param param2 The name of second parameter
+   * @return Vector of pairs of first and second parameters
+   */
+  template <typename T1, typename T2>
+  std::vector<std::pair<T1, T2>> getParam(const std::string & param1,
+                                          const std::string & param2) const
+  {
+    return parameters().get<T1, T2>(param1, param2);
   }
 
   inline bool isParamValid(const std::string & name) const { return _pars.isParamValid(name); }
@@ -151,7 +160,7 @@ public:
    * back to the normal behavior of mooseError - only printing a message using the given args.
    */
   template <typename... Args>
-  [[noreturn]] void paramError(const std::string & param, Args... args)
+  [[noreturn]] void paramError(const std::string & param, Args... args) const
   {
     auto prefix = param + ": ";
     if (!_pars.inputLocation(param).empty())
@@ -166,7 +175,7 @@ public:
    * back to the normal behavior of mooseWarning - only printing a message using the given args.
    */
   template <typename... Args>
-  void paramWarning(const std::string & param, Args... args)
+  void paramWarning(const std::string & param, Args... args) const
   {
     auto prefix = param + ": ";
     if (!_pars.inputLocation(param).empty())
@@ -182,7 +191,7 @@ public:
    * the given args.
    */
   template <typename... Args>
-  void paramInfo(const std::string & param, Args... args)
+  void paramInfo(const std::string & param, Args... args) const
   {
     auto prefix = param + ": ";
     if (!_pars.inputLocation(param).empty())

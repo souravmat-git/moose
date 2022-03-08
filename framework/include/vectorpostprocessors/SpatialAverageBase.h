@@ -11,11 +11,6 @@
 
 #include "ElementVectorPostprocessor.h"
 
-class SpatialAverageBase;
-
-template <>
-InputParameters validParams<SpatialAverageBase>();
-
 /**
  * Base clase for computing spatial average of a variable over simple spatial regions
  * of the computation domain
@@ -52,7 +47,7 @@ protected:
   const unsigned int _nvals;
 
   /// coupled variable that is being binned
-  std::vector<const VariableValue *> _values;
+  const std::vector<const VariableValue *> _values;
 
   /// current quadrature point - used in computeVolume()
   unsigned int _qp;
@@ -69,4 +64,3 @@ protected:
   /// aggregated global average vectors
   std::vector<VectorPostprocessorValue *> _average;
 };
-

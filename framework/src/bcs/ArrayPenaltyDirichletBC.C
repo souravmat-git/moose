@@ -11,8 +11,6 @@
 
 registerMooseObject("MooseApp", ArrayPenaltyDirichletBC);
 
-defineLegacyParams(ArrayPenaltyDirichletBC);
-
 InputParameters
 ArrayPenaltyDirichletBC::validParams()
 {
@@ -32,12 +30,15 @@ ArrayPenaltyDirichletBC::ArrayPenaltyDirichletBC(const InputParameters & paramet
     _p(getParam<Real>("penalty")),
     _v(getParam<RealEigenVector>("value"))
 {
+  if (_v.size() != _count)
+    paramError(
+        "value", "Number of 'values' must equal number of variable components (", _count, ").");
 }
 
-RealEigenVector
-ArrayPenaltyDirichletBC::computeQpResidual()
+void
+ArrayPenaltyDirichletBC::computeQpResidual(RealEigenVector & residual)
 {
-  return _p * _test[_i][_qp] * (_u[_qp] - _v);
+  residual = _p * _test[_i][_qp] * (_u[_qp] - _v);
 }
 
 RealEigenVector

@@ -11,12 +11,11 @@
 
 registerMooseObject("MooseApp", ElementIntegralVariableUserObject);
 
-defineLegacyParams(ElementIntegralVariableUserObject);
-
 InputParameters
 ElementIntegralVariableUserObject::validParams()
 {
   InputParameters params = ElementIntegralUserObject::validParams();
+  params.addClassDescription("computes a volume integral of a variable.");
   params.addRequiredCoupledVar("variable", "The name of the variable that this object operates on");
   return params;
 }
@@ -32,7 +31,7 @@ ElementIntegralVariableUserObject::ElementIntegralVariableUserObject(
     _u(coupledValue("variable")),
     _grad_u(coupledGradient("variable"))
 {
-  addMooseVariableDependency(mooseVariable());
+  addMooseVariableDependency(&mooseVariableField());
 }
 
 Real

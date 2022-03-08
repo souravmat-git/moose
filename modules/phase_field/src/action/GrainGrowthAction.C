@@ -102,7 +102,7 @@ GrainGrowthAction::act()
   // Loop over order parameters
   for (unsigned int op = 0; op < _op_num; op++)
   {
-    auto type = AddVariableAction::determineType(_fe_type, 1);
+    auto type = AddVariableAction::variableType(_fe_type);
     auto var_params = _factory.getValidParams(type);
 
     var_params.applySpecificParameters(_pars, {"family", "order"});
@@ -115,7 +115,7 @@ GrainGrowthAction::act()
     if (initial_from_file)
     {
       if (_current_task == "check_copy_nodal_vars")
-        _app.setFileRestart() = true;
+        _app.setExodusFileRestart(true);
 
       if (_current_task == "copy_nodal_vars")
       {

@@ -11,12 +11,6 @@
 
 #include "Kernel.h"
 
-// Forward Declaration
-class CoupledTimeDerivative;
-
-template <>
-InputParameters validParams<CoupledTimeDerivative>();
-
 /**
  * This calculates the time derivative for a coupled variable
  **/
@@ -36,4 +30,3 @@ protected:
   const VariableValue & _dv_dot;
   const unsigned int _v_var;
 };
-

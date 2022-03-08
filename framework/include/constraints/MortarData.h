@@ -18,6 +18,7 @@
 #include <set>
 
 class SubProblem;
+class MortarExecutorInterface;
 
 class MortarData : public libMesh::ParallelObject
 {
@@ -26,19 +27,23 @@ public:
 
   /**
    * Create mortar generation object
-   * @param boundary_key The master-slave boundary pair on which the AMG objects lives
-   * @param subdomain_key The master-slave subdomain pair on which the AMG objects lives
+   * @param boundary_key The primary-secondary boundary pair on which the AMG objects lives
+   * @param subdomain_key The primary-secondary subdomain pair on which the AMG objects lives
    * @param subproblem A reference to the subproblem
    * @param on_displaced Whether the AMG object lives on the displaced mesh
    * @param periodic Whether the AMG object will be used for enforcing periodic constraints. Note
    * that this changes the direction of the projection normals so one AMG object cannot be used to
    * enforce both periodic and non-periodic constraints
+   * @param debug whether to output mortar segment mesh exodus file for debugging purposes
+   * @param correct_edge_dropping edge dropping treatment selection
    */
   void createMortarInterface(const std::pair<BoundaryID, BoundaryID> & boundary_key,
                              const std::pair<SubdomainID, SubdomainID> & subdomain_key,
                              SubProblem & subproblem,
                              bool on_displaced,
-                             bool periodic);
+                             bool periodic,
+                             const bool debug,
+                             const bool correct_edge_dropping);
 
   /**
    * Getter to retrieve the AutomaticMortarGeneration object corresponding to the boundary and
@@ -92,6 +97,18 @@ public:
    */
   const std::set<SubdomainID> & getHigherDimSubdomainIDs(SubdomainID lower_d_subdomain_id) const;
 
+  /**
+   * \em Adds \p mei to the container of objects that will have their \p mortarSetup method called
+   * as soon as the mortar mesh has been generated for the first time
+   */
+  void notifyWhenMortarSetup(MortarExecutorInterface * mei);
+
+  /**
+   * \em Removes \p mei from the container of objects that will have their \p mortarSetup method
+   * called as soon as the mortar mesh has been generated for the first time
+   */
+  void dontNotifyWhenMortarSetup(MortarExecutorInterface * mei);
+
 private:
   /**
    * Builds mortar segment mesh from specific AutomaticMortarGeneration object
@@ -100,11 +117,11 @@ private:
 
   typedef std::pair<BoundaryID, BoundaryID> MortarKey;
 
-  /// Map from master-slave (in that order) boundary ID pair to the corresponding
+  /// Map from primary-secondary (in that order) boundary ID pair to the corresponding
   /// undisplaced AutomaticMortarGeneration object
   std::unordered_map<MortarKey, AutomaticMortarGeneration> _mortar_interfaces;
 
-  /// Map from master-slave (in that order) boundary ID pair to the corresponding
+  /// Map from primary-secondary (in that order) boundary ID pair to the corresponding
   /// displaced AutomaticMortarGeneration object
   std::unordered_map<MortarKey, AutomaticMortarGeneration> _displaced_mortar_interfaces;
 
@@ -122,7 +139,20 @@ private:
   /// Map from displaced AMG key to whether the displaced AMG object is enforcing periodic constraints
   std::unordered_map<MortarKey, bool> _displaced_periodic_map;
 
+  /// Map from undisplaced AMG key to whether the undisplaced AMG object is to output mortar segment mesh
+  std::unordered_map<MortarKey, bool> _debug_flag_map;
+
+  /// Map from displaced AMG key to whether the displaced AMG object is to output mortar segment mesh
+  std::unordered_map<MortarKey, bool> _displaced_debug_flag_map;
+
   /// Map from lower dimensional subdomain ids to corresponding higher simensional subdomain ids
   /// (e.g. the ids of the interior parents)
   std::unordered_map<SubdomainID, std::set<SubdomainID>> _lower_d_sub_to_higher_d_subs;
+
+  /// A container of objects for whom the \p mortarSetup method will be called after the mortar mesh
+  /// has been setup for the first time
+  std::set<MortarExecutorInterface *> _mei_objs;
+
+  /// Whether we have performed any mortar mesh construction
+  bool _mortar_initd;
 };

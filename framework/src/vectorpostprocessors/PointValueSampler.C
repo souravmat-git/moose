@@ -13,13 +13,11 @@
 
 registerMooseObject("MooseApp", PointValueSampler);
 
-defineLegacyParams(PointValueSampler);
-
 InputParameters
 PointValueSampler::validParams()
 {
   InputParameters params = PointSamplerBase::validParams();
-
+  params.addClassDescription("Sample a variable at specific points.");
   params.addRequiredParam<std::vector<Point>>(
       "points", "The points where you want to evaluate the variables");
 

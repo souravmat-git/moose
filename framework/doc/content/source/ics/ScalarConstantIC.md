@@ -1,1 +1,9 @@
-!template load file=stubs/moose_object.md.template name=ScalarConstantIC syntax=/ICs/ScalarConstantIC
+# ScalarConstantIC
+
+!syntax description /ICs/ScalarConstantIC
+
+!syntax parameters /ICs/ScalarConstantIC
+
+!syntax inputs /ICs/ScalarConstantIC
+
+!syntax children /ICs/ScalarConstantIC

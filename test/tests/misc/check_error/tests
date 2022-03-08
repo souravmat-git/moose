@@ -10,6 +10,7 @@
     requirement = 'The system shall report an error when the system solver is unable to find a converged solution.'
     design = 'Executioner/index.md'
     issues = '#5144 #5153'
+    collections = 'FAILURE_ANALYSIS'
   [../]
 
   [./range_check_param]
@@ -19,6 +20,7 @@
 
     requirement = 'The system shall report an error message when a range-checked parameter is out of range.'
     issues = '#2777'
+    collections = 'FAILURE_ANALYSIS'
   [../]
 
   [./checked_pointer_param_test]
@@ -54,7 +56,7 @@
     input = 'bad_bc_test.i'
     expect_err = "A '\w+' is not a registered object"
 
-    requirement = 'The system shall report an error when an attempt to is made to instantiate a non-existent BoundaryCondition object.'
+    requirement = 'The system shall report an error when an attempt is made to instantiate a non-existent BoundaryCondition object.'
     issues = '#10486'
   [../]
 
@@ -219,7 +221,7 @@
   [./function_file_test1]
     type = 'RunException'
     input = 'function_file_test1.i'
-    expect_err = "In Piecewise \S+: Read more than two rows of data from file '\S+'.  Did you mean to use \"format = columns\" or set \"xy_in_file_only\" to false?"
+    expect_err = "In \S+: Read more than two rows of data from file '\S+'.  Did you mean to use \"format = columns\" or set \"xy_in_file_only\" to false?"
 
     requirement = 'The system shall report an error when the Piecewise utility encounters an unexpected column data format.'
     issues = '#2421'
@@ -228,7 +230,7 @@
   [./function_file_test2]
     type = 'RunException'
     input = 'function_file_test2.i'
-    expect_err = "In Piecewise \S+: Read more than two columns of data from file '\S+'.  Did you mean to use \"format = rows\"?"
+    expect_err = "In \S+: Read more than two columns of data from file '\S+'.  Did you mean to use \"format = rows\"?"
 
     requirement = 'The system shall report an error when the Piecewise utility encounters an unexpected row data format.'
     issues = '#2421'
@@ -237,7 +239,7 @@
   [./function_file_test3]
     type = 'RunException'
     input = 'function_file_test3.i'
-    expect_err = "In PiecewiseBase \S+: Lengths of x and y data do not match."
+    expect_err = "In \S+: Lengths of x and y data do not match."
 
     requirement = 'The system shall report an error when the Piecewise utility encounters inconsistent domain and range data.'
     issues = '#2421'
@@ -255,7 +257,7 @@
   [./function_file_test5]
     type = 'RunException'
     input = 'function_file_test5.i'
-    expect_err = "In Piecewise \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
+    expect_err = "In \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
 
     requirement = 'The system shall report an error when the Piecewise data is over-specified with the data file option.'
     issues = '#2421'
@@ -264,7 +266,7 @@
   [./function_file_test6]
     type = 'RunException'
     input = 'function_file_test6.i'
-    expect_err = "In Piecewise \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
+    expect_err = "In \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
 
     requirement = 'The system shall report an error when the Piecewise data is over-specified with row/column data.'
     issues = '#2421'
@@ -273,7 +275,7 @@
   [./function_file_test7]
     type = 'RunException'
     input = 'function_file_test7.i'
-    expect_err = "In Piecewise \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
+    expect_err = "In \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
 
     requirement = 'The system shall report an error when either the domain or range is missing when using the domain/range option in the Piecewise utility.'
     issues = '#2421'
@@ -282,7 +284,7 @@
   [./function_file_test8]
     type = 'RunException'
     input = 'function_file_test8.i'
-    expect_err = "In Piecewise \S+: Length of data provided in 'xy_data' must be a multiple of 2."
+    expect_err = "In \S+: Length of data provided in 'xy_data' must be a multiple of 2."
 
     requirement = 'The system shall report and error if the supplied domain/range pairs are not even in the Piecewise utility.'
     issues = '#2421'
@@ -291,7 +293,7 @@
   [./function_file_test9]
     type = 'RunException'
     input = 'function_file_test9.i'
-    expect_err = "In Piecewise \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
+    expect_err = "In \S+: Either 'data_file', 'x' and 'y', or 'xy_data' must be specified exclusively."
 
     requirement = 'The system shall report an error if no function is supplied in the Piecewise utility.'
     issues = '#2421'
@@ -309,7 +311,7 @@
   [./function_file_test11]
     type = 'RunException'
     input = 'function_file_test11.i'
-    expect_err = "In Piecewise \S+: Read more than two columns of data from file '\S+'.  Did you mean to use \"format = rows\" or set \"xy_in_file_only\" to false?"
+    expect_err = "In \S+: Read more than two columns of data from file '\S+'.  Did you mean to use \"format = rows\" or set \"xy_in_file_only\" to false?"
 
     requirement = 'The system shall report an error when the number of columns appears incorrect in the Piecewise utility.'
     issues = '#2421'
@@ -318,7 +320,7 @@
   [./function_file_test12]
     type = 'RunException'
     input = 'function_file_test12.i'
-    expect_err = "In Piecewise \S+: The 'y_index_in_file' is out-of-range of the available data in '\S+', which contains 3 columns of data."
+    expect_err = "In \S+: The 'y_index_in_file' is out-of-range of the available data in '\S+', which contains 3 columns of data."
 
     requirement = 'The system shall report an error when an out of range y-column index is supplied in the Piecewise utility.'
     issues = '#2421'
@@ -327,7 +329,7 @@
   [./function_file_test13]
     type = 'RunException'
     input = 'function_file_test13.i'
-    expect_err = "In Piecewise \S+: The 'x_index_in_file' is out-of-range of the available data in '\S+', which contains 3 columns of data."
+    expect_err = "In \S+: The 'x_index_in_file' is out-of-range of the available data in '\S+', which contains 3 columns of data."
 
     requirement = 'The system shall report an error when an out of range x-column index is supplied in the Piecewise utility.'
     issues = '#2421'
@@ -336,7 +338,7 @@
   [./function_file_test14]
     type = 'RunException'
     input = 'function_file_test14.i'
-    expect_err = "In Piecewise \S+: Read more than two rows of data from file '\S+'.  Did you mean to use \"format = columns\" or set \"xy_in_file_only\" to false?"
+    expect_err = "In \S+: Read more than two rows of data from file '\S+'.  Did you mean to use \"format = columns\" or set \"xy_in_file_only\" to false?"
 
     requirement = 'The system shall report an error if too many rows are supplied when the data is expected to contain row information.'
     issues = '#2421'
@@ -345,7 +347,7 @@
   [./function_file_test15]
     type = 'RunException'
     input = 'function_file_test15.i'
-    expect_err = "In Piecewise \S+: The 'x_index_in_file' is out-of-range of the available data in '\S+', which contains 3 rows of data."
+    expect_err = "In \S+: The 'x_index_in_file' is out-of-range of the available data in '\S+', which contains 3 rows of data."
 
     requirement = 'The system shall report an error when an out of range x-row index is supplied in the Piecewise utility.'
     issues = '#2421'
@@ -354,7 +356,7 @@
   [./function_file_test16]
     type = 'RunException'
     input = 'function_file_test16.i'
-    expect_err = "In Piecewise \S+: The 'y_index_in_file' is out-of-range of the available data in '\S+', which contains 3 rows of data."
+    expect_err = "In \S+: The 'y_index_in_file' is out-of-range of the available data in '\S+', which contains 3 rows of data."
 
     requirement = 'The system shall report an error when an out of range y-row index is supplied in the Piecewise utility.'
     issues = '#2421'
@@ -363,7 +365,7 @@
   [./function_file_test17]
     type = 'RunException'
     input = 'function_file_test17.i'
-    expect_err = "In Piecewise \S+: 'x_index_in_file' and 'y_index_in_file' are set to the same value."
+    expect_err = "In \S+: 'x_index_in_file' and 'y_index_in_file' are set to the same value."
 
     requirement = 'The system shall report an error when the x and y index in file are equal in the Piecewise utility.'
     issues = '#2421'
@@ -387,6 +389,26 @@
     issues = '#1405'
   [../]
 
+  [./incomplete_fvkernel_block_coverage_test]
+    type = 'RunException'
+    input = 'incomplete_fvkernel_block_coverage_test.i'
+    expect_err = "The following block\(s\) lack an active kernel:"
+
+    requirement = 'The system shall report an error if one or more domain blocks do not have any active FVKernels objects assigned.'
+    issues = '#1405 #15196'
+    ad_indexing_type = 'global'
+  [../]
+
+  [./incomplete_fvkernel_variable_coverage_test]
+    type = 'RunException'
+    input = 'incomplete_fvkernel_variable_coverage_test.i'
+    expect_err = "The following variable\(s\) lack an active kernel:"
+
+    requirement = 'The system shall report an error if one or more variables do not have any active FVKernel objects assigned.'
+    issues = '#1405 #15196'
+    ad_indexing_type = 'global'
+  [../]
+
   [./invalid_elemental_to_nodal_couple_test]
     type = 'RunException'
     input = 'invalid_aux_coupling_test.i'
@@ -408,7 +430,7 @@
   [./missing_coupled_mat_prop_test]
     type = 'RunException'
     input = 'missing_coupled_mat_prop_test.i'
-    expect_err = "One or more Material Properties were not supplied on block"
+    expect_err = "Material property 'mp1', requested by 'mat_global'"
 
     requirement = 'The system shall report an error when a material property is requested but not supplied on a mesh block.'
     issues = '#1405'
@@ -481,7 +503,7 @@
   [./missing_mesh_test]
     type = 'RunException'
     input = 'missing_mesh_test.i'
-    expect_err = "cannot locate mesh file '\S+'"
+    expect_err = "Unable to open file \S+"
 
     requirement = 'The system shall report an error when the mesh file cannot be found.'
     issues = '#1405'
@@ -663,15 +685,6 @@
     method = '!dbg'
 
     requirement = 'The system shall report an error when an input file block associated with on pluggable system is asked to build an object from a different system.'
-    issues = '#1405'
-  [../]
-
-  [./wrong_object_test2]
-    type = 'RunException'
-    input = 'nonexistent_pps_test.i'
-    expect_err = "Postprocessor '\S+' requested but not specified in the input file."
-
-    requirement = 'The system shall report an error when a Postprocessor value is requested from a non-existent Postprocessor.'
     issues = '#1405'
   [../]
 
@@ -1050,5 +1063,14 @@
     requirement = 'The system shall report an error when nodal boundary condition is applied on a non-nodal variable.'
     design = 'NonlinearSystem.md'
     issues = '#14019'
+  [../]
+  [./check_git_lfs_pointer]
+    type = 'RunException'
+    input = 'mesh_pointer_error_check.i'
+    expect_err = 'appears to be a Git-LFS pointer'
+
+    requirement = 'The system shall report an error when a git-lfs file pointer is encountered.'
+    design = 'MooseUtils.md'
+    issues = '#17407'
   [../]
 []

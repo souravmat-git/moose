@@ -16,13 +16,11 @@
 
 registerMooseAction("MooseApp", SetupPredictorAction, "setup_predictor");
 
-defineLegacyParams(SetupPredictorAction);
-
 InputParameters
 SetupPredictorAction::validParams()
 {
   InputParameters params = MooseObjectAction::validParams();
-
+  params.addClassDescription("Add a Predictor object to the simulation.");
   return params;
 }
 

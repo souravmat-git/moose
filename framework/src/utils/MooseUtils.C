@@ -15,7 +15,11 @@
 #include "InputParameters.h"
 #include "ExecFlagEnum.h"
 #include "InfixIterator.h"
+#include "MaterialBase.h"
+#include "MortarConstraintBase.h"
+#include "MortarNodalAuxKernel.h"
 
+#include "libmesh/utility.h"
 #include "libmesh/elem.h"
 
 // External includes
@@ -34,9 +38,7 @@
 #include <numeric>
 #include <unistd.h>
 
-#ifdef LIBMESH_HAVE_PETSC
 #include "petscsys.h"
-#endif
 
 #ifdef __WIN32__
 #include <windows.h>
@@ -50,6 +52,55 @@ std::string getLatestCheckpointFileHelper(const std::list<std::string> & checkpo
 
 namespace MooseUtils
 {
+std::string
+pathjoin(const std::string & s)
+{
+  return s;
+}
+
+std::string
+runTestsExecutable()
+{
+  auto build_loc = pathjoin(Moose::getExecutablePath(), "run_tests");
+  if (pathExists(build_loc) && checkFileReadable(build_loc))
+    return build_loc;
+  // TODO: maybe no path prefix - just moose_test_runner here?
+  return pathjoin(Moose::getExecutablePath(), "moose_test_runner");
+}
+std::string
+findTestRoot()
+{
+  std::string path = ".";
+  for (int i = 0; i < 5; i++)
+  {
+    auto testroot = pathjoin(path, "testroot");
+    if (pathExists(testroot) && checkFileReadable(testroot))
+      return testroot;
+    path += "/..";
+  }
+  return "";
+}
+
+std::string
+installedTestsDir(const std::string & app_name)
+{
+  std::string installed_path = pathjoin(Moose::getExecutablePath(), "../share", app_name, "test");
+
+  auto testroot = pathjoin(installed_path, "testroot");
+  if (pathExists(testroot) && checkFileReadable(testroot))
+    return installed_path;
+  return "";
+}
+
+std::string
+docsDir(const std::string & app_name)
+{
+  std::string installed_path = pathjoin(Moose::getExecutablePath(), "../share", app_name, "doc");
+  auto docfile = pathjoin(installed_path, "css/moose.css");
+  if (pathExists(docfile) && checkFileReadable(docfile))
+    return installed_path;
+  return "";
+}
 
 std::string
 replaceAll(std::string str, const std::string & from, const std::string & to)
@@ -165,7 +216,10 @@ pathExists(const std::string & path)
 }
 
 bool
-checkFileReadable(const std::string & filename, bool check_line_endings, bool throw_on_unreadable)
+checkFileReadable(const std::string & filename,
+                  bool check_line_endings,
+                  bool throw_on_unreadable,
+                  bool check_for_git_lfs_pointer)
 {
   std::ifstream in(filename.c_str(), std::ifstream::in);
   if (in.fail())
@@ -189,15 +243,35 @@ checkFileReadable(const std::string & filename, bool check_line_endings, bool th
         mooseError(filename + " contains Windows(DOS) line endings which are not supported.");
   }
 
+  if (check_for_git_lfs_pointer && checkForGitLFSPointer(in))
+    mooseError(filename + " appears to be a Git-LFS pointer. Make sure you have \"git-lfs\" "
+                          "installed so that you may pull this file.");
   in.close();
 
   return true;
 }
 
 bool
+checkForGitLFSPointer(std::ifstream & file)
+{
+  mooseAssert(file.is_open(), "Passed in file handle is not open");
+
+  std::string line;
+
+  // git-lfs pointer files contain several name value pairs. The specification states that the
+  // first name/value pair must be "version {url}". We'll do a simplified check for that.
+  file.seekg(0);
+  std::getline(file, line);
+  if (line.find("version https://") != std::string::npos)
+    return true;
+  else
+    return false;
+}
+
+bool
 checkFileWriteable(const std::string & filename, bool throw_on_unwritable)
 {
-  std::ofstream out(filename.c_str(), std::ofstream::out);
+  std::ofstream out(filename.c_str(), std::ios_base::app);
   if (out.fail())
   {
     if (throw_on_unwritable)
@@ -217,19 +291,19 @@ checkFileWriteable(const std::string & filename, bool throw_on_unwritable)
 void
 parallelBarrierNotify(const Parallel::Communicator & comm, bool messaging)
 {
-  processor_id_type slave_processor_id;
+  processor_id_type secondary_processor_id;
 
   if (messaging)
     Moose::out << "Waiting For Other Processors To Finish" << std::endl;
   if (comm.rank() == 0)
   {
-    // The master process is already through, so report it
+    // The primary process is already through, so report it
     if (messaging)
       Moose::out << "Jobs complete: 1/" << comm.size() << (1 == comm.size() ? "\n" : "\r")
                  << std::flush;
     for (unsigned int i = 2; i <= comm.size(); ++i)
     {
-      comm.receive(MPI_ANY_SOURCE, slave_processor_id);
+      comm.receive(MPI_ANY_SOURCE, secondary_processor_id);
       if (messaging)
         Moose::out << "Jobs complete: " << i << "/" << comm.size()
                    << (i == comm.size() ? "\n" : "\r") << std::flush;
@@ -237,8 +311,8 @@ parallelBarrierNotify(const Parallel::Communicator & comm, bool messaging)
   }
   else
   {
-    slave_processor_id = comm.rank();
-    comm.send(0, slave_processor_id);
+    secondary_processor_id = comm.rank();
+    comm.send(0, secondary_processor_id);
   }
 
   comm.barrier();
@@ -335,6 +409,125 @@ splitFileName(std::string full_file)
 
   // Return the path and file as a pair
   return std::pair<std::string, std::string>(path, file);
+}
+
+void
+makedirs(const std::string & dir_name, bool throw_on_failure)
+{
+  // split path into directories with delimiter '/'
+  std::vector<std::string> split_dir_names;
+  MooseUtils::tokenize(dir_name, split_dir_names);
+
+  auto n = split_dir_names.size();
+
+  // remove '.' and '..' when possible
+  auto i = n;
+  i = 0;
+  while (i != n)
+  {
+    if (split_dir_names[i] == ".")
+    {
+      for (auto j = i + 1; j < n; ++j)
+        split_dir_names[j - 1] = split_dir_names[j];
+      --n;
+    }
+    else if (i > 0 && split_dir_names[i] == ".." && split_dir_names[i - 1] != "..")
+    {
+      for (auto j = i + 1; j < n; ++j)
+        split_dir_names[j - 2] = split_dir_names[j];
+      n -= 2;
+      --i;
+    }
+    else
+      ++i;
+  }
+  if (n == 0)
+    return;
+
+  split_dir_names.resize(n);
+
+  // start creating directories recursively
+  std::string cur_dir = dir_name[0] == '/' ? "" : ".";
+  for (auto & dir : split_dir_names)
+  {
+    cur_dir += "/" + dir;
+
+    if (!pathExists(cur_dir))
+    {
+      auto code = Utility::mkdir(cur_dir.c_str());
+      if (code != 0)
+      {
+        std::string msg = "Failed creating directory " + dir_name;
+        if (throw_on_failure)
+          throw std::invalid_argument(msg);
+        else
+          mooseError(msg);
+      }
+    }
+  }
+}
+
+void
+removedirs(const std::string & dir_name, bool throw_on_failure)
+{
+  // split path into directories with delimiter '/'
+  std::vector<std::string> split_dir_names;
+  MooseUtils::tokenize(dir_name, split_dir_names);
+
+  auto n = split_dir_names.size();
+
+  // remove '.' and '..' when possible
+  auto i = n;
+  i = 0;
+  while (i != n)
+  {
+    if (split_dir_names[i] == ".")
+    {
+      for (auto j = i + 1; j < n; ++j)
+        split_dir_names[j - 1] = split_dir_names[j];
+      --n;
+    }
+    else if (i > 0 && split_dir_names[i] == ".." && split_dir_names[i - 1] != "..")
+    {
+      for (auto j = i + 1; j < n; ++j)
+        split_dir_names[j - 2] = split_dir_names[j];
+      n -= 2;
+      --i;
+    }
+    else
+      ++i;
+  }
+  if (n == 0)
+    return;
+
+  split_dir_names.resize(n);
+
+  // start removing directories recursively
+  std::string base_dir = dir_name[0] == '/' ? "" : ".";
+  for (i = n; i > 0; --i)
+  {
+    std::string cur_dir = base_dir;
+    auto j = i;
+    for (j = 0; j < i; ++j)
+      cur_dir += "/" + split_dir_names[j];
+
+    // listDir should return at least '.' and '..'
+    if (pathExists(cur_dir) && listDir(cur_dir).size() == 2)
+    {
+      auto code = rmdir(cur_dir.c_str());
+      if (code != 0)
+      {
+        std::string msg = "Failed removing directory " + dir_name;
+        if (throw_on_failure)
+          throw std::invalid_argument(msg);
+        else
+          mooseError(msg);
+      }
+    }
+    else
+      // stop removing
+      break;
+  }
 }
 
 std::string
@@ -440,6 +633,8 @@ MaterialPropertyStorageDump(
       }
     }
   }
+
+  Moose::out << std::flush;
 }
 
 std::string &
@@ -453,7 +648,8 @@ removeColor(std::string & msg)
 void
 indentMessage(const std::string & prefix,
               std::string & message,
-              const char * color /*= COLOR_CYAN*/)
+              const char * color /*= COLOR_CYAN*/,
+              bool indent_first_line)
 {
   // First we need to see if the message we need to indent (with color) also contains color codes
   // that span lines.
@@ -466,13 +662,19 @@ indentMessage(const std::string & prefix,
 
   bool ends_in_newline = message.empty() ? true : message.back() == '\n';
 
+  bool first = true;
+
   std::istringstream iss(message);
   for (std::string line; std::getline(iss, line);) // loop over each line
   {
     const static pcrecpp::RE match_color(".*(\\33\\[3\\dm)((?!\\33\\[3\\d)[^\n])*");
     pcrecpp::StringPiece line_piece(line);
     match_color.FindAndConsume(&line_piece, &color_code);
-    colored_message += color + prefix + ": " + curr_color + line;
+
+    if (!first || indent_first_line)
+      colored_message += color + prefix + ": " + curr_color;
+
+    colored_message += line;
 
     // Only add a newline to the last line if it had one to begin with!
     if (!iss.eof() || ends_in_newline)
@@ -480,6 +682,8 @@ indentMessage(const std::string & prefix,
 
     if (!color_code.empty())
       curr_color = color_code; // remember last color of this line
+
+    first = false;
   }
   message = colored_message;
 }
@@ -581,6 +785,29 @@ wildCardMatch(std::string name, std::string search_string)
     return false;
 }
 
+bool
+globCompare(const std::string & candidate,
+            const std::string & pattern,
+            std::size_t c,
+            std::size_t p)
+{
+  if (p == pattern.size())
+    return c == candidate.size();
+
+  if (pattern[p] == '*')
+  {
+    for (; c < candidate.size(); ++c)
+      if (globCompare(candidate, pattern, c, p + 1))
+        return true;
+    return globCompare(candidate, pattern, c, p + 1);
+  }
+
+  if (pattern[p] != '?' && pattern[p] != candidate[c])
+    return false;
+
+  return globCompare(candidate, pattern, c + 1, p + 1);
+}
+
 template <typename T>
 T
 convertStringToInt(const std::string & str, bool throw_on_failure)
@@ -591,8 +818,15 @@ convertStringToInt(const std::string & str, bool throw_on_failure)
   // This would be the case for scientific notation
   long double double_val;
   std::stringstream double_ss(str);
+  double_ss >> double_val;
 
-  if ((double_ss >> double_val).fail() || !double_ss.eof())
+  // on arm64 the long double does not have sufficient precission
+  bool use_int = false;
+  std::stringstream int_ss(str);
+  if (!(int_ss >> val).fail() && int_ss.eof())
+    use_int = true;
+
+  if (double_ss.fail() || !double_ss.eof())
   {
     std::string msg =
         std::string("Unable to convert '") + str + "' to type " + demangle(typeid(T).name());
@@ -603,21 +837,18 @@ convertStringToInt(const std::string & str, bool throw_on_failure)
       mooseError(msg);
   }
 
-  // Check to see if it's an integer (and within range of an integer
+  // Check to see if it's an integer (and within range of an integer)
   if (double_val == static_cast<T>(double_val))
-    val = double_val;
-  else // Still failure
-  {
-    std::string msg =
-        std::string("Unable to convert '") + str + "' to type " + demangle(typeid(T).name());
+    return use_int ? val : static_cast<T>(double_val);
 
-    if (throw_on_failure)
-      throw std::invalid_argument(msg);
-    else
-      mooseError(msg);
-  }
+  // Still failure
+  std::string msg =
+      std::string("Unable to convert '") + str + "' to type " + demangle(typeid(T).name());
 
-  return val;
+  if (throw_on_failure)
+    throw std::invalid_argument(msg);
+  else
+    mooseError(msg);
 }
 
 template <>
@@ -703,7 +934,8 @@ getDefaultExecFlagEnum()
                               EXEC_TIMESTEP_END,
                               EXEC_TIMESTEP_BEGIN,
                               EXEC_FINAL,
-                              EXEC_CUSTOM);
+                              EXEC_CUSTOM,
+                              EXEC_ALWAYS);
   return exec_enum;
 }
 
@@ -761,16 +993,42 @@ linearPartitionChunk(dof_id_type num_items, dof_id_type num_chunks, dof_id_type 
 }
 
 std::vector<std::string>
-split(const std::string & str, const std::string & delimiter)
+split(const std::string & str, const std::string & delimiter, std::size_t max_count)
 {
   std::vector<std::string> output;
+  std::size_t count = 0;
   size_t prev = 0, pos = 0;
   do
   {
     pos = str.find(delimiter, prev);
     output.push_back(str.substr(prev, pos - prev));
     prev = pos + delimiter.length();
-  } while (pos != std::string::npos);
+    count += 1;
+  } while (pos != std::string::npos && count < max_count);
+
+  if (pos != std::string::npos)
+    output.push_back(str.substr(prev));
+
+  return output;
+}
+
+std::vector<std::string>
+rsplit(const std::string & str, const std::string & delimiter, std::size_t max_count)
+{
+  std::vector<std::string> output;
+  std::size_t count = 0;
+  size_t prev = str.length(), pos = str.length();
+  do
+  {
+    pos = str.rfind(delimiter, prev);
+    output.insert(output.begin(), str.substr(pos + delimiter.length(), prev - pos));
+    prev = pos - delimiter.length();
+    count += 1;
+  } while (pos != std::string::npos && pos > 0 && count < max_count);
+
+  if (pos != std::string::npos)
+    output.insert(output.begin(), str.substr(0, pos));
+
   return output;
 }
 
@@ -860,22 +1118,22 @@ fileSize(const std::string & filename)
 std::string
 realpath(const std::string & path)
 {
-#ifdef LIBMESH_HAVE_PETSC
   char dummy[PETSC_MAX_PATH_LEN];
+#if defined(PETSC_HAVE_REALPATH)
+  // If "realpath" is adopted by PETSc and
+  // "path" does not exist, then PETSc will print a misleading message.
+  // [0]PETSC ERROR: Error in external library
+  // [0]PETSC ERROR: realpath()
+  // [0]PETSC ERROR: See https://www.mcs.anl.gov/petsc/documentation/faq.html for trouble shooting.
+  // [0]PETSC ERROR: Petsc Release Version 3.13.3, unknown
+  // We here override the misleading message with a better one.
+  if (!::realpath(path.c_str(), dummy))
+    mooseError("Failed to get real path for ", path);
+#endif
   if (PetscGetRealPath(path.c_str(), dummy))
     mooseError("Failed to get real path for ", path);
+
   return dummy;
-#else
-#ifndef __WIN32__
-  char dummy[PATH_MAX];
-  if (!realpath(path.c_str(), dummy))
-    mooseError("Failed to get real path for ", path);
-  return dummy;
-#else
-  // on windows, but without PETSc: just return original path
-  return path;
-#endif
-#endif
 }
 
 std::string
@@ -925,6 +1183,90 @@ buildBoundingBox(const Point & p1, const Point & p2)
   return bb;
 }
 
+std::string
+prettyCppType(const std::string & cpp_type)
+{
+  // On mac many of the std:: classes are inline namespaced with __1
+  // On linux std::string can be inline namespaced with __cxx11
+  std::string s = cpp_type;
+  pcrecpp::RE("std::__\\w+::").GlobalReplace("std::", &s);
+  // It would be nice if std::string actually looked normal
+  pcrecpp::RE("\\s*std::basic_string<char, std::char_traits<char>, std::allocator<char> >\\s*")
+      .GlobalReplace("std::string", &s);
+  // It would be nice if std::vector looked normal
+  pcrecpp::RE r("std::vector<([[:print:]]+),\\s?std::allocator<\\s?\\1\\s?>\\s?>");
+  r.GlobalReplace("std::vector<\\1>", &s);
+  // Do it again for nested vectors
+  r.GlobalReplace("std::vector<\\1>", &s);
+  return s;
+}
+
+template <typename Consumers>
+std::deque<MaterialBase *>
+buildRequiredMaterials(const Consumers & mat_consumers,
+                       const std::vector<std::shared_ptr<MaterialBase>> & mats,
+                       const bool allow_stateful)
+{
+  std::deque<MaterialBase *> required_mats;
+
+  std::unordered_set<unsigned int> needed_mat_props;
+  for (const auto & consumer : mat_consumers)
+  {
+    const auto & mp_deps = consumer->getMatPropDependencies();
+    needed_mat_props.insert(mp_deps.begin(), mp_deps.end());
+  }
+
+  // A predicate of calling this function is that these materials come in already sorted by
+  // dependency with the front of the container having no other material dependencies and following
+  // materials potentially depending on the ones in front of them. So we can start at the back and
+  // iterate forward checking whether the current material supplies anything that is needed, and if
+  // not we discard it
+  for (auto it = mats.rbegin(); it != mats.rend(); ++it)
+  {
+    auto * const mat = it->get();
+    bool supplies_needed = false;
+
+    const auto & supplied_props = mat->getSuppliedPropIDs();
+
+    // Do O(N) with the small container
+    for (const auto supplied_prop : supplied_props)
+    {
+      if (needed_mat_props.count(supplied_prop))
+      {
+        supplies_needed = true;
+        break;
+      }
+    }
+
+    if (!supplies_needed)
+      continue;
+
+    if (!allow_stateful && mat->hasStatefulProperties())
+      mooseError("Someone called buildRequiredMaterials with allow_stateful = false but a material "
+                 "dependency ",
+                 mat->name(),
+                 " computes stateful properties.");
+
+    const auto & mp_deps = mat->getMatPropDependencies();
+    needed_mat_props.insert(mp_deps.begin(), mp_deps.end());
+    required_mats.push_front(mat);
+  }
+
+  return required_mats;
+}
+
+template std::deque<MaterialBase *>
+buildRequiredMaterials(const std::vector<MortarConstraintBase *> &,
+                       const std::vector<std::shared_ptr<MaterialBase>> &,
+                       bool);
+template std::deque<MaterialBase *>
+buildRequiredMaterials(const std::array<const MortarNodalAuxKernelTempl<Real> *, 1> &,
+                       const std::vector<std::shared_ptr<MaterialBase>> &,
+                       bool);
+template std::deque<MaterialBase *>
+buildRequiredMaterials(const std::array<const MortarNodalAuxKernelTempl<RealVectorValue> *, 1> &,
+                       const std::vector<std::shared_ptr<MaterialBase>> &,
+                       bool);
 } // MooseUtils namespace
 
 std::string
@@ -941,9 +1283,10 @@ getLatestCheckpointFileHelper(const std::list<std::string> & checkpoint_files,
   // Loop through all possible files and store the newest
   for (const auto & cp_file : checkpoint_files)
   {
-    if (find_if(extensions.begin(), extensions.end(), [cp_file](const std::string & ext) {
-          return MooseUtils::hasExtension(cp_file, ext);
-        }) != extensions.end())
+    if (find_if(extensions.begin(),
+                extensions.end(),
+                [cp_file](const std::string & ext)
+                { return MooseUtils::hasExtension(cp_file, ext); }) != extensions.end())
     {
       struct stat stats;
       stat(cp_file.c_str(), &stats);

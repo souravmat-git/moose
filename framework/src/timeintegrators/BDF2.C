@@ -12,18 +12,19 @@
 
 registerMooseObject("MooseApp", BDF2);
 
-defineLegacyParams(BDF2);
-
 InputParameters
 BDF2::validParams()
 {
   InputParameters params = TimeIntegrator::validParams();
-
+  params.addClassDescription(
+      "Second order backward differentiation formula time integration scheme.");
   return params;
 }
 
 BDF2::BDF2(const InputParameters & parameters)
-  : TimeIntegrator(parameters), _weight(declareRestartableData<std::vector<Real>>("weight"))
+  : TimeIntegrator(parameters),
+    _weight(declareRestartableData<std::vector<Real>>("weight")),
+    _solution_older(_sys.solutionState(2))
 {
   _weight.resize(3);
 }
@@ -63,7 +64,9 @@ BDF2::computeTimeDerivatives()
 }
 
 void
-BDF2::computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const
+BDF2::computeADTimeDerivatives(DualReal & ad_u_dot,
+                               const dof_id_type & dof,
+                               DualReal & /*ad_u_dotdot*/) const
 {
   auto ad_sln = ad_u_dot;
   if (_t_step != 1)

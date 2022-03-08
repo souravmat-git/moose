@@ -9,13 +9,11 @@
 
 #include "MooseUnitApp.h"
 #include "Moose.h"
-#include "ModulesApp.h"
 
-template <>
 InputParameters
-validParams<MooseUnitApp>()
+MooseUnitApp::validParams()
 {
-  InputParameters params = validParams<MooseApp>();
+  InputParameters params = MooseApp::validParams();
   return params;
 }
 
@@ -26,9 +24,8 @@ MooseUnitApp::MooseUnitApp(const InputParameters & parameters) : MooseApp(parame
 }
 
 void
-MooseUnitApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
+MooseUnitApp::registerAll(Factory & f, ActionFactory &, Syntax &)
 {
-  ModulesApp::registerAll(f, af, s);
   Registry::registerObjectsTo(f, {"MooseUnitApp"});
 }
 

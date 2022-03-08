@@ -12,12 +12,6 @@
 // MOOSE includes
 #include "TableOutput.h"
 
-// Forward declarations
-class Console;
-
-template <>
-InputParameters validParams<Console>();
-
 /**
  * An output object for writing to the console (screen)
  */
@@ -79,7 +73,8 @@ public:
    * @param old_norm The old residual norm to compare against
    * @param norm The current residual norm
    */
-  static std::string outputNorm(const Real & old_norm, const Real & norm);
+  static std::string
+  outputNorm(const Real & old_norm, const Real & norm, const unsigned int precision = 6);
 
   /**
    * Return system information flags
@@ -93,11 +88,6 @@ public:
   }
 
 protected:
-  /**
-   * Adds the printing of system information to the init() method
-   */
-  void init();
-
   /**
    * Print the input file at the beginning of the simulation
    */
@@ -120,6 +110,11 @@ protected:
   {
     mooseError("Can't currently output VectorPostprocessors to the screen");
   };
+
+  /**
+   * Prints the Reporter values to the screen
+   */
+  virtual void outputReporters() override;
 
   /**
    * Print system information

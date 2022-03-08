@@ -14,13 +14,18 @@
 #include "InfixIterator.h"
 #include "MooseEnumItem.h"
 #include "MooseError.h"
+#include "MooseADWrapper.h"
 #include "Moose.h"
 #include "DualReal.h"
+#include "ExecutablePath.h"
 
 #include "libmesh/compare_types.h"
 #include "libmesh/bounding_box.h"
+#include "libmesh/int_range.h"
 #include "metaphysicl/raw_type.h"
 #include "metaphysicl/metaphysicl_version.h"
+#include "metaphysicl/dynamic_std_array_wrapper.h"
+#include "timpi/standard_type.h"
 
 // C++ includes
 #include <string>
@@ -28,11 +33,13 @@
 #include <map>
 #include <list>
 #include <iterator>
+#include <deque>
 
 // Forward Declarations
 class InputParameters;
 class ExecFlagEnum;
 class MaterialProperties;
+class MaterialBase;
 
 namespace libMesh
 {
@@ -70,6 +77,33 @@ MetaPhysicL::DualNumber<T, D, asd> abs(MetaPhysicL::DualNumber<T, D, asd> && in)
 namespace MooseUtils
 {
 
+std::string pathjoin(const std::string & s);
+
+template <typename... Args>
+std::string
+pathjoin(const std::string & s, Args... args)
+{
+  if (s[s.size() - 1] == '/')
+    return s + pathjoin(args...);
+  return s + "/" + pathjoin(args...);
+}
+
+/// Returns the location of either a local repo run_tests script - or an
+/// installed test executor script if run_tests isn't found.
+std::string runTestsExecutable();
+
+/// Searches in the current working directory and then recursively up in each
+/// parent directory looking for a "testroot" file.  Returns the full path to
+/// the first testroot file found.
+std::string findTestRoot();
+
+/// Returns the directory of any installed tests - or the empty string if none
+/// are found.
+std::string installedTestsDir(const std::string & app_name);
+
+/// Returns the directory of any installed docs/site.
+std::string docsDir(const std::string & app_name);
+
 /// Replaces all occurences of from in str with to and returns the result.
 std::string replaceAll(std::string str, const std::string & from, const std::string & to);
 
@@ -96,12 +130,17 @@ void escape(std::string & str);
 std::string trim(const std::string & str, const std::string & white_space = " \t\n\v\f\r");
 
 /**
- * Python like split function for strings.
+ * Python like split functions for strings.
  *
  * NOTE: This is similar to the tokenize function, but it maintains empty items, which tokenize does
  *       not. For example, "foo;bar;;" becomes {"foo", "bar", "", ""}.
  */
-std::vector<std::string> split(const std::string & str, const std::string & delimiter);
+std::vector<std::string> split(const std::string & str,
+                               const std::string & delimiter,
+                               std::size_t max_count = std::numeric_limits<std::size_t>::max());
+std::vector<std::string> rsplit(const std::string & str,
+                                const std::string & delimiter,
+                                std::size_t max_count = std::numeric_limits<std::size_t>::max());
 
 /**
  * Python like join function for strings.
@@ -126,11 +165,14 @@ bool pathContains(const std::string & expression,
  * @param filename The filename to check
  * @param check_line_endings Whether or not to see if the file contains DOS line endings.
  * @param throw_on_unreadable Whether or not to throw a MOOSE error if the file doesn't exist
+ * @param check_for_git_lfs_pointer Whether or not to call a subroutine utility to make sure that
+ *   the file in question is not actually a git-lfs pointer.
  * @return a Boolean indicating whether the file exists and is readable
  */
 bool checkFileReadable(const std::string & filename,
                        bool check_line_endings = false,
-                       bool throw_on_unreadable = true);
+                       bool throw_on_unreadable = true,
+                       bool check_for_git_lfs_pointer = true);
 
 /**
  * Check if the file is writable (path exists and permissions)
@@ -139,6 +181,17 @@ bool checkFileReadable(const std::string & filename,
  * return a Boolean indicating whether the file exists and is writable
  */
 bool checkFileWriteable(const std::string & filename, bool throw_on_unwritable = true);
+
+/**
+ * Check if the file is a Git-LFS pointer. When using a repository that utilizes Git-LFS,
+ * it's possible that the client may not have the right packages installed in which case
+ * the clone will contain plain-text files with key information for retrieving the actual
+ * (large) files. This can cause odd errors since the file technically exists, is readable,
+ * and even has the right name/extension. However, the content of the file will not match
+ * the expected content.
+ * @param file A pointer to the open filestream.
+ */
+bool checkForGitLFSPointer(std::ifstream & file);
 
 /**
  * This function implements a parallel barrier function but writes progress
@@ -189,6 +242,26 @@ std::string stripExtension(const std::string & s);
 std::pair<std::string, std::string> splitFileName(std::string full_file);
 
 /**
+ * Recursively make directories
+ * @param dir_name A complete path
+ * @param throw_on_failure True to throw instead of error out when creating a directory is failed.
+ *
+ * The path can be relative like 'a/b/c' or absolute like '/a/b/c'.
+ * The path is allowed to contain '.' or '..'.
+ */
+void makedirs(const std::string & dir_name, bool throw_on_failure = false);
+
+/**
+ * Recursively remove directories from inner-most when the directories are empty
+ * @param dir_name A complete path
+ * @param throw_on_failure True to throw instead of error out when deleting a directory is failed.
+ *
+ * The path can be relative like 'a/b/c' or absolute like '/a/b/c'.
+ * The path is allowed to contain '.' or '..'.
+ */
+void removedirs(const std::string & dir_name, bool throw_on_failure = false);
+
+/**
  * Function for converting a camel case name to a name containing underscores.
  * @param camel_case_name A string containing camel casing
  * @return a string containing no capital letters with underscores as appropriate
@@ -216,6 +289,21 @@ std::string baseName(const std::string & name);
  * Get the hostname the current process is running on
  */
 std::string hostname();
+
+/**
+ * @returns A cleaner representation of the c++ type \p cpp_type.
+ */
+std::string prettyCppType(const std::string & cpp_type);
+
+/**
+ * @returns A cleaner representation of the type for the given object
+ */
+template <typename T>
+std::string
+prettyCppType(const T * = nullptr)
+{
+  return prettyCppType(demangle(typeid(T).name()));
+}
 
 /**
  * This routine is a simple helper function for searching a map by values instead of keys
@@ -483,6 +571,7 @@ void MaterialPropertyStorageDump(
  * @param prefix The prefix to use for indenting
  * @param message The message that will be indented
  * @param color The color to apply to the prefix (default CYAN)
+ * @param indent_first_line If true this will indent the first line too (default)
  *
  * Takes a message like the following and indents it with another color code (see below)
  *
@@ -501,9 +590,14 @@ void MaterialPropertyStorageDump(
  *
  * Also handles single line color codes
  * COLOR_CYAN sub_app: 0 Nonline |R| = COLOR_GREEN 1.0e-10 COLOR_DEFAULT
+ *
+ * Not indenting the first line is useful in the case where the first line is actually finishing
+ * the line before it.
  */
-void
-indentMessage(const std::string & prefix, std::string & message, const char * color = COLOR_CYAN);
+void indentMessage(const std::string & prefix,
+                   std::string & message,
+                   const char * color = COLOR_CYAN,
+                   bool dont_indent_first_line = true);
 
 /**
  * remove ANSI escape sequences for teminal color from msg
@@ -538,11 +632,42 @@ std::string getLatestAppCheckpointFileBase(const std::list<std::string> & checkp
  */
 bool wildCardMatch(std::string name, std::string search_string);
 
+/*
+ * Checks to see if a candidate string matches a pattern string, permitting glob
+ * wildcards (* and ?) anywhere in the pattern.
+ * @param candidate The name to check
+ * @param pattern The search string to check name candidate
+ */
+bool globCompare(const std::string & candidate,
+                 const std::string & pattern,
+                 std::size_t c = 0,
+                 std::size_t p = 0);
+
+template <typename T>
+void
+expandAllMatches(const std::vector<T> & candidates, std::vector<T> & patterns)
+{
+  std::set<T> expanded;
+  for (const auto & p : patterns)
+  {
+    unsigned int found = 0;
+    for (const auto & c : candidates)
+      if (globCompare(c, p))
+      {
+        expanded.insert(c);
+        found++;
+      }
+    if (!found)
+      throw std::invalid_argument(p);
+  }
+  patterns.assign(expanded.begin(), expanded.end());
+}
+
 /**
  * This function will split the passed in string on a set of delimiters appending the substrings
- * to the passed in vector.  The delimiters default to "/" but may be supplied as well.  In addition
- * if min_len is supplied, the minimum token length will be greater than the supplied value.
- * T should be std::string or a MOOSE derived string class.
+ * to the passed in vector.  The delimiters default to "/" but may be supplied as well.  In
+ * addition if min_len is supplied, the minimum token length will be greater than the supplied
+ * value. T should be std::string or a MOOSE derived string class.
  */
 template <typename T>
 void
@@ -785,21 +910,121 @@ struct IsLikeReal<DualReal>
 };
 
 /**
+ * Custom type trait that has a ::value of true for types that can be broadcasted
+ */
+template <typename T>
+struct canBroadcast
+{
+  static constexpr bool value = std::is_base_of<TIMPI::DataType, TIMPI::StandardType<T>>::value ||
+                                std::is_same<T, std::string>::value;
+};
+template <typename T>
+struct canBroadcast<std::vector<T>>
+{
+  static constexpr bool value = std::is_base_of<TIMPI::DataType, TIMPI::StandardType<T>>::value ||
+                                std::is_same<T, std::string>::value;
+};
+
+///@{ Comparison helpers that support the MooseUtils::Any wildcard which will match any value
+const static struct AnyType
+{
+} Any;
+
+template <typename T1, typename T2>
+bool
+wildcardEqual(const T1 & a, const T2 & b)
+{
+  return a == b;
+}
+
+template <typename T>
+bool
+wildcardEqual(const T &, AnyType)
+{
+  return true;
+}
+template <typename T>
+bool
+wildcardEqual(AnyType, const T &)
+{
+  return true;
+}
+///@}
+
+/**
+ * Find a specific pair in a container matching on first, second or both pair components
+ */
+template <typename C, typename M1, typename M2>
+typename C::iterator
+findPair(C & container, const M1 & first, const M2 & second)
+{
+  return std::find_if(container.begin(),
+                      container.end(),
+                      [&](auto & item) {
+                        return wildcardEqual(first, item.first) &&
+                               wildcardEqual(second, item.second);
+                      });
+}
+
+/**
  * Construct a valid bounding box from 2 arbitrary points
  *
  * If you have 2 points in space and you wish to construct a bounding box, you should use
  * this method to avoid unexpected behavior of the underlying BoundingBox class in libMesh.
- * BoundingBox class expect 2 points whose coordinates are "sorted" (i.e., x-, y- and -z coordinates
- * of the first point are smaller then the corresponding coordinates of the second point).
- * If this "sorting" is not present, the BoundingBox class will build an empty box and any further
- * testing of points inside the box will fail. This method will allow you to obtain the correct
- * bounding box for any valid combination of 2 corner points of a box.
+ * BoundingBox class expect 2 points whose coordinates are "sorted" (i.e., x-, y- and -z
+ * coordinates of the first point are smaller then the corresponding coordinates of the second
+ * point). If this "sorting" is not present, the BoundingBox class will build an empty box and
+ * any further testing of points inside the box will fail. This method will allow you to obtain
+ * the correct bounding box for any valid combination of 2 corner points of a box.
  *
  * @param p1 First corner of the constructed bounding box
  * @param p2 Second corner of the constructed bounding box
  * @return Valid bounding box
  */
 BoundingBox buildBoundingBox(const Point & p1, const Point & p2);
+
+template <typename Consumers>
+std::deque<MaterialBase *>
+buildRequiredMaterials(const Consumers & mat_consumers,
+                       const std::vector<std::shared_ptr<MaterialBase>> & mats,
+                       const bool allow_stateful);
+
+/**
+ * Utility class template for a semidynamic vector with a maximum size N
+ * and a chosen dynamic size. This container avoids heap allocation and
+ * is meant as a replacement for small local std::vector variables.
+ * Note: this class uses default initialization, which will not initialize built-in types.
+ * Note: due to an assertion bug in DynamicStdArrayWrapper we have to allocate one element more
+ * until https://github.com/libMesh/MetaPhysicL/pull/8 in MetaPhysicL is available in MOOSE.
+ */
+template <typename T, std::size_t N>
+class SemidynamicVector
+  : public MetaPhysicL::DynamicStdArrayWrapper<T, MetaPhysicL::NWrapper<N + 1>>
+{
+  typedef MetaPhysicL::DynamicStdArrayWrapper<T, MetaPhysicL::NWrapper<N + 1>> Parent;
+
+public:
+  SemidynamicVector(std::size_t size) : Parent()
+  {
+    Parent::resize(size);
+    // TODO: uncomment this once https://github.com/libMesh/MetaPhysicL/pull/8
+    //       makes it all the way into MOOSE.
+    // for (const auto i : make_range(size))
+    //   _data[i] = {};
+  }
+
+  void resize(std::size_t new_size)
+  {
+    // const auto old_dynamic_n = Parent::size();
+    Parent::resize(new_size);
+    // TODO: uncomment this once https://github.com/libMesh/MetaPhysicL/pull/8
+    //       makes it all the way into MOOSE.
+    // for (const auto i : make_range(old_dynamic_n, _dynamic_n))
+    //   _data[i] = {};
+  }
+
+  std::size_t max_size() const { return N; }
+};
 
 } // MooseUtils namespace
 

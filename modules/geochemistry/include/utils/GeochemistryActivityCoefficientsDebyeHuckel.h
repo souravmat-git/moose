@@ -11,6 +11,7 @@
 
 #include "GeochemistryActivityCoefficients.h"
 #include "GeochemistryIonicStrength.h"
+#include "EquilibriumConstantInterpolator.h"
 
 struct DebyeHuckelParameters
 {
@@ -40,6 +41,14 @@ struct DebyeHuckelParameters
       d_neutral(0.0)
   {
   }
+
+  bool operator==(const DebyeHuckelParameters & rhs) const
+  {
+    return (A == rhs.A) && (B == rhs.B) && (Bdot == rhs.Bdot) && (a_water == rhs.a_water) &&
+           (b_water == rhs.b_water) && (c_water == rhs.c_water) && (d_water == rhs.d_water) &&
+           (a_neutral == rhs.a_neutral) && (b_neutral == rhs.b_neutral) &&
+           (c_neutral == rhs.c_neutral) && (d_neutral == rhs.d_neutral);
+  };
 };
 
 /**
@@ -52,8 +61,11 @@ public:
   /**
    * @param method Method used by this class to compute activity coefficients and activity of water
    * @param is_calculator Calculates ionic strengths
+   * @param db Original geochemistry database: used to find the temperature interpolation type,
+   * Debye-Huckel params, etc
    */
-  GeochemistryActivityCoefficientsDebyeHuckel(const GeochemistryIonicStrength & is_calculator);
+  GeochemistryActivityCoefficientsDebyeHuckel(const GeochemistryIonicStrength & is_calculator,
+                                              const GeochemicalDatabaseReader & db);
 
   void setInternalParameters(Real temperature,
                              const ModelGeochemicalDatabase & mgd,
@@ -79,6 +91,18 @@ public:
   Real getStoichiometricIonicStrength() const;
 
 private:
+  /// number of temperature points in the database file
+  const unsigned _numT;
+
+  /// Debye-Huckel parameters found in the database
+  const GeochemistryDebyeHuckel _database_dh_params;
+
+  /// Debye-Huckel parameters found in the database for computing the water activities
+  const GeochemistryNeutralSpeciesActivity _database_dh_water;
+
+  /// Debye-Huckel parameters found in the database for computing the neutral (CO2) activities
+  const GeochemistryNeutralSpeciesActivity _database_dh_neutral;
+
   /// ionic-strength calculator
   const GeochemistryIonicStrength & _is_calculator;
 
@@ -99,4 +123,37 @@ private:
 
   /// Debye-Huckel parameters
   DebyeHuckelParameters _dh;
+
+  /// Interpolator object for the Debye-Huckel parameter A
+  EquilibriumConstantInterpolator _interp_A;
+
+  /// Interpolator object for the Debye-Huckel parameter B
+  EquilibriumConstantInterpolator _interp_B;
+
+  /// Interpolator object for the Debye-Huckel parameter Bdot
+  EquilibriumConstantInterpolator _interp_Bdot;
+
+  /// Interpolator object for the Debye-Huckel parameter a_water
+  EquilibriumConstantInterpolator _interp_a_water;
+
+  /// Interpolator object for the Debye-Huckel parameter b_water
+  EquilibriumConstantInterpolator _interp_b_water;
+
+  /// Interpolator object for the Debye-Huckel parameter c_water
+  EquilibriumConstantInterpolator _interp_c_water;
+
+  /// Interpolator object for the Debye-Huckel parameter d_water
+  EquilibriumConstantInterpolator _interp_d_water;
+
+  /// Interpolator object for the Debye-Huckel parameter a_neutral
+  EquilibriumConstantInterpolator _interp_a_neutral;
+
+  /// Interpolator object for the Debye-Huckel parameter b_neutral
+  EquilibriumConstantInterpolator _interp_b_neutral;
+
+  /// Interpolator object for the Debye-Huckel parameter c_neutral
+  EquilibriumConstantInterpolator _interp_c_neutral;
+
+  /// Interpolator object for the Debye-Huckel parameter d_neutral
+  EquilibriumConstantInterpolator _interp_d_neutral;
 };

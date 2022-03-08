@@ -12,48 +12,26 @@
 #include "Moose.h"
 #include "Adaptivity.h"
 #include "MooseApp.h"
-#include "TimedPrint.h"
 
 registerMooseAction("MooseApp", SetupMeshCompleteAction, "prepare_mesh");
 
 registerMooseAction("MooseApp",
                     SetupMeshCompleteAction,
-                    "delete_remote_elements_post_equation_systems_init");
-
-registerMooseAction("MooseApp", SetupMeshCompleteAction, "execute_mesh_modifiers");
+                    "delete_remote_elements_after_late_geometric_ghosting");
 
 registerMooseAction("MooseApp", SetupMeshCompleteAction, "uniform_refine_mesh");
 
 registerMooseAction("MooseApp", SetupMeshCompleteAction, "setup_mesh_complete");
 
-defineLegacyParams(SetupMeshCompleteAction);
-
 InputParameters
 SetupMeshCompleteAction::validParams()
 {
   InputParameters params = Action::validParams();
+  params.addClassDescription("Perform operations on the mesh in preparation for a simulation.");
   return params;
 }
 
-SetupMeshCompleteAction::SetupMeshCompleteAction(InputParameters params)
-  : Action(params), _uniform_refine_timer(registerTimedSection("uniformRefine", 2))
-{
-}
-
-bool
-SetupMeshCompleteAction::completeSetup(MooseMesh * mesh)
-{
-  bool prepared = mesh->prepared();
-
-  if (!prepared)
-    mesh->prepare();
-
-  // Clear the modifiers, they are not used again during the simulation after the mesh has been
-  // completed
-  _app.clearMeshModifiers();
-
-  return prepared;
-}
+SetupMeshCompleteAction::SetupMeshCompleteAction(InputParameters params) : Action(params) {}
 
 void
 SetupMeshCompleteAction::act()
@@ -61,19 +39,17 @@ SetupMeshCompleteAction::act()
   if (!_mesh)
     mooseError("No mesh file was supplied and no generation block was provided");
 
-  if (_current_task == "execute_mesh_modifiers")
+  if (_current_task == "uniform_refine_mesh")
   {
     // we don't need to run mesh modifiers *again* after they ran already during the mesh
     // splitting process
-    if (_app.isUseSplit())
-      return;
-    _app.executeMeshModifiers();
-  }
-  else if (_current_task == "uniform_refine_mesh")
-  {
-    // we don't need to run mesh modifiers *again* after they ran already during the mesh
-    // splitting process
-    if (_app.isUseSplit())
+    // A uniform refinement is helpful for some instances when using a pre-split mesh.
+    // For example, a 'coarse' mesh might completely resolve geometry (also is large)
+    // but does not have enough resolution for the interior. For this scenario,
+    // we pre-split the coarse mesh, and load the pre-split mesh in parallel,
+    // and then do a few levels of uniform refinements to have a fine mesh that
+    // potentially resolves physics features.
+    if (_app.isUseSplit() && _mesh->skipRefineWhenUseSplit())
       return;
 
     // uniform refinement has been done on master, so skip
@@ -86,15 +62,16 @@ SetupMeshCompleteAction::act()
      * file based restart and we need uniform refinements, we'll have to postpone
      * those refinements until after the solution has been read in.
      */
-    if (_app.setFileRestart() == false && _app.isRecovering() == false)
+    if (_app.getExodusFileRestart() == false && _app.isRecovering() == false)
     {
-      TIME_SECTION(_uniform_refine_timer);
-
-      auto & _communicator = *_app.getCommunicator();
-      CONSOLE_TIMED_PRINT("Uniformly refining mesh");
+      TIME_SECTION("uniformRefine", 2, "Uniformly Refining");
 
       if (_mesh->uniformRefineLevel())
       {
+        if (_mesh->meshSubdomains().count(Moose::INTERNAL_SIDE_LOWERD_ID) ||
+            _mesh->meshSubdomains().count(Moose::BOUNDARY_SIDE_LOWERD_ID))
+          mooseError("HFEM does not support mesh uniform refinement currently.");
+
         Adaptivity::uniformRefine(_mesh.get());
         // After refinement we need to make sure that all of our MOOSE-specific containers are
         // up-to-date
@@ -110,24 +87,36 @@ SetupMeshCompleteAction::act()
       }
     }
   }
-  else if (_current_task == "delete_remote_elements_post_equation_systems_init")
+  else if (_current_task == "delete_remote_elements_after_late_geometric_ghosting")
   {
+    TIME_SECTION("deleteRemoteElems", 2, "Deleting Remote Elements");
+
+    if (_displaced_mesh &&
+        (_mesh->needsRemoteElemDeletion() != _displaced_mesh->needsRemoteElemDeletion()))
+      mooseError("Our reference and displaced meshes are not in sync with respect to whether we "
+                 "should delete remote elements.");
+
     // We currently only trigger the needsRemoteDeletion flag if somebody has requested a late
-    // geometric ghosting functor and/or we have a displaced mesh. In other words, we almost never
-    // trigger this.
+    // geometric ghosting functor and/or we have a displaced mesh
     if (_mesh->needsRemoteElemDeletion())
     {
-      _mesh->getMesh().delete_remote_elements();
+      _mesh->deleteRemoteElements();
       if (_displaced_mesh)
-        _displaced_mesh->getMesh().delete_remote_elements();
+        _displaced_mesh->deleteRemoteElements();
     }
   }
   else
   {
     // Prepare the mesh (may occur multiple times)
-    completeSetup(_mesh.get());
+    {
+      TIME_SECTION("completeSetupUndisplaced", 2, "Setting Up Undisplaced Mesh");
+      _mesh->prepare();
+    }
 
     if (_displaced_mesh)
-      completeSetup(_displaced_mesh.get());
+    {
+      TIME_SECTION("completeSetupDisplaced", 2, "Setting Up Displaced Mesh");
+      _displaced_mesh->prepare();
+    }
   }
 }

@@ -40,9 +40,8 @@ offset = 1e-2
 
 [Contact]
   [./top_bottom]
-    mesh = file
-    slave = 10
-    master = 20
+    secondary = 10
+    primary = 20
 
     model = frictionless
     formulation = ranfs

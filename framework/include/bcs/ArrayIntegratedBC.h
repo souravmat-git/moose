@@ -13,12 +13,6 @@
 #include "MooseVariableInterface.h"
 #include "MooseVariableScalar.h"
 
-// Forward declarations
-class ArrayIntegratedBC;
-
-template <>
-InputParameters validParams<ArrayIntegratedBC>();
-
 /**
  * Base class for deriving any boundary condition of a integrated type
  */
@@ -29,55 +23,41 @@ public:
 
   ArrayIntegratedBC(const InputParameters & parameters);
 
-  virtual ArrayMooseVariable & variable() override { return _var; }
+  virtual const ArrayMooseVariable & variable() const override { return _var; }
 
   virtual void computeResidual() override;
   virtual void computeJacobian() override;
   /**
    * Computes d-ivar-residual / d-jvar...
    */
-  virtual void computeJacobianBlock(MooseVariableFEBase & jvar) override;
+  virtual void computeOffDiagJacobian(unsigned int jvar) override;
   /**
    * Computes jacobian block with respect to a scalar variable
    * @param jvar The number of the scalar variable
    */
-  void computeJacobianBlockScalar(unsigned int jvar) override;
+  void computeOffDiagJacobianScalar(unsigned int jvar) override;
 
 protected:
   /**
-   * Method for computing the residual at quadrature points
+   * Method for computing the residual at quadrature points, to be filled in \p residual.
    */
-  virtual RealEigenVector computeQpResidual() = 0;
+  virtual void computeQpResidual(RealEigenVector & residual) = 0;
 
   /**
    * Method for computing the diagonal Jacobian at quadrature points
    */
-  virtual RealEigenVector computeQpJacobian() { return RealEigenVector::Zero(_var.count()); }
+  virtual RealEigenVector computeQpJacobian();
 
   /**
    * Method for computing an off-diagonal jacobian component at quadrature points.
    */
-  virtual RealEigenMatrix computeQpOffDiagJacobian(MooseVariableFEBase & jvar)
-  {
-    if (jvar.number() == _var.number())
-    {
-      RealEigenVector v = computeQpJacobian();
-      RealEigenMatrix t = RealEigenMatrix::Zero(_var.count(), _var.count());
-      t.diagonal() = v;
-      return t;
-    }
-    else
-      return RealEigenMatrix::Zero(_var.count(), jvar.count());
-  }
+  virtual RealEigenMatrix computeQpOffDiagJacobian(const MooseVariableFEBase & jvar);
 
   /**
    * This is the virtual that derived classes should override for computing a full Jacobian
    * component
    */
-  virtual RealEigenMatrix computeQpOffDiagJacobianScalar(MooseVariableScalar & jvar)
-  {
-    return RealEigenMatrix::Zero(_var.count(), (unsigned int)jvar.order() + 1);
-  }
+  virtual RealEigenMatrix computeQpOffDiagJacobianScalar(const MooseVariableScalar & jvar);
 
   /**
    * Put necessary evaluations depending on qp but independent on test functions here
@@ -93,7 +73,7 @@ protected:
    * Put necessary evaluations depending on qp but independent on test and shape functions here for
    * off-diagonal Jacobian assembly
    */
-  virtual void initQpOffDiagJacobian(MooseVariableFEBase &) {}
+  virtual void initQpOffDiagJacobian(const MooseVariableFEBase &) {}
 
   ArrayMooseVariable & _var;
 
@@ -111,4 +91,8 @@ protected:
 
   /// Number of components of the array variable
   const unsigned int _count;
+
+private:
+  /// Work vector for residual
+  RealEigenVector _work_vector;
 };

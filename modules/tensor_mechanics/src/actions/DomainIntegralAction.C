@@ -33,8 +33,9 @@ DomainIntegralAction::validParams()
 {
   InputParameters params = Action::validParams();
   addCrackFrontDefinitionParams(params);
-  MultiMooseEnum integral_vec("JIntegral InteractionIntegralKI InteractionIntegralKII "
-                              "InteractionIntegralKIII InteractionIntegralT");
+  MultiMooseEnum integral_vec(
+      "JIntegral CIntegral KFromJIntegral InteractionIntegralKI InteractionIntegralKII "
+      "InteractionIntegralKIII InteractionIntegralT");
   params.addClassDescription(
       "Creates the MOOSE objects needed to compute fraction domain integrals");
   params.addRequiredParam<MultiMooseEnum>("integrals",
@@ -56,8 +57,6 @@ DomainIntegralAction::validParams()
                                 "The last ring of elements for volume integral domain");
   params.addParam<std::vector<VariableName>>(
       "output_variable", "Variable values to be reported along the crack front");
-  params.addParam<bool>(
-      "convert_J_to_K", false, "Convert J-integral to stress intensity factor K.");
   params.addParam<Real>("poissons_ratio", "Poisson's ratio");
   params.addParam<Real>("youngs_modulus", "Young's modulus");
   params.addParam<std::vector<SubdomainName>>("block", "The block ids where integrals are defined");
@@ -65,9 +64,6 @@ DomainIntegralAction::validParams()
   params.addParam<std::vector<VariableName>>(
       "displacements",
       "The displacements appropriate for the simulation geometry and coordinate system");
-  params.addParam<VariableName>("disp_x", "The x displacement");
-  params.addParam<VariableName>("disp_y", "The y displacement");
-  params.addParam<VariableName>("disp_z", "The z displacement");
   params.addParam<VariableName>("temperature", "", "The temperature");
   MooseEnum position_type("Angle Distance", "Distance");
   params.addParam<MooseEnum>(
@@ -85,14 +81,25 @@ DomainIntegralAction::validParams()
       false,
       "Calculate an equivalent K from KI, KII and KIII, assuming self-similar crack growth.");
   params.addParam<bool>("output_q", true, "Output q");
-  params.addParam<bool>("solid_mechanics",
-                        false,
-                        "Set to true if the solid_mechanics system is "
-                        "used.");
   params.addRequiredParam<bool>(
       "incremental", "Flag to indicate whether an incremental or total model is being used.");
   params.addParam<std::vector<MaterialPropertyName>>(
       "eigenstrain_names", "List of eigenstrains applied in the strain calculation");
+  params.addDeprecatedParam<bool>("convert_J_to_K",
+                                  false,
+                                  "Convert J-integral to stress intensity factor K.",
+                                  "This input parameter is deprecated and will be removed soon. "
+                                  "Use 'integrals = KFromJIntegral' to request output of the "
+                                  "conversion from the J-integral to stress intensity factors");
+  params.addParam<std::vector<MaterialName>>(
+      "inelastic_models",
+      "The material objects to use to calculate the strain energy rate density.");
+  params.addParam<MaterialPropertyName>("eigenstrain_gradient",
+                                        "Material defining gradient of eigenstrain tensor");
+  params.addParam<MaterialPropertyName>("body_force", "Material defining body force");
+  params.addParam<bool>("use_automatic_differentiation",
+                        false,
+                        "Flag to use automatic differentiation (AD) objects when possible");
   return params;
 }
 
@@ -118,7 +125,6 @@ DomainIntegralAction::DomainIntegralAction(const InputParameters & params)
                                       : 0.0),
     _treat_as_2d(getParam<bool>("2d")),
     _axis_2d(getParam<unsigned int>("axis_2d")),
-    _convert_J_to_K(false),
     _has_symmetry_plane(isParamValid("symmetry_plane")),
     _symmetry_plane(_has_symmetry_plane ? getParam<unsigned int>("symmetry_plane")
                                         : std::numeric_limits<unsigned int>::max()),
@@ -127,8 +133,9 @@ DomainIntegralAction::DomainIntegralAction(const InputParameters & params)
     _get_equivalent_k(getParam<bool>("equivalent_k")),
     _use_displaced_mesh(false),
     _output_q(getParam<bool>("output_q")),
-    _solid_mechanics(getParam<bool>("solid_mechanics")),
-    _incremental(getParam<bool>("incremental"))
+    _incremental(getParam<bool>("incremental")),
+    _convert_J_to_K(isParamValid("convert_J_to_K") ? getParam<bool>("convert_J_to_K") : false),
+    _use_ad(getParam<bool>("use_automatic_differentiation"))
 {
   if (_q_function_type == GEOMETRY)
   {
@@ -186,36 +193,15 @@ DomainIntegralAction::DomainIntegralAction(const InputParameters & params)
   MultiMooseEnum integral_moose_enums = getParam<MultiMooseEnum>("integrals");
   for (unsigned int i = 0; i < integral_moose_enums.size(); ++i)
   {
-    if (isParamValid("displacements"))
-    {
-      _displacements = getParam<std::vector<VariableName>>("displacements");
+    _displacements = getParam<std::vector<VariableName>>("displacements");
 
-      if (_displacements.size() < 2)
-        paramError(
-            "displacements",
-            "DomainIntegral error: The size of the displacements vector should at least be 2.");
-    }
-    else
-    {
-      if (isParamValid("disp_x") || isParamValid("disp_y") || isParamValid("disp_z"))
-        mooseDeprecated("DomainIntegral Warning: disp_x, disp_y and disp_z are deprecated. "
-                        "Please specify displacements using the `dispalcements` parameter.");
+    if (_displacements.size() < 2)
+      paramError(
+          "displacements",
+          "DomainIntegral error: The size of the displacements vector should at least be 2.");
 
-      if (!isParamValid("disp_x") || !isParamValid("disp_y"))
-        paramError(
-            "displacements",
-            "DomainIntegral error: Specify displacements using the `displacements` parameter.");
-      else
-      {
-        _displacements.clear();
-        _displacements.push_back(getParam<VariableName>("disp_x"));
-        _displacements.push_back(getParam<VariableName>("disp_y"));
-        if (isParamValid("disp_z"))
-          _displacements.push_back(getParam<VariableName>("disp_z"));
-      }
-    }
-
-    if (integral_moose_enums[i] != "JIntegral")
+    if (integral_moose_enums[i] != "JIntegral" && integral_moose_enums[i] != "CIntegral" &&
+        integral_moose_enums[i] != "KFromJIntegral")
     {
       // Check that parameters required for interaction integrals are defined
       if (!(isParamValid("poissons_ratio")) || !(isParamValid("youngs_modulus")))
@@ -238,10 +224,23 @@ DomainIntegralAction::DomainIntegralAction(const InputParameters & params)
     _integrals.insert(INTEGRAL(int(integral_moose_enums.get(i))));
   }
 
+  if ((_integrals.count(J_INTEGRAL) != 0 && _integrals.count(C_INTEGRAL) != 0) ||
+      (_integrals.count(J_INTEGRAL) != 0 && _integrals.count(K_FROM_J_INTEGRAL) != 0) ||
+      (_integrals.count(C_INTEGRAL) != 0 && _integrals.count(K_FROM_J_INTEGRAL) != 0))
+    paramError("integrals",
+               "JIntegral, CIntegral, and KFromJIntegral options are mutually exclusive");
+
+  // Acommodate deprecated parameter convert_J_to_K
+  if (_convert_J_to_K && _integrals.count(K_FROM_J_INTEGRAL) != 0)
+  {
+    _integrals.insert(K_FROM_J_INTEGRAL);
+    _integrals.erase(J_INTEGRAL);
+  }
+
   if (isParamValid("temperature"))
     _temp = getParam<VariableName>("temperature");
 
-  if (_temp != "" && !isParamValid("eigenstrain_names") && !_solid_mechanics)
+  if (_temp != "" && !isParamValid("eigenstrain_names"))
     paramError(
         "eigenstrain_names",
         "DomainIntegral error: must provide `eigenstrain_names` when temperature is coupled.");
@@ -260,18 +259,34 @@ DomainIntegralAction::DomainIntegralAction(const InputParameters & params)
                  "'output_variables' not yet supported with 'crack_front_points'");
   }
 
-  if (isParamValid("convert_J_to_K"))
-    _convert_J_to_K = getParam<bool>("convert_J_to_K");
-  if (_convert_J_to_K)
+  if (_integrals.count(K_FROM_J_INTEGRAL) != 0)
   {
     if (!isParamValid("youngs_modulus") || !isParamValid("poissons_ratio"))
-      mooseError("DomainIntegral error: must set Young's modulus and Poisson's ratio for "
-                 "J-integral if convert_J_to_K = true.");
+      mooseError("DomainIntegral error: must set Young's modulus and Poisson's ratio "
+                 "if K_FROM_J_INTEGRAL is selected.");
     if (!youngs_modulus_set)
       _youngs_modulus = getParam<Real>("youngs_modulus");
     if (!poissons_ratio_set)
       _poissons_ratio = getParam<Real>("poissons_ratio");
   }
+
+  if (_integrals.count(J_INTEGRAL) != 0 || _integrals.count(C_INTEGRAL) != 0 ||
+      _integrals.count(K_FROM_J_INTEGRAL) != 0)
+  {
+    if (isParamValid("eigenstrain_gradient"))
+      paramError("eigenstrain_gradient",
+                 "'eigenstrain_gradient' cannot be specified when the computed integrals include "
+                 "JIntegral, CIntegral, or KFromJIntegral");
+    if (isParamValid("body_force"))
+      paramError("body_force",
+                 "'body_force' cannot be specified when the computed integrals include JIntegral, "
+                 "CIntegral, or KFromJIntegral");
+  }
+  if (isParamValid("eigenstrain_gradient") && (_temp != "" || isParamValid("eigenstrain_names")))
+    paramError("eigenstrain_gradient",
+               "'eigenstrain_gradient' cannot be specified together with 'temperature' or "
+               "'eigenstrain_names'. These are for separate, mutually exclusive systems for "
+               "including the effect of eigenstrains");
 }
 
 DomainIntegralAction::~DomainIntegralAction() {}
@@ -285,6 +300,10 @@ DomainIntegralAction::act()
   const unsigned int num_crack_front_points = calcNumCrackFrontPoints();
   const std::string aux_stress_base_name("aux_stress");
   const std::string aux_grad_disp_base_name("aux_grad_disp");
+
+  std::string ad_prepend = "";
+  if (_use_ad)
+    ad_prepend = "AD";
 
   if (_current_task == "add_user_object")
   {
@@ -449,10 +468,15 @@ DomainIntegralAction::act()
       switch (*sit)
       {
         case J_INTEGRAL:
-          if (_convert_J_to_K)
-            pp_base_name = "K";
-          else
-            pp_base_name = "J";
+          pp_base_name = "J";
+          break;
+
+        case C_INTEGRAL:
+          pp_base_name = "C";
+          break;
+
+        case K_FROM_J_INTEGRAL:
+          pp_base_name = "K";
           break;
 
         case INTERACTION_INTEGRAL_KI:
@@ -566,28 +590,49 @@ DomainIntegralAction::act()
 
   else if (_current_task == "add_vector_postprocessor")
   {
-    if (_integrals.count(J_INTEGRAL) != 0)
+    if (_integrals.count(J_INTEGRAL) != 0 || _integrals.count(C_INTEGRAL) != 0 ||
+        _integrals.count(K_FROM_J_INTEGRAL) != 0)
     {
       std::string vpp_base_name;
-      if (_convert_J_to_K)
-        vpp_base_name = "K";
-      else
+      std::string jintegral_selection = "JIntegral";
+
+      if (_integrals.count(J_INTEGRAL) != 0)
+      {
         vpp_base_name = "J";
+        jintegral_selection = "JIntegral";
+      }
+      else if (_integrals.count(K_FROM_J_INTEGRAL) != 0)
+      {
+        vpp_base_name = "K";
+        jintegral_selection = "KFromJIntegral";
+      }
+      else if (_integrals.count(C_INTEGRAL) != 0)
+      {
+        vpp_base_name = "C";
+        jintegral_selection = "CIntegral";
+      }
+
       if (_treat_as_2d)
         vpp_base_name += "_2DVPP";
       const std::string vpp_type_name("JIntegral");
       InputParameters params = _factory.getValidParams(vpp_type_name);
       params.set<ExecFlagEnum>("execute_on") = EXEC_TIMESTEP_END;
       params.set<UserObjectName>("crack_front_definition") = uo_name;
-      params.set<bool>("convert_J_to_K") = _convert_J_to_K;
+
       params.set<MooseEnum>("position_type") = _position_type;
-      if (_convert_J_to_K)
+
+      if (_integrals.count(K_FROM_J_INTEGRAL) != 0)
       {
         params.set<Real>("youngs_modulus") = _youngs_modulus;
         params.set<Real>("poissons_ratio") = _poissons_ratio;
       }
+
       if (_has_symmetry_plane)
         params.set<unsigned int>("symmetry_plane") = _symmetry_plane;
+
+      // Select the integral type to be computed in JIntegral vector postprocessor
+      params.set<MooseEnum>("integral") = jintegral_selection;
+
       params.set<std::vector<VariableName>>("displacements") = _displacements;
       params.set<bool>("use_displaced_mesh") = _use_displaced_mesh;
       for (unsigned int ring_index = 0; ring_index < _ring_vec.size(); ++ring_index)
@@ -614,9 +659,6 @@ DomainIntegralAction::act()
       std::string vpp_base_name;
       std::string vpp_type_name("InteractionIntegral");
 
-      if (_solid_mechanics)
-        vpp_type_name = "InteractionIntegralSM";
-
       InputParameters params = _factory.getValidParams(vpp_type_name);
       params.set<UserObjectName>("crack_front_definition") = uo_name;
       params.set<bool>("use_displaced_mesh") = _use_displaced_mesh;
@@ -628,11 +670,24 @@ DomainIntegralAction::act()
       if (_temp != "")
         params.set<std::vector<VariableName>>("temperature") = {_temp};
 
+      if (parameters().isParamValid("eigenstrain_gradient"))
+        params.set<MaterialPropertyName>("eigenstrain_gradient") =
+            parameters().get<MaterialPropertyName>("eigenstrain_gradient");
+      if (parameters().isParamValid("body_force"))
+        params.set<MaterialPropertyName>("body_force") =
+            parameters().get<MaterialPropertyName>("body_force");
+
       for (std::set<INTEGRAL>::iterator sit = _integrals.begin(); sit != _integrals.end(); ++sit)
       {
         switch (*sit)
         {
           case J_INTEGRAL:
+            continue;
+
+          case C_INTEGRAL:
+            continue;
+
+          case K_FROM_J_INTEGRAL:
             continue;
 
           case INTERACTION_INTEGRAL_KI:
@@ -742,7 +797,7 @@ DomainIntegralAction::act()
 
   else if (_current_task == "add_material")
   {
-    if (_temp != "" && !_solid_mechanics)
+    if (_temp != "")
     {
       std::string mater_name;
       const std::string mater_type_name("ThermalFractureIntegral");
@@ -757,16 +812,21 @@ DomainIntegralAction::act()
     }
     MultiMooseEnum integral_moose_enums = getParam<MultiMooseEnum>("integrals");
     bool have_j_integral = false;
+    bool have_c_integral = false;
+
     for (auto ime : integral_moose_enums)
     {
-      if (ime == "JIntegral")
+      if (ime == "JIntegral" || ime == "CIntegral" || ime == "KFromJIntegral")
         have_j_integral = true;
+
+      if (ime == "CIntegral")
+        have_c_integral = true;
     }
-    if (have_j_integral && !_solid_mechanics)
+    if (have_j_integral)
     {
       std::string mater_name;
-      const std::string mater_type_name("StrainEnergyDensity");
-      mater_name = "StrainEnergyDensity";
+      const std::string mater_type_name(ad_prepend + "StrainEnergyDensity");
+      mater_name = ad_prepend + "StrainEnergyDensity";
 
       InputParameters params = _factory.getValidParams(mater_type_name);
       _incremental = getParam<bool>("incremental");
@@ -774,19 +834,38 @@ DomainIntegralAction::act()
       params.set<std::vector<SubdomainName>>("block") = {_blocks};
       _problem->addMaterial(mater_type_name, mater_name, params);
 
-      std::string mater_name2;
-      const std::string mater_type_name2("EshelbyTensor");
-      mater_name2 = "EshelbyTensor";
-
-      InputParameters params2 = _factory.getValidParams(mater_type_name2);
-      _displacements = getParam<std::vector<VariableName>>("displacements");
-      params2.set<std::vector<VariableName>>("displacements") = _displacements;
-      params2.set<std::vector<SubdomainName>>("block") = {_blocks};
-      if (_temp != "")
       {
-        params2.set<std::vector<VariableName>>("temperature") = {_temp};
+        std::string mater_name;
+        const std::string mater_type_name(ad_prepend + "EshelbyTensor");
+        mater_name = ad_prepend + "EshelbyTensor";
+
+        InputParameters params = _factory.getValidParams(mater_type_name);
+        _displacements = getParam<std::vector<VariableName>>("displacements");
+        params.set<std::vector<VariableName>>("displacements") = _displacements;
+        params.set<std::vector<SubdomainName>>("block") = {_blocks};
+
+        if (have_c_integral)
+          params.set<bool>("compute_dissipation") = true;
+
+        if (_temp != "")
+          params.set<std::vector<VariableName>>("temperature") = {_temp};
+
+        _problem->addMaterial(mater_type_name, mater_name, params);
       }
-      _problem->addMaterial(mater_type_name2, mater_name2, params2);
+      // Strain energy rate density needed for C(t)/C* integral
+      if (have_c_integral)
+      {
+        std::string mater_name;
+        const std::string mater_type_name(ad_prepend + "StrainEnergyRateDensity");
+        mater_name = ad_prepend + "StrainEnergyRateDensity";
+
+        InputParameters params = _factory.getValidParams(mater_type_name);
+        params.set<std::vector<SubdomainName>>("block") = {_blocks};
+        params.set<std::vector<MaterialName>>("inelastic_models") =
+            getParam<std::vector<MaterialName>>("inelastic_models");
+
+        _problem->addMaterial(mater_type_name, mater_name, params);
+      }
     }
   }
 }

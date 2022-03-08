@@ -11,12 +11,12 @@
 
 registerMooseObject("MooseApp", PercentChangePostprocessor);
 
-defineLegacyParams(PercentChangePostprocessor);
-
 InputParameters
 PercentChangePostprocessor::validParams()
 {
   InputParameters params = GeneralPostprocessor::validParams();
+  params.addClassDescription("Computes the percent change of a postprocessor value compared to the "
+                             "value at the previous timestep.");
   params.addRequiredParam<PostprocessorName>(
       "postprocessor", "The name of the postprocessor used for exit criterion");
   return params;

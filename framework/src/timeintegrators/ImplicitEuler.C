@@ -12,13 +12,11 @@
 
 registerMooseObject("MooseApp", ImplicitEuler);
 
-defineLegacyParams(ImplicitEuler);
-
 InputParameters
 ImplicitEuler::validParams()
 {
   InputParameters params = TimeIntegrator::validParams();
-
+  params.addClassDescription("Time integration using the implicit Euler method.");
   return params;
 }
 
@@ -42,7 +40,9 @@ ImplicitEuler::computeTimeDerivatives()
 }
 
 void
-ImplicitEuler::computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const
+ImplicitEuler::computeADTimeDerivatives(DualReal & ad_u_dot,
+                                        const dof_id_type & dof,
+                                        DualReal & /*ad_u_dotdot*/) const
 {
   computeTimeDerivativeHelper(ad_u_dot, _solution_old(dof));
 }

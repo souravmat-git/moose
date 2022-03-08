@@ -41,6 +41,7 @@
 [Mesh]#Comment
   file = hertz_contact_rz.e
   displacements = 'disp_x disp_y'
+  allow_renumbering = false
 [] # Mesh
 
 [Functions]
@@ -112,7 +113,6 @@
   [./all]
     add_variables = true
     strain = SMALL
-    use_displaced_mesh = false
   [../]
 []
 [AuxKernels]
@@ -188,8 +188,8 @@
 
 [Contact]
   [./dummy_name]
-    master = 1000
-    slave = 100
+    primary = 1000
+    secondary = 100
     model = coulomb
     formulation = penalty
     normalize_penalty = true

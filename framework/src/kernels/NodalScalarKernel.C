@@ -15,8 +15,6 @@
 #include "MooseMesh.h"
 #include "SystemBase.h"
 
-defineLegacyParams(NodalScalarKernel);
-
 InputParameters
 NodalScalarKernel::validParams()
 {
@@ -75,7 +73,7 @@ NodalScalarKernel::reinit()
 }
 
 void
-NodalScalarKernel::computeOffDiagJacobian(unsigned int jvar)
+NodalScalarKernel::computeOffDiagJacobianScalar(unsigned int jvar)
 {
   if (jvar == _var.number())
     computeJacobian();

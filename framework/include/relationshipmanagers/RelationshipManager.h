@@ -15,12 +15,7 @@
 
 #include "libmesh/ghosting_functor.h"
 
-// Forward declarations
-class RelationshipManager;
 class MooseMesh;
-
-template <>
-InputParameters validParams<RelationshipManager>();
 
 /**
  * RelationshipManagers are used for describing what kinds of non-local resources are needed for an
@@ -35,18 +30,19 @@ public:
 
   RelationshipManager(const InputParameters & parameters);
 
-  /**
-   * Called before this RM is attached.  Will only be called once.
-   */
-  void init()
-  {
-    if (!_inited)
-      internalInit();
-    _inited = true;
-  }
+  RelationshipManager(const RelationshipManager & other);
 
   /**
-   * Whether or not this RM has been inited
+   * Called before this RM is attached
+   */
+  void init(const MeshBase & mesh, const DofMap * dof_map = nullptr);
+
+  /**
+   * Whether or not this RM has been inited. NOTE that this just indicates that the \p init method
+   * has been called at least once. Conceivably this could have been during the early geometric
+   * setup phase and if this relationship manager is also algebraic/coupling, we are not assured
+   * that this RelationshipManager is fully initialized until the \p init call during the
+   * algebraic/coupling/late-geometric setup phase
    */
   bool inited() { return _inited; }
 
@@ -82,8 +78,29 @@ public:
 
   virtual bool operator==(const RelationshipManager & /*rhs*/) const
   {
-    mooseError("Comparison operator required for this RelationshipManager required");
+    mooseError("RelationshipManager::operator>= must be overridden");
   }
+
+  /**
+   * Whether this relationship manager provides more or the same amount and type of ghosting as the
+   * \p rhs
+   */
+  virtual bool operator>=(const RelationshipManager & rhs) const
+  {
+    mooseDeprecated(
+        "Are you overriding RelationshipManager::operator==? We are transitioning to make "
+        "operator>= "
+        "the required override. If you are not overriding operator>= or operator==, you are about "
+        "to get an error message saying that operator>= must be overridden.");
+
+    return *this == rhs;
+  }
+
+  /**
+   * Whether the base class provides more or the same amount and type of ghosting as the
+   * \p rhs
+   */
+  virtual bool baseGreaterEqual(const RelationshipManager & rhs) const;
 
   /**
    * Whether or not this RM can be attached to the Mesh early if it's geometric.
@@ -100,26 +117,24 @@ public:
    */
   bool useDisplacedMesh() const { return _use_displaced_mesh; }
 
-  /**
-   * Set the dof map
-   */
-  void setDofMap(const DofMap & dof_map) { _dof_map = &dof_map; }
+  const DofMap * dofMap() { return _dof_map; }
 
 protected:
   /**
    * Called before this RM is attached.  Only called once
    */
-  virtual void internalInit() = 0;
+  virtual void internalInitWithMesh(const MeshBase &) { internalInit(); }
+  virtual void internalInit() {}
 
   /// Whether or not this has been initialized
   bool _inited = false;
 
-  /// Reference to the Mesh object
-  MooseMesh & _mesh;
+  /// Pointer to the \p MooseMesh object
+  MooseMesh * const _moose_mesh;
 
   /// Pointer to DofMap (may be null if this is geometric only). This is useful for setting coupling
   /// matrices in call-backs from DofMap::reinit
-  const DofMap * _dof_map;
+  const DofMap * _dof_map = nullptr;
 
   /// Boolean indicating whether this RM can be attached early (e.g. all parameters are known
   /// without the need for inspecting things like variables or other parts of the system that
@@ -135,9 +150,6 @@ protected:
 
   /// Which system this should go to (undisplaced or displaced)
   const bool _use_displaced_mesh;
-
-  /// What type of systems this RM can be applied to
-  const Moose::RMSystemType _system_type;
 
 public:
   /**

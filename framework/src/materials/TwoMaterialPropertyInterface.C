@@ -10,8 +10,7 @@
 #include "TwoMaterialPropertyInterface.h"
 #include "MaterialData.h"
 #include "InputParameters.h"
-
-defineLegacyParams(TwoMaterialPropertyInterface);
+#include "FEProblemBase.h"
 
 InputParameters
 TwoMaterialPropertyInterface::validParams()

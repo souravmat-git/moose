@@ -17,6 +17,15 @@
     design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPointSourceFromPostprocessor'
     issues = '#15132'
   [../]
+  [./hfrompps]
+    type = 'CSVDiff'
+    input = 'hfrompps.i'
+    csvdiff = 'hfrompps.csv'
+    threading = '!pthreads'
+    requirement = 'The system shall provide an enthalphy point source computed by a postprocessor'
+    design = 'porous_flow/sinks.md PorousFlowPointEnthalpySourceFromPostprocessor'
+    issues = '#15742'
+  [../]
   [./theis1]
     type = 'CSVDiff'
     input = 'theis1.i'
@@ -209,6 +218,26 @@
     design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPolyLineSink.md'
     issues = '#7992 #8139'
   [../]
+  [./pls01_line_base]
+    type = 'CSVDiff'
+    input = 'pls01.i'
+    cli_args = "DiracKernels/pls/point_file='' DiracKernels/pls/line_base='10 0 0' DiracKernels/pls/line_length=.02 DiracKernels/pls/line_direction='1 0 0' Outputs/file_base=pls01_line_base"
+    csvdiff = 'pls01_line_base.csv'
+    threading = '!pthreads'
+    requirement = 'PorousFlowPolyLineSink shall extract fluid at the specified rate when using the line_base parameter'
+    design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPolyLineSink.md'
+    issues = '#7992 #8139'
+  [../]
+  [./pls01_line_base_bounds]
+    type = RunException
+    input = 'pls01.i'
+    cli_args = "DiracKernels/pls/point_file='' DiracKernels/pls/line_base='.1 0 0' DiracKernels/pls/line_length=42 DiracKernels/pls/line_direction='0 0 1'"
+    expect_err = 'length causes end point.*to lie outside the mesh'
+    threading = '!pthreads'
+    requirement = 'PorousFlowPolyLineSink shall abort with an error if the line base, direction, and length cause the line to exit the mesh domain."'
+    design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPolyLineSink.md'
+    issues = '#7992 #8139'
+  [../]
   [./pls01_01]
     type = 'CSVDiff'
     input = 'pls01.i'
@@ -247,6 +276,31 @@
     requirement = 'PorousFlowPolyLineSink shall extract fluid at the specified rate'
     design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPolyLineSink.md'
     issues = '#7992 #8139'
+  [../]
+  [./pls02_autopoints]
+    type = 'CSVDiff'
+    input = 'pls02.i'
+    csvdiff = 'pls02_dirac_pts_0004.csv'
+    allow_test_objects = true
+    mesh_mode=replicated
+    cli_args = "VectorPostprocessors/dirac_pts/type=DiracPointsWriter"
+               " DiracKernels/pls/point_file=''"
+               " DiracKernels/pls/line_base='0.1 0.01 0.01 -0.249'"
+               " DiracKernels/pls/line_direction='0 0 1'"
+               " DiracKernels/pls/line_length=0.5"
+               " Adaptivity/max_h_level=4"
+               " Adaptivity/steps=3"
+               " Adaptivity/marker=box"
+               " Adaptivity/Markers/box/type=BoxMarker"
+               " Adaptivity/Markers/box/bottom_left='-2 -2 -2'"
+               " Adaptivity/Markers/box/top_right='2 2 2'"
+               " Adaptivity/Markers/box/inside=refine"
+               " Adaptivity/Markers/box/outside=do_nothing"
+               " Executioner/end_time=4"
+    threading = '!pthreads'
+    requirement = 'PorousFlowPolyLineSink shall be able to dynamically create dirac points automatically in response to changing mesh geometry.'
+    design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPolyLineSink.md'
+    issues = '#15528 #15547'
   [../]
   [./pls03_00]
     type = 'CSVDiff'
@@ -297,6 +351,15 @@
     design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPolyLineSink.md'
     issues = '#7992 #8139'
   [../]
+  [./pls02reporter]
+    type = 'CSVDiff'
+    input = 'pls02reporter.i'
+    csvdiff = 'pls02reporter_out.csv'
+    threading = '!pthreads'
+    requirement = 'PorousFlowPolyLineSink shall extract fluid at the specified rate getting the coordinates from a reporter'
+    design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPolyLineSink.md'
+    issues = '#20018'
+  [../]
 
   [./bh02]
     type = 'CSVDiff'
@@ -314,7 +377,7 @@
     threading = '!pthreads'
     requirement = 'PorousFlowPeacemanBorehole shall inject fluid at the specified rate in a fully-saturated system'
     design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPeacemanBorehole.md'
-    issues = '#7992 #8139'
+    issues = '#7992 #8139 #20452'
   [../]
   [./bh04]
     type = 'CSVDiff'
@@ -353,6 +416,15 @@
     requirement = 'PorousFlowPeacemanBorehole shall extract fluid at the specified rate in a cylindrical model'
     design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPeacemanBorehole.md'
     issues = '#7992 #8139'
+  [../]
+  [./bh02reporter]
+    type = 'CSVDiff'
+    input = 'bh02reporter.i'
+    csvdiff = 'bh02reporter_out.csv'
+    threading = '!pthreads'
+    requirement = 'PorousFlowPeacemanBorehole shall extract fluid at the specified rate in a fully-saturated system using reporter for input'
+    design = 'porous_flow/tests/dirackernels/dirackernels_tests.md porous_flow/sinks.md PorousFlowPeacemanBorehole.md'
+    issues = '#20018'
   [../]
   [./injection_production]
     type = 'Exodiff'

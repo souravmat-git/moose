@@ -9,18 +9,16 @@
 
 #include "PiecewiseLinearBase.h"
 
-defineLegacyParams(PiecewiseLinearBase);
-
 InputParameters
 PiecewiseLinearBase::validParams()
 {
-  InputParameters params = PiecewiseBase::validParams();
+  InputParameters params = PiecewiseTabularBase::validParams();
   params.addClassDescription("Linearly interpolates between pairs of x-y data");
   return params;
 }
 
 PiecewiseLinearBase::PiecewiseLinearBase(const InputParameters & parameters)
-  : PiecewiseBase(parameters), _linear_interp(nullptr)
+  : PiecewiseTabularBase(parameters), _linear_interp(nullptr)
 {
 }
 
@@ -32,12 +30,12 @@ PiecewiseLinearBase::initialSetup()
 }
 
 void
-PiecewiseLinearBase::buildInterpolation()
+PiecewiseLinearBase::buildInterpolation(const bool extrap)
 {
   // try building a linear interpolation object
   try
   {
-    _linear_interp = libmesh_make_unique<LinearInterpolation>(_raw_x, _raw_y);
+    _linear_interp = std::make_unique<LinearInterpolation>(_raw_x, _raw_y, extrap);
   }
   catch (std::domain_error & e)
   {
@@ -48,15 +46,30 @@ PiecewiseLinearBase::buildInterpolation()
 Real
 PiecewiseLinearBase::value(Real t, const Point & p) const
 {
-  const Real x = _has_axis ? p(_axis) : t;
+  const auto x = _has_axis ? p(_axis) : t;
+  return _scale_factor * _linear_interp->sample(x);
+}
+
+ADReal
+PiecewiseLinearBase::value(const ADReal & t, const ADPoint & p) const
+{
+  const auto x = _has_axis ? p(_axis) : t;
   return _scale_factor * _linear_interp->sample(x);
 }
 
 Real
-PiecewiseLinearBase::timeDerivative(Real t, const Point & p) const
+PiecewiseLinearBase::timeDerivative(Real t, const Point &) const
 {
-  const Real x = _has_axis ? p(_axis) : t;
-  return _scale_factor * _linear_interp->sampleDerivative(x);
+  return _has_axis ? 0.0 : _scale_factor * _linear_interp->sampleDerivative(t);
+}
+
+RealGradient
+PiecewiseLinearBase::gradient(Real, const Point & p) const
+{
+  RealGradient ret;
+  if (_has_axis)
+    ret(_axis) = _scale_factor * _linear_interp->sampleDerivative(p(_axis));
+  return ret;
 }
 
 Real
@@ -75,6 +88,6 @@ PiecewiseLinearBase::average() const
 void
 PiecewiseLinearBase::setData(const std::vector<Real> & x, const std::vector<Real> & y)
 {
-  PiecewiseBase::setData(x, y);
+  PiecewiseTabularBase::setData(x, y);
   buildInterpolation();
 }

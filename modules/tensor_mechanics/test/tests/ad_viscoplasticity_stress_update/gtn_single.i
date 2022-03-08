@@ -37,11 +37,16 @@
     base_name = 'total'
   [../]
   [./stress]
-    type = ADComputeMultiplePorousInelasticStress
+    type = ADComputeMultipleInelasticStress
     inelastic_models = gtn
-    initial_porosity = 0.1
     outputs = all
     base_name = 'total'
+  [../]
+  [./porosity]
+    type = ADPorosityFromStrain
+    initial_porosity = 0.1
+    inelastic_strain = 'total_combined_inelastic_strain'
+    outputs = 'all'
   [../]
 
   [./gtn]
@@ -54,7 +59,7 @@
     relative_tolerance = 1e-11
   [../]
   [./coef]
-    type = ParsedMaterial
+    type = ADParsedMaterial
     f_name = coef
     # Example of creep power law
     function = '1e-18 * exp(-4e4 / 1.987 / 1200)'

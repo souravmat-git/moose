@@ -25,7 +25,6 @@
 #include "MooseMesh.h"
 #include "MooseUtils.h"
 #include "FVBoundaryCondition.h"
-#include "FVDirichletBC.h"
 
 #include "libmesh/dof_map.h"
 #include "libmesh/string_to_enum.h"
@@ -59,10 +58,22 @@ dataStore(std::ostream & stream, SystemBase & system_base, void * context)
 
   dataStore(stream, solution, context);
 
+  // Need an l-value reference to pass to dataStore
+  unsigned int num_vectors = libmesh_system.n_vectors();
+  dataStore(stream, num_vectors, context);
+
   for (System::vectors_iterator it = libmesh_system.vectors_begin();
        it != libmesh_system.vectors_end();
        it++)
+  {
+    // Store the vector name. A map iterator will have a const Key, so we need to make a copy
+    // because dataStore expects a non-const reference
+    auto vector_name = it->first;
+    dataStore(stream, vector_name, context);
+
+    // Store the vector
     dataStore(stream, *(it->second), context);
+  }
 }
 
 template <>
@@ -75,10 +86,25 @@ dataLoad(std::istream & stream, SystemBase & system_base, void * context)
 
   dataLoad(stream, solution, context);
 
-  for (System::vectors_iterator it = libmesh_system.vectors_begin();
-       it != libmesh_system.vectors_end();
-       it++)
-    dataLoad(stream, *(it->second), context);
+  unsigned int num_vectors;
+  dataLoad(stream, num_vectors, context);
+
+  // Can't do a range based for loop because we don't actually use the index, resulting in an unused
+  // variable warning. So we make a dumb index variable and use it in the loop termination check
+  for (unsigned int vec_num = 0; vec_num < num_vectors; ++vec_num)
+  {
+    std::string vector_name;
+    dataLoad(stream, vector_name, context);
+
+    if (!libmesh_system.have_vector(vector_name))
+      mooseError("Trying to load vector name ",
+                 vector_name,
+                 " but that vector doesn't exist in the system.");
+
+    auto & vector = libmesh_system.get_vector(vector_name);
+
+    dataLoad(stream, vector, context);
+  }
 
   system_base.update();
 }
@@ -104,25 +130,24 @@ SystemBase::SystemBase(SubProblem & subproblem,
     _max_var_n_dofs_per_elem(0),
     _max_var_n_dofs_per_node(0),
     _time_integrator(nullptr),
-    _computing_scaling_jacobian(false),
-    _computing_scaling_residual(false),
     _automatic_scaling(false),
     _verbose(false),
-    _default_solution_states(2)
+    _solution_states_initialized(false)
 {
 }
 
-MooseVariableFEBase &
-SystemBase::getVariable(THREAD_ID tid, const std::string & var_name)
+MooseVariableFieldBase &
+SystemBase::getVariable(THREAD_ID tid, const std::string & var_name) const
 {
-  MooseVariableFEBase * var = dynamic_cast<MooseVariableFEBase *>(_vars[tid].getVariable(var_name));
+  MooseVariableFieldBase * var =
+      dynamic_cast<MooseVariableFieldBase *>(_vars[tid].getVariable(var_name));
   if (!var)
     mooseError("Variable '", var_name, "' does not exist in this system");
   return *var;
 }
 
-MooseVariableFEBase &
-SystemBase::getVariable(THREAD_ID tid, unsigned int var_number)
+MooseVariableFieldBase &
+SystemBase::getVariable(THREAD_ID tid, unsigned int var_number) const
 {
   if (var_number < _numbered_vars[tid].size())
     if (_numbered_vars[tid][var_number])
@@ -146,6 +171,13 @@ SystemBase::getActualFieldVariable(THREAD_ID tid, const std::string & var_name)
 }
 
 template <typename T>
+MooseVariableFV<T> &
+SystemBase::getFVVariable(THREAD_ID tid, const std::string & var_name)
+{
+  return *_vars[tid].getFVVariable<T>(var_name);
+}
+
+template <typename T>
 MooseVariableFE<T> &
 SystemBase::getFieldVariable(THREAD_ID tid, unsigned int var_number)
 {
@@ -160,7 +192,7 @@ SystemBase::getActualFieldVariable(THREAD_ID tid, unsigned int var_number)
 }
 
 MooseVariableScalar &
-SystemBase::getScalarVariable(THREAD_ID tid, const std::string & var_name)
+SystemBase::getScalarVariable(THREAD_ID tid, const std::string & var_name) const
 {
   MooseVariableScalar * var = dynamic_cast<MooseVariableScalar *>(_vars[tid].getVariable(var_name));
   if (!var)
@@ -169,7 +201,7 @@ SystemBase::getScalarVariable(THREAD_ID tid, const std::string & var_name)
 }
 
 MooseVariableScalar &
-SystemBase::getScalarVariable(THREAD_ID tid, unsigned int var_number)
+SystemBase::getScalarVariable(THREAD_ID tid, unsigned int var_number) const
 {
   MooseVariableScalar * var =
       dynamic_cast<MooseVariableScalar *>(_vars[tid].getVariable(var_number));
@@ -191,25 +223,13 @@ SystemBase::getVariableBlocks(unsigned int var_number)
 void
 SystemBase::addVariableToZeroOnResidual(std::string var_name)
 {
-  unsigned int ncomp = getVariable(0, var_name).count();
-  if (ncomp > 1)
-    // need to push libMesh variable names for all components
-    for (unsigned int i = 0; i < ncomp; ++i)
-      _vars_to_be_zeroed_on_residual.push_back(_subproblem.arrayVariableComponent(var_name, i));
-  else
-    _vars_to_be_zeroed_on_residual.push_back(var_name);
+  _vars_to_be_zeroed_on_residual.push_back(var_name);
 }
 
 void
 SystemBase::addVariableToZeroOnJacobian(std::string var_name)
 {
-  unsigned int ncomp = getVariable(0, var_name).count();
-  if (ncomp > 1)
-    // need to push libMesh variable names for all components
-    for (unsigned int i = 0; i < ncomp; ++i)
-      _vars_to_be_zeroed_on_jacobian.push_back(_subproblem.arrayVariableComponent(var_name, i));
-  else
-    _vars_to_be_zeroed_on_jacobian.push_back(var_name);
+  _vars_to_be_zeroed_on_jacobian.push_back(var_name);
 }
 
 void
@@ -219,11 +239,15 @@ SystemBase::zeroVariables(std::vector<std::string> & vars_to_be_zeroed)
   {
     NumericVector<Number> & solution = this->solution();
 
-    AllLocalDofIndicesThread aldit(system(), vars_to_be_zeroed);
+    auto problem = dynamic_cast<FEProblemBase *>(&_subproblem);
+    if (!problem)
+      mooseError("System needs to be registered in FEProblemBase for using zeroVariables.");
+
+    AllLocalDofIndicesThread aldit(*problem, vars_to_be_zeroed, true);
     ConstElemRange & elem_range = *_mesh.getActiveLocalElementRange();
     Threads::parallel_reduce(elem_range, aldit);
 
-    const std::set<dof_id_type> & dof_indices_to_zero = aldit._all_dof_indices;
+    const auto & dof_indices_to_zero = aldit.getDofIndices();
 
     solution.close();
 
@@ -253,7 +277,7 @@ Order
 SystemBase::getMinQuadratureOrder()
 {
   Order order = CONSTANT;
-  const std::vector<MooseVariableFEBase *> & vars = _vars[0].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[0].fieldVariables();
   for (const auto & var : vars)
   {
     FEType fe_type = var->feType();
@@ -269,19 +293,55 @@ SystemBase::prepare(THREAD_ID tid)
 {
   if (_subproblem.hasActiveElementalMooseVariables(tid))
   {
-    const std::set<MooseVariableFEBase *> & active_elemental_moose_variables =
+    const std::set<MooseVariableFieldBase *> & active_elemental_moose_variables =
         _subproblem.getActiveElementalMooseVariables(tid);
-    const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+    const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
     for (const auto & var : vars)
       var->clearDofIndices();
 
-    for (const auto & var : active_elemental_moose_variables)
-      if (&(var->sys()) == this)
-        var->prepare();
+#ifndef MOOSE_GLOBAL_AD_INDEXING
+    // When we have a displaced problem and we have AD objects it's possible that you can have
+    // something like the following: A displaced displacement kernel uses a material property
+    // computed with an undisplaced material. That material property is a function of the
+    // temperature. However, the temperature doesn't have any displaced kernels acting on it nor has
+    // any displaced objects explicitly coupling it. In this case the displaced temperature would
+    // not register as an active_elemental_moose_variable, and if we only prepare
+    // active_elemental_moose_variables then in our ADKernel (when not using global AD indexing) we
+    // will either have to skip over variables who have no dof indices or we will attempt to index
+    // out of bounds into _local_ke. So we need to make sure here that we prepare all variables that
+    // are active *either* in the undisplaced or displaced system
+    if (_subproblem.haveADObjects() && _subproblem.haveDisplaced())
+    {
+      // If active_elemental_moose_variables contains both copies of an undisplaced and displaced
+      // variable, use this container to make sure we don't prepare said variable twice
+      std::set<unsigned int> vars_initd;
+      for (auto * const var : active_elemental_moose_variables)
+      {
+        // eliminate variables that are not of like nl/aux system
+        if (var->kind() != _var_kind)
+          continue;
+
+        const unsigned int var_num = var->number();
+        if (vars_initd.find(var_num) == vars_initd.end())
+        {
+          if (&var->sys() == this)
+            var->prepare();
+          else
+            this->getVariable(tid, var_num).prepare();
+
+          vars_initd.insert(var_num);
+        }
+      }
+    }
+    else
+#endif
+      for (const auto & var : active_elemental_moose_variables)
+        if (&(var->sys()) == this)
+          var->prepare();
   }
   else
   {
-    const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+    const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
     for (const auto & var : vars)
       var->prepare();
   }
@@ -293,16 +353,28 @@ SystemBase::prepareFace(THREAD_ID tid, bool resize_data)
   // We only need to do something if the element prepare was restricted
   if (_subproblem.hasActiveElementalMooseVariables(tid))
   {
-    const std::set<MooseVariableFEBase *> & active_elemental_moose_variables =
+    const std::set<MooseVariableFieldBase *> & active_elemental_moose_variables =
         _subproblem.getActiveElementalMooseVariables(tid);
 
-    std::vector<MooseVariableFEBase *> newly_prepared_vars;
+    std::vector<MooseVariableFieldBase *> newly_prepared_vars;
 
-    const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+    const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
     for (const auto & var : vars)
     {
-      // If it wasn't in the active list, we need to prepare it
-      if (&(var->sys()) == this && !active_elemental_moose_variables.count(var))
+      mooseAssert(&var->sys() == this,
+                  "I will cry if we store variables in our warehouse that don't belong to us");
+
+      // If it wasn't in the active list, we need to prepare it. This has the potential to duplicate
+      // prepare if we have these conditions:
+      //
+      // 1. We have a displaced problem
+      // 2. We are using AD
+      // 3. We are not using global AD indexing
+      //
+      // But I think I would rather risk duplicate prepare than introduce an additional member set
+      // variable for tracking prepared variables. Set insertion is slow and some simulations have a
+      // ton of variables
+      if (!active_elemental_moose_variables.count(var))
       {
         var->prepare();
         newly_prepared_vars.push_back(var);
@@ -323,7 +395,7 @@ SystemBase::prepareFace(THREAD_ID tid, bool resize_data)
 void
 SystemBase::prepareNeighbor(THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
     var->prepareNeighbor();
 }
@@ -331,7 +403,7 @@ SystemBase::prepareNeighbor(THREAD_ID tid)
 void
 SystemBase::prepareLowerD(THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
     var->prepareLowerD();
 }
@@ -342,7 +414,7 @@ SystemBase::reinitElem(const Elem * /*elem*/, THREAD_ID tid)
 
   if (_subproblem.hasActiveElementalMooseVariables(tid))
   {
-    const std::set<MooseVariableFEBase *> & active_elemental_moose_variables =
+    const std::set<MooseVariableFieldBase *> & active_elemental_moose_variables =
         _subproblem.getActiveElementalMooseVariables(tid);
     for (const auto & var : active_elemental_moose_variables)
       if (&(var->sys()) == this)
@@ -350,7 +422,7 @@ SystemBase::reinitElem(const Elem * /*elem*/, THREAD_ID tid)
   }
   else
   {
-    const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+    const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
     for (const auto & var : vars)
       var->computeElemValues();
   }
@@ -362,7 +434,7 @@ SystemBase::reinitElemFace(const Elem * /*elem*/,
                            BoundaryID /*bnd_id*/,
                            THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
     var->computeElemValuesFace();
 }
@@ -373,7 +445,7 @@ SystemBase::reinitNeighborFace(const Elem * /*elem*/,
                                BoundaryID /*bnd_id*/,
                                THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
     var->computeNeighborValuesFace();
 }
@@ -381,7 +453,7 @@ SystemBase::reinitNeighborFace(const Elem * /*elem*/,
 void
 SystemBase::reinitNeighbor(const Elem * /*elem*/, THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
     var->computeNeighborValues();
 }
@@ -389,7 +461,7 @@ SystemBase::reinitNeighbor(const Elem * /*elem*/, THREAD_ID tid)
 void
 SystemBase::reinitLowerD(THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
     var->computeLowerDValues();
 }
@@ -397,7 +469,7 @@ SystemBase::reinitLowerD(THREAD_ID tid)
 void
 SystemBase::reinitNode(const Node * /*node*/, THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
   {
     var->reinitNode();
@@ -409,7 +481,7 @@ SystemBase::reinitNode(const Node * /*node*/, THREAD_ID tid)
 void
 SystemBase::reinitNodeFace(const Node * /*node*/, BoundaryID /*bnd_id*/, THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
   {
     var->reinitNode();
@@ -421,7 +493,7 @@ SystemBase::reinitNodeFace(const Node * /*node*/, BoundaryID /*bnd_id*/, THREAD_
 void
 SystemBase::reinitNodes(const std::vector<dof_id_type> & nodes, THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
   {
     var->reinitNodes(nodes);
@@ -432,7 +504,7 @@ SystemBase::reinitNodes(const std::vector<dof_id_type> & nodes, THREAD_ID tid)
 void
 SystemBase::reinitNodesNeighbor(const std::vector<dof_id_type> & nodes, THREAD_ID tid)
 {
-  const std::vector<MooseVariableFEBase *> & vars = _vars[tid].fieldVariables();
+  const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
   {
     var->reinitNodesNeighbor(nodes);
@@ -564,6 +636,44 @@ SystemBase::restoreOldSolutions()
   }
 }
 
+SparseMatrix<Number> &
+SystemBase::addMatrix(TagID tag)
+{
+  if (!_subproblem.matrixTagExists(tag))
+    mooseError("Cannot add tagged matrix with TagID ",
+               tag,
+               " in system '",
+               name(),
+               "' because the tag does not exist in the problem");
+
+  if (hasMatrix(tag))
+    return getMatrix(tag);
+
+  const auto matrix_name = _subproblem.matrixTagName(tag);
+  SparseMatrix<Number> & mat = system().add_matrix(matrix_name);
+  associateMatrixToTag(mat, tag);
+
+  return mat;
+}
+
+void
+SystemBase::removeMatrix(TagID tag_id)
+{
+  if (!_subproblem.matrixTagExists(tag_id))
+    mooseError("Cannot remove the matrix with TagID ",
+               tag_id,
+               "\nin system '",
+               name(),
+               "', because that tag does not exist in the problem");
+
+  if (hasMatrix(tag_id))
+  {
+    const auto matrix_name = _subproblem.matrixTagName(tag_id);
+    system().remove_matrix(matrix_name);
+    _tagged_matrices[tag_id] = nullptr;
+  }
+}
+
 NumericVector<Number> &
 SystemBase::addVector(const std::string & vector_name, const bool project, const ParallelType type)
 {
@@ -578,54 +688,94 @@ NumericVector<Number> &
 SystemBase::addVector(TagID tag, const bool project, const ParallelType type)
 {
   if (!_subproblem.vectorTagExists(tag))
-    mooseError("Cannot add a tagged vector with vector_tag, ",
+    mooseError("Cannot add tagged vector with TagID ",
                tag,
-               ", that tag does not exist in System ",
-               name());
+               " in system '",
+               name(),
+               "' because the tag does not exist in the problem");
 
   if (hasVector(tag))
-    return getVector(tag);
+  {
+    auto & vec = getVector(tag);
 
-  auto vector_name = _subproblem.vectorTagName(tag);
+    if (type != ParallelType::AUTOMATIC && vec.type() != type)
+      mooseError("Cannot add tagged vector '",
+                 _subproblem.vectorTagName(tag),
+                 "', in system '",
+                 name(),
+                 "' because a vector with the same name was found with a different parallel type");
 
+    return vec;
+  }
+
+  const auto vector_name = _subproblem.vectorTagName(tag);
   NumericVector<Number> & vec = system().add_vector(vector_name, project, type);
-
-  if (_tagged_vectors.size() < tag + 1)
-    _tagged_vectors.resize(tag + 1);
-
-  _tagged_vectors[tag] = &vec;
+  associateVectorToTag(vec, tag);
 
   return vec;
 }
 
 void
+SystemBase::closeTaggedVector(const TagID tag)
+{
+  if (!_subproblem.vectorTagExists(tag))
+    mooseError("Cannot close vector with TagID ",
+               tag,
+               " in system '",
+               name(),
+               "' because that tag does not exist in the problem");
+  else if (!hasVector(tag))
+    mooseError("Cannot close vector tag with name '",
+               _subproblem.vectorTagName(tag),
+               "' in system '",
+               name(),
+               "' because there is no vector associated with that tag");
+
+  getVector(tag).close();
+}
+
+void
 SystemBase::closeTaggedVectors(const std::set<TagID> & tags)
 {
-  for (auto & tag : tags)
-  {
-    mooseAssert(_subproblem.vectorTagExists(tag), "Tag: " << tag << " does not exsit");
-    getVector(tag).close();
-  }
+  for (const auto tag : tags)
+    closeTaggedVector(tag);
+}
+
+void
+SystemBase::zeroTaggedVector(const TagID tag)
+{
+  if (!_subproblem.vectorTagExists(tag))
+    mooseError("Cannot zero vector with TagID ",
+               tag,
+               " in system '",
+               name(),
+               "' because that tag does not exist in the problem");
+  else if (!hasVector(tag))
+    mooseError("Cannot zero vector tag with name '",
+               _subproblem.vectorTagName(tag),
+               "' in system '",
+               name(),
+               "' because there is no vector associated with that tag");
+
+  getVector(tag).zero();
 }
 
 void
 SystemBase::zeroTaggedVectors(const std::set<TagID> & tags)
 {
-  for (auto & tag : tags)
-  {
-    mooseAssert(_subproblem.vectorTagExists(tag), "Tag: " << tag << " does not exsit");
-    getVector(tag).zero();
-  }
+  for (const auto tag : tags)
+    zeroTaggedVector(tag);
 }
 
 void
 SystemBase::removeVector(TagID tag_id)
 {
   if (!_subproblem.vectorTagExists(tag_id))
-    mooseError("Cannot remove an unexisting tag or its associated vector, ",
+    mooseError("Cannot remove the vector with TagID ",
                tag_id,
-               ", that tag does not exist in System ",
-               name());
+               "\nin system '",
+               name(),
+               "', because that tag does not exist in the problem");
 
   if (hasVector(tag_id))
   {
@@ -673,6 +823,13 @@ SystemBase::addVariable(const std::string & var_type,
     // The number returned by libMesh is the _last_ variable number... we want to hold onto the
     // _first_
     var_num = system().add_variables(var_names, fe_type, &blocks) - (components - 1);
+
+    // Set as array variable
+    if (parameters.isParamSetByUser("array") && !parameters.get<bool>("array"))
+      mooseError("Variable '",
+                 name,
+                 "' is an array variable ('components' > 1) but 'array' is set to false.");
+    parameters.set<bool>("array") = true;
   }
   else
     var_num = system().add_variable(name, fe_type, &blocks);
@@ -688,13 +845,22 @@ SystemBase::addVariable(const std::string & var_type,
 
     _vars[tid].add(name, var);
 
-    if (auto fe_var = dynamic_cast<MooseVariableFEBase *>(var.get()))
+    if (auto fe_var = dynamic_cast<MooseVariableFieldBase *>(var.get()))
     {
       auto required_size = var_num + components;
       if (required_size > _numbered_vars[tid].size())
         _numbered_vars[tid].resize(required_size);
       for (MooseIndex(components) component = 0; component < components; ++component)
         _numbered_vars[tid][var_num + component] = fe_var;
+
+      if (auto * const functor = dynamic_cast<Moose::FunctorBase<ADReal> *>(fe_var))
+        _subproblem.addFunctor(name, *functor, tid);
+      else if (auto * const functor = dynamic_cast<Moose::FunctorBase<ADRealVectorValue> *>(fe_var))
+        _subproblem.addFunctor(name, *functor, tid);
+      else if (auto * const functor = dynamic_cast<Moose::FunctorBase<RealEigenVector> *>(fe_var))
+        _subproblem.addFunctor(name, *functor, tid);
+      else
+        mooseError("This should be a functor");
     }
 
     if (var->blockRestricted())
@@ -771,47 +937,6 @@ SystemBase::hasVector(const std::string & name) const
   return system().have_vector(name);
 }
 
-TagID
-SystemBase::timeVectorTag()
-{
-  mooseError("Not implemented yet");
-  return 0;
-}
-
-TagID
-SystemBase::timeMatrixTag()
-{
-  mooseError("Not implemented yet");
-  return 0;
-}
-
-TagID
-SystemBase::systemMatrixTag()
-{
-  mooseError("Not implemented yet");
-  return 0;
-}
-
-TagID
-SystemBase::nonTimeVectorTag()
-{
-  mooseError("Not implemented yet");
-  return 0;
-}
-
-TagID
-SystemBase::residualVectorTag()
-{
-  mooseError("Not implemented yet");
-  return 0;
-}
-
-bool
-SystemBase::hasVector(TagID tag) const
-{
-  return tag < _tagged_vectors.size() && _tagged_vectors[tag];
-}
-
 /**
  * Get a raw NumericVector with the given name.
  */
@@ -821,10 +946,26 @@ SystemBase::getVector(const std::string & name)
   return system().get_vector(name);
 }
 
+const NumericVector<Number> &
+SystemBase::getVector(const std::string & name) const
+{
+  return system().get_vector(name);
+}
+
 NumericVector<Number> &
 SystemBase::getVector(TagID tag)
 {
-  mooseAssert(hasVector(tag), "Cannot retrieve vector with residual_tag: " << tag);
+  if (!hasVector(tag))
+  {
+    if (!_subproblem.vectorTagExists(tag))
+      mooseError("Cannot retreive vector with tag ", tag, " because that tag does not exist");
+    else
+      mooseError("Cannot retreive vector with tag ",
+                 tag,
+                 " in system '",
+                 name(),
+                 "'\nbecause a vector has not been associated with that tag.");
+  }
 
   return *_tagged_vectors[tag];
 }
@@ -832,7 +973,17 @@ SystemBase::getVector(TagID tag)
 const NumericVector<Number> &
 SystemBase::getVector(TagID tag) const
 {
-  mooseAssert(hasVector(tag), "Cannot retrieve vector with residual_tag: " << tag);
+  if (!hasVector(tag))
+  {
+    if (!_subproblem.vectorTagExists(tag))
+      mooseError("Cannot retreive vector with tag ", tag, " because that tag does not exist");
+    else
+      mooseError("Cannot retreive vector with tag ",
+                 tag,
+                 " in system '",
+                 name(),
+                 "'\nbecause a vector has not been associated with that tag.");
+  }
 
   return *_tagged_vectors[tag];
 }
@@ -840,8 +991,9 @@ SystemBase::getVector(TagID tag) const
 void
 SystemBase::associateVectorToTag(NumericVector<Number> & vec, TagID tag)
 {
-  mooseAssert(_subproblem.vectorTagExists(tag),
-              "You can't associate a tag that does not exist " << tag);
+  if (!_subproblem.vectorTagExists(tag))
+    mooseError("Cannot associate vector to tag ", tag, " because that tag does not exist");
+
   if (_tagged_vectors.size() < tag + 1)
     _tagged_vectors.resize(tag + 1);
 
@@ -851,34 +1003,48 @@ SystemBase::associateVectorToTag(NumericVector<Number> & vec, TagID tag)
 void
 SystemBase::disassociateVectorFromTag(NumericVector<Number> & vec, TagID tag)
 {
-  mooseAssert(_subproblem.vectorTagExists(tag),
-              "You can't associate a tag that does not exist " << tag);
-  if (_tagged_vectors.size() < tag + 1)
-    _tagged_vectors.resize(tag + 1);
-
-  if (_tagged_vectors[tag] != &vec)
+  if (!_subproblem.vectorTagExists(tag))
+    mooseError("Cannot disassociate vector from tag ", tag, " because that tag does not exist");
+  if (hasVector(tag) && &getVector(tag) != &vec)
     mooseError("You can not disassociate a vector from a tag which it was not associated to");
 
+  disassociateVectorFromTag(tag);
+}
+
+void
+SystemBase::disassociateVectorFromTag(TagID tag)
+{
+  if (!_subproblem.vectorTagExists(tag))
+    mooseError("Cannot disassociate vector from tag ", tag, " because that tag does not exist");
+
+  if (_tagged_vectors.size() < tag + 1)
+    _tagged_vectors.resize(tag + 1);
   _tagged_vectors[tag] = nullptr;
 }
 
 void
-SystemBase::disassociateAllTaggedVectors()
+SystemBase::disassociateDefaultVectorTags()
 {
-  for (auto & tagged_vector : _tagged_vectors)
-    tagged_vector = nullptr;
-}
-
-bool
-SystemBase::hasMatrix(TagID tag) const
-{
-  return tag < _tagged_matrices.size() && _tagged_matrices[tag];
+  const auto tags = defaultVectorTags();
+  for (const auto tag : tags)
+    if (_subproblem.vectorTagExists(tag))
+      disassociateVectorFromTag(tag);
 }
 
 SparseMatrix<Number> &
 SystemBase::getMatrix(TagID tag)
 {
-  mooseAssert(hasMatrix(tag), "Cannot retrieve matrix with matrix_tag: " << tag);
+  if (!hasMatrix(tag))
+  {
+    if (!_subproblem.matrixTagExists(tag))
+      mooseError("Cannot retreive matrix with tag ", tag, " because that tag does not exist");
+    else
+      mooseError("Cannot retreive matrix with tag ",
+                 tag,
+                 " in system '",
+                 name(),
+                 "'\nbecause a matrix has not been associated with that tag.");
+  }
 
   return *_tagged_matrices[tag];
 }
@@ -886,7 +1052,17 @@ SystemBase::getMatrix(TagID tag)
 const SparseMatrix<Number> &
 SystemBase::getMatrix(TagID tag) const
 {
-  mooseAssert(hasMatrix(tag), "Cannot retrieve matrix with matrix_tag: " << tag);
+  if (!hasMatrix(tag))
+  {
+    if (!_subproblem.matrixTagExists(tag))
+      mooseError("Cannot retreive matrix with tag ", tag, " because that tag does not exist");
+    else
+      mooseError("Cannot retreive matrix with tag ",
+                 tag,
+                 " in system '",
+                 name(),
+                 "'\nbecause a matrix has not been associated with that tag.");
+  }
 
   return *_tagged_matrices[tag];
 }
@@ -900,10 +1076,18 @@ SystemBase::closeTaggedMatrices(const std::set<TagID> & tags)
 }
 
 void
+SystemBase::flushTaggedMatrices(const std::set<TagID> & tags)
+{
+  for (auto tag : tags)
+    if (hasMatrix(tag))
+      getMatrix(tag).flush();
+}
+
+void
 SystemBase::associateMatrixToTag(SparseMatrix<Number> & matrix, TagID tag)
 {
-  mooseAssert(_subproblem.matrixTagExists(tag),
-              "Cannot associate Matrix with matrix_tag : " << tag << "that does not exist");
+  if (!_subproblem.matrixTagExists(tag))
+    mooseError("Cannot associate matrix to tag ", tag, " because that tag does not exist");
 
   if (_tagged_matrices.size() < tag + 1)
     _tagged_matrices.resize(tag + 1);
@@ -914,16 +1098,32 @@ SystemBase::associateMatrixToTag(SparseMatrix<Number> & matrix, TagID tag)
 void
 SystemBase::disassociateMatrixFromTag(SparseMatrix<Number> & matrix, TagID tag)
 {
-  mooseAssert(_subproblem.matrixTagExists(tag),
-              "Cannot disassociate Matrix with matrix_tag : " << tag << "that does not exist");
+  if (!_subproblem.matrixTagExists(tag))
+    mooseError("Cannot disassociate matrix from tag ", tag, " because that tag does not exist");
+  if (hasMatrix(tag) && &getMatrix(tag) != &matrix)
+    mooseError("You can not disassociate a matrix from a tag which it was not associated to");
+
+  disassociateMatrixFromTag(tag);
+}
+
+void
+SystemBase::disassociateMatrixFromTag(TagID tag)
+{
+  if (!_subproblem.matrixTagExists(tag))
+    mooseError("Cannot disassociate matrix from tag ", tag, " because that tag does not exist");
 
   if (_tagged_matrices.size() < tag + 1)
     _tagged_matrices.resize(tag + 1);
-
-  if (_tagged_matrices[tag] != &matrix)
-    mooseError("You can not disassociate a matrix from a tag which it was not associated to");
-
   _tagged_matrices[tag] = nullptr;
+}
+
+void
+SystemBase::disassociateDefaultMatrixTags()
+{
+  const auto tags = defaultMatrixTags();
+  for (const auto tag : tags)
+    if (_subproblem.matrixTagExists(tag))
+      disassociateMatrixFromTag(tag);
 }
 
 void
@@ -983,13 +1183,6 @@ SystemBase::matrixTagActive(TagID tag) const
   return tag < _matrix_tag_active_flags.size() && _matrix_tag_active_flags[tag];
 }
 
-void
-SystemBase::disassociateAllTaggedMatrices()
-{
-  for (auto & matrix : _tagged_matrices)
-    matrix = nullptr;
-}
-
 unsigned int
 SystemBase::number() const
 {
@@ -1044,35 +1237,32 @@ SystemBase::copyVars(ExodusII_IO & io)
 
     if (hasVariable(vci._dest_name))
     {
-      if (getVariable(0, vci._dest_name).isNodal())
-        io.copy_nodal_solution(system(), vci._dest_name, vci._source_name, timestep);
-
+      const auto & var = getVariable(0, vci._dest_name);
+      if (var.count() > 1) // array variable
+      {
+        const auto & array_var = getFieldVariable<RealEigenVector>(0, vci._dest_name);
+        for (MooseIndex(var.count()) i = 0; i < var.count(); ++i)
+        {
+          const auto exodus_var = _subproblem.arrayVariableComponent(vci._source_name, i);
+          const auto system_var = array_var.componentName(i);
+          if (var.isNodal())
+            io.copy_nodal_solution(system(), exodus_var, system_var, timestep);
+          else
+            io.copy_elemental_solution(system(), exodus_var, system_var, timestep);
+        }
+      }
       else
-        io.copy_elemental_solution(system(), vci._dest_name, vci._source_name, timestep);
+      {
+        if (var.isNodal())
+          io.copy_nodal_solution(system(), vci._dest_name, vci._source_name, timestep);
+        else
+          io.copy_elemental_solution(system(), vci._dest_name, vci._source_name, timestep);
+      }
     }
     else if (hasScalarVariable(vci._dest_name))
-    {
-      auto rank = comm().rank();
-      auto size = comm().size();
-
-      // Read solution on rank 0 only and send data to rank "size - 1" where scalar DOFs are
-      // stored
-      std::vector<Real> global_values;
-      if (rank == 0)
-      {
-        // Read the scalar value then set that value in the current solution
-        io.read_global_variable({vci._source_name}, timestep, global_values);
-        if (size > 1)
-          comm().send(size - 1, global_values);
-      }
-      if (rank == size - 1)
-      {
-        if (size > 1)
-          comm().receive(0, global_values);
-        const unsigned int var_num = system().variable_number(vci._dest_name);
-        system().solution->set(var_num, global_values[0]);
-      }
-    }
+      io.copy_scalar_solution(system(), {vci._dest_name}, {vci._source_name}, timestep);
+    else
+      mooseError("Unrecognized variable ", vci._dest_name, " in variables to copy.");
   }
 
   if (did_copy)
@@ -1080,14 +1270,10 @@ SystemBase::copyVars(ExodusII_IO & io)
 }
 
 void
-SystemBase::addExtraVectors()
+SystemBase::update(const bool update_libmesh_system)
 {
-}
-
-void
-SystemBase::update()
-{
-  system().update();
+  if (update_libmesh_system)
+    system().update();
   std::vector<VariableName> std_field_variables;
   getStandardFieldVariableNames(std_field_variables);
   cacheVarIndicesByFace(std_field_variables);
@@ -1154,6 +1340,9 @@ SystemBase::copyOldSolutions()
 void
 SystemBase::restoreSolutions()
 {
+  if (!hasSolutionState(1))
+    mooseError("Cannot restore solutions without old solution");
+
   *(const_cast<NumericVector<Number> *&>(currentSolution())) = solutionOld();
   solution() = solutionOld();
   if (solutionUDotOld())
@@ -1177,14 +1366,57 @@ SystemBase::name() const
   return system().name();
 }
 
+NumericVector<Number> *
+SystemBase::solutionPreviousNewton()
+{
+  if (hasVector(Moose::PREVIOUS_NL_SOLUTION_TAG))
+    return &getVector(Moose::PREVIOUS_NL_SOLUTION_TAG);
+  else
+    return nullptr;
+}
+
+const NumericVector<Number> *
+SystemBase::solutionPreviousNewton() const
+{
+  if (hasVector(Moose::PREVIOUS_NL_SOLUTION_TAG))
+    return &getVector(Moose::PREVIOUS_NL_SOLUTION_TAG);
+  else
+    return nullptr;
+}
+
+void
+SystemBase::initSolutionState()
+{
+  // Default is the current solution
+  unsigned int state = 0;
+
+  // Add additional states as required by the variable states requested
+  for (const auto & var : getVariables(/* tid = */ 0))
+    state = std::max(state, var->oldestSolutionStateRequested());
+  for (const auto & var : getScalarVariables(/* tid = */ 0))
+    state = std::max(state, var->oldestSolutionStateRequested());
+
+  needSolutionState(state);
+
+  _solution_states_initialized = true;
+}
+
+TagName
+SystemBase::oldSolutionStateVectorName(const unsigned int state) const
+{
+  mooseAssert(state != 0, "Not an old state");
+  if (state == 1)
+    return Moose::OLD_SOLUTION_TAG;
+  else if (state == 2)
+    return Moose::OLDER_SOLUTION_TAG;
+  else
+    return "solution_state_" + std::to_string(state);
+}
+
 const NumericVector<Number> &
 SystemBase::solutionState(const unsigned int state) const
 {
-  mooseAssert(
-      !_solution_states.empty(),
-      "No solution states available: make sure to init the default states in system constructors");
-
-  if (state >= _solution_states.size())
+  if (!hasSolutionState(state))
     mooseError("Solution state ",
                state,
                " was requested in ",
@@ -1193,33 +1425,48 @@ SystemBase::solutionState(const unsigned int state) const
                _solution_states.size() - 1,
                " is available.");
 
+  if (state == 0)
+    mooseAssert(_solution_states[0] == &solutionInternal(), "Inconsistent current solution");
+  else
+    mooseAssert(_solution_states[state] == &getVector(oldSolutionStateVectorName(state)),
+                "Inconsistent solution state");
+
   return *_solution_states[state];
 }
 
 NumericVector<Number> &
 SystemBase::solutionState(const unsigned int state)
 {
-  // Create up to the state requested if unavailable
-  if (state >= _solution_states.size())
-  {
-    _solution_states.resize(state + 1);
-
-    // The first three states (now, old, older) will point to the solutions in the libMesh system,
-    // which is why we are using the "internal" calls to these vectors. _solution_states will then
-    // be the forward facing access to these vectors
-    _solution_states[0] = &solutionInternal();
-    if (state > 0)
-      _solution_states[1] = &solutionOldInternal();
-    if (state > 1)
-      _solution_states[2] = &solutionOlderInternal();
-
-    // Create anything that is past older (state of 3+)
-    for (unsigned int i = 3; i <= state; ++i)
-      if (!_solution_states[i])
-        _solution_states[i] = &addVector("solution_state_" + std::to_string(i), true, GHOSTED);
-  }
-
+  if (!hasSolutionState(state))
+    needSolutionState(state);
   return *_solution_states[state];
+}
+
+void
+SystemBase::needSolutionState(const unsigned int state)
+{
+  if (hasSolutionState(state))
+    return;
+
+  _solution_states.resize(state + 1);
+
+  // The 0-th (current) solution state is owned by libMesh
+  if (!_solution_states[0])
+    _solution_states[0] = &solutionInternal();
+  else
+    mooseAssert(_solution_states[0] == &solutionInternal(), "Inconsistent current solution");
+
+  // We will manually add all states past current
+  for (unsigned int i = 1; i <= state; ++i)
+    if (!_solution_states[i])
+    {
+      auto tag =
+          _subproblem.addVectorTag(oldSolutionStateVectorName(i), Moose::VECTOR_TAG_SOLUTION);
+      _solution_states[i] = &addVector(tag, true, GHOSTED);
+    }
+    else
+      mooseAssert(_solution_states[i] == &getVector(oldSolutionStateVectorName(i)),
+                  "Inconsistent solution state");
 }
 
 void
@@ -1253,7 +1500,7 @@ SystemBase::applyScalingFactors(const std::vector<Real> & inverse_scaling_factor
       for (const auto & scalar_variable : scalar_variables)
         _console << "  " << scalar_variable->name() << ": " << scalar_variable->scalingFactor()
                  << "\n";
-      _console << "\n\n";
+      _console << "\n" << std::endl;
 
       // restore state
       _console.flags(original_flags);
@@ -1269,7 +1516,7 @@ SystemBase::cacheVarIndicesByFace(const std::vector<VariableName> & vars)
     return;
 
   // prepare a vector of MooseVariables from names
-  std::vector<MooseVariableBase *> moose_vars;
+  std::vector<const MooseVariableBase *> moose_vars;
   for (auto & v : vars)
   {
     // first make sure this is not a scalar variable
@@ -1282,81 +1529,65 @@ SystemBase::cacheVarIndicesByFace(const std::vector<VariableName> & vars)
     moose_vars.push_back(&getVariable(0, v));
   }
 
-  // loop over all faces
-  auto & faces = mesh().faceInfo();
-  for (auto & p : faces)
-  {
-    // get elem & neighbor elements, and set subdomain ids
-    const Elem & elem_elem = p.elem();
-    const Elem * neighbor_elem = p.neighborPtr();
-    SubdomainID elem_subdomain_id = elem_elem.subdomain_id();
-    SubdomainID neighbor_subdomain_id = Elem::invalid_subdomain_id;
-    if (neighbor_elem)
-      neighbor_subdomain_id = neighbor_elem->subdomain_id();
+  _mesh.cacheVarIndicesByFace(moose_vars);
+  _mesh.computeFaceInfoFaceCoords();
+}
 
-    // TODO: what happens if elem and neighbor subdomain ids have different
-    // coordinate transforms here?  Figure out how to handle this robustly.
-    coordTransformFactor(_subproblem, elem_subdomain_id, p.faceCentroid(), p.faceCoord());
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+void
+SystemBase::addScalingVector()
+{
+  addVector("scaling_factors", /*project=*/false, libMesh::ParallelType::GHOSTED);
+  _subproblem.hasScalingVector();
+}
+#endif
 
-    // loop through vars
-    for (unsigned int j = 0; j < moose_vars.size(); ++j)
-    {
-      // get the variable, its name, and its domain of definition
-      auto var = moose_vars[j];
-      auto var_name = var->name();
-      std::set<SubdomainID> var_subdomains = var->blockIDs();
+bool
+SystemBase::computingScalingJacobian() const
+{
+  return _subproblem.computingScalingJacobian();
+}
 
-      // unfortunately, MOOSE is lazy and all subdomains has its own
-      // ID. If ANY_BLOCK_ID is in var_subdomains, inject all subdomains explicitly
-      if (var_subdomains.find(Moose::ANY_BLOCK_ID) != var_subdomains.end())
-        var_subdomains = _mesh.meshSubdomains();
+void
+SystemBase::initialSetup()
+{
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+    _vars[tid].initialSetup();
+}
 
-      // first stash away DoF information; this is more difficult than you would
-      // think because var can be defined on the elem subdomain, the neighbor subdomain
-      // or both subdomains
-      // elem
-      std::vector<dof_id_type> elem_dof_indices;
-      if (var_subdomains.find(elem_subdomain_id) != var_subdomains.end())
-        var->getDofIndices(&elem_elem, elem_dof_indices);
-      else
-        elem_dof_indices = {libMesh::DofObject::invalid_id};
-      p.elemDofIndices(var_name) = elem_dof_indices;
-      // neighbor
-      std::vector<dof_id_type> neighbor_dof_indices;
-      if (neighbor_elem && var_subdomains.find(neighbor_subdomain_id) != var_subdomains.end())
-        var->getDofIndices(neighbor_elem, neighbor_dof_indices);
-      else
-        neighbor_dof_indices = {libMesh::DofObject::invalid_id};
-      p.neighborDofIndices(var_name) = neighbor_dof_indices;
+void
+SystemBase::timestepSetup()
+{
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+    _vars[tid].timestepSetup();
+}
 
-      /**
-       * The following paragraph of code assigns the VarFaceNeighbors
-       * 1. The face is an internal face of this variable if it is defined on
-       *    the elem and neighbor subdomains
-       * 2. The face is an invalid face of this variable if it is neither defined
-       *    on the elem nor the neighbor subdomains
-       * 3. If not 1. or 2. then this is a boundary for this variable and the else clause
-       *    applies
-       */
-      bool var_defined_elem = var_subdomains.find(elem_subdomain_id) != var_subdomains.end();
-      bool var_defined_neighbor =
-          var_subdomains.find(neighbor_subdomain_id) != var_subdomains.end();
-      if (var_defined_elem && var_defined_neighbor)
-        p.faceType(var_name) = FaceInfo::VarFaceNeighbors::BOTH;
-      else if (!var_defined_elem && !var_defined_neighbor)
-        p.faceType(var_name) = FaceInfo::VarFaceNeighbors::NEITHER;
-      else
-      {
-        // this is a boundary face for this variable, set elem or neighbor
-        if (var_defined_elem)
-          p.faceType(var_name) = FaceInfo::VarFaceNeighbors::ELEM;
-        else if (var_defined_neighbor)
-          p.faceType(var_name) = FaceInfo::VarFaceNeighbors::NEIGHBOR;
-        else
-          mooseError("Should never get here");
-      }
-    }
-  }
+void
+SystemBase::subdomainSetup()
+{
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+    _vars[tid].subdomainSetup();
+}
+
+void
+SystemBase::residualSetup()
+{
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+    _vars[tid].residualSetup();
+}
+
+void
+SystemBase::jacobianSetup()
+{
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+    _vars[tid].jacobianSetup();
+}
+
+void
+SystemBase::clearAllDofIndices()
+{
+  for (auto & var_warehouse : _vars)
+    var_warehouse.clearAllDofIndices();
 }
 
 template MooseVariableFE<Real> & SystemBase::getFieldVariable<Real>(THREAD_ID tid,
@@ -1394,3 +1625,6 @@ SystemBase::getActualFieldVariable<RealVectorValue>(THREAD_ID tid, unsigned int 
 
 template MooseVariableField<RealEigenVector> &
 SystemBase::getActualFieldVariable<RealEigenVector>(THREAD_ID tid, unsigned int var_number);
+
+template MooseVariableFV<Real> & SystemBase::getFVVariable<Real>(THREAD_ID tid,
+                                                                 const std::string & var_name);

@@ -47,19 +47,19 @@ class StyleCommand(command.CommandComponent):
         settings['fontweight'] = (None, "Set the font weight.")
         return settings
 
-    def createToken(self, parent, info, page):
+    def createToken(self, parent, info, page, settings):
         return StyleToken(parent,
-                          halign=self.settings['halign'],
-                          border=self.settings['border'],
-                          color=self.settings['color'],
-                          fontsize=self.settings['fontsize'],
-                          fontweight=self.settings['fontweight'],
-                          **self.attributes)
+                          halign=settings['halign'],
+                          border=settings['border'],
+                          color=settings['color'],
+                          fontsize=settings['fontsize'],
+                          fontweight=settings['fontweight'],
+                          **self.attributes(settings))
 
 class RenderStyleToken(components.RenderComponent):
 
     def createHTML(self, parent, token, page):
-        style = [token['style']]
+        style = [token.get('style', '')]
         if token['halign']:
             if token['halign'] not in ('center', 'left', 'right'):
                 msg = "The supplied string for 'halign' is '{}' but it must be " \
@@ -82,19 +82,19 @@ class RenderStyleToken(components.RenderComponent):
         return html.Tag(parent, tag_type, token, style=';'.join(style))
 
     def createLatex(self, parent, token, page):
-        master = parent
+        primary = parent
 
         if token['halign']:
             halign = token['halign']
             if halign != 'center':
                 halign = 'flush{}'.format(halign)
-            master = latex.Environment(master, halign)
+            primary = latex.Environment(primary, halign)
 
         if token['border']:
-            master = latex.Environment(master, 'fbox')
+            primary = latex.Environment(primary, 'fbox')
 
         if token['color']:
-            master = latex.Brace(master)
-            latex.Command(master, 'color', string=token['color'])
+            primary = latex.Brace(primary)
+            latex.Command(primary, 'color', string=token['color'])
 
-        return master
+        return primary

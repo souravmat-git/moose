@@ -32,14 +32,12 @@
 #include "MaterialData.h"
 #include "MathUtils.h"
 #include "Assembly.h"
+#include "GeometricSearchInterface.h"
+#include "FunctorInterface.h"
 
-// forward declarations
-class MaterialBase;
 class MooseMesh;
 class SubProblem;
-
-template <>
-InputParameters validParams<MaterialBase>();
+class FaceInfo;
 
 /**
  * MaterialBases compute MaterialProperties.
@@ -61,7 +59,9 @@ class MaterialBase : public MooseObject,
                      public MeshChangedInterface,
                      public OutputInterface,
                      public RandomInterface,
-                     public ElementIDInterface
+                     public ElementIDInterface,
+                     protected GeometricSearchInterface,
+                     protected FunctorInterface
 {
 public:
   static InputParameters validParams();
@@ -101,13 +101,17 @@ public:
    * Declare the property named "name"
    */
   template <typename T>
-  MaterialProperty<T> & declareProperty(const std::string & prop_name);
+  MaterialProperty<T> & declarePropertyByName(const std::string & prop_name);
+  template <typename T>
+  MaterialProperty<T> & declareProperty(const std::string & name);
   template <typename T>
   MaterialProperty<T> & declarePropertyOld(const std::string & prop_name);
   template <typename T>
   MaterialProperty<T> & declarePropertyOlder(const std::string & prop_name);
   template <typename T>
-  ADMaterialProperty<T> & declareADProperty(const std::string & prop_name);
+  ADMaterialProperty<T> & declareADPropertyByName(const std::string & prop_name);
+  template <typename T>
+  ADMaterialProperty<T> & declareADProperty(const std::string & name);
   template <typename T, bool is_ad, typename std::enable_if<is_ad, int>::type = 0>
   ADMaterialProperty<T> & declareGenericProperty(const std::string & prop_name)
   {
@@ -118,6 +122,16 @@ public:
   {
     return declareProperty<T>(prop_name);
   }
+  template <typename T, bool is_ad, typename std::enable_if<is_ad, int>::type = 0>
+  ADMaterialProperty<T> & declareGenericPropertyByName(const std::string & prop_name)
+  {
+    return declareADPropertyByName<T>(prop_name);
+  }
+  template <typename T, bool is_ad, typename std::enable_if<!is_ad, int>::type = 0>
+  MaterialProperty<T> & declareGenericPropertyByName(const std::string & prop_name)
+  {
+    return declarePropertyByName<T>(prop_name);
+  }
   ///@}
 
   /**
@@ -126,13 +140,29 @@ public:
    */
   template <typename T, bool is_ad>
   const GenericMaterialProperty<T, is_ad> &
-  getGenericZeroMaterialProperty(const std::string & prop_name);
+  getGenericZeroMaterialProperty(const std::string & name);
+  template <typename T, bool is_ad>
+  const GenericMaterialProperty<T, is_ad> &
+  getGenericZeroMaterialPropertyByName(const std::string & prop_name);
+
+  /**
+   * Return a constant zero anonymous material property
+   */
+  template <typename T, bool is_ad>
+  const GenericMaterialProperty<T, is_ad> & getGenericZeroMaterialProperty();
 
   /// for backwards compatibility
-  template <typename T>
-  const MaterialProperty<T> & getZeroMaterialProperty(const std::string & prop_name)
+  template <typename T, typename... Ts>
+  const MaterialProperty<T> & getZeroMaterialProperty(Ts... args)
   {
-    return getGenericZeroMaterialProperty<T, false>(prop_name);
+    return getGenericZeroMaterialProperty<T, false>(args...);
+  }
+
+  /// for backwards compatibility
+  template <typename T, typename... Ts>
+  const MaterialProperty<T> & getZeroMaterialPropertyByName(Ts... args)
+  {
+    return getGenericZeroMaterialPropertyByName<T, false>(args...);
   }
 
   /**
@@ -146,6 +176,12 @@ public:
    * @return A reference to the set of properties with calls to declareProperty
    */
   virtual const std::set<std::string> & getSuppliedItems() override { return _supplied_props; }
+
+  /**
+   * Get the prop ids corresponding to \p declareProperty
+   * @return A reference to the set of properties with calls to \p declareProperty
+   */
+  const std::set<unsigned int> & getSuppliedPropIDs() { return _supplied_prop_ids; }
 
   void checkStatefulSanity() const;
 
@@ -177,6 +213,16 @@ public:
    * @return Whether this material has stateful properties
    */
   bool hasStatefulProperties() const { return _has_stateful_property; }
+
+  /**
+   * Whether this material supports ghosted computations. This is important for finite volume
+   * calculations in which variables have defined values on ghost cells/elements and for which these
+   * ghost values may need to flow through material calculations to be eventually consumed by FV
+   * flux kernels or boundary conditions
+   */
+  virtual bool ghostable() const { return false; }
+
+  void setFaceInfo(const FaceInfo & fi) { _face_info = &fi; }
 
 protected:
   /**
@@ -275,12 +321,33 @@ protected:
   bool _has_stateful_property;
 
   bool _overrides_init_stateful_props = true;
+
+  const FaceInfo * _face_info = nullptr;
+
+private:
+  const MaterialPropertyName _declare_suffix;
 };
 
 template <typename T>
 MaterialProperty<T> &
-MaterialBase::declareProperty(const std::string & prop_name)
+MaterialBase::declareProperty(const std::string & name)
 {
+  // Check if the supplied parameter is a valid input parameter key
+  std::string prop_name = name;
+  if (_pars.have_parameter<MaterialPropertyName>(name))
+    prop_name = _pars.get<MaterialPropertyName>(name);
+
+  return declarePropertyByName<T>(prop_name);
+}
+
+template <typename T>
+MaterialProperty<T> &
+MaterialBase::declarePropertyByName(const std::string & prop_name_in)
+{
+  const auto prop_name =
+      _declare_suffix.empty()
+          ? prop_name_in
+          : MooseUtils::join(std::vector<std::string>({prop_name_in, _declare_suffix}), "_");
   registerPropName(prop_name, false, MaterialBase::CURRENT);
   return materialData().declareProperty<T>(prop_name);
 }
@@ -309,7 +376,19 @@ MaterialBase::declarePropertyOlder(const std::string & prop_name)
 
 template <typename T, bool is_ad>
 const GenericMaterialProperty<T, is_ad> &
-MaterialBase::getGenericZeroMaterialProperty(const std::string & prop_name)
+MaterialBase::getGenericZeroMaterialProperty(const std::string & name)
+{
+  // Check if the supplied parameter is a valid input parameter key
+  std::string prop_name = name;
+  if (_pars.have_parameter<MaterialPropertyName>(name))
+    prop_name = _pars.get<MaterialPropertyName>(name);
+
+  return getGenericZeroMaterialPropertyByName<T, is_ad>(prop_name);
+}
+
+template <typename T, bool is_ad>
+const GenericMaterialProperty<T, is_ad> &
+MaterialBase::getGenericZeroMaterialPropertyByName(const std::string & prop_name)
 {
   checkExecutionStage();
   auto & preload_with_zero = materialData().getGenericProperty<T, is_ad>(prop_name);
@@ -337,11 +416,46 @@ MaterialBase::getGenericZeroMaterialProperty(const std::string & prop_name)
   return preload_with_zero;
 }
 
+template <typename T, bool is_ad>
+const GenericMaterialProperty<T, is_ad> &
+MaterialBase::getGenericZeroMaterialProperty()
+{
+  // static zero property storage
+  static GenericMaterialProperty<T, is_ad> zero;
+
+  // resize to accomodate maximum number of qpoints
+  // (in multiapp scenarios getMaxQps can return different values in each app; we need the max)
+  unsigned int nqp = _fe_problem.getMaxQps();
+  if (nqp > zero.size())
+    zero.resize(nqp);
+
+  // set values for all qpoints to zero
+  for (unsigned int qp = 0; qp < nqp; ++qp)
+    MathUtils::mooseSetToZero(zero[qp]);
+
+  return zero;
+}
+
 template <typename T>
 ADMaterialProperty<T> &
-MaterialBase::declareADProperty(const std::string & prop_name)
+MaterialBase::declareADProperty(const std::string & name)
 {
-  _fe_problem.usingADMatProps(true);
+  // Check if the supplied parameter is a valid input parameter key
+  std::string prop_name = name;
+  if (_pars.have_parameter<MaterialPropertyName>(name))
+    prop_name = _pars.get<MaterialPropertyName>(name);
+
+  return declareADPropertyByName<T>(prop_name);
+}
+
+template <typename T>
+ADMaterialProperty<T> &
+MaterialBase::declareADPropertyByName(const std::string & prop_name_in)
+{
+  const auto prop_name =
+      _declare_suffix.empty()
+          ? prop_name_in
+          : MooseUtils::join(std::vector<std::string>({prop_name_in, _declare_suffix}), "_");
   registerPropName(prop_name, false, MaterialBase::CURRENT);
   return materialData().declareADProperty<T>(prop_name);
 }

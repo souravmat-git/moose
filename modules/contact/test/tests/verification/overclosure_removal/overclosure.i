@@ -200,10 +200,8 @@
 
 [Contact]
   [./leftright]
-    slave = 4
-    disp_y = disp_y
-    disp_x = disp_x
-    master = 3
+    secondary = 4
+    primary = 3
     model = frictionless
     formulation = penalty
     normalize_penalty = true

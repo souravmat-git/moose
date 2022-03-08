@@ -22,15 +22,12 @@ using libMesh::GhostingFunctor;
 using libMesh::MeshBase;
 using libMesh::processor_id_type;
 
-class AugmentSparsityOnInterface;
-
-template <>
-InputParameters validParams<AugmentSparsityOnInterface>();
-
 class AugmentSparsityOnInterface : public RelationshipManager
 {
 public:
   AugmentSparsityOnInterface(const InputParameters &);
+
+  AugmentSparsityOnInterface(const AugmentSparsityOnInterface & others);
 
   static InputParameters validParams();
 
@@ -43,6 +40,15 @@ public:
                           const MeshBase::const_element_iterator & range_end,
                           processor_id_type p,
                           map_type & coupled_elements) override;
+
+  /**
+   * A clone() is needed because GhostingFunctor can not be shared between
+   * different meshes. The operations in  GhostingFunctor are mesh dependent.
+   */
+  virtual std::unique_ptr<GhostingFunctor> clone() const override
+  {
+    return std::make_unique<AugmentSparsityOnInterface>(*this);
+  }
 
   /**
    * According to the base class docs, "We call mesh_reinit() whenever
@@ -59,22 +65,21 @@ public:
 
   std::string getInfo() const override;
 
-  virtual bool operator==(const RelationshipManager & other) const override;
+  virtual bool operator>=(const RelationshipManager & other) const override;
 
 protected:
-  virtual void internalInit() override;
+  virtual void internalInitWithMesh(const MeshBase &) override;
 
-  /**
-   * The Mesh we're calculating on
-   */
-  const AutomaticMortarGeneration * _amg;
+  BoundaryName _primary_boundary_name;
+  BoundaryName _secondary_boundary_name;
+  SubdomainName _primary_subdomain_name;
+  SubdomainName _secondary_subdomain_name;
 
-  bool _has_attached_amg;
+  /// Whether this relationship manager is called when coupling functors are called when building
+  /// the matrix sparsity pattern
+  const bool _is_coupling_functor;
 
-  BoundaryName _master_boundary_name;
-  BoundaryName _slave_boundary_name;
-  SubdomainName _master_subdomain_name;
-  SubdomainName _slave_subdomain_name;
-
-  std::pair<SubdomainID, SubdomainID> _subdomain_pair;
+  /// Whether to ghost point neighbors of secondary lower subdomain elements and consequently their
+  /// cross mortar interface counterparts
+  const bool _ghost_point_neighbors;
 };

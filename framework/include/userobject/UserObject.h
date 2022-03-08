@@ -15,6 +15,7 @@
 #include "UserObjectInterface.h"
 #include "PostprocessorInterface.h"
 #include "VectorPostprocessorInterface.h"
+#include "ReporterInterface.h"
 #include "MeshChangedInterface.h"
 #include "MooseObject.h"
 #include "MooseTypes.h"
@@ -23,17 +24,14 @@
 #include "ScalarCoupleable.h"
 #include "SetupInterface.h"
 #include "PerfGraphInterface.h"
+#include "SamplerInterface.h"
+#include "FunctorInterface.h"
 
 #include "libmesh/parallel.h"
 
-// Forward declarations
-class UserObject;
 class FEProblemBase;
 class SubProblem;
 class Assembly;
-
-template <>
-InputParameters validParams<UserObject>();
 
 /**
  * Base class for user-specific data
@@ -44,12 +42,15 @@ class UserObject : public MooseObject,
                    public UserObjectInterface,
                    protected PostprocessorInterface,
                    protected VectorPostprocessorInterface,
+                   protected ReporterInterface,
                    protected DistributionInterface,
+                   protected SamplerInterface,
                    protected Restartable,
                    protected MeshMetaDataInterface,
                    protected MeshChangedInterface,
                    protected ScalarCoupleable,
-                   protected PerfGraphInterface
+                   protected PerfGraphInterface,
+                   protected FunctorInterface
 {
 public:
   static InputParameters validParams();
@@ -96,6 +97,17 @@ public:
   }
 
   /**
+   * Optional interface function for providing the points at which a UserObject attains
+   * spatial values. If a UserObject overrides this function, then other objects that
+   * take both the UserObject and points can instead directly use the points specified
+   * on the UserObject.
+   */
+  virtual const std::vector<Point> spatialPoints() const
+  {
+    mooseError("Spatial UserObject interface is not satisfied; spatialPoints() must be overridden");
+  }
+
+  /**
    * Must override.
    *
    * @param uo The UserObject to be joined into _this_ object.  Take the data from the uo object and
@@ -115,31 +127,49 @@ public:
     _communicator.sum(value);
   }
 
+  /**
+   * Gather the parallel max of the variable passed in. It takes care of values across all threads
+   * and CPUs (we DO hybrid parallelism!)
+   *
+   * After calling this, the variable that was passed in will hold the gathered value.
+   */
   template <typename T>
   void gatherMax(T & value)
   {
     _communicator.max(value);
   }
 
+  /**
+   * Gather the parallel min of the variable passed in. It takes care of values across all threads
+   * and CPUs (we DO hybrid parallelism!)
+   *
+   * After calling this, the variable that was passed in will hold the gathered value.
+   */
   template <typename T>
   void gatherMin(T & value)
   {
     _communicator.min(value);
   }
 
+  /**
+   * Gather the parallel value of a variable according to which process has the parallel
+   * maximum of the provided value.
+   * @param[in] value process with maximum value will be selected
+   * @param[in] proxy value to be obtained on process with maximum value
+   */
   template <typename T1, typename T2>
-  void gatherProxyValueMax(T1 & value, T2 & proxy)
-  {
-    unsigned int rank;
-    _communicator.maxloc(value, rank);
-    _communicator.broadcast(proxy, rank);
-  }
+  void gatherProxyValueMax(T1 & value, T2 & proxy);
 
-  void setPrimaryThreadCopy(UserObject * primary)
-  {
-    if (!_primary_thread_copy && primary != this)
-      _primary_thread_copy = primary;
-  }
+  /**
+   * Gather the parallel value of a variable according to which process has the parallel
+   * minimum of the provided value.
+   * @param[in] value process with minimum value will be selected
+   * @param[in] proxy value to be obtained on process with minimum value
+   */
+  template <typename T1, typename T2>
+  void gatherProxyValueMin(T1 & value, T2 & proxy);
+
+  void setPrimaryThreadCopy(UserObject * primary);
 
   UserObject * primaryThreadCopy() { return _primary_thread_copy; }
 
@@ -147,115 +177,21 @@ public:
    * Recursively return a set of user objects this user object depends on
    * Note: this can be called only after all user objects are constructed.
    */
-  std::set<UserObjectName> getDependObjects() const
-  {
-    std::set<UserObjectName> all;
-    for (auto & v : _depend_uo)
-    {
-      all.insert(v);
-      auto & uo = UserObjectInterface::getUserObjectBaseByName(v);
-      auto uos = uo.getDependObjects();
-      for (auto & t : uos)
-        all.insert(t);
-    }
-    return all;
-  }
+  std::set<UserObjectName> getDependObjects() const;
 
-  template <typename T>
-  const T & getUserObject(const std::string & name)
-  {
-    _depend_uo.insert(_pars.get<UserObjectName>(name));
-    return UserObjectInterface::getUserObject<T>(name);
-  }
-
-  template <typename T>
-  const T & getUserObjectByName(const UserObjectName & name)
-  {
-    _depend_uo.insert(name);
-    return UserObjectInterface::getUserObjectByName<T>(name);
-  }
-
-  const UserObject & getUserObjectBase(const UserObjectName & name)
-  {
-    return getUserObjectBaseByName(_pars.get<UserObjectName>(name));
-  }
-
-  const UserObject & getUserObjectBaseByName(const UserObjectName & name)
-  {
-    _depend_uo.insert(name);
-    return UserObjectInterface::getUserObjectBaseByName(name);
-  }
-
-  const PostprocessorValue & getPostprocessorValue(const std::string & name, unsigned int index = 0)
-  {
-    if (hasPostprocessor(name, index))
-    {
-      UserObjectName nm;
-      if (_pars.isSinglePostprocessor(name))
-        nm = _pars.get<PostprocessorName>(name);
-      else
-        nm = _pars.get<std::vector<PostprocessorName>>(name)[index];
-
-      _depend_uo.insert(nm);
-    }
-    return PostprocessorInterface::getPostprocessorValue(name, index);
-  }
-
-  const PostprocessorValue & getPostprocessorValueByName(const PostprocessorName & name)
-  {
-    _depend_uo.insert(name);
-    return PostprocessorInterface::getPostprocessorValueByName(name);
-  }
-
-  const VectorPostprocessorValue & getVectorPostprocessorValue(const std::string & name,
-                                                               const std::string & vector_name)
-  {
-    _depend_uo.insert(_pars.get<VectorPostprocessorName>(name));
-    return VectorPostprocessorInterface::getVectorPostprocessorValue(name, vector_name);
-  }
-
-  const VectorPostprocessorValue &
-  getVectorPostprocessorValueByName(const VectorPostprocessorName & name,
-                                    const std::string & vector_name)
-  {
-    _depend_uo.insert(name);
-    return VectorPostprocessorInterface::getVectorPostprocessorValueByName(name, vector_name);
-  }
-
-  const VectorPostprocessorValue & getVectorPostprocessorValue(const std::string & name,
-                                                               const std::string & vector_name,
-                                                               bool needs_broadcast)
-  {
-    _depend_uo.insert(_pars.get<VectorPostprocessorName>(name));
-    return VectorPostprocessorInterface::getVectorPostprocessorValue(
-        name, vector_name, needs_broadcast);
-  }
-
-  const VectorPostprocessorValue & getVectorPostprocessorValueByName(
-      const VectorPostprocessorName & name, const std::string & vector_name, bool needs_broadcast)
-  {
-    _depend_uo.insert(name);
-    return VectorPostprocessorInterface::getVectorPostprocessorValueByName(
-        name, vector_name, needs_broadcast);
-  }
-
-  const ScatterVectorPostprocessorValue &
-  getScatterVectorPostprocessorValue(const std::string & name, const std::string & vector_name)
-  {
-    _depend_uo.insert(_pars.get<VectorPostprocessorName>(name));
-    return VectorPostprocessorInterface::getScatterVectorPostprocessorValue(name, vector_name);
-  }
-
-  const ScatterVectorPostprocessorValue &
-  getScatterVectorPostprocessorValueByName(const std::string & name,
-                                           const std::string & vector_name)
-  {
-    _depend_uo.insert(name);
-    return VectorPostprocessorInterface::getScatterVectorPostprocessorValueByName(name,
-                                                                                  vector_name);
-  }
+  /**
+   * Whether or not a threaded copy of this object is needed when obtaining it in
+   * another object, like via the UserObjectInterface.
+   *
+   * Derived classes should override this as needed.
+   */
+  virtual bool needThreadedCopy() const { return false; }
 
 protected:
+  virtual void addPostprocessorDependencyHelper(const PostprocessorName & name) const override;
+  virtual void
+  addVectorPostprocessorDependencyHelper(const VectorPostprocessorName & name) const override;
+
   /// Reference to the Subproblem for this user object
   SubProblem & _subproblem;
 
@@ -263,7 +199,7 @@ protected:
   FEProblemBase & _fe_problem;
 
   /// Thread ID of this postprocessor
-  THREAD_ID _tid;
+  const THREAD_ID _tid;
   Assembly & _assembly;
 
   /// Coordinate system
@@ -272,8 +208,28 @@ protected:
   const bool _duplicate_initial_execution;
 
 private:
+  virtual void addUserObjectDependencyHelper(const UserObject & uo) const override final;
+
   UserObject * _primary_thread_copy = nullptr;
 
   /// Depend UserObjects that to be used by AuxKernel for finding the full UO dependency
-  std::set<UserObjectName> _depend_uo;
+  mutable std::set<UserObjectName> _depend_uo;
 };
+
+template <typename T1, typename T2>
+void
+UserObject::gatherProxyValueMax(T1 & value, T2 & proxy)
+{
+  processor_id_type rank;
+  _communicator.maxloc(value, rank);
+  _communicator.broadcast(proxy, rank);
+}
+
+template <typename T1, typename T2>
+void
+UserObject::gatherProxyValueMin(T1 & value, T2 & proxy)
+{
+  processor_id_type rank;
+  _communicator.minloc(value, rank);
+  _communicator.broadcast(proxy, rank);
+}

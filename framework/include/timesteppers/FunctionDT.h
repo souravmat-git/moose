@@ -13,11 +13,7 @@
 #include "FunctionInterface.h"
 #include "LinearInterpolation.h"
 
-class FunctionDT;
 class Function;
-
-template <>
-InputParameters validParams<FunctionDT>();
 
 class FunctionDT : public TimeStepper, public FunctionInterface
 {
@@ -29,7 +25,6 @@ public:
   virtual void init() override;
 
   virtual void postStep() override;
-  virtual void rejectStep() override;
 
 protected:
   virtual Real computeInitialDT() override;
@@ -50,8 +45,6 @@ protected:
   std::unique_ptr<LinearInterpolation> _time_ipol;
 
   Real _growth_factor;
-  /// True if cut back of the time step occurred
-  bool _cutback_occurred;
   Real _min_dt;
 
   /// Whether or not to interpolate DT between times

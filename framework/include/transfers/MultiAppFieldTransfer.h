@@ -11,16 +11,11 @@
 
 #include "MultiAppTransfer.h"
 
-// Forward declarations
-class MultiAppFieldTransfer;
 class MooseVariableFieldBase;
 namespace libMesh
 {
 class DofObject;
 }
-
-template <>
-InputParameters validParams<MultiAppFieldTransfer>();
 
 /**
  *  intermediary class that allows variable names as inputs
@@ -46,7 +41,9 @@ protected:
   void transferDofObject(libMesh::DofObject * to_object,
                          libMesh::DofObject * from_object,
                          MooseVariableFieldBase & to_var,
-                         MooseVariableFieldBase & from_var);
+                         MooseVariableFieldBase & from_var,
+                         NumericVector<Number> & to_solution,
+                         NumericVector<Number> & from_solution);
 
   /// Virtual function defining variables to be transferred
   virtual std::vector<VariableName> getFromVarNames() const = 0;

@@ -42,10 +42,10 @@
   [./thermal_contact]
     type = GapHeatTransfer
     variable = temp
-    master = 5
-    slave = 10
-    emissivity_master = 0
-    emissivity_slave = 0
+    primary = 5
+    secondary = 10
+    emissivity_primary = 0
+    emissivity_secondary = 0
     quadrature = true
   [../]
 []
@@ -131,7 +131,7 @@
     execute_on = 'initial timestep_end'
   [../]
   [./flux_from_clad]
-    type = ADSideFluxIntegral
+    type = ADSideDiffusiveFluxIntegral
     variable = temp
     boundary = 5
     diffusivity = thermal_conductivity

@@ -37,10 +37,10 @@
   [./thermal_contact]
     type = GapHeatTransfer
     variable = temp
-    master = 2
-    slave = 3
-    emissivity_master = 0
-    emissivity_slave = 0
+    primary = 2
+    secondary = 3
+    emissivity_primary = 0
+    emissivity_secondary = 0
   [../]
 []
 
@@ -134,9 +134,6 @@
     type = Density
     block = '1 2'
     density = 1.0
-    disp_x = disp_x
-    disp_y = disp_y
-    disp_z = disp_z
   [../]
 []
 

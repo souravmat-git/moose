@@ -9,14 +9,22 @@
 
 #pragma once
 
-/* include/base/MooseConfig.h. Generated automatically at end of configure. */
-/* include/base/MooseConfig.h.tmp.  Generated from MooseConfig.h.in by configure.  */
-/* include/base/MooseConfig.h.in.  Generated from configure.ac by autoheader.  */
+/* framework/include/base/MooseConfig.h. Generated automatically at end of configure. */
+/* framework/include/base/MooseConfig.h.tmp.  Generated from MooseConfig.h.in by configure.  */
+/* framework/include/base/MooseConfig.h.in.  Generated from configure.ac by autoheader.  */
 
 /* The size of the derivative backing array */
 #ifndef MOOSE_AD_MAX_DOFS_PER_ELEM
-#define MOOSE_AD_MAX_DOFS_PER_ELEM 50
+#define MOOSE_AD_MAX_DOFS_PER_ELEM 53
 #endif
+
+/* Whether to use a global indexing scheme for AD */
+#ifndef MOOSE_GLOBAL_AD_INDEXING
+#define MOOSE_GLOBAL_AD_INDEXING 1
+#endif
+
+/* Whether or not libpng was detected on the system */
+/* #undef HAVE_LIBPNG */
 
 /* Define to the address where bug reports for this package should be sent. */
 #ifndef MOOSE_PACKAGE_BUGREPORT
@@ -49,4 +57,6 @@
 #endif
 
 /* Whether to use a sparse derivative type */
-/* #undef SPARSE_AD */
+#ifndef MOOSE_SPARSE_AD
+#define MOOSE_SPARSE_AD 1
+#endif

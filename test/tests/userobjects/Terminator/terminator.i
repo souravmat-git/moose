@@ -30,7 +30,7 @@
 
 [Postprocessors]
   [./max_c]
-    type = NodalMaxValue
+    type = NodalExtremeValue
     variable = c
     execute_on = 'initial timestep_end'
   [../]
@@ -66,10 +66,6 @@
 
 [Executioner]
   type = Transient
-
-  #Preconditioned JFNK (default)
-  solve_type = 'PJFNK'
-
   dt = 100
   num_steps = 6
 []

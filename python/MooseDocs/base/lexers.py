@@ -17,7 +17,7 @@ import types
 import re
 
 from .. import common
-from ..tree import tokens, pages
+from ..tree import tokens
 
 LOG = logging.getLogger(__name__)
 
@@ -34,6 +34,9 @@ class Pattern(object):
         self.name = name
         self.regex = regex
         self.function = function
+
+    def __str__(self):
+        return '{}: re={}; func={}'.format(self.name, self.regex, self.function)
 
 class Grammar(object):
     """
@@ -97,7 +100,7 @@ class Grammar(object):
         out = []
         for obj in self.__patterns:
             out.append(str(obj))
-        return 'Grammar:\n' + ', '.join(out)
+        return 'Grammar:\n' + '\n'.join(out)
 
 class LexerInformation(object):
     """

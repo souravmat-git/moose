@@ -11,11 +11,6 @@
 
 #include "ArrayKernel.h"
 
-class ArrayReaction;
-
-template <>
-InputParameters validParams<ArrayReaction>();
-
 class ArrayReaction : public ArrayKernel
 {
 public:
@@ -24,9 +19,9 @@ public:
   ArrayReaction(const InputParameters & parameters);
 
 protected:
-  virtual RealEigenVector computeQpResidual() override;
+  virtual void computeQpResidual(RealEigenVector & residual) override;
   virtual RealEigenVector computeQpJacobian() override;
-  virtual RealEigenMatrix computeQpOffDiagJacobian(MooseVariableFEBase & jvar) override;
+  virtual RealEigenMatrix computeQpOffDiagJacobian(const MooseVariableFEBase & jvar) override;
 
   /// scalar diffusion coefficient
   const MaterialProperty<Real> * const _r;

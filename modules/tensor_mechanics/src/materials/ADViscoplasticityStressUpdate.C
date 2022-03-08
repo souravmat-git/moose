@@ -58,7 +58,7 @@ ADViscoplasticityStressUpdate::ADViscoplasticityStressUpdate(const InputParamete
     _pore_shape_factor(_pore_shape == PoreShapeModel::SPHERICAL ? 1.5 : std::sqrt(3.0)),
     _power(getParam<Real>("power")),
     _power_factor(_model == ViscoplasticityModel::LPS ? (_power - 1.0) / (_power + 1.0) : 1.0),
-    _coefficient(getMaterialProperty<Real>("coefficient")),
+    _coefficient(getADMaterialProperty<Real>("coefficient")),
     _gauge_stress(declareADProperty<Real>(_base_name + "gauge_stress")),
     _maximum_gauge_ratio(getParam<Real>("maximum_gauge_ratio")),
     _minimum_equivalent_stress(getParam<Real>("minimum_equivalent_stress")),
@@ -78,7 +78,9 @@ ADViscoplasticityStressUpdate::updateState(ADRankTwoTensor & elastic_strain_incr
                                            ADRankTwoTensor & stress,
                                            const RankTwoTensor & /*stress_old*/,
                                            const ADRankFourTensor & elasticity_tensor,
-                                           const RankTwoTensor & elastic_strain_old)
+                                           const RankTwoTensor & elastic_strain_old,
+                                           bool /*compute_full_tangent_operator = false*/,
+                                           RankFourTensor & /*tangent_operator = _identityTensor*/)
 {
   // Compute initial hydrostatic stress and porosity
   if (_pore_shape == PoreShapeModel::CYLINDRICAL)
@@ -240,7 +242,7 @@ ADViscoplasticityStressUpdate::computeDGaugeDSigma(const ADReal & gauge_stress,
                                                    const ADRankTwoTensor & dev_stress,
                                                    const ADRankTwoTensor & stress)
 {
-  // Compute the derivative of the gauge stress with respect to the equilvalent and hydrostatic
+  // Compute the derivative of the gauge stress with respect to the equivalent and hydrostatic
   // stress components
   const ADReal M = std::abs(_hydro_stress) / gauge_stress;
   const ADReal h = computeH(_power, M);
@@ -264,7 +266,7 @@ ADViscoplasticityStressUpdate::computeDGaugeDSigma(const ADReal & gauge_stress,
     }
   }
 
-  // Compute the derivative of the residual with respect to the equilvalent stress
+  // Compute the derivative of the residual with respect to the equivalent stress
   ADReal dresidual_dequiv_stress = 2.0 * equiv_stress / Utility::pow<2>(gauge_stress);
   if (_pore_shape == PoreShapeModel::SPHERICAL)
     dresidual_dequiv_stress *= 1.0 + _intermediate_porosity / 1.5;

@@ -22,8 +22,8 @@ MooseParsedFunctionWrapper::MooseParsedFunctionWrapper(FEProblemBase & feproblem
 {
   initialize();
 
-  _function_ptr = libmesh_make_unique<ParsedFunction<Real, RealGradient>>(
-      _function_str, &_vars, &_initial_vals);
+  _function_ptr =
+      std::make_unique<ParsedFunction<Real, RealGradient>>(_function_str, &_vars, &_initial_vals);
 
   for (auto & v : _vars)
     _addr.push_back(&_function_ptr->getVarAddress(v));
@@ -92,9 +92,10 @@ MooseParsedFunctionWrapper::initialize()
   for (unsigned int i = 0; i < _vals_input.size(); ++i)
   {
     // Case when a Postprocessor is found by the name given in the input values
-    if (_feproblem.hasPostprocessor(_vals_input[i]))
+    ReporterName r_name(_vals_input[i], "value");
+    if (_feproblem.getReporterData().hasReporterValue<PostprocessorValue>(r_name))
     {
-      Real & pp_val = _feproblem.getPostprocessorValue(_vals_input[i]);
+      const Real & pp_val = _feproblem.getPostprocessorValueByName(_vals_input[i]);
       _initial_vals.push_back(pp_val);
       _pp_vals.push_back(&pp_val);
       _pp_index.push_back(i);
@@ -103,7 +104,7 @@ MooseParsedFunctionWrapper::initialize()
     // Case when a scalar variable is found by the name given in the input values
     else if (_feproblem.hasScalarVariable(_vals_input[i]))
     {
-      Real & scalar_val = _feproblem.getScalarVariable(_tid, _vals_input[i]).sln()[0];
+      auto & scalar_val = _feproblem.getScalarVariable(_tid, _vals_input[i]).sln()[0];
       _initial_vals.push_back(scalar_val);
       _scalar_vals.push_back(&scalar_val);
       _scalar_index.push_back(i);

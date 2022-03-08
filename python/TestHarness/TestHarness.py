@@ -13,6 +13,8 @@ import platform
 import os, re, inspect, errno, copy, json
 import shlex
 from . import RaceChecker
+import subprocess
+import shutil
 
 from socket import gethostname
 from FactorySystem.Factory import Factory
@@ -42,26 +44,158 @@ def findTestRoot(start=os.getcwd(), method=os.environ.get('METHOD', 'opt')):
             app_name, args, hit_node = readTestRoot(fname)
             return rootdir, app_name, args, hit_node
         rootdir = os.path.dirname(rootdir)
-    raise RuntimeError('test root directory not found')
+    raise RuntimeError('test root directory not found in "{}"'.format(start))
+
+# This function finds a file in the herd trunk containing all the possible applications
+# thay may be built with an "up" target.  If passed the value ROOT it will simply
+# return the root directory
+def findDepApps(dep_names, use_current_only=False):
+    dep_name = dep_names.split('~')[0]
+
+    app_dirs = []
+    moose_apps = ['framework', 'moose', 'test', 'unit', 'modules', 'examples']
+    apps = []
+
+    # First see if we are in a git repo
+    p = subprocess.Popen('git rev-parse --show-cdup', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    p.wait()
+    if p.returncode == 0:
+        git_dir = p.communicate()[0].decode('utf-8')
+        root_dir = os.path.abspath(os.path.join(os.getcwd(), git_dir)).rstrip()
+
+        # Assume that any application we care about is always a peer
+        dir_to_append = '.' if use_current_only else '..'
+        app_dirs.append(os.path.abspath(os.path.join(root_dir, dir_to_append)))
+
+    # Now see if we can find .build_apps in a parent directory from where we are at, usually "projects"
+    restrict_file = '.build_apps'
+    restrict_file_path = ''
+    restrict_dir = ''
+
+    next_dir = os.getcwd()
+    for i in range(4):
+        next_dir = os.path.join(next_dir, "..")
+        if os.path.isfile(os.path.join(next_dir, restrict_file)):
+            restrict_file_path = os.path.join(next_dir, restrict_file)
+            break
+    if restrict_file_path != '':
+        restrict_dir = os.path.dirname(os.path.abspath(restrict_file_path))
+        app_dirs.append(restrict_dir)
+
+    # Make sure that we found at least one directory to search
+    if len(app_dirs) == 0:
+        return ''
+
+    # unique paths to search
+    unique_dirs = set()
+    for dir in app_dirs:
+        unique_dirs.add(os.path.abspath(dir))
+
+    remove_dirs = set()
+    # now strip common paths
+    for dir1 in unique_dirs:
+        for dir2 in unique_dirs:
+            if dir1 == dir2:
+                continue
+
+            if dir1 in dir2:
+                remove_dirs.add(dir2)
+            elif dir2 in dir1:
+                remove_dirs.add(dir1)
+    # set difference
+    unique_dirs = unique_dirs - remove_dirs
+
+    if restrict_file_path != '':
+        f = open(restrict_file_path)
+        apps.extend(f.read().splitlines())
+        f.close()
+
+    # See which apps in this file are children or dependents of this app
+    dep_apps = set()
+    dep_dirs = set()
+
+    # moose, elk and modules have special rules
+    if dep_name == "moose":
+        dep_app_re=re.compile(r"\bmoose\.mk\b")
+    elif dep_name == "modules":
+        dep_app_re=re.compile(r"\bmodules\.mk\b")
+    elif dep_name == "elk":
+        dep_app_re=re.compile(r"\belk(?:_module)?\.mk\b")
+    else:
+        dep_app_re=re.compile(r"^\s*APPLICATION_NAME\s*:=\s*"+dep_name,re.MULTILINE)
+
+    ignores = ['.git', '.svn', '.libs', 'gold', 'src', 'include', 'contrib', 'tests', 'bak', 'tutorials']
+
+    for dir in unique_dirs:
+        startinglevel = dir.count(os.sep)
+        for dirpath, dirnames, filenames in os.walk(dir, topdown=True):
+            # Don't traverse too deep!
+            if dirpath.count(os.sep) - startinglevel >= 2: # 2 levels outta be enough for anybody
+                dirnames[:] = []
+
+            # Don't traverse into ignored directories
+            for ignore in ignores:
+                if ignore in dirnames:
+                    dirnames.remove(ignore)
+
+            # Honor user ignored directories
+            if os.path.isfile(os.path.join(dirpath, '.moose_ignore')):
+                dirnames[:] = []
+                continue
+
+            # Don't traverse into submodules
+            if os.path.isfile(os.path.join(dirpath, '.gitmodules')):
+                f = open(os.path.join(dirpath, '.gitmodules'))
+                content = f.read()
+                f.close()
+                sub_mods = re.findall(r'path = (\w+)', content)
+                dirnames[:] = [x for x in dirnames if x not in sub_mods]
+
+            potential_makefile = os.path.join(dirpath, 'Makefile')
+
+            if os.path.isfile(potential_makefile):
+                f = open(potential_makefile)
+                lines = f.read()
+                f.close()
+
+                # We only want to build certain applications, look at the path to make a decision
+                # If we are in trunk, we will honor .build_apps.  If we aren't, then we'll add it
+                eligible_app = dirpath.split('/')[-1]
+
+                if dep_app_re.search(lines) and ((len(apps) == 0 or eligible_app in apps) or ('/moose/' in dirpath and eligible_app in moose_apps)):
+                    dep_apps.add(eligible_app)
+                    dep_dirs.add(dirpath)
+
+                    # Don't traverse once we've found a dependency
+                    dirnames[:] = []
+
+    # Now we need to filter out duplicate moose apps
+    moose_dir = os.environ.get('MOOSE_DIR')
+    return '\n'.join(dep_dirs)
 
 class TestHarness:
 
     @staticmethod
-    def buildAndRun(argv, app_name, moose_dir):
-        harness = TestHarness(argv, moose_dir, app_name=app_name)
+    def buildAndRun(argv, app_name, moose_dir, moose_python=None):
+        harness = TestHarness(argv, moose_dir, app_name=app_name, moose_python=moose_python)
         harness.findAndRunTests()
         sys.exit(harness.error_code)
 
-    def __init__(self, argv, moose_dir, app_name=None):
+    def __init__(self, argv, moose_dir, app_name=None, moose_python=None):
+        if moose_python is None:
+            self.moose_python_dir = os.path.join(moose_dir, "python")
+        else:
+            self.moose_python_dir = moose_python
         os.environ['MOOSE_DIR'] = moose_dir
-        os.environ['PYTHONPATH'] = os.path.join(moose_dir, 'python') + ':' + os.environ.get('PYTHONPATH', '')
+        os.environ['PYTHONPATH'] = self.moose_python_dir + ':' + os.environ.get('PYTHONPATH', '')
 
         if app_name:
             rootdir, app_name, args, root_params = '.', app_name, [], pyhit.Node()
         else:
             rootdir, app_name, args, root_params = findTestRoot(start=os.getcwd())
 
-        orig_cwd = os.getcwd()
+        self._rootdir = rootdir
+        self._orig_cwd = os.getcwd()
         os.chdir(rootdir)
         argv = argv[:1] + args + argv[1:]
 
@@ -77,11 +211,10 @@ class TestHarness:
         # Get dependant applications and load dynamic tester plugins
         # If applications have new testers, we expect to find them in <app_dir>/scripts/TestHarness/testers
         dirs = [os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))]
-        sys.path.append(os.path.join(moose_dir, 'framework', 'scripts'))   # For find_dep_apps.py
+        dirs.append(os.path.join(moose_dir, 'share', 'moose', 'python', 'TestHarness', 'testers'))
 
         # Use the find_dep_apps script to get the dependant applications for an app
-        import find_dep_apps
-        depend_app_dirs = find_dep_apps.findDepApps(app_name, use_current_only=True)
+        depend_app_dirs = findDepApps(app_name, use_current_only=True)
         dirs.extend([os.path.join(my_dir, 'scripts', 'TestHarness') for my_dir in depend_app_dirs.split('\n')])
 
         # Finally load the plugins!
@@ -127,9 +260,11 @@ class TestHarness:
             checks['petsc_version'] = 'N/A'
             checks['petsc_version_release'] = 'N/A'
             checks['slepc_version'] = 'N/A'
+            checks['exodus_version'] = 'N/A'
             checks['library_mode'] = set(['ALL'])
             checks['mesh_mode'] = set(['ALL'])
             checks['ad_mode'] = set(['ALL'])
+            checks['ad_indexing_type'] = set(['ALL'])
             checks['dtk'] = set(['ALL'])
             checks['unique_ids'] = set(['ALL'])
             checks['vtk'] = set(['ALL'])
@@ -140,6 +275,7 @@ class TestHarness:
             checks['threading'] = set(['ALL'])
             checks['superlu'] = set(['ALL'])
             checks['mumps'] = set(['ALL'])
+            checks['strumpack'] = set(['ALL'])
             checks['parmetis'] = set(['ALL'])
             checks['chaco'] = set(['ALL'])
             checks['party'] = set(['ALL'])
@@ -156,9 +292,11 @@ class TestHarness:
             checks['petsc_version'] = util.getPetscVersion(self.libmesh_dir)
             checks['petsc_version_release'] = util.getLibMeshConfigOption(self.libmesh_dir, 'petsc_version_release')
             checks['slepc_version'] = util.getSlepcVersion(self.libmesh_dir)
+            checks['exodus_version'] = util.getExodusVersion(self.libmesh_dir)
             checks['library_mode'] = util.getSharedOption(self.libmesh_dir)
             checks['mesh_mode'] = util.getLibMeshConfigOption(self.libmesh_dir, 'mesh_mode')
             checks['ad_mode'] = util.getMooseConfigOption(self.moose_dir, 'ad_mode')
+            checks['ad_indexing_type'] = util.getMooseConfigOption(self.moose_dir, 'ad_indexing_type')
             checks['dtk'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'dtk')
             checks['unique_ids'] = util.getLibMeshConfigOption(self.libmesh_dir, 'unique_ids')
             checks['vtk'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'vtk')
@@ -169,6 +307,7 @@ class TestHarness:
             checks['threading'] =  util.getLibMeshThreadingModel(self.libmesh_dir)
             checks['superlu'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'superlu')
             checks['mumps'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'mumps')
+            checks['strumpack'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'strumpack')
             checks['parmetis'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'parmetis')
             checks['chaco'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'chaco')
             checks['party'] =  util.getLibMeshConfigOption(self.libmesh_dir, 'party')
@@ -198,7 +337,7 @@ class TestHarness:
 
         self.initialize(argv, app_name)
 
-        os.chdir(orig_cwd)
+        os.chdir(self._orig_cwd)
 
     """
     Recursively walks the current tree looking for tests to run
@@ -217,11 +356,9 @@ class TestHarness:
 
         if self.options.spec_file and os.path.isdir(self.options.spec_file):
             search_dir = self.options.spec_file
-
         elif self.options.spec_file and os.path.isfile(self.options.spec_file):
             search_dir = os.path.dirname(self.options.spec_file)
             self._infiles = [os.path.basename(self.options.spec_file)]
-
         else:
             search_dir = os.getcwd()
 
@@ -250,7 +387,11 @@ class TestHarness:
                             full_app_name = app_name + "-" + self.options.method
                             if platform.system() == 'Windows':
                                 full_app_name += '.exe'
-                            testroot_params["executable"] = os.path.join(dirpath, full_app_name)
+
+                            testroot_params["executable"] = full_app_name
+                            if shutil.which(full_app_name) is None:
+                                testroot_params["executable"] = os.path.join(dirpath, full_app_name)
+
                             testroot_params["testroot_dir"] = dirpath
                             caveats = [full_app_name]
                             if args:
@@ -272,7 +413,7 @@ class TestHarness:
                             # Get the testers for this test
                             testers = self.createTesters(dirpath, file, find_only, testroot_params)
 
-                            # Schedule the testers for immediate execution
+                            # Schedule the testers (non blocking)
                             self.scheduler.schedule(testers)
 
                             # record these launched test to prevent this test from launching again
@@ -282,7 +423,7 @@ class TestHarness:
                             os.chdir(saved_cwd)
                             sys.path.pop()
 
-            # Wait for all the tests to complete
+            # Wait for all the tests to complete (blocking)
             self.scheduler.waitFinish()
 
             # TODO: this DOES NOT WORK WITH MAX FAILES (max failes is considered a scheduler error at the moment)
@@ -371,6 +512,7 @@ class TestHarness:
         params['executable'] = testroot_params.get("executable", self.executable)
         params['hostname'] = self.host_name
         params['moose_dir'] = self.moose_dir
+        params['moose_python_dir'] = self.moose_python_dir
         params['base_dir'] = self.base_dir
         params['first_directory'] = first_directory
         params['root_params'] = testroot_params.get("root_params", self.root_params)
@@ -379,7 +521,8 @@ class TestHarness:
             if type(params['prereq']) != list:
                 print(("Option 'prereq' needs to be of type list in " + params['test_name']))
                 sys.exit(1)
-            params['prereq'] = [relative_path.replace('/tests/', '') + '.' + item for item in params['prereq']]
+            elif (params['prereq'] != ['ALL']):
+                params['prereq'] = [relative_path.replace('/tests/', '') + '.' + item for item in params['prereq']]
 
         # Double the alloted time for tests when running with the valgrind option
         tester.setValgrindMode(self.options.valgrind_mode)
@@ -534,7 +677,14 @@ class TestHarness:
                              colored=self.options.colored, code=self.options.code )))
 
         else:
-            print(('Ran %d tests in %.1f seconds.' % (self.num_passed+self.num_failed, time)))
+            num_nonzero_timing = sum(1 if float(tup[0].getTiming()) > 0 else 0 for tup in self.test_table)
+            if num_nonzero_timing > 0:
+                timing_max = max(float(tup[0].getTiming()) for tup in self.test_table)
+                timing_avg = sum(float(tup[0].getTiming()) for tup in self.test_table) / num_nonzero_timing
+            else:
+                timing_max = 0
+                timing_avg = 0
+            print(('Ran %d tests in %.1f seconds. Average test time %.1f seconds, maximum test time %.1f seconds.' % (self.num_passed+self.num_failed, time, timing_avg, timing_max)))
 
             if self.num_passed:
                 summary = '<g>%d passed</g>'
@@ -557,6 +707,25 @@ class TestHarness:
 
             print((util.colorText( summary % (self.num_passed, self.num_skipped, self.num_pending, self.num_failed),  "", html = True, \
                              colored=self.options.colored, code=self.options.code )))
+
+            if self.options.longest_jobs:
+                # Sort all jobs by run time
+                sorted_tups = sorted(self.test_table, key=lambda tup: float(tup[0].getTiming()), reverse=True)
+
+                print('\n%d longest running jobs:' % self.options.longest_jobs)
+                print(('-' * (util.TERM_COLS)))
+
+                # Copy the current options and force timing to be true so that
+                # we get times when we call formatResult() below
+                options_with_timing = copy.deepcopy(self.options)
+                options_with_timing.timing = True
+
+                for tup in sorted_tups[0:self.options.longest_jobs]:
+                    job = tup[0]
+                    if not job.isSkip() and float(job.getTiming()) > 0:
+                        print(util.formatResult(job, options_with_timing, caveats=True))
+                if len(sorted_tups) == 0 or float(sorted_tups[0][0].getTiming()) == 0:
+                    print('No jobs were completed.')
 
             # Perform any write-to-disc operations
             self.writeResults()
@@ -651,21 +820,26 @@ class TestHarness:
                         else:
                             output_dir = job.getTestDir()
 
+                        output = ''
+                        # Append input file contents to output
+                        if self.options.include_input:
+                            # This is a file i/o operation. We only want to do this once, and only if necessary
+                            input_file = job.getInputFileContents()
+                            if input_file:
+                                output += "\n\nINPUT FILE:\n" + str(input_file)
+
+                        output += "\n\nTEST OUTPUT:" + job.getOutput()
+
                         # Yes, by design test dir will be apart of the output file name
                         output_file = os.path.join(output_dir, '.'.join([os.path.basename(job.getTestDir()),
-                                                                         job.getTestNameShort(),
+                                                                         job.getTestNameShort().replace(os.sep, '.'),
                                                                          status,
                                                                          'txt']))
 
-                        formated_results = util.formatResult(job, self.options, result=job.getOutput(), color=False)
+                        formated_results = util.formatResult(job, self.options, result=output, color=False)
 
-                        # Passing tests
-                        if self.options.ok_files and job.isPass():
-                            with open(output_file, 'w') as f:
-                                f.write(formated_results)
-
-                        # Failing tests
-                        if self.options.fail_files and job.isFail():
+                        if (self.options.ok_files and job.isPass()) or \
+                           (self.options.fail_files and job.isFail()):
                             with open(output_file, 'w') as f:
                                 f.write(formated_results)
 
@@ -678,7 +852,8 @@ class TestHarness:
 
     def initialize(self, argv, app_name):
         # Load the scheduler plugins
-        self.factory.loadPlugins([os.path.join(self.moose_dir, 'python', 'TestHarness')], 'schedulers', "IS_SCHEDULER")
+        plugin_paths = [os.path.join(self.moose_dir, 'python', 'TestHarness'), os.path.join(self.moose_dir, 'share', 'moose', 'python', 'TestHarness')]
+        self.factory.loadPlugins(plugin_paths, 'schedulers', "IS_SCHEDULER")
 
         self.options.queueing = False
         if self.options.pbs:
@@ -706,9 +881,27 @@ class TestHarness:
         self.scheduler = self.factory.create(scheduler_plugin, self, plugin_params)
 
         ## Save executable-under-test name to self.executable
-        self.executable = os.getcwd() + '/' + app_name + '-' + self.options.method
-        if platform.system() == 'Windows':
-            self.executable += '.exe'
+        exec_suffix = 'Windows' if platform.system() == 'Windows' else ''
+        self.executable = app_name + '-' + self.options.method + exec_suffix
+        # if the executable has a slash - assume it is a file path
+        if '/' in app_name:
+            self.executable = os.path.abspath(self.executable)
+        # look for executable in PATH - if not there, check other places.
+        elif shutil.which(self.executable) is None:
+            if os.path.exists(os.getcwd() + '/' + self.executable):
+                # it's in the current working directory
+                self.executable = os.getcwd() + '/' + self.executable
+            elif os.path.exists(os.path.join(self._rootdir, self.executable)):
+                # it's in the testroot file's directory
+                self.executable = self.executable
+                # we may be hopping around between multiple (module)
+                # subdirectories of tests - so the executable needs to be an
+                # absolute path.
+                self.executable = os.path.abspath(os.path.join(self._rootdir, self.executable))
+            else:
+                # it's (hopefully) in an installed location
+                mydir = os.path.dirname(os.path.realpath(__file__))
+                self.executable = os.path.join(mydir, '../../../..', 'bin', self.executable)
 
         # Save the output dir since the current working directory changes during tests
         self.output_dir = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), self.options.output_dir)
@@ -767,6 +960,7 @@ class TestHarness:
         parser.add_argument('--dbfile', nargs='?', action='store', dest='dbFile', help='Location to timings data base file. If not set, assumes $HOME/timingDB/timing.sqlite')
         parser.add_argument('-l', '--load-average', action='store', type=float, dest='load', help='Do not run additional tests if the load average is at least LOAD')
         parser.add_argument('-t', '--timing', action='store_true', dest='timing', help='Report Timing information for passing tests')
+        parser.add_argument('--longest-jobs', action='store', dest='longest_jobs', type=int, default=0, help='Print the longest running jobs upon completion')
         parser.add_argument('-s', '--scale', action='store_true', dest='scaling', help='Scale problems that have SCALE_REFINE set')
         parser.add_argument('-i', nargs=1, action='store', type=str, dest='input_file_name', default='', help='The test specification file to look for')
         parser.add_argument('--libmesh_dir', nargs=1, action='store', type=str, dest='libmesh_dir', help='Currently only needed for bitten code coverage')
@@ -784,6 +978,7 @@ class TestHarness:
         parser.add_argument('--check-input', action='store_true', dest='check_input', help='Run check_input (syntax) tests only')
         parser.add_argument('--no-check-input', action='store_true', dest='no_check_input', help='Do not run check_input (syntax) tests')
         parser.add_argument('--spec-file', action='store', type=str, dest='spec_file', help='Supply a path to the tests spec file to run the tests found therein. Or supply a path to a directory in which the TestHarness will search for tests. You can further alter which tests spec files are found through the use of -i and --re')
+        parser.add_argument('-C', '--test-root', nargs=1, metavar='dir', type=str, dest='spec_file', help='Tell the TestHarness to search for test spec files at this location.')
         parser.add_argument('-d', '--pedantic-checks', action='store_true', dest='pedantic_checks', help="Run pedantic checks of the Testers' file writes looking for race conditions.")
 
         # Options that pass straight through to the executable
@@ -809,6 +1004,7 @@ class TestHarness:
         outputgroup.add_argument('-x', '--sep-files', action='store_true', dest='sep_files', help='Write the output of each test to a separate file. Only quiet output to terminal. This is equivalant to \'--sep-files-fail --sep-files-ok\'')
         outputgroup.add_argument('--sep-files-ok', action='store_true', dest='ok_files', help='Write the output of each passed test to a separate file')
         outputgroup.add_argument('-a', '--sep-files-fail', action='store_true', dest='fail_files', help='Write the output of each FAILED test to a separate file. Only quiet output to terminal.')
+        outputgroup.add_argument('--include-input-file', action='store_true', dest='include_input', help='Include the contents of the input file when writing the results of a test to a file')
         outputgroup.add_argument("--testharness-unittest", action="store_true", help="Run the TestHarness unittests that test the TestHarness.")
         outputgroup.add_argument("--yaml", action="store_true", dest="yaml", help="Dump the parameters for the testers in Yaml Format")
         outputgroup.add_argument("--dump", action="store_true", dest="dump", help="Dump the parameters for the testers in GetPot Format")

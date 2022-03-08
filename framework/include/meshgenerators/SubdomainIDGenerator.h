@@ -11,12 +11,6 @@
 
 #include "MeshGenerator.h"
 
-// Forward declarations
-class SubdomainIDGenerator;
-
-template <>
-InputParameters validParams<SubdomainIDGenerator>();
-
 /**
  * MeshGenerator for assigning a subdomain ID to all elements
  */
@@ -30,9 +24,9 @@ public:
   std::unique_ptr<MeshBase> generate() override;
 
 protected:
+  /// the input mesh, which may be output by another mesh generator
   std::unique_ptr<MeshBase> & _input;
 
   /// The subdomain ID to assign to every elemennt
   SubdomainID _subdomain_id;
 };
-

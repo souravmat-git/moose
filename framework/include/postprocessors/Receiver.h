@@ -11,12 +11,6 @@
 
 #include "GeneralPostprocessor.h"
 
-// Forward Declarations
-class Receiver;
-
-template <>
-InputParameters validParams<Receiver>();
-
 /**
  * A class for storing data, it allows the user to change the value of the
  * postprocessor by altering the _my_value reference
@@ -46,11 +40,6 @@ public:
    */
   virtual Real getValue() override;
 
-  /**
-   * Initial setup function for applying the default value
-   */
-  virtual void initialSetup() override;
-
 private:
   /// Flag for initializing the old value
   bool _initialize_old;
@@ -58,4 +47,3 @@ private:
   /// Reference to the value being stored in the associated PostprocessorData class
   const PostprocessorValue & _my_value;
 };
-

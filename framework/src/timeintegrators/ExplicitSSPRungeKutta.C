@@ -17,8 +17,6 @@
 
 registerMooseObject("MooseApp", ExplicitSSPRungeKutta);
 
-defineLegacyParams(ExplicitSSPRungeKutta);
-
 InputParameters
 ExplicitSSPRungeKutta::validParams()
 {
@@ -35,6 +33,7 @@ ExplicitSSPRungeKutta::ExplicitSSPRungeKutta(const InputParameters & parameters)
 
     _order(getParam<MooseEnum>("order")),
 
+    _stage(0),
     _solution_intermediate_stage(_nl.addVector("solution_intermediate_stage", false, GHOSTED)),
     _tmp_solution(_nl.addVector("tmp_solution", false, GHOSTED)),
     _tmp_mass_solution_product(_nl.addVector("tmp_mass_solution_product", false, GHOSTED))
@@ -74,11 +73,27 @@ ExplicitSSPRungeKutta::computeTimeDerivatives()
 }
 
 void
-ExplicitSSPRungeKutta::computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const
+ExplicitSSPRungeKutta::computeADTimeDerivatives(ADReal & ad_u_dot,
+                                                const dof_id_type & dof,
+                                                DualReal & /*ad_u_dotdot*/) const
 {
-  for (unsigned int k = 0; k <= _stage; k++)
-    ad_u_dot -= _a[_stage][k] * (*(_solution_stage[k]))(dof);
-  ad_u_dot *= 1.0 / (_b[_stage] * _dt);
+  // Note that if the solution for the current stage is not a nullptr, then neither
+  // are the previous stages.
+  if (_solution_stage[_stage])
+  {
+    for (unsigned int k = 0; k <= _stage; k++)
+      ad_u_dot -= _a[_stage][k] * (*(_solution_stage[k]))(dof);
+    ad_u_dot *= 1.0 / (_b[_stage] * _dt);
+  }
+  else
+  {
+    // We must be outside the solve loop in order to meet this criterion. In that case are we at
+    // timestep_begin or timestep_end? We don't know, so I don't think it's meaningful to compute
+    // derivatives here. Let's put in a quiet NaN which will only signal if we try to do something
+    // meaningful with it (and then we do want to signal because time derivatives may not be
+    // meaningful right now)
+    ad_u_dot = std::numeric_limits<typename ADReal::value_type>::quiet_NaN();
+  }
 }
 
 void
@@ -128,7 +143,7 @@ ExplicitSSPRungeKutta::solveStage()
 {
   // Compute the mass matrix
   _nl.computeTimeDerivatives();
-  auto & mass_matrix = *_nonlinear_implicit_system->matrix;
+  auto & mass_matrix = _nonlinear_implicit_system->get_system_matrix();
   _fe_problem.computeJacobianTag(
       *_nonlinear_implicit_system->current_local_solution, mass_matrix, _Ke_time_tag);
 
@@ -175,7 +190,7 @@ ExplicitSSPRungeKutta::postResidual(NumericVector<Number> & residual)
   _tmp_solution.close();
 
   // Perform mass matrix product with the above vector
-  auto & mass_matrix = *_nonlinear_implicit_system->matrix;
+  auto & mass_matrix = _nonlinear_implicit_system->get_system_matrix();
   mass_matrix.vector_mult(_tmp_mass_solution_product, _tmp_solution);
 
   // Finish computing residual vector (before modification by nodal BCs)

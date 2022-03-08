@@ -50,7 +50,7 @@ PowerLawCreepStressUpdate::PowerLawCreepStressUpdate(const InputParameters & par
 }
 
 void
-PowerLawCreepStressUpdate::computeStressInitialize(const Real /*effective_trial_stress*/,
+PowerLawCreepStressUpdate::computeStressInitialize(const Real & /*effective_trial_stress*/,
                                                    const RankFourTensor & /*elasticity_tensor*/)
 {
   if (_has_temp)
@@ -62,7 +62,7 @@ PowerLawCreepStressUpdate::computeStressInitialize(const Real /*effective_trial_
 }
 
 Real
-PowerLawCreepStressUpdate::computeResidual(const Real effective_trial_stress, const Real scalar)
+PowerLawCreepStressUpdate::computeResidual(const Real & effective_trial_stress, const Real & scalar)
 {
   const Real stress_delta = effective_trial_stress - _three_shear_modulus * scalar;
   const Real creep_rate =
@@ -71,11 +71,43 @@ PowerLawCreepStressUpdate::computeResidual(const Real effective_trial_stress, co
 }
 
 Real
-PowerLawCreepStressUpdate::computeDerivative(const Real effective_trial_stress, const Real scalar)
+PowerLawCreepStressUpdate::computeDerivative(const Real & effective_trial_stress,
+                                             const Real & scalar)
 {
   const Real stress_delta = effective_trial_stress - _three_shear_modulus * scalar;
   const Real creep_rate_derivative = -1.0 * _coefficient * _three_shear_modulus * _n_exponent *
                                      std::pow(stress_delta, _n_exponent - 1.0) * _exponential *
                                      _exp_time;
   return creep_rate_derivative * _dt - 1.0;
+}
+
+Real
+PowerLawCreepStressUpdate::computeStrainEnergyRateDensity(
+    const MaterialProperty<RankTwoTensor> & stress,
+    const MaterialProperty<RankTwoTensor> & strain_rate)
+{
+  if (_n_exponent <= 1)
+    return 0.0;
+
+  Real creep_factor = _n_exponent / (_n_exponent + 1);
+
+  return creep_factor * stress[_qp].doubleContraction((strain_rate)[_qp]);
+}
+
+void
+PowerLawCreepStressUpdate::computeStressFinalize(const RankTwoTensor & plastic_strain_increment)
+{
+  _creep_strain[_qp] += plastic_strain_increment;
+}
+
+void
+PowerLawCreepStressUpdate::resetIncrementalMaterialProperties()
+{
+  _creep_strain[_qp] = _creep_strain_old[_qp];
+}
+
+bool
+PowerLawCreepStressUpdate::substeppingCapabilityEnabled()
+{
+  return getParam<bool>("use_substep");
 }

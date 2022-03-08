@@ -12,12 +12,12 @@
 
 registerMooseAction("MooseApp", AddConstraintAction, "add_constraint");
 
-defineLegacyParams(AddConstraintAction);
-
 InputParameters
 AddConstraintAction::validParams()
 {
-  return MooseObjectAction::validParams();
+  InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a Constraint object to the simulation.");
+  return params;
 }
 
 AddConstraintAction::AddConstraintAction(InputParameters params) : MooseObjectAction(params) {}

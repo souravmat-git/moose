@@ -26,8 +26,6 @@
 
 const BoundaryID InternalSideIndicator::InternalBndId = 12345;
 
-defineLegacyParams(InternalSideIndicator);
-
 InputParameters
 InternalSideIndicator::validParams()
 {
@@ -67,7 +65,7 @@ InternalSideIndicator::InternalSideIndicator(const InputParameters & parameters)
 
     _boundary_id(parameters.get<BoundaryID>("_boundary_id")),
 
-    _var(_subproblem.getStandardVariable(_tid, parameters.get<VariableName>("variable"))),
+    _var(mooseVariableField()),
     _scale_by_flux_faces(parameters.get<bool>("scale_by_flux_faces")),
 
     _u(_var.sln()),
@@ -78,11 +76,11 @@ InternalSideIndicator::InternalSideIndicator(const InputParameters & parameters)
     _u_neighbor(_var.slnNeighbor()),
     _grad_u_neighbor(_var.gradSlnNeighbor())
 {
-  const std::vector<MooseVariableFEBase *> & coupled_vars = getCoupledMooseVars();
+  const std::vector<MooseVariableFieldBase *> & coupled_vars = getCoupledMooseVars();
   for (const auto & var : coupled_vars)
     addMooseVariableDependency(var);
 
-  addMooseVariableDependency(mooseVariable());
+  addMooseVariableDependency(&mooseVariableField());
 }
 
 void

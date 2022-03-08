@@ -9,8 +9,6 @@
 
 #include "SidePostprocessor.h"
 
-defineLegacyParams(SidePostprocessor);
-
 InputParameters
 SidePostprocessor::validParams()
 {
@@ -20,6 +18,6 @@ SidePostprocessor::validParams()
 }
 
 SidePostprocessor::SidePostprocessor(const InputParameters & parameters)
-  : SideUserObject(parameters), Postprocessor(parameters)
+  : SideUserObject(parameters), Postprocessor(this)
 {
 }

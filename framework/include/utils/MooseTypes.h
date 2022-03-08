@@ -188,6 +188,15 @@ typedef StoredRange<std::vector<const Elem *>::iterator, const Elem *> ConstElem
 namespace Moose
 {
 
+/// This is used for places where we initialize some qp-sized data structures
+/// that would end up being sized too small after the quadrature order gets
+/// bumped (dynamically in-sim).  So for these cases, we just use this constant
+/// to size those data structures overly large to accomodate rather than come
+/// up with some overkill complex mechanism for dynamically resizing them.
+/// Eventually, we may need or implement that more sophisticated mechanism and
+/// will no longer need this.
+const size_t constMaxQpsPerElem = 216;
+
 // These are used by MooseVariableData and MooseVariableDataFV
 enum SolutionState
 {
@@ -422,88 +431,41 @@ using ADVariablePhiGradient = ADTemplateVariablePhiGradient<Real>;
 // Templated typed to support is_ad templated classes
 namespace Moose
 {
-
 template <typename T, bool is_ad>
-struct GenericStruct
-{
-  typedef T type;
-};
-template <typename T>
-struct GenericStruct<T, true>
-{
-  typedef typename ADType<T>::type type;
-};
-
+using GenericType = typename std::conditional<is_ad, typename ADType<T>::type, T>::type;
 } // namespace Moose
-template <bool is_ad>
-using GenericReal = typename Moose::GenericStruct<Real, is_ad>::type;
-template <bool is_ad>
-using GenericRankTwoTensor = typename Moose::GenericStruct<RankTwoTensor, is_ad>::type;
-template <bool is_ad>
-using GenericRankThreeTensor = typename Moose::GenericStruct<RankThreeTensor, is_ad>::type;
-template <bool is_ad>
-using GenericRankFourTensor = typename Moose::GenericStruct<RankFourTensor, is_ad>::type;
-template <bool is_ad>
-using GenericVariableValue = typename Moose::GenericStruct<VariableValue, is_ad>::type;
-template <bool is_ad>
-using GenericVariableGradient = typename Moose::GenericStruct<VariableGradient, is_ad>::type;
-template <bool is_ad>
-using GenericVariableSecond = typename Moose::GenericStruct<VariableSecond, is_ad>::type;
 
-#define declareADValidParams(ADObjectType)                                                         \
-  template <>                                                                                      \
-  InputParameters validParams<ADObjectType>()
+template <bool is_ad>
+using GenericReal = typename Moose::GenericType<Real, is_ad>;
+template <bool is_ad>
+using GenericRealVectorValue = typename Moose::GenericType<RealVectorValue, is_ad>;
+template <bool is_ad>
+using GenericRankTwoTensor = typename Moose::GenericType<RankTwoTensor, is_ad>;
+template <bool is_ad>
+using GenericRankThreeTensor = typename Moose::GenericType<RankThreeTensor, is_ad>;
+template <bool is_ad>
+using GenericRankFourTensor = typename Moose::GenericType<RankFourTensor, is_ad>;
+template <bool is_ad>
+using GenericVariableValue = typename Moose::GenericType<VariableValue, is_ad>;
+template <bool is_ad>
+using GenericVariableGradient = typename Moose::GenericType<VariableGradient, is_ad>;
+template <bool is_ad>
+using GenericVariableSecond = typename Moose::GenericType<VariableSecond, is_ad>;
 
-#define defineADValidParams(ADObjectType, ADBaseObjectType, addedParamCode)                        \
-  template <>                                                                                      \
-  InputParameters validParams<ADObjectType>()                                                      \
-  {                                                                                                \
-    InputParameters params = validParams<ADBaseObjectType>();                                      \
-    addedParamCode;                                                                                \
-    return params;                                                                                 \
-  }                                                                                                \
-  void mooseClangFormatFunction()
-
+// Should be removed with #19439
 #define defineLegacyParams(ObjectType)                                                             \
-  template <>                                                                                      \
-  InputParameters validParams<ObjectType>()                                                        \
-  {                                                                                                \
-    return ObjectType::validParams();                                                              \
-  }                                                                                                \
-  void mooseClangFormatFunction()
-
-#define defineADLegacyParams(ADObjectType)                                                         \
-  template <>                                                                                      \
-  InputParameters validParams<ADObjectType>()                                                      \
-  {                                                                                                \
-    return ADObjectType::validParams();                                                            \
-  }                                                                                                \
-  void mooseClangFormatFunction()
-
-#define defineADBaseValidParams(ADObjectType, BaseObjectType, addedParamCode)                      \
-  template <>                                                                                      \
-  InputParameters validParams<ADObjectType>()                                                      \
-  {                                                                                                \
-    InputParameters params = validParams<BaseObjectType>();                                        \
-    addedParamCode;                                                                                \
-    return params;                                                                                 \
-  }                                                                                                \
-  void mooseClangFormatFunction()
-
-#define defineADValidParamsFromEmpty(ADObjectType, addedParamCode)                                 \
-  template <>                                                                                      \
-  InputParameters validParams<ADObjectType>()                                                      \
-  {                                                                                                \
-    InputParameters params = emptyInputParameters();                                               \
-    addedParamCode;                                                                                \
-    return params;                                                                                 \
-  }                                                                                                \
-  void mooseClangFormatFunction()
+  static_assert(false,                                                                             \
+                "defineLegacyParams is no longer supported as legacy input parameter "             \
+                "construction is no longer supported; see "                                        \
+                "mooseframework.org/newsletter/2021_11.html#legacy-input-parameter-deprecation "   \
+                "for more information");
 
 namespace Moose
 {
 extern const processor_id_type INVALID_PROCESSOR_ID;
 extern const SubdomainID ANY_BLOCK_ID;
+extern const SubdomainID INTERNAL_SIDE_LOWERD_ID;
+extern const SubdomainID BOUNDARY_SIDE_LOWERD_ID;
 extern const SubdomainID INVALID_BLOCK_ID;
 extern const BoundaryID ANY_BOUNDARY_ID;
 extern const BoundaryID INVALID_BOUNDARY_ID;
@@ -565,8 +527,8 @@ enum CouplingType
 
 enum ConstraintSideType
 {
-  SIDE_MASTER,
-  SIDE_SLAVE
+  SIDE_PRIMARY,
+  SIDE_SECONDARY
 };
 
 enum DGResidualType
@@ -585,8 +547,8 @@ enum DGJacobianType
 
 enum ConstraintType
 {
-  Slave = Element,
-  Master = Neighbor
+  Secondary = Element,
+  Primary = Neighbor
 };
 
 enum class ElementType : unsigned int
@@ -598,8 +560,8 @@ enum class ElementType : unsigned int
 
 enum class MortarType : unsigned int
 {
-  Slave = static_cast<unsigned int>(Moose::ElementType::Element),
-  Master = static_cast<unsigned int>(Moose::ElementType::Neighbor),
+  Secondary = static_cast<unsigned int>(Moose::ElementType::Element),
+  Primary = static_cast<unsigned int>(Moose::ElementType::Neighbor),
   Lower = static_cast<unsigned int>(Moose::ElementType::Lower)
 };
 
@@ -614,15 +576,15 @@ enum class RESTARTABLE_FILTER : unsigned char
 
 enum ConstraintJacobianType
 {
-  SlaveSlave = ElementElement,
-  SlaveMaster = ElementNeighbor,
-  MasterSlave = NeighborElement,
-  MasterMaster = NeighborNeighbor,
+  SecondarySecondary = ElementElement,
+  SecondaryPrimary = ElementNeighbor,
+  PrimarySecondary = NeighborElement,
+  PrimaryPrimary = NeighborNeighbor,
   LowerLower,
-  LowerSlave,
-  LowerMaster,
-  SlaveLower,
-  MasterLower
+  LowerSecondary,
+  LowerPrimary,
+  SecondaryLower,
+  PrimaryLower
 };
 
 enum CoordinateSystemType
@@ -672,12 +634,15 @@ enum SolveType
  */
 enum EigenSolveType
 {
-  EST_POWER,              ///< Power / Inverse / RQI
-  EST_ARNOLDI,            ///< Arnoldi
-  EST_KRYLOVSCHUR,        ///< Krylov-Schur
-  EST_JACOBI_DAVIDSON,    ///< Jacobi-Davidson
-  EST_NONLINEAR_POWER,    ///< Nonlinear inverse power
-  EST_NEWTON,             ///< Newton-based eigen solver
+  EST_POWER,           ///< Power / Inverse / RQI
+  EST_ARNOLDI,         ///< Arnoldi
+  EST_KRYLOVSCHUR,     ///< Krylov-Schur
+  EST_JACOBI_DAVIDSON, ///< Jacobi-Davidson
+  EST_NONLINEAR_POWER, ///< Nonlinear inverse power
+  EST_NEWTON, ///< Newton-based eigensolver with an assembled Jacobian matrix (fully coupled by default)
+  EST_PJFNK,   ///< Preconditioned Jacobian-free Newton Krylov
+  EST_PJFNKMO, ///< The same as PJFNK except that matrix-vector multiplication is employed to replace residual evaluation in linear solver
+  EST_JFNK     ///< Jacobian-free Newton Krylov
 };
 
 /**
@@ -744,20 +709,12 @@ enum LineSearchType
   LS_DEFAULT,
   LS_NONE,
   LS_BASIC,
-#ifdef LIBMESH_HAVE_PETSC
-#if PETSC_VERSION_LESS_THAN(3, 3, 0)
-  LS_CUBIC,
-  LS_QUADRATIC,
-  LS_BASICNONORMS,
-#else
   LS_SHELL,
   LS_CONTACT,
   LS_PROJECT,
   LS_L2,
   LS_BT,
   LS_CP
-#endif
-#endif
 };
 
 /**
@@ -916,6 +873,9 @@ DerivativeStringClass(OutputName);
 /// Used for objects that expect MaterialProperty names
 DerivativeStringClass(MaterialPropertyName);
 
+/// Used for objects that expect Moose::Functor names
+DerivativeStringClass(MooseFunctorName);
+
 /// User for accessing Material objects
 DerivativeStringClass(MaterialName);
 
@@ -927,3 +887,17 @@ DerivativeStringClass(MeshGeneratorName);
 
 /// Name of extra element IDs
 DerivativeStringClass(ExtraElementIDName);
+
+/// Name of a Reporter Value, second argument to ReporterName (see Reporter.h)
+DerivativeStringClass(ReporterValueName);
+
+/// Name of an Executor.  Used for inputs to Executors
+DerivativeStringClass(ExecutorName);
+
+namespace Moose
+{
+extern const TagName SOLUTION_TAG;
+extern const TagName OLD_SOLUTION_TAG;
+extern const TagName OLDER_SOLUTION_TAG;
+extern const TagName PREVIOUS_NL_SOLUTION_TAG;
+}

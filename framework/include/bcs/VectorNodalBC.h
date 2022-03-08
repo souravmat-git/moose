@@ -12,12 +12,6 @@
 #include "NodalBCBase.h"
 #include "MooseVariableInterface.h"
 
-// Forward declarations
-class VectorNodalBC;
-
-template <>
-InputParameters validParams<VectorNodalBC>();
-
 /**
  * Base class for deriving any boundary condition that works at nodes on vector variables
  */
@@ -32,7 +26,7 @@ public:
    * Gets the variable this BC is active on
    * @return the variable
    */
-  virtual VectorMooseVariable & variable() override { return _var; }
+  virtual const VectorMooseVariable & variable() const override { return _var; }
   virtual void computeResidual() override;
   virtual void computeJacobian() override;
   virtual void computeOffDiagJacobian(unsigned int jvar) override;

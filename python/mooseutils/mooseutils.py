@@ -35,12 +35,12 @@ def colorText(string, color, **kwargs):
     """
     # Get the properties
     html = kwargs.pop('html', False)
-    code = kwargs.pop('code', True)
     colored = kwargs.pop('colored', True)
 
     # ANSI color codes for colored terminal output
     color_codes = dict(RESET='\033[0m',
                        BOLD='\033[1m',
+                       DIM='\033[2m',
                        RED='\033[31m',
                        GREEN='\033[32m',
                        YELLOW='\033[33m',
@@ -55,20 +55,15 @@ def colorText(string, color, **kwargs):
                        LIGHT_MAGENTA='\033[95m',
                        LIGHT_CYAN='\033[96m',
                        LIGHT_GREY='\033[37m')
-    if code:
-        color_codes['GREEN'] = '\033[32m'
-        color_codes['CYAN']  = '\033[36m'
-        color_codes['MAGENTA'] = '\033[35m'
 
-    if colored and not ('BITTEN_NOCOLOR' in os.environ and os.environ['BITTEN_NOCOLOR'] == 'true'):
-        if html:
-            string = string.replace('<r>', color_codes['BOLD']+color_codes['RED'])
-            string = string.replace('<c>', color_codes['BOLD']+color_codes['CYAN'])
-            string = string.replace('<g>', color_codes['BOLD']+color_codes['GREEN'])
-            string = string.replace('<y>', color_codes['BOLD']+color_codes['YELLOW'])
-            string = string.replace('<b>', color_codes['BOLD'])
-            string = re.sub(r'</[rcgyb]>', color_codes['RESET'], string)
-        else:
+    if colored and html:
+        string = string.replace('<r>', color_codes['BOLD']+color_codes['RED'])
+        string = string.replace('<c>', color_codes['BOLD']+color_codes['CYAN'])
+        string = string.replace('<g>', color_codes['BOLD']+color_codes['GREEN'])
+        string = string.replace('<y>', color_codes['BOLD']+color_codes['YELLOW'])
+        string = string.replace('<b>', color_codes['BOLD'])
+        string = re.sub(r'</[rcgyb]>', color_codes['RESET'], string)
+    elif colored and not html:
             string = color_codes[color] + string + color_codes['RESET']
     elif html:
         string = re.sub(r'</?[rcgyb]>', '', string)    # stringip all "html" tags
@@ -119,26 +114,26 @@ def find_moose_executable(loc, **kwargs):
             matches = re.findall(r'APPLICATION_NAME\s*[:=]+\s*(?P<name>.+)$', content, flags=re.MULTILINE)
             name = matches[-1] if matches else None
 
-        if name is None:
-            name = os.path.basename(loc)
 
+    loc = os.path.abspath(loc)
+    # If we still don't have a name, let's try the tail of the path
+    if name is None:
+        name = os.path.basename(loc)
 
     show_error = kwargs.pop('show_error', True)
-
-    # Handle 'combined' and 'tests'
-    if os.path.isdir(loc):
-        if name == 'test':
-            name = 'moose_test'
+    exe = None
 
     # Check that the location exists and that it is a directory
-    exe = None
-    loc = os.path.abspath(loc)
     if not os.path.isdir(loc):
         if show_error:
             print('ERROR: The supplied path must be a valid directory:', loc)
 
     # Search for executable with the given name
     else:
+        # Handle 'tests'
+        if name == 'test':
+            name = 'moose_test'
+
         for method in methods:
             exe_name = os.path.join(loc, name + '-' + method)
             if os.path.isfile(exe_name):
@@ -164,7 +159,7 @@ def find_moose_executable_recursive(loc=os.getcwd(), **kwargs):
             break
     return executable
 
-def run_executable(app_path, args, mpi=None, suppress_output=False):
+def run_executable(app_path, *args, mpi=None, suppress_output=False):
     """
     A function for running an application.
     """
@@ -175,10 +170,11 @@ def run_executable(app_path, args, mpi=None, suppress_output=False):
         cmd = [app_path]
     cmd += args
 
+    kwargs = dict(encoding='utf-8')
     if suppress_output:
-        return subprocess.check_output(cmd)
-    else:
-        return subprocess.call(cmd)
+        kwargs['stdout'] = subprocess.DEVNULL
+        kwargs['stderr'] = subprocess.DEVNULL
+    return subprocess.call(cmd, **kwargs)
 
 def runExe(app_path, args):
     """
@@ -349,42 +345,6 @@ def text_unidiff(out_content, gold_content, out_fname=None, gold_fname=None, col
 
     return ''.join(diff)
 
-def is_git_repo(working_dir=os.getcwd()):
-    """
-    Return true if the repository is a git repo.
-    """
-    return os.path.isdir(os.path.join(working_dir, '.git'))
-
-def git_commit(working_dir=os.getcwd()):
-    """
-    Return the current SHA from git.
-    """
-    out = check_output(['git', 'rev-parse', 'HEAD'], cwd=working_dir)
-    return out.strip(' \n')
-
-def git_commit_message(sha, working_dir=os.getcwd()):
-    """
-    Return the the commit message for the supplied SHA
-    """
-    out = check_output(['git', 'show', '-s', '--format=%B', sha], cwd=working_dir)
-    return out.strip(' \n')
-
-def git_merge_commits(working_dir=os.getcwd()):
-    """
-    Return the current SHAs for a merge.
-    """
-    out = check_output(['git', 'log', '-1', '--merges', '--pretty=format:%P'], cwd=working_dir)
-    return out.strip(' \n').split(' ')
-
-def git_ls_files(working_dir=os.getcwd()):
-    """
-    Return a list of files via 'git ls-files'.
-    """
-    out = set()
-    for fname in check_output(['git', 'ls-files'], cwd=working_dir).split('\n'):
-            out.add(os.path.abspath(os.path.join(working_dir, fname)))
-    return out
-
 def list_files(working_dir=os.getcwd()):
     """
     Return a set of files, recursively, for the supplied directory.
@@ -394,18 +354,6 @@ def list_files(working_dir=os.getcwd()):
         for fname in filenames:
             out.add(os.path.join(root, fname))
     return out
-
-def git_root_dir(working_dir=os.getcwd()):
-    """
-    Return the top-level git directory by running 'git rev-parse --show-toplevel'.
-    """
-    try:
-        return check_output(['git', 'rev-parse', '--show-toplevel'],
-                            cwd=working_dir, stderr=subprocess.STDOUT).strip('\n')
-    except subprocess.CalledProcessError:
-        print("The supplied directory is not a git repository: {}".format(working_dir))
-    except OSError:
-        print("The supplied directory does not exist: {}".format(working_dir))
 
 def run_time(function, *args, **kwargs):
     """Run supplied function with duration timing."""
@@ -442,7 +390,11 @@ def shellCommand(command, cwd=None):
 
 def check_output(cmd, **kwargs):
     """Get output from a process"""
-    return subprocess.check_output(cmd, encoding='utf-8', **kwargs)
+    kwargs.setdefault('check', True)
+    kwargs.setdefault('stdout', subprocess.PIPE)
+    kwargs.setdefault('stderr', subprocess.STDOUT)
+    kwargs.setdefault('encoding', 'utf-8')
+    return subprocess.run(cmd, **kwargs).stdout
 
 def generate_filebase(string, replace='_', lowercase=True):
     """
@@ -458,3 +410,9 @@ def recursive_update(d, u):
     for k, v in u.items():
         d[k] = recursive_update(d.get(k, dict()), v) if isinstance(v, dict) else v
     return d
+
+def fuzzyEqual(test_value, true_value, tolerance):
+    return abs(test_value - true_value) / abs(true_value) < tolerance
+
+def fuzzyAbsoluteEqual(test_value, true_value, tolerance):
+    return abs(test_value - true_value) < tolerance

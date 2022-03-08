@@ -11,23 +11,24 @@
 
 registerMooseObject("MooseApp", VariableTimeIntegrationAux);
 
-defineLegacyParams(VariableTimeIntegrationAux);
-
 InputParameters
 VariableTimeIntegrationAux::validParams()
 {
   InputParameters params = AuxKernel::validParams();
+  params.addClassDescription("Integrates a field variable in time.");
   params.addRequiredCoupledVar("variable_to_integrate", "The variable to be integrated");
-  params.addParam<Real>("coefficient", 1.0, "A simple coefficient");
+  params.addParam<Real>("coefficient", 1.0, "A simple coefficient multiplying the integral");
   params.addParam<unsigned int>(
-      "order", 2, "The order of global truncation error: midpoint=1, trapazoidal=2, Simpson=3");
+      "order", 2, "The order of global truncation error: midpoint=1, trapezoidal=2, Simpson=3");
   return params;
 }
 
 VariableTimeIntegrationAux::VariableTimeIntegrationAux(const InputParameters & parameters)
   : AuxKernel(parameters),
     _coef(getParam<Real>("coefficient")),
-    _order(getParam<unsigned int>("order"))
+    _order(getParam<unsigned int>("order")),
+    _u_old(_order != 3 ? uOld() : genericZeroValue<false>()),
+    _u_older(_order == 3 ? uOlder() : genericZeroValue<false>())
 {
   switch (_order)
   {
@@ -50,7 +51,7 @@ VariableTimeIntegrationAux::VariableTimeIntegrationAux(const InputParameters & p
       _coupled_vars.push_back(&coupledValueOlder("variable_to_integrate"));
       break;
     default:
-      mooseError("VariableTimeIntegrationAux: unknown time integraiton order specfied");
+      mooseError("VariableTimeIntegrationAux: unknown time integration order specified");
   }
 }
 

@@ -12,17 +12,20 @@
 #include "Material.h"
 #include "DerivativeMaterialInterface.h"
 #include "RankTwoTensorForward.h"
+#include "MooseTypes.h"
 
 /**
  * EshelbyTensor defines a strain increment and rotation increment, for finite strains.
  */
-class EshelbyTensor : public DerivativeMaterialInterface<Material>
+template <bool is_ad>
+class EshelbyTensorTempl : public DerivativeMaterialInterface<Material>
 {
 public:
   static InputParameters validParams();
 
-  EshelbyTensor(const InputParameters & parameters);
+  EshelbyTensorTempl(const InputParameters & parameters);
 
+  virtual void initialSetup() override;
   virtual void initQpStatefulProperties() override;
   virtual void computeQpProperties() override;
 
@@ -30,19 +33,29 @@ protected:
   /// Base name of the material system
   const std::string _base_name;
 
+  /// Whether to also compute Eshelby tensor's dissipation for C(t) integral
+  const bool _compute_dissipation;
+
   const MaterialProperty<Real> & _sed;
+  const MaterialProperty<Real> * _serd;
+
   MaterialProperty<RankTwoTensor> & _eshelby_tensor;
+  MaterialProperty<RankTwoTensor> * _eshelby_tensor_dissipation;
 
   /// The stress tensor
-  const MaterialProperty<RankTwoTensor> & _stress;
+  const GenericMaterialProperty<RankTwoTensor, is_ad> & _stress;
 
-  /// The odl stress tensor
+  /// The old stress tensor
   const MaterialProperty<RankTwoTensor> & _stress_old;
 
   std::vector<const VariableGradient *> _grad_disp;
+  std::vector<const VariableGradient *> _grad_disp_old;
 
   MaterialProperty<RealVectorValue> & _J_thermal_term_vec;
   const VariableGradient & _grad_temp;
   const bool _has_temp;
-  const MaterialProperty<RankTwoTensor> * const _total_deigenstrain_dT;
+  const OptionalMaterialProperty<RankTwoTensor> & _total_deigenstrain_dT;
 };
+
+typedef EshelbyTensorTempl<false> EshelbyTensor;
+typedef EshelbyTensorTempl<true> ADEshelbyTensor;

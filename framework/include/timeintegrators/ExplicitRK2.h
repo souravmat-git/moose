@@ -11,11 +11,6 @@
 
 #include "TimeIntegrator.h"
 
-class ExplicitRK2;
-
-template <>
-InputParameters validParams<ExplicitRK2>();
-
 /**
  * Base class for three different explicit second-order Runge-Kutta
  * time integration methods:
@@ -67,7 +62,9 @@ public:
   virtual int order() override { return 2; }
 
   virtual void computeTimeDerivatives() override;
-  void computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const override;
+  void computeADTimeDerivatives(DualReal & ad_u_dot,
+                                const dof_id_type & dof,
+                                DualReal & ad_u_dotdot) const override;
   virtual void solve() override;
   virtual void postResidual(NumericVector<Number> & residual) override;
 
@@ -82,6 +79,9 @@ protected:
 
   /// Buffer to store non-time residual from the first stage.
   NumericVector<Number> & _residual_old;
+
+  /// The older solution
+  const NumericVector<Number> & _solution_older;
 
   /// The method coefficients.  See the table above for description.
   /// These are pure virtual in the base class, and must be overridden
@@ -102,4 +102,3 @@ ExplicitRK2::computeTimeDerivativeHelper(T & u_dot, const T2 & u_old, const T3 &
 
   u_dot *= 1. / _dt;
 }
-

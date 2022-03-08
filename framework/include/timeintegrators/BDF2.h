@@ -12,11 +12,6 @@
 #include "TimeIntegrator.h"
 #include "MathUtils.h"
 
-class BDF2;
-
-template <>
-InputParameters validParams<BDF2>();
-
 /**
  * BDF2 time integrator
  */
@@ -30,7 +25,9 @@ public:
   virtual int order() override { return 2; }
   virtual void preStep() override;
   virtual void computeTimeDerivatives() override;
-  void computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const override;
+  void computeADTimeDerivatives(DualReal & ad_u_dot,
+                                const dof_id_type & dof,
+                                DualReal & ad_u_dotdot) const override;
   virtual void postResidual(NumericVector<Number> & residual) override;
 
 protected:
@@ -42,6 +39,9 @@ protected:
   computeTimeDerivativeHelper(T & u_dot, const T2 & u, const T3 & u_old, const T4 & u_older) const;
 
   std::vector<Real> & _weight;
+
+  /// The older solution
+  const NumericVector<Number> & _solution_older;
 };
 
 namespace BDF2Helper
@@ -68,4 +68,3 @@ BDF2::computeTimeDerivativeHelper(T & u_dot,
     u_dot *= 1. / _dt;
   }
 }
-

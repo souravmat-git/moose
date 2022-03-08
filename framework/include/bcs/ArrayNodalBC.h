@@ -12,12 +12,6 @@
 #include "NodalBCBase.h"
 #include "MooseVariableInterface.h"
 
-// Forward declarations
-class ArrayNodalBC;
-
-template <>
-InputParameters validParams<ArrayNodalBC>();
-
 /**
  * Base class for deriving any boundary condition that works at nodes on vector variables
  */
@@ -32,7 +26,7 @@ public:
    * Gets the variable this BC is active on
    * @return the variable
    */
-  virtual ArrayMooseVariable & variable() override { return _var; }
+  virtual const ArrayMooseVariable & variable() const override { return _var; }
   virtual void computeResidual() override;
   virtual void computeJacobian() override;
   virtual void computeOffDiagJacobian(unsigned int jvar) override;
@@ -46,7 +40,11 @@ protected:
   /// Value of the unknown variable this BC is acting on
   const RealEigenVector & _u;
 
-  virtual RealEigenVector computeQpResidual() = 0;
+  /**
+   * Compute this BC's contribution to the residual at the current quadrature point,
+   * to be filled in \p residual.
+   */
+  virtual void computeQpResidual(RealEigenVector & residual) = 0;
 
   /**
    * The user can override this function to compute the "on-diagonal"
@@ -60,4 +58,11 @@ protected:
    * computing an off-diagonal jacobian component.
    */
   virtual RealEigenMatrix computeQpOffDiagJacobian(MooseVariableFEBase & jvar);
+
+  /// Number of components of the array variable
+  const unsigned int _count;
+
+private:
+  /// Work vector for residual
+  RealEigenVector _work_vector;
 };

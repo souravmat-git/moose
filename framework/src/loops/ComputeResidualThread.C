@@ -67,6 +67,10 @@ ComputeResidualThread::subdomainChanged()
   std::set<TagID> needed_fe_var_vector_tags;
   _kernels.updateBlockFEVariableCoupledVectorTagDependency(
       _subdomain, needed_fe_var_vector_tags, _tid);
+  _integrated_bcs.updateBlockFEVariableCoupledVectorTagDependency(
+      _subdomain, needed_fe_var_vector_tags, _tid);
+  _fe_problem.getMaterialWarehouse().updateBlockFEVariableCoupledVectorTagDependency(
+      _subdomain, needed_fe_var_vector_tags, _tid);
 
   // Update material dependencies
   std::set<unsigned int> needed_mat_props;
@@ -192,6 +196,12 @@ ComputeResidualThread::onBoundary(const Elem * elem,
       if (bc->shouldApply())
         bc->computeResidual();
     }
+
+    if (lower_d_elem)
+    {
+      Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
+      _fe_problem.addResidualLower(_tid);
+    }
   }
 }
 
@@ -244,31 +254,25 @@ ComputeResidualThread::onInternalSide(const Elem * elem, unsigned int side)
     // Pointer to the neighbor we are currently working on.
     const Elem * neighbor = elem->neighbor_ptr(side);
 
-    // Get the global id of the element and the neighbor
-    const dof_id_type elem_id = elem->id(), neighbor_id = neighbor->id();
+    _fe_problem.reinitElemNeighborAndLowerD(elem, side, _tid);
 
-    if ((neighbor->active() && (neighbor->level() == elem->level()) && (elem_id < neighbor_id)) ||
-        (neighbor->level() < elem->level()))
+    // Set up Sentinels so that, even if one of the reinitMaterialsXXX() calls throws, we
+    // still remember to swap back during stack unwinding.
+    SwapBackSentinel face_sentinel(_fe_problem, &FEProblem::swapBackMaterialsFace, _tid);
+    _fe_problem.reinitMaterialsFace(elem->subdomain_id(), _tid);
+
+    SwapBackSentinel neighbor_sentinel(_fe_problem, &FEProblem::swapBackMaterialsNeighbor, _tid);
+    _fe_problem.reinitMaterialsNeighbor(neighbor->subdomain_id(), _tid);
+
+    const auto & dgks = _dg_warehouse->getActiveBlockObjects(_subdomain, _tid);
+    for (const auto & dg_kernel : dgks)
+      if (dg_kernel->hasBlocks(neighbor->subdomain_id()))
+        dg_kernel->computeResidual();
+
     {
-      _fe_problem.reinitNeighbor(elem, side, _tid);
-
-      // Set up Sentinels so that, even if one of the reinitMaterialsXXX() calls throws, we
-      // still remember to swap back during stack unwinding.
-      SwapBackSentinel face_sentinel(_fe_problem, &FEProblem::swapBackMaterialsFace, _tid);
-      _fe_problem.reinitMaterialsFace(elem->subdomain_id(), _tid);
-
-      SwapBackSentinel neighbor_sentinel(_fe_problem, &FEProblem::swapBackMaterialsNeighbor, _tid);
-      _fe_problem.reinitMaterialsNeighbor(neighbor->subdomain_id(), _tid);
-
-      const auto & dgks = _dg_warehouse->getActiveBlockObjects(_subdomain, _tid);
-      for (const auto & dg_kernel : dgks)
-        if (dg_kernel->hasBlocks(neighbor->subdomain_id()))
-          dg_kernel->computeResidual();
-
-      {
-        Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
-        _fe_problem.addResidualNeighbor(_tid);
-      }
+      Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
+      _fe_problem.addResidualNeighbor(_tid);
+      _fe_problem.addResidualLower(_tid);
     }
   }
 }

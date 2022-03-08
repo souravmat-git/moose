@@ -11,11 +11,6 @@
 
 #include "ArrayIntegratedBC.h"
 
-class ArrayPenaltyDirichletBC;
-
-template <>
-InputParameters validParams<ArrayPenaltyDirichletBC>();
-
 class ArrayPenaltyDirichletBC : public ArrayIntegratedBC
 {
 public:
@@ -24,7 +19,7 @@ public:
   ArrayPenaltyDirichletBC(const InputParameters & parameters);
 
 protected:
-  virtual RealEigenVector computeQpResidual() override;
+  virtual void computeQpResidual(RealEigenVector & residual) override;
   virtual RealEigenVector computeQpJacobian() override;
 
 private:

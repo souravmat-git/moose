@@ -18,8 +18,6 @@
 #include "libmesh/threads.h"
 #include "libmesh/quadrature.h"
 
-defineLegacyParams(ArrayKernel);
-
 InputParameters
 ArrayKernel::validParams()
 {
@@ -43,7 +41,8 @@ ArrayKernel::ArrayKernel(const InputParameters & parameters)
     _grad_phi(_assembly.gradPhi(_var)),
     _u(_is_implicit ? _var.sln() : _var.slnOld()),
     _grad_u(_is_implicit ? _var.gradSln() : _var.gradSlnOld()),
-    _count(_var.count())
+    _count(_var.count()),
+    _work_vector(_count)
 {
   addMooseVariableDependency(mooseVariable());
 
@@ -102,10 +101,12 @@ ArrayKernel::computeResidual()
     initQpResidual();
     for (_i = 0; _i < _test.size(); _i++)
     {
-      RealEigenVector residual = _JxW[_qp] * _coord[_qp] * computeQpResidual();
-      mooseAssert(residual.size() == _count,
+      _work_vector.setZero();
+      computeQpResidual(_work_vector);
+      mooseAssert(_work_vector.size() == _count,
                   "Size of local residual is not equal to the number of array variable compoments");
-      _assembly.saveLocalArrayResidual(_local_re, _i, _test.size(), residual);
+      _work_vector *= _JxW[_qp] * _coord[_qp];
+      _assembly.saveLocalArrayResidual(_local_re, _i, _test.size(), _work_vector);
     }
   }
 
@@ -137,9 +138,9 @@ ArrayKernel::computeJacobian()
     for (_i = 0; _i < _test.size(); _i++)
       for (_j = 0; _j < _phi.size(); _j++)
       {
-        RealEigenVector v = _JxW[_qp] * _coord[_qp] * computeQpJacobian();
+        _work_vector = computeQpJacobian() * _JxW[_qp] * _coord[_qp];
         _assembly.saveDiagLocalArrayJacobian(
-            _local_ke, _i, _test.size(), _j, _phi.size(), _var.number(), v);
+            _local_ke, _i, _test.size(), _j, _phi.size(), _var.number(), _work_vector);
       }
   }
 
@@ -160,27 +161,35 @@ ArrayKernel::computeJacobian()
   }
 }
 
-void
-ArrayKernel::computeOffDiagJacobian(MooseVariableFEBase & jvar)
+RealEigenVector
+ArrayKernel::computeQpJacobian()
 {
-  bool same_var = (jvar.number() == _var.number());
+  return RealEigenVector::Zero(_var.count());
+}
 
-  prepareMatrixTag(_assembly, _var.number(), jvar.number());
+void
+ArrayKernel::computeOffDiagJacobian(const unsigned int jvar_num)
+{
+  const auto & jvar = getVariable(jvar_num);
+
+  bool same_var = (jvar_num == _var.number());
+
+  prepareMatrixTag(_assembly, _var.number(), jvar_num);
 
   // This (undisplaced) jvar could potentially yield the wrong phi size if this object is acting on
   // the displaced mesh
-  auto phi_size = _sys.getVariable(_tid, jvar.number()).dofIndices().size();
+  auto phi_size = jvar.dofIndices().size();
 
-  precalculateOffDiagJacobian(jvar.number());
+  precalculateOffDiagJacobian(jvar_num);
   for (_qp = 0; _qp < _qrule->n_points(); _qp++)
   {
     initQpOffDiagJacobian(jvar);
     for (_i = 0; _i < _test.size(); _i++)
       for (_j = 0; _j < phi_size; _j++)
       {
-        RealEigenMatrix v = _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(jvar);
+        _work_matrix = computeQpOffDiagJacobian(jvar) * _JxW[_qp] * _coord[_qp];
         _assembly.saveFullLocalArrayJacobian(
-            _local_ke, _i, _test.size(), _j, phi_size, _var.number(), jvar.number(), v);
+            _local_ke, _i, _test.size(), _j, phi_size, _var.number(), jvar_num, _work_matrix);
       }
   }
 
@@ -201,6 +210,15 @@ ArrayKernel::computeOffDiagJacobian(MooseVariableFEBase & jvar)
   }
 }
 
+RealEigenMatrix
+ArrayKernel::computeQpOffDiagJacobian(const MooseVariableFEBase & jvar)
+{
+  if (jvar.number() == _var.number())
+    return computeQpJacobian().asDiagonal();
+  else
+    return RealEigenMatrix::Zero(_var.count(), jvar.count());
+}
+
 void
 ArrayKernel::computeOffDiagJacobianScalar(unsigned int jvar)
 {
@@ -210,10 +228,16 @@ ArrayKernel::computeOffDiagJacobianScalar(unsigned int jvar)
   for (_qp = 0; _qp < _qrule->n_points(); _qp++)
     for (_i = 0; _i < _test.size(); _i++)
     {
-      RealEigenMatrix v = _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobianScalar(jv);
+      _work_matrix = computeQpOffDiagJacobianScalar(jv) * _JxW[_qp] * _coord[_qp];
       _assembly.saveFullLocalArrayJacobian(
-          _local_ke, _i, _test.size(), 0, 1, _var.number(), jvar, v);
+          _local_ke, _i, _test.size(), 0, 1, _var.number(), jvar, _work_matrix);
     }
 
   accumulateTaggedLocalMatrix();
+}
+
+RealEigenMatrix
+ArrayKernel::computeQpOffDiagJacobianScalar(const MooseVariableScalar & jvar)
+{
+  return RealEigenMatrix::Zero(_var.count(), (unsigned int)jvar.order() + 1);
 }

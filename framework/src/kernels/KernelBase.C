@@ -17,21 +17,13 @@
 
 #include "libmesh/threads.h"
 
-defineLegacyParams(KernelBase);
-
 InputParameters
 KernelBase::validParams()
 {
-  auto params = MooseObject::validParams();
-  params += TransientInterface::validParams();
+  auto params = ResidualObject::validParams();
   params += BlockRestrictable::validParams();
-  params += RandomInterface::validParams();
-  params += MeshChangedInterface::validParams();
   params += MaterialPropertyInterface::validParams();
-  params += TaggingInterface::validParams();
 
-  params.addRequiredParam<NonlinearVariableName>(
-      "variable", "The name of the variable that this Kernel operates on");
   params.addParam<std::vector<AuxVariableName>>(
       "save_in",
       "The name of auxiliary variables to save this Kernel's residual contributions to. "
@@ -54,36 +46,21 @@ KernelBase::validParams()
   params.addParamNamesToGroup(" diag_save_in save_in use_displaced_mesh", "Advanced");
   params.addCoupledVar("displacements", "The displacements");
 
-  params.declareControllable("enable");
+  // Kernels always couple within their element
+  params.addRelationshipManager("ElementSideNeighborLayers",
+                                Moose::RelationshipManagerType::COUPLING,
+                                [](const InputParameters &, InputParameters & rm_params)
+                                { rm_params.set<unsigned short>("layers") = 0; });
   return params;
 }
 
 KernelBase::KernelBase(const InputParameters & parameters)
-  : MooseObject(parameters),
+  : ResidualObject(parameters),
     BlockRestrictable(this),
-    SetupInterface(this),
     CoupleableMooseVariableDependencyIntermediateInterface(this, false),
-    FunctionInterface(this),
-    UserObjectInterface(this),
-    TransientInterface(this),
-    PostprocessorInterface(this),
-    VectorPostprocessorInterface(this),
     MaterialPropertyInterface(this, blockIDs(), Moose::EMPTY_BOUNDARY_IDS),
-    RandomInterface(parameters,
-                    *parameters.getCheckedPointerParam<FEProblemBase *>("_fe_problem_base"),
-                    parameters.get<THREAD_ID>("_tid"),
-                    false),
     GeometricSearchInterface(this),
-    Restartable(this, "Kernels"),
-    MeshChangedInterface(parameters),
-    TaggingInterface(this),
     ElementIDInterface(this),
-    _subproblem(*getCheckedPointerParam<SubProblem *>("_subproblem")),
-    _fe_problem(*parameters.get<FEProblemBase *>("_fe_problem_base")),
-    _sys(*getCheckedPointerParam<SystemBase *>("_sys")),
-    _tid(parameters.get<THREAD_ID>("_tid")),
-    _assembly(_subproblem.assembly(_tid)),
-    _mesh(_subproblem.mesh()),
     _current_elem(_assembly.elem()),
     _current_elem_volume(_assembly.elemVolume()),
     _q_point(_assembly.qPoints()),
@@ -93,11 +70,10 @@ KernelBase::KernelBase(const InputParameters & parameters)
     _has_save_in(false),
     _save_in_strings(parameters.get<std::vector<AuxVariableName>>("save_in")),
     _has_diag_save_in(false),
-    _diag_save_in_strings(parameters.get<std::vector<AuxVariableName>>("diag_save_in"))
+    _diag_save_in_strings(parameters.get<std::vector<AuxVariableName>>("diag_save_in")),
+    _use_displaced_mesh(getParam<bool>("use_displaced_mesh"))
 {
   auto num_disp = coupledComponents("displacements");
   for (decltype(num_disp) i = 0; i < num_disp; ++i)
     _displacements.push_back(coupled("displacements", i));
 }
-
-KernelBase::~KernelBase() {}

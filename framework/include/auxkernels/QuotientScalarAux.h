@@ -11,11 +11,6 @@
 
 #include "AuxScalarKernel.h"
 
-class QuotientScalarAux;
-
-template <>
-InputParameters validParams<QuotientScalarAux>();
-
 /**
  * This auxiliary kernel computes its value by dividing "numerator" by
  * "denominator.  For efficiency, it doesn't check the denominator for
@@ -31,7 +26,6 @@ public:
 protected:
   virtual Real computeValue() override;
 
-  VariableValue & _a;
-  VariableValue & _b;
+  const VariableValue & _a;
+  const VariableValue & _b;
 };
-

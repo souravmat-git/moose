@@ -10,7 +10,6 @@
 #pragma once
 
 #include "GeneralVectorPostprocessor.h"
-#include "Calculators.h"
 #include "BootstrapCalculators.h"
 
 /**
@@ -42,11 +41,14 @@ protected:
   /// Confidence levels to compute (see computeLevels)
   const std::vector<Real> _ci_levels;
 
+  /// Confidence level replicates
+  const unsigned int _replicates;
+
+  /// Confidence level seed
+  const unsigned int _seed;
+
   /// The VPP vector that will hold the statistics identifiers
   VectorPostprocessorValue & _stat_type_vector;
-
-  /// Confidence level calculator
-  std::unique_ptr<const StochasticTools::BootstrapCalculator> _ci_calculator = nullptr;
 
   // The following vectors are sized to the number of statistics to be computed
 
@@ -64,10 +66,4 @@ private:
    * This also performs error checking on the supplied "ci_levels".
    */
   std::vector<Real> computeLevels(const std::vector<Real> & levels_in) const;
-
-  ///@{
-  /// PrefGraph timers
-  const PerfID _perf_initial_setup;
-  const PerfID _perf_execute;
-  ///@}
 };

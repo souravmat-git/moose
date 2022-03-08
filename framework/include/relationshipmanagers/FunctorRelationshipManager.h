@@ -13,12 +13,7 @@
 
 #include "libmesh/ghosting_functor.h"
 
-// Forward declarations
-class FunctorRelationshipManager;
 class MooseMesh;
-
-template <>
-InputParameters validParams<FunctorRelationshipManager>();
 
 /**
  * Intermediate base class for RelationshipManagers that are simply built
@@ -31,6 +26,8 @@ public:
   static InputParameters validParams();
 
   FunctorRelationshipManager(const InputParameters & parameters);
+
+  FunctorRelationshipManager(const FunctorRelationshipManager & other);
 
   virtual void operator()(const MeshBase::const_element_iterator & range_begin,
                           const MeshBase::const_element_iterator & range_end,
@@ -45,7 +42,21 @@ public:
 
   virtual void delete_remote_elements() override;
 
+  /**
+   * It is often called after cloning a ghosting functor/RM.
+   * It is essential because the operations in a ghosting functor are mesh-dependent.
+   */
+  virtual void set_mesh(const MeshBase * mesh) override
+  {
+    if (_functor)
+    {
+      _functor->set_mesh(mesh);
+      _mesh = mesh;
+    }
+    else
+      mooseError("functor does not exist");
+  }
+
 protected:
   std::unique_ptr<GhostingFunctor> _functor;
 };
-

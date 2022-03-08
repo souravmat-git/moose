@@ -26,8 +26,7 @@ DiscreteNucleationMarker::DiscreteNucleationMarker(const InputParameters & param
     _map(getUserObject<DiscreteNucleationMap>("map")),
     _periodic(_map.getPeriodic()),
     _inserter(_map.getInserter()),
-    _radius(_map.getRadiusAndWidth().first),
-    _int_width(_map.getRadiusAndWidth().second),
+    _int_width(_map.getWidth()),
     _nucleus_list(_inserter.getNucleusList())
 {
 }
@@ -35,17 +34,20 @@ DiscreteNucleationMarker::DiscreteNucleationMarker(const InputParameters & param
 Marker::MarkerValue
 DiscreteNucleationMarker::computeElementMarker()
 {
-  const RealVectorValue centroid = _current_elem->centroid();
+  const RealVectorValue centroid = _current_elem->vertex_average();
   const Real size = 0.5 * _current_elem->hmax();
 
   // check if the surface of a nucleus might touch the element
   for (unsigned i = 0; i < _nucleus_list.size(); ++i)
   {
+    // get the radius of the current nucleus
+    const Real radius = _nucleus_list[i].radius;
+
     // use a non-periodic or periodic distance
     const Real r = _periodic < 0
-                       ? (centroid - _nucleus_list[i].second).norm()
-                       : _mesh.minPeriodicDistance(_periodic, centroid, _nucleus_list[i].second);
-    if (r < _radius + size && r > _radius - size && size > _int_width)
+                       ? (centroid - _nucleus_list[i].center).norm()
+                       : _mesh.minPeriodicDistance(_periodic, centroid, _nucleus_list[i].center);
+    if (r < radius + size && r > radius - size && size > _int_width)
       return REFINE;
   }
 

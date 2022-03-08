@@ -1,1 +1,11 @@
-!template load file=stubs/moose_object.md.template name=SideFluxAverage syntax=/Postprocessors/SideFluxAverage
+# SideFluxAverage
+
+This object is deprecated. See [SideDiffusiveFluxAverage](/SideDiffusiveFluxAverage.md) 
+
+!syntax description /Postprocessors/SideFluxAverage
+
+!syntax parameters /Postprocessors/SideFluxAverage
+
+!syntax inputs /Postprocessors/SideFluxAverage
+
+!syntax children /Postprocessors/SideFluxAverage

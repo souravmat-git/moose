@@ -15,30 +15,20 @@
 
 registerMooseObject("MooseApp", NodalEqualValueConstraint);
 
-defineLegacyParams(NodalEqualValueConstraint);
-
 InputParameters
 NodalEqualValueConstraint::validParams()
 {
   InputParameters params = NodalScalarKernel::validParams();
+  params.addClassDescription("Constrain two nodes to have identical values.");
   params.addRequiredCoupledVar("var", "Variable(s) to put the constraint on");
   return params;
 }
 
 NodalEqualValueConstraint::NodalEqualValueConstraint(const InputParameters & parameters)
-  : NodalScalarKernel(parameters)
+  : NodalScalarKernel(parameters), _val_number(coupledIndices("var")), _value(coupledValues("var"))
 {
   if (_node_ids.size() != 2)
     paramError("boundary", "invalid number of nodes: want 2, got ", _node_ids.size());
-
-  unsigned int n = coupledComponents("var");
-  _value.resize(n);
-  _val_number.resize(n);
-  for (unsigned int k = 0; k < n; k++)
-  {
-    _value[k] = &coupledValue("var", k);
-    _val_number[k] = coupled("var", k);
-  }
 }
 
 void

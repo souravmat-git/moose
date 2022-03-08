@@ -9,13 +9,13 @@ Extensions:
     MooseDocs.extensions.navigation:
         name: MOOSE Tensor_Mechanics Module
         repo: https://github.com/idaholab/moose
-        home: /modules/tensor_mechanics
+        home: /modules/tensor_mechanics/index.md
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/modules/tensor_mechanics
-        hide:
-            framework: !include framework/doc/hidden.yml
-            tensor_mechanics: !include modules/tensor_mechanics/doc/hidden.yml
-        remove: !include framework/doc/remove.yml
+        remove:
+            framework: !include framework/doc/remove.yml
+        unregister:
+            framework: !include framework/doc/unregister.yml
         includes:
             - framework/include
             - modules/tensor_mechanics/include
@@ -27,6 +27,7 @@ Extensions:
         active: True
     MooseDocs.extensions.sqa:
         active: True
+        reports: !include modules/tensor_mechanics/doc/sqa_reports.yml
         categories:
             framework: !include framework/doc/sqa_framework.yml
             tensor_mechanics: !include modules/tensor_mechanics/doc/sqa_tensor_mechanics.yml

@@ -11,9 +11,6 @@
 
 #include "MeshGenerator.h"
 
-// Forward declarations
-class SideSetsGeneratorBase;
-
 // libMesh forward declarations
 namespace libMesh
 {
@@ -24,9 +21,9 @@ class FEGenericBase;
 typedef FEGenericBase<Real> FEBase;
 }
 
-template <>
-InputParameters validParams<SideSetsGeneratorBase>();
-
+/*
+ * Base class for mesh generators that add sidesets to the mesh
+ */
 class SideSetsGeneratorBase : public MeshGenerator
 {
 public:

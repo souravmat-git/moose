@@ -17,7 +17,7 @@
 #include "MooseTypes.h"
 #include "MooseMesh.h"
 #include "Attributes.h"
-#include "FVDirichletBC.h"
+#include "FVDirichletBCBase.h"
 #include "SubProblem.h"
 #include "FVKernel.h"
 #include "ADUtils.h"
@@ -34,7 +34,8 @@ MooseVariableDataFV<OutputType>::MooseVariableDataFV(const MooseVariableFV<Outpu
                                                      Moose::ElementType element_type,
                                                      const Elem * const & elem)
 
-  : _var(var),
+  : MeshChangedInterface(var.parameters()),
+    _var(var),
     _fe_type(_var.feType()),
     _var_num(_var.number()),
     _var_name(_var.name()),
@@ -75,7 +76,9 @@ MooseVariableDataFV<OutputType>::MooseVariableDataFV(const MooseVariableFV<Outpu
     _need_ad(true),
     _need_ad_u(true),
     _need_ad_u_dot(false),
+    _need_ad_u_dotdot(false),
     _need_ad_grad_u(false),
+    _need_ad_grad_u_dot(false),
     _need_ad_second_u(false),
     _need_dof_values(false),
     _need_dof_values_old(false),
@@ -89,7 +92,8 @@ MooseVariableDataFV<OutputType>::MooseVariableDataFV(const MooseVariableFV<Outpu
     _need_dof_du_dotdot_du(false),
     _time_integrator(_sys.getTimeIntegrator()),
     _elem(elem),
-    _displaced(dynamic_cast<const DisplacedSystem *>(&_sys) ? true : false)
+    _displaced(dynamic_cast<const DisplacedSystem *>(&_sys) ? true : false),
+    _qrule(nullptr)
 {
   auto num_vector_tags = _sys.subproblem().numVectorTags();
 
@@ -109,6 +113,17 @@ MooseVariableDataFV<OutputType>::MooseVariableDataFV(const MooseVariableFV<Outpu
 }
 
 template <typename OutputType>
+unsigned int
+MooseVariableDataFV<OutputType>::oldestSolutionStateRequested() const
+{
+  if (_need_u_older || _need_grad_older || _need_second_older || _need_dof_values_older)
+    return 2;
+  if (_need_u_old || _need_grad_old || _need_second_old || _need_dof_values_old)
+    return 1;
+  return 0;
+}
+
+template <typename OutputType>
 void
 MooseVariableDataFV<OutputType>::setGeometry(Moose::GeometryType gm_type)
 {
@@ -116,11 +131,13 @@ MooseVariableDataFV<OutputType>::setGeometry(Moose::GeometryType gm_type)
   {
     case Moose::Volume:
     {
+      _qrule = _assembly.qRule();
       // TODO: set integration multiplier to cell volume
       break;
     }
     case Moose::Face:
     {
+      _qrule = _assembly.qRuleFace();
       // TODO: set integration multiplier to face area
       break;
     }
@@ -349,6 +366,17 @@ MooseVariableDataFV<OutputType>::curlSln(Moose::SolutionState state) const
   }
 }
 
+namespace
+{
+template <typename T, typename T2>
+void
+assignForAllQps(const T & value, T2 & array, const unsigned int nqp)
+{
+  for (const auto qp : make_range(nqp))
+    array[qp] = value;
+}
+}
+
 template <typename OutputType>
 void
 MooseVariableDataFV<OutputType>::initializeSolnVars()
@@ -357,55 +385,56 @@ MooseVariableDataFV<OutputType>::initializeSolnVars()
       _sys.subproblem().getActiveFEVariableCoupleableVectorTags(_tid);
   auto && active_coupleable_matrix_tags =
       _sys.subproblem().getActiveFEVariableCoupleableMatrixTags(_tid);
-  unsigned int nqp = 1;
+  mooseAssert(_qrule, "We should have a non-null qrule");
+  const auto nqp = _qrule->n_points();
 
   _u.resize(nqp);
-  _u[0] = 0;
+  assignForAllQps(0, _u, nqp);
   _grad_u.resize(nqp);
-  _grad_u[0] = 0;
+  assignForAllQps(0, _grad_u, nqp);
 
   for (auto tag : active_coupleable_vector_tags)
     if (_need_vector_tag_u[tag])
     {
       _vector_tag_u[tag].resize(nqp);
-      _vector_tag_u[tag][0] = 0;
+      assignForAllQps(0, _vector_tag_u[tag], nqp);
     }
 
   for (auto tag : active_coupleable_matrix_tags)
     if (_need_matrix_tag_u[tag])
     {
       _matrix_tag_u[tag].resize(nqp);
-      _matrix_tag_u[tag][0] = 0;
+      assignForAllQps(0, _matrix_tag_u[tag], nqp);
     }
 
   if (_need_second)
   {
     _second_u.resize(nqp);
-    _second_u[0] = 0;
+    assignForAllQps(0, _second_u, nqp);
   }
 
   if (_need_curl)
   {
     _curl_u.resize(nqp);
-    _curl_u[0] = 0;
+    assignForAllQps(0, _curl_u, nqp);
   }
 
   if (_need_u_previous_nl)
   {
     _u_previous_nl.resize(nqp);
-    _u_previous_nl[0] = 0;
+    assignForAllQps(0, _u_previous_nl, nqp);
   }
 
   if (_need_grad_previous_nl)
   {
     _grad_u_previous_nl.resize(nqp);
-    _grad_u_previous_nl[0] = 0;
+    assignForAllQps(0, _grad_u_previous_nl, nqp);
   }
 
   if (_need_second_previous_nl)
   {
     _second_u_previous_nl.resize(nqp);
-    _second_u_previous_nl[0] = 0;
+    assignForAllQps(0, _second_u_previous_nl, nqp);
   }
 
   if (_subproblem.isTransient())
@@ -413,91 +442,91 @@ MooseVariableDataFV<OutputType>::initializeSolnVars()
     if (_need_u_dot)
     {
       _u_dot.resize(nqp);
-      _u_dot[0] = 0;
+      assignForAllQps(0, _u_dot, nqp);
     }
 
     if (_need_u_dotdot)
     {
       _u_dotdot.resize(nqp);
-      _u_dotdot[0] = 0;
+      assignForAllQps(0, _u_dotdot, nqp);
     }
 
     if (_need_u_dot_old)
     {
       _u_dot_old.resize(nqp);
-      _u_dot_old[0] = 0;
+      assignForAllQps(0, _u_dot_old, nqp);
     }
 
     if (_need_u_dotdot_old)
     {
       _u_dotdot_old.resize(nqp);
-      _u_dotdot_old[0] = 0;
+      assignForAllQps(0, _u_dotdot_old, nqp);
     }
 
     if (_need_du_dot_du)
     {
       _du_dot_du.resize(nqp);
-      _du_dot_du[0] = 0;
+      assignForAllQps(0, _du_dot_du, nqp);
     }
 
     if (_need_du_dotdot_du)
     {
       _du_dotdot_du.resize(nqp);
-      _du_dotdot_du[0] = 0;
+      assignForAllQps(0, _du_dotdot_du, nqp);
     }
 
     if (_need_grad_dot)
     {
       _grad_u_dot.resize(nqp);
-      _grad_u_dot[0] = 0;
+      assignForAllQps(0, _grad_u_dot, nqp);
     }
 
     if (_need_grad_dotdot)
     {
       _grad_u_dotdot.resize(nqp);
-      _grad_u_dotdot[0] = 0;
+      assignForAllQps(0, _grad_u_dotdot, nqp);
     }
 
     if (_need_u_old)
     {
       _u_old.resize(nqp);
-      _u_old[0] = 0;
+      assignForAllQps(0, _u_old, nqp);
     }
 
     if (_need_u_older)
     {
       _u_older.resize(nqp);
-      _u_older[0] = 0;
+      assignForAllQps(0, _u_older, nqp);
     }
 
     if (_need_grad_old)
     {
       _grad_u_old.resize(nqp);
-      _grad_u_old[0] = 0;
+      assignForAllQps(0, _grad_u_old, nqp);
     }
 
     if (_need_grad_older)
     {
       _grad_u_older.resize(nqp);
-      _grad_u_older[0] = 0;
+      assignForAllQps(0, _grad_u_older, nqp);
     }
 
     if (_need_second_old)
     {
       _second_u_old.resize(nqp);
-      _second_u_old[0] = 0;
+      assignForAllQps(0, _second_u_old, nqp);
     }
 
     if (_need_curl_old)
     {
       _curl_u_old.resize(nqp);
-      _curl_u_old[0] = 0;
+      assignForAllQps(0, _curl_u_old, nqp);
     }
 
     if (_need_second_older)
     {
       _second_u_older.resize(nqp);
-      _second_u_older[0] = 0;
+      assignForAllQps(0, _second_u_older, nqp);
     }
   }
 }
@@ -510,7 +539,7 @@ MooseVariableDataFV<OutputType>::computeGhostValuesFace(
   _has_dirichlet_bc = false;
   initializeSolnVars();
 
-  std::vector<FVDirichletBC *> bcs;
+  std::vector<FVDirichletBCBase *> bcs;
 
   // TODO: this query probably (maybe?)needs to also filter based on the
   // active tags - these currently live in the flux thread loop object and I'm
@@ -522,6 +551,7 @@ MooseVariableDataFV<OutputType>::computeGhostValuesFace(
       .template condition<AttribThread>(_tid)
       .template condition<AttribBoundaries>(fi.boundaryIDs())
       .template condition<AttribVar>(_var_num)
+      .template condition<AttribSysNum>(_var.sys().number())
       .queryInto(bcs);
   mooseAssert(bcs.size() <= 1, "cannot have multiple dirichlet BCs on the same boundary");
   _has_dirichlet_bc = bcs.size() > 0;
@@ -529,7 +559,8 @@ MooseVariableDataFV<OutputType>::computeGhostValuesFace(
   // These need to be initialized but we can't use the regular computeAD
   // routine because that routine accesses the solution which doesn't exist
   // for this ghost element. So we do it manually here:
-  unsigned int nqp = 1;
+  mooseAssert(_qrule, "We should have a non-null qrule");
+  const auto nqp = _qrule->n_points();
   if (_need_ad_u)
     _ad_u.resize(nqp);
   if (_need_ad_grad_u)
@@ -538,10 +569,48 @@ MooseVariableDataFV<OutputType>::computeGhostValuesFace(
     _ad_u_dot.resize(nqp);
   if (_need_ad_second_u)
     _ad_second_u.resize(nqp);
-  if (_need_ad_u_dot)
-    _ad_u_dot.resize(nqp);
+  if (_need_ad_u_dotdot)
+    _ad_u_dotdot.resize(nqp);
 
-  if (bcs.size() > 0)
+  mooseAssert(
+      _need_ad_u_dot && !other_face._need_ad_u_dot
+          ? _element_type == Moose::ElementType::Element &&
+                other_face._element_type != Moose::ElementType::Element
+          : true,
+      "I only really understand having a time derivative for this and not having a time "
+      "derivative for the other if this is elemental data and the other is not elemental data.");
+
+  mooseAssert(
+      _need_ad_u_dotdot && !other_face._need_ad_u_dotdot
+          ? _element_type == Moose::ElementType::Element &&
+                other_face._element_type != Moose::ElementType::Element
+          : true,
+      "I only really understand having a second time derivative for this and not having a second "
+      "time derivative for the other if this is elemental data and the other is not elemental "
+      "data.");
+
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+  const ADReal u_other =
+      ADReal::do_derivatives ? other_face.adSln()[0] : other_face.sln(Moose::Current)[0];
+  const auto & u_face = _var.getBoundaryFaceValue(fi);
+  const auto u_ghost = 2 * u_face - u_other;
+
+  if (_need_ad_u)
+    assignForAllQps(u_ghost, _ad_u, nqp);
+  assignForAllQps(u_ghost.value(), _u, nqp);
+
+  // If people have time derivatives on faces, then they're in trouble (for now) because we do not
+  // know the time dependence of u_face. Let's try to do better than silent wrong values at least in
+  // debugging modes by tossing some NaNs in
+  if (_need_ad_u_dot && other_face._need_ad_u_dot)
+    assignForAllQps(std::numeric_limits<typename ADReal::value_type>::quiet_NaN(), _ad_u_dot, nqp);
+  // Let's do the same when second time derivatives are requested on faces
+  if (_need_ad_u_dotdot && other_face._need_ad_u_dotdot)
+    assignForAllQps(
+        std::numeric_limits<typename ADReal::value_type>::quiet_NaN(), _ad_u_dotdot, nqp);
+
+#else
+  if (_has_dirichlet_bc)
   {
     // extrapolate from the boundary element across the boundary face using
     // the given BC face value to determine a ghost cell value for u.  Be sure
@@ -555,7 +624,7 @@ MooseVariableDataFV<OutputType>::computeGhostValuesFace(
     // hack has been implemented by initializing _need_ad_u and friends to 'true'
     // by default.  Consider perhaps a better solution to this problem.
     DualReal u_other;
-    if (_subproblem.currentlyComputingJacobian())
+    if (ADReal::do_derivatives)
       u_other = other_face.adSln()[0];
     else
       u_other = other_face.sln(Moose::Current)[0];
@@ -563,13 +632,18 @@ MooseVariableDataFV<OutputType>::computeGhostValuesFace(
     auto u_ghost = 2 * u_face - u_other;
 
     if (_need_ad_u)
-      _ad_u[0] = u_ghost;
-    _u[0] = u_ghost.value();
+      assignForAllQps(u_ghost, _ad_u, nqp);
+    assignForAllQps(u_ghost.value(), _u, nqp);
 
-    if (_need_ad_u_dot)
+    if (_need_ad_u_dot && other_face._need_ad_u_dot)
       // The partial derivative with respect to time is the same as for u_other except with a
       // negative sign. (See the u_ghost formula above)
-      _ad_u_dot[0] = -other_face.adUDot()[0];
+      assignForAllQps(-other_face.adUDot()[0], _ad_u_dot, nqp);
+
+    if (_need_ad_u_dotdot && other_face._need_ad_u_dotdot)
+      // The partial second derivative with respect to time is the same as for u_other except with a
+      // negative sign. (See the u_ghost formula above)
+      assignForAllQps(-other_face.adUDotDot()[0], _ad_u_dotdot, nqp);
   }
   else
   {
@@ -580,27 +654,34 @@ MooseVariableDataFV<OutputType>::computeGhostValuesFace(
     // TODO: make sure DirichletBC and FluxBC are _not_ defined on
     // the same sideset
     DualReal u_other;
-    if (_subproblem.currentlyComputingJacobian())
+    if (ADReal::do_derivatives)
       u_other = other_face.adSln()[0];
     else
       u_other = other_face.sln(Moose::Current)[0];
 
     if (_need_ad_u)
-      _ad_u[0] = u_other;
-    _u[0] = u_other.value();
+      assignForAllQps(u_other, _ad_u, nqp);
+    assignForAllQps(u_other.value(), _u, nqp);
 
-    if (_need_ad_u_dot)
+    if (_need_ad_u_dot && other_face._need_ad_u_dot)
       // Since we are simply tracking the other face's value, the time derivative is also the same
-      _ad_u_dot[0] = other_face.adUDot()[0];
-  }
+      assignForAllQps(other_face.adUDot()[0], _ad_u_dot, nqp);
 
-  // At this point we're only doing const monomials and we're no doing reconstruction, so any
-  // spatial derivatives are zero. We need to explicitly assign here to ensure that the values and
-  // DualNumber derivatives are properly initialized
+    if (_need_ad_u_dotdot && other_face._need_ad_u_dotdot)
+      // Since we are simply tracking the other face's value, the second time derivative is also the
+      // same
+      assignForAllQps(other_face.adUDotDot()[0], _ad_u_dotdot, nqp);
+  }
+#endif
+
+  // At this point we're only doing const monomials and we're not accessing reconstruction
+  // information through no-param-accessors (e.g. adGradSln()), so any spatial derivatives are zero.
+  // We need to explicitly assign here to ensure that the values and DualNumber derivatives are
+  // properly initialized
   if (_need_ad_grad_u)
-    _ad_grad_u[0] = 0;
+    assignForAllQps(0, _ad_grad_u, nqp);
   if (_need_ad_second_u)
-    _ad_second_u[0] = 0;
+    assignForAllQps(0, _ad_second_u, nqp);
 }
 
 template <typename OutputType>
@@ -639,95 +720,103 @@ void
 MooseVariableDataFV<OutputType>::computeValues()
 {
   initDofIndices();
+  initializeSolnVars();
 
   unsigned int num_dofs = _dof_indices.size();
 
   if (num_dofs > 0)
     fetchDoFValues();
+  else
+    // We don't have any dofs. There's nothing to do
+    return;
+
+  mooseAssert(num_dofs == 1 && _dof_values.size() == 1,
+              "There should only be one dof per elem for FV variables");
 
   bool is_transient = _subproblem.isTransient();
-  unsigned int nqp = 1;
+  const auto nqp = _qrule->n_points();
   auto && active_coupleable_vector_tags =
       _sys.subproblem().getActiveFEVariableCoupleableVectorTags(_tid);
   auto && active_coupleable_matrix_tags =
       _sys.subproblem().getActiveFEVariableCoupleableMatrixTags(_tid);
 
-  initializeSolnVars();
-
-  _u[0] = _dof_values[0];
-  _grad_u[0] = 0;
-
   bool second_required =
       _need_second || _need_second_old || _need_second_older || _need_second_previous_nl;
   bool curl_required = _need_curl || _need_curl_old;
 
-  if (is_transient)
+  for (const auto qp : make_range(nqp))
   {
-    if (_need_u_old)
-      _u_old[0] = _dof_values_old[0];
-
-    if (_need_u_older)
-      _u_older[0] = _dof_values_older[0];
-
-    if (_need_u_dot)
-      _u_dot[0] = _dof_values_dot[0];
-
-    if (_need_u_dotdot)
-      _u_dotdot[0] = _dof_values_dotdot[0];
-
-    if (_need_u_dot_old)
-      _u_dot_old[0] = _dof_values_dot_old[0];
-
-    if (_need_u_dotdot_old)
-      _u_dotdot_old[0] = _dof_values_dotdot_old[0];
-
-    if (_need_du_dot_du)
-      _du_dot_du[0] = _dof_du_dot_du[0];
-
-    if (_need_du_dotdot_du)
-      _du_dotdot_du[0] = _dof_du_dotdot_du[0];
-  }
-
-  if (second_required)
-  {
-    if (_need_second)
-      _second_u[0] = 0;
-
-    if (_need_second_previous_nl)
-      _second_u_previous_nl[0] = 0;
+    _u[qp] = _dof_values[0];
+    _grad_u[qp] = 0;
 
     if (is_transient)
     {
-      if (_need_second_old)
-        _second_u_old[0] = 0;
+      if (_need_u_old)
+        _u_old[qp] = _dof_values_old[0];
 
-      if (_need_second_older)
-        _second_u_older[0] = 0;
+      if (_need_u_older)
+        _u_older[qp] = _dof_values_older[0];
+
+      if (_need_u_dot)
+        _u_dot[qp] = _dof_values_dot[0];
+
+      if (_need_u_dotdot)
+        _u_dotdot[qp] = _dof_values_dotdot[0];
+
+      if (_need_u_dot_old)
+        _u_dot_old[qp] = _dof_values_dot_old[0];
+
+      if (_need_u_dotdot_old)
+        _u_dotdot_old[qp] = _dof_values_dotdot_old[0];
+
+      if (_need_du_dot_du)
+        _du_dot_du[qp] = _dof_du_dot_du[0];
+
+      if (_need_du_dotdot_du)
+        _du_dotdot_du[qp] = _dof_du_dotdot_du[0];
     }
+
+    if (second_required)
+    {
+      if (_need_second)
+        _second_u[qp] = 0;
+
+      if (_need_second_previous_nl)
+        _second_u_previous_nl[qp] = 0;
+
+      if (is_transient)
+      {
+        if (_need_second_old)
+          _second_u_old[qp] = 0;
+
+        if (_need_second_older)
+          _second_u_older[qp] = 0;
+      }
+    }
+
+    if (curl_required)
+    {
+      if (_need_curl)
+        _curl_u[qp] = 0;
+
+      if (is_transient && _need_curl_old)
+        _curl_u_old[qp] = 0;
+    }
+
+    for (auto tag : active_coupleable_vector_tags)
+      if (_need_vector_tag_u[tag])
+        _vector_tag_u[tag][qp] = _vector_tags_dof_u[tag][0];
+
+    for (auto tag : active_coupleable_matrix_tags)
+      if (_need_matrix_tag_u[tag])
+        _matrix_tag_u[tag][qp] = _matrix_tags_dof_u[tag][0];
+
+    if (_need_u_previous_nl)
+      _u_previous_nl[qp] = _dof_values_previous_nl[0];
+
+    if (_need_grad_previous_nl)
+      _grad_u_previous_nl[qp] = _dof_values_previous_nl[0];
   }
-
-  if (curl_required)
-  {
-    if (_need_curl)
-      _curl_u[0] = 0;
-
-    if (is_transient && _need_curl_old)
-      _curl_u_old[0] = 0;
-  }
-
-  for (auto tag : active_coupleable_vector_tags)
-    if (_need_vector_tag_u[tag])
-      _vector_tag_u[tag][0] = _vector_tags_dof_u[tag][0];
-
-  for (auto tag : active_coupleable_matrix_tags)
-    if (_need_matrix_tag_u[tag])
-      _matrix_tag_u[tag][0] = _matrix_tags_dof_u[tag][0];
-
-  if (_need_u_previous_nl)
-    _u_previous_nl[0] = _dof_values_previous_nl[0];
-
-  if (_need_grad_previous_nl)
-    _grad_u_previous_nl[0] = _dof_values_previous_nl[0];
 
   // Automatic differentiation
   if (_need_ad)
@@ -775,6 +864,13 @@ MooseVariableDataFV<OutputType>::computeAD(const unsigned int num_dofs, const un
     _ad_u_dot.resize(nqp);
   }
 
+  if (_need_ad_u_dotdot)
+  {
+    _ad_dofs_dotdot.resize(num_dofs);
+    _ad_u_dotdot.resize(nqp);
+  }
+
+#ifndef MOOSE_GLOBAL_AD_INDEXING
   auto ad_offset = Moose::adOffset(
       _var_num, _sys.getMaxVarNDofsPerElem(), _element_type, _sys.system().n_vars());
   mooseAssert(_var.kind() == Moose::VarKindType::VAR_AUXILIARY || ad_offset || !_var_num,
@@ -789,49 +885,83 @@ MooseVariableDataFV<OutputType>::computeAD(const unsigned int num_dofs, const un
                ". You can run `configure --with-derivative-size=<n>` to request a larger "
                "derivative container.");
 #endif
-
-  if (_need_ad_u)
-    _ad_u[0] = _ad_zero;
-
-  if (_need_ad_grad_u)
-    _ad_grad_u[0] = _ad_zero;
+#endif
 
   if (_need_ad_second_u)
-    _ad_second_u[0] = 0;
+    assignForAllQps(0, _ad_second_u, nqp);
 
   if (_need_ad_u_dot)
-    _ad_u_dot[0] = _ad_zero;
+    assignForAllQps(_ad_zero, _ad_u_dot, nqp);
+
+  if (_need_ad_u_dotdot)
+    assignForAllQps(_ad_zero, _ad_u_dotdot, nqp);
 
   for (unsigned int i = 0; i < num_dofs; i++)
   {
     _ad_dof_values[i] = (*_sys.currentSolution())(_dof_indices[i]);
 
     // NOTE!  You have to do this AFTER setting the value!
-    if (_var.kind() == Moose::VAR_NONLINEAR)
+    if (_var.kind() == Moose::VAR_NONLINEAR && ADReal::do_derivatives)
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+      Moose::derivInsert(_ad_dof_values[i].derivatives(), _dof_indices[i], 1.);
+#else
       Moose::derivInsert(_ad_dof_values[i].derivatives(), ad_offset + i, 1.);
+#endif
 
-    if (_need_ad_u_dot && _time_integrator && _time_integrator->dt())
+    if (_need_ad_u_dot && safeToComputeADUDot() && _time_integrator->dt())
     {
       _ad_dofs_dot[i] = _ad_dof_values[i];
-      _time_integrator->computeADTimeDerivatives(_ad_dofs_dot[i], _dof_indices[i]);
+      _time_integrator->computeADTimeDerivatives(_ad_dofs_dot[i],
+                                                 _dof_indices[i],
+                                                 _need_ad_u_dotdot ? _ad_dofs_dotdot[i]
+                                                                   : _ad_real_dummy);
     }
   }
 
   if (_need_ad_u)
-    _ad_u[0] = _ad_dof_values[0];
+    assignForAllQps(_ad_dof_values[0], _ad_u, nqp);
 
-  if (_need_ad_u_dot && _time_integrator)
-    _ad_u_dot[0] = _ad_dofs_dot[0];
+  if (_need_ad_grad_u)
+    assignForAllQps(
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+        _var.adGradSln(_elem),
+#else
+        _ad_zero,
+#endif
+        _ad_grad_u,
+        nqp);
 
-  if (_need_ad_u_dot && !_time_integrator)
-    _ad_u_dot[0] = _u_dot[0];
+  if (_need_ad_u_dot)
+  {
+    if (safeToComputeADUDot())
+    {
+      assignForAllQps(_ad_dofs_dot[0], _ad_u_dot, nqp);
+      if (_need_ad_u_dotdot)
+        assignForAllQps(_ad_dofs_dotdot[0], _ad_u_dotdot, nqp);
+    }
+    else
+    {
+      assignForAllQps(_u_dot[0], _ad_u_dot, nqp);
+      if (_need_ad_u_dotdot)
+        assignForAllQps(_u_dotdot[0], _ad_u_dotdot, nqp);
+    }
+  }
 }
 
 template <typename OutputType>
 void
 MooseVariableDataFV<OutputType>::setDofValue(const OutputData & value, unsigned int index)
 {
+  mooseAssert(index == 0, "We only ever have one dof value locally");
   _dof_values[index] = value;
+
+  // Update the qp values as well
+  for (const auto qp : make_range(_u.size()))
+    _u[qp] = value;
+
+  if (_need_ad_u)
+    for (const auto qp : make_range(_ad_u.size()))
+      _ad_u[qp] = value;
 }
 
 template <typename OutputType>
@@ -880,7 +1010,13 @@ void
 MooseVariableDataFV<OutputType>::insert(NumericVector<Number> & residual)
 {
   initDofIndices();
-  residual.insert(&_dof_values[0], _dof_indices);
+  if (_dof_indices.size())
+  {
+    mooseAssert(
+        _dof_indices.size() == 1,
+        "Finite volume variables should be constant monomial and have only one dof per element.");
+    residual.insert(&_dof_values[0], _dof_indices);
+  }
 }
 
 template <typename OutputType>
@@ -1105,13 +1241,19 @@ MooseVariableDataFV<OutputType>::fetchADDoFValues()
   auto n = _dof_indices.size();
   libmesh_assert(n);
   _ad_dof_values.resize(n);
+#ifndef MOOSE_GLOBAL_AD_INDEXING
   auto ad_offset = _var_num * _sys.getMaxVarNDofsPerNode();
+#endif
 
   for (decltype(n) i = 0; i < n; ++i)
   {
     _ad_dof_values[i] = _dof_values[i];
     if (_var.kind() == Moose::VAR_NONLINEAR)
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+      Moose::derivInsert(_ad_dof_values[i].derivatives(), _dof_indices[i], 1.);
+#else
       Moose::derivInsert(_ad_dof_values[i].derivatives(), ad_offset + i, 1.);
+#endif
   }
 }
 
@@ -1143,8 +1285,16 @@ MooseVariableDataFV<OutputType>::prepareIC()
   initDofIndices();
   _dof_values.resize(_dof_indices.size());
 
-  unsigned int nqp = 1;
+  mooseAssert(_qrule, "We should have a non-null qrule");
+  const auto nqp = _qrule->n_points();
   _u.resize(nqp);
+}
+
+template <typename OutputType>
+void
+MooseVariableDataFV<OutputType>::meshChanged()
+{
+  _prev_elem = nullptr;
 }
 
 template class MooseVariableDataFV<Real>;

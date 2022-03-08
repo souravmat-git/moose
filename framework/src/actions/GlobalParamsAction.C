@@ -11,12 +11,12 @@
 
 registerMooseAction("MooseApp", GlobalParamsAction, "set_global_params");
 
-defineLegacyParams(GlobalParamsAction);
-
 InputParameters
 GlobalParamsAction::validParams()
 {
   InputParameters params = Action::validParams();
+  params.addClassDescription("Action used to aid in the application of parameters defined in the "
+                             "GlobalParams input block.");
   std::vector<std::string> blocks(1, "");
 
   /* GlobalParams should not have children or other standard public Action attributes */

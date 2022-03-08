@@ -11,8 +11,6 @@
 
 registerMooseObject("MooseApp", VectorPostprocessorVisualizationAux);
 
-defineLegacyParams(VectorPostprocessorVisualizationAux);
-
 InputParameters
 VectorPostprocessorVisualizationAux::validParams()
 {
@@ -73,6 +71,5 @@ VectorPostprocessorVisualizationAux::computeValue()
                     << name());
     return _vpp_vector[_my_pid];
   }
-  else
-    return _vpp_scatter;
+  return _vpp_scatter;
 }

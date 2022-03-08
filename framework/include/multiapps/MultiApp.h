@@ -17,7 +17,8 @@
 #include "libmesh/communicator.h"
 #include "libmesh/point.h"
 
-class MultiApp;
+#include "nlohmann/json.h"
+
 class UserObject;
 class FEProblemBase;
 class FEProblem;
@@ -37,8 +38,53 @@ template <typename T>
 class NumericVector;
 } // namespace libMesh
 
-template <>
-InputParameters validParams<MultiApp>();
+/// Holds app partitioning information relevant to the a particular rank for a
+/// multiapp scenario.
+struct LocalRankConfig
+{
+  /// The number of simulations that should/will be run locally on this rank.
+  dof_id_type num_local_sims;
+  /// The (global) index of the first local simulation for this rank.  All
+  /// ranks that are used to perform multi-proc parallel runs for a given
+  /// simulation will have the same first_local_sim_index as each other.
+  dof_id_type first_local_sim_index;
+  /// The number of (sub)apps that should/will be run locally on this rank.
+  /// This will generally be identical to num_local_sims unless operating in
+  /// some sort of "batch" mode where a single subapp is reused for multiple
+  /// simulations.
+  dof_id_type num_local_apps;
+  /// The (global) index of the first local app for this rank.  All ranks that
+  /// are used to perform multi-proc parallel runs for a given app will have
+  /// the same first_local_app_index as each other.  This will generally be
+  /// identical to first_local_sim_index unless operating in some sort of "batch" mode
+  /// where a single subapp is reused for multiple simulations.
+  dof_id_type first_local_app_index;
+  /// This is true if this rank is the primary/zero rank for a (sub)app slot.
+  /// A slot is all ranks that are grouped together to run a single (sub)app
+  /// together.  This field will be true for exactly one rank in each slot.
+  /// This is important for things like multiapp transfers where you want to
+  /// only transfer data to a given subapp once even though it may be running on
+  /// multiple procs/ranks.
+  bool is_first_local_rank;
+};
+
+/// Returns app partitioning information relevant to the given rank for a
+/// multiapp scenario with the given number of apps (napps) and parallel/mpi
+/// procs (nprocs).  min_app_procs and max_app_procs define the min and max
+/// number of procs that must/can be used in parallel to run a given (sub)app.
+/// batch_mode affects whether 1 subapp is assigned per rank to be re-used to
+/// run each of the (napps) simulations or whether 1 subapp is created for
+/// each napps simulation (globally).
+///
+/// Each proc calls this function in order to determine which (sub)apps among
+/// the global list of all subapps for a multiapp should be run by the given
+/// rank.
+LocalRankConfig rankConfig(dof_id_type rank,
+                           dof_id_type nprocs,
+                           dof_id_type napps,
+                           dof_id_type min_app_procs,
+                           dof_id_type max_app_procs,
+                           bool batch_mode = false);
 
 /**
  * Helper class for holding Sub-app backups
@@ -73,20 +119,24 @@ public:
   virtual void finalize();
 
   /**
-   * Method called at the end of the simulation (after finalize)
+   * Method called at the end of the simulation (after finalize).
    */
   virtual void postExecute();
 
   /**
-   * Called just after construction to allow derived classes to set _positions;
+   * Called just after construction to allow derived classes to set _positions and create
+   * sub-apps accordingly.
    */
   void setupPositions();
 
+  /**
+   * Method to be called in main-app initial setup for create sub-apps if using positions is false.
+   */
   virtual void initialSetup() override;
 
   /**
    * Gets called just before transfers are done _to_ the MultiApp
-   * (Which is just before the MultiApp is solved)
+   * (Which is just before the MultiApp is solved).
    */
   virtual void preTransfer(Real dt, Real target_time);
 
@@ -117,9 +167,11 @@ public:
    * Calls multi-apps executioners' endStep and postStep methods which creates output and advances
    * time (not the time step; see incrementTStep()) among other things. This method is only called
    * for Picard calculations because for loosely coupled calculations the executioners' endStep and
-   * postStep methods are called from solveStep().
+   * postStep methods are called from solveStep(). This may be called with the optional flag \p
+   * recurse_through_multiapp_levels which may be useful if this method is being called for the
+   * *final* time of program execution
    */
-  virtual void finishStep() {}
+  virtual void finishStep(bool /*recurse_through_multiapp_levels*/ = false) {}
 
   /**
    * Save off the state of every Sub App
@@ -129,11 +181,13 @@ public:
   virtual void backup();
 
   /**
-   * Restore the state of every Sub App
+   * Restore the state of every Sub App. This allows us to "Restore" this state later
+   * If the app is not forced to restore, it is only done as needed (and also for the
+   * apps underneath as needed)
    *
-   * This allows us to "Restore" this state later
+   * @param force Whether the restoration has to happen no matter what.
    */
-  virtual void restore();
+  virtual void restore(bool force = true);
 
   /**
    * Whether or not this MultiApp should be restored at the beginning of
@@ -280,11 +334,21 @@ public:
    */
   bool isRootProcessor() { return _my_rank == 0; }
 
+  /**
+   * Whether or not this MultiApp is using positions or its own way for constructing sub-apps.
+   */
+  bool usingPositions() const { return _use_positions; }
+
 protected:
   /**
    * _must_ fill in _positions with the positions of the sub-aps
    */
   virtual void fillPositions();
+
+  /**
+   * Fill command line arguments for sub apps
+   */
+  void readCommandLineArguments();
 
   /**
    * Helper function for creating an App instance.
@@ -321,11 +385,21 @@ protected:
   virtual std::string getCommandLineArgsParamHelper(unsigned int local_app);
 
   /**
-   * Initialize the MultiApp by creating the provided number of apps.
-   *
-   * This is called in the constructor, by default it utilizes the 'positions' input parameters.
+   * Build communicators and reserve backups.
    */
-  void init(unsigned int num);
+  void init(unsigned int num_apps, bool batch_mode = false);
+
+  /**
+   * Same as other init method, except defining a custom rank configuration
+   */
+  void init(unsigned int num_apps, const LocalRankConfig & config);
+
+  /**
+   * Create the provided number of apps.
+   *
+   * This is called in the setupPositions().
+   */
+  void createApps();
 
   /**
    * Reserve the solution from the previous simulation,
@@ -347,6 +421,9 @@ protected:
 
   /// The input file for each app's simulation
   std::vector<FileName> _input_files;
+
+  /// Number of positions for each input file
+  std::vector<unsigned int> _npositions_inputfile;
 
   /// The output file basename for each multiapp
   std::string _output_base;
@@ -399,6 +476,9 @@ protected:
   /// Maximum number of processors to give to each app
   unsigned int _max_procs_per_app;
 
+  /// Minimum number of processors to give to each app
+  unsigned int _min_procs_per_app;
+
   /// Whether or not to move the output of the MultiApp into position
   bool _output_in_position;
 
@@ -432,8 +512,11 @@ protected:
   /// Backups for each local App
   SubAppBackups & _backups;
 
-  /// Storage for command line arguments
+  /// CommandLine arguments
   const std::vector<std::string> & _cli_args;
+
+  /// CommandLine arguments from files
+  std::vector<std::string> _cli_args_from_file;
 
   /// Flag indicates if or not restart from the latest solution
   bool _keep_solution_during_restore;
@@ -441,11 +524,15 @@ protected:
   /// The solution from the end of the previous solve, this is cloned from the Nonlinear solution during restore
   std::vector<std::unique_ptr<NumericVector<Real>>> _end_solutions;
 
-private:
-  PerfID _perf_backup;
-  PerfID _perf_restore;
-  PerfID _perf_init;
-  PerfID _perf_reset_app;
+  /// The app configuration resulting from calling init
+  LocalRankConfig _rank_config;
+
+  ///Timers
+  const PerfID _solve_step_timer;
+  const PerfID _init_timer;
+  const PerfID _backup_timer;
+  const PerfID _restore_timer;
+  const PerfID _reset_timer;
 };
 
 template <>

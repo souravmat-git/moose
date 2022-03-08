@@ -48,7 +48,8 @@ SamplerParameterTransfer::SamplerParameterTransfer(const InputParameters & param
 void
 SamplerParameterTransfer::execute()
 {
-  mooseAssert(_sampler_ptr->getNumberOfLocalRows() == _multi_app->numLocalApps(),
+  mooseAssert((_sampler_ptr->getNumberOfLocalRows() == 0) ||
+                  (_sampler_ptr->getNumberOfLocalRows() == _multi_app->numLocalApps()),
               "The number of MultiApps and the number of sample rows must be the same.");
 
   // Loop over all sub-apps
@@ -71,26 +72,13 @@ SamplerParameterTransfer::execute()
 }
 
 void
-SamplerParameterTransfer::initializeToMultiapp()
-{
-  _global_index = _sampler_ptr->getLocalRowBegin();
-}
-
-void
 SamplerParameterTransfer::executeToMultiapp()
 {
-  SamplerReceiver * ptr = getReceiver(processor_id());
-
-  std::vector<Real> row = _sampler_ptr->getNextLocalRow();
-
-  ptr->transfer(_parameter_names, row);
-
-  _global_index++;
-}
-
-void
-SamplerParameterTransfer::finalizeToMultiapp()
-{
+  if (_multi_app->isRootProcessor())
+  {
+    SamplerReceiver * ptr = getReceiver(_app_index);
+    ptr->transfer(_parameter_names, _row_data);
+  }
 }
 
 SamplerReceiver *

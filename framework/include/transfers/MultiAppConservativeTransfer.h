@@ -11,12 +11,6 @@
 
 #include "MultiAppFieldTransfer.h"
 
-// Forward declarations
-class MultiAppConservativeTransfer;
-
-template <>
-InputParameters validParams<MultiAppConservativeTransfer>();
-
 /**
  *  Transfers variables on possibly differne meshes while conserving a user
  *  defined property of each variable
@@ -39,6 +33,8 @@ public:
 protected:
   virtual std::vector<VariableName> getFromVarNames() const override { return _from_var_names; }
   virtual std::vector<AuxVariableName> getToVarNames() const override { return _to_var_names; }
+
+  bool performAdjustment(const PostprocessorValue & from, const PostprocessorValue & to) const;
 
   /// Name of variables transfering from
   const std::vector<VariableName> _from_var_names;
@@ -69,4 +65,5 @@ private:
                                             PostprocessorName & to_postprocessor);
 
   bool _use_nearestpoint_pps;
+  bool _allow_skipped_adjustment;
 };

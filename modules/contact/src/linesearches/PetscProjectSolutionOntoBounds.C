@@ -9,7 +9,6 @@
 
 #include "PetscProjectSolutionOntoBounds.h"
 
-#ifdef LIBMESH_HAVE_PETSC
 #if !PETSC_VERSION_LESS_THAN(3, 6, 0)
 #include "FEProblem.h"
 #include "DisplacedProblem.h"
@@ -89,10 +88,10 @@ PetscProjectSolutionOntoBounds::lineSearch()
 
   const auto & pen_locs = _displaced_problem->geomSearchData().getPenetrationLocators();
 
-  // Keep track of the slave nodes that we push back onto the master face. We'll eventually check to
-  // make sure that we didn't have a corner node at the intersection of two slave faces that we
-  // tried to displace twice. As this stands now this won't cover the case wherethe intersection
-  // happens only across processes
+  // Keep track of the secondary nodes that we push back onto the primary face. We'll eventually
+  // check to make sure that we didn't have a corner node at the intersection of two secondary faces
+  // that we tried to displace twice. As this stands now this won't cover the case wherethe
+  // intersection happens only across processes
   std::set<dof_id_type> nodes_displaced;
 
   std::vector<unsigned int> disp_nums;
@@ -165,5 +164,4 @@ PetscProjectSolutionOntoBounds::lineSearch()
   LIBMESH_CHKERR(ierr);
 }
 
-#endif // !PETSC_VERSION_LESS_THAN(3, 3, 0)
-#endif // LIBMESH_HAVE_PETSC
+#endif // !PETSC_VERSION_LESS_THAN(3, 6, 0)

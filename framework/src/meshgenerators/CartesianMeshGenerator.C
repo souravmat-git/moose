@@ -20,8 +20,6 @@
 
 registerMooseObject("MooseApp", CartesianMeshGenerator);
 
-defineLegacyParams(CartesianMeshGenerator);
-
 InputParameters
 CartesianMeshGenerator::validParams()
 {
@@ -227,7 +225,7 @@ CartesianMeshGenerator::CartesianMeshGenerator(const InputParameters & parameter
 std::unique_ptr<MeshBase>
 CartesianMeshGenerator::generate()
 {
-  std::unique_ptr<ReplicatedMesh> mesh = libmesh_make_unique<ReplicatedMesh>(comm(), 2);
+  auto mesh = buildMeshBaseObject();
 
   // switching on MooseEnum to generate the reference mesh
   // Note: element type is fixed
@@ -251,7 +249,7 @@ CartesianMeshGenerator::generate()
   MeshBase::element_iterator el_end = mesh->active_elements_end();
   for (; el != el_end; ++el)
   {
-    const Point p = (*el)->centroid();
+    const Point p = (*el)->vertex_average();
     unsigned int ix = std::floor(p(0));
     unsigned int iy = std::floor(p(1));
     unsigned int iz = std::floor(p(2));

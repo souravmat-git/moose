@@ -22,6 +22,7 @@ template <typename ComputeValueType>
 class AuxKernelTempl;
 typedef AuxKernelTempl<Real> AuxKernel;
 typedef AuxKernelTempl<RealVectorValue> VectorAuxKernel;
+typedef AuxKernelTempl<RealEigenVector> ArrayAuxKernel;
 class FEProblemBase;
 class TimeIntegrator;
 class AuxScalarKernel;
@@ -43,13 +44,11 @@ public:
   AuxiliarySystem(FEProblemBase & subproblem, const std::string & name);
   virtual ~AuxiliarySystem();
 
-  virtual void addExtraVectors() override;
-
-  virtual void initialSetup();
-  virtual void timestepSetup();
-  virtual void subdomainSetup();
-  virtual void residualSetup();
-  virtual void jacobianSetup();
+  virtual void initialSetup() override;
+  virtual void timestepSetup() override;
+  virtual void subdomainSetup() override;
+  virtual void residualSetup() override;
+  virtual void jacobianSetup() override;
   virtual void updateActive(THREAD_ID tid);
 
   virtual void addVariable(const std::string & var_type,
@@ -98,7 +97,6 @@ public:
 
   const NumericVector<Number> * const & currentSolution() const override
   {
-    _current_solution = _sys.current_local_solution.get();
     return _current_solution;
   }
 
@@ -132,19 +130,6 @@ public:
    */
   std::set<std::string> getDependObjects(ExecFlagType type);
   std::set<std::string> getDependObjects();
-  /**
-   * Adds a solution length vector to the system.
-   *
-   * @param vector_name The name of the vector.
-   * @param project Whether or not to project this vector when doing mesh refinement.
-   *                If the vector is just going to be recomputed then there is no need to project
-   * it.
-   * @param type What type of parallel vector.  This is usually either PARALLEL or GHOSTED.
-   *             GHOSTED is needed if you are going to be accessing off-processor entries.
-   *             The ghosting pattern is the same as the solution vector.
-   */
-  NumericVector<Number> &
-  addVector(const std::string & vector_name, const bool project, const ParallelType type) override;
 
   /**
    * Get the minimum quadrature order for evaluating elemental auxiliary variables
@@ -157,13 +142,7 @@ public:
    */
   bool needMaterialOnSide(BoundaryID bnd_id);
 
-  NumericVector<Number> * solutionPreviousNewton() override { return _solution_previous_nl; }
-  const NumericVector<Number> * solutionPreviousNewton() const override
-  {
-    return _solution_previous_nl;
-  }
-
-  virtual TransientExplicitSystem & sys() { return _sys; }
+  virtual ExplicitSystem & sys() { return _sys; }
 
   virtual System & system() override { return _sys; }
   virtual const System & system() const override { return _sys; }
@@ -177,30 +156,29 @@ public:
 protected:
   void computeScalarVars(ExecFlagType type);
   void computeNodalVars(ExecFlagType type);
+  void computeMortarNodalVars(ExecFlagType type);
   void computeNodalVecVars(ExecFlagType type);
+  void computeNodalArrayVars(ExecFlagType type);
   void computeElementalVars(ExecFlagType type);
   void computeElementalVecVars(ExecFlagType type);
+  void computeElementalArrayVars(ExecFlagType type);
 
   template <typename AuxKernelType>
   void computeElementalVarsHelper(const MooseObjectWarehouse<AuxKernelType> & warehouse,
-                                  const std::vector<std::vector<MooseVariableFEBase *>> & vars,
-                                  const PerfID timer);
+                                  const std::vector<std::vector<MooseVariableFEBase *>> & vars);
 
   template <typename AuxKernelType>
   void computeNodalVarsHelper(const MooseObjectWarehouse<AuxKernelType> & warehouse,
-                              const std::vector<std::vector<MooseVariableFEBase *>> & vars,
-                              const PerfID timer);
+                              const std::vector<std::vector<MooseVariableFEBase *>> & vars);
 
   FEProblemBase & _fe_problem;
 
-  TransientExplicitSystem & _sys;
+  ExplicitSystem & _sys;
 
   /// solution vector from nonlinear solver
-  mutable const NumericVector<Number> * _current_solution;
+  const NumericVector<Number> * _current_solution;
   /// Serialized version of the solution vector
   NumericVector<Number> & _serialized_solution;
-  /// Solution vector of the previous nonlinear iterate
-  NumericVector<Number> * _solution_previous_nl;
   /// solution vector for u^dot
   NumericVector<Number> * _u_dot;
   /// solution vector for u^dotdot
@@ -221,28 +199,33 @@ protected:
   std::vector<std::vector<MooseVariableFEBase *>> _nodal_vars;
   std::vector<std::vector<MooseVariableFEBase *>> _nodal_std_vars;
   std::vector<std::vector<MooseVariableFEBase *>> _nodal_vec_vars;
+  std::vector<std::vector<MooseVariableFEBase *>> _nodal_array_vars;
 
-  std::vector<std::vector<MooseVariableFEBase *>> _elem_vars;
-  std::vector<std::vector<MooseVariableFEBase *>> _elem_std_vars;
-  std::vector<std::vector<MooseVariableFEBase *>> _elem_vec_vars;
+  ///@{
+  /**
+   * Elemental variables. These may be either finite element or finite volume variables
+   */
+  std::vector<std::vector<MooseVariableFieldBase *>> _elem_vars;
+  std::vector<std::vector<MooseVariableFieldBase *>> _elem_std_vars;
+  std::vector<std::vector<MooseVariableFieldBase *>> _elem_vec_vars;
+  std::vector<std::vector<MooseVariableFieldBase *>> _elem_array_vars;
+  ///@}
 
   // Storage for AuxScalarKernel objects
   ExecuteMooseObjectWarehouse<AuxScalarKernel> _aux_scalar_storage;
 
   // Storage for AuxKernel objects
   ExecuteMooseObjectWarehouse<AuxKernel> _nodal_aux_storage;
+  ExecuteMooseObjectWarehouse<AuxKernel> _mortar_nodal_aux_storage;
   ExecuteMooseObjectWarehouse<AuxKernel> _elemental_aux_storage;
 
   // Storage for VectorAuxKernel objects
   ExecuteMooseObjectWarehouse<VectorAuxKernel> _nodal_vec_aux_storage;
   ExecuteMooseObjectWarehouse<VectorAuxKernel> _elemental_vec_aux_storage;
 
-  /// Timers
-  const PerfID _compute_scalar_vars_timer;
-  const PerfID _compute_nodal_vars_timer;
-  const PerfID _compute_nodal_vec_vars_timer;
-  const PerfID _compute_elemental_vars_timer;
-  const PerfID _compute_elemental_vec_vars_timer;
+  // Storage for ArrayAuxKernel objects
+  ExecuteMooseObjectWarehouse<ArrayAuxKernel> _nodal_array_aux_storage;
+  ExecuteMooseObjectWarehouse<ArrayAuxKernel> _elemental_array_aux_storage;
 
   friend class ComputeIndicatorThread;
   friend class ComputeMarkerThread;
@@ -253,9 +236,4 @@ protected:
   friend class ComputeNodalKernelBCJacobiansThread;
 
   NumericVector<Number> & solutionInternal() const override { return *_sys.solution; }
-  NumericVector<Number> & solutionOldInternal() const override { return *_sys.old_local_solution; }
-  NumericVector<Number> & solutionOlderInternal() const override
-  {
-    return *_sys.older_local_solution;
-  }
 };

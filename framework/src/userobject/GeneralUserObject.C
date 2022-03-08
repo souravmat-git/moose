@@ -9,20 +9,12 @@
 
 #include "GeneralUserObject.h"
 
-defineLegacyParams(GeneralUserObject);
-
 InputParameters
 GeneralUserObject::validParams()
 {
   InputParameters params = UserObject::validParams();
   params += MaterialPropertyInterface::validParams();
-  params.addParam<bool>(
-      "force_preaux", false, "Forces the GeneralUserObject to be executed in PREAUX");
-  params.addParam<bool>(
-      "force_preic",
-      false,
-      "Forces the GeneralUserObject to be executed in PREIC during initial setup");
-  params.addParamNamesToGroup("force_preaux force_preic", "Advanced");
+
   return params;
 }
 
@@ -47,57 +39,19 @@ GeneralUserObject::getSuppliedItems()
   return _supplied_vars;
 }
 
-const PostprocessorValue &
-GeneralUserObject::getPostprocessorValue(const std::string & name, unsigned int index)
+void
+GeneralUserObject::addPostprocessorDependencyHelper(const PostprocessorName & name) const
 {
-  // is this a vector of pp names, we use the number of default entries
-  // to figure that out
-  if (_pars.isSinglePostprocessor(name))
-    _depend_vars.insert(_pars.get<PostprocessorName>(name));
-  else
-    _depend_vars.insert(_pars.get<std::vector<PostprocessorName>>(name)[index]);
-  return UserObject::getPostprocessorValue(name, index);
-}
-
-const PostprocessorValue &
-GeneralUserObject::getPostprocessorValueByName(const PostprocessorName & name)
-{
+  UserObject::addPostprocessorDependencyHelper(name);
   _depend_vars.insert(name);
-  return UserObject::getPostprocessorValueByName(name);
 }
 
-const VectorPostprocessorValue &
-GeneralUserObject::getVectorPostprocessorValue(const std::string & name,
-                                               const std::string & vector_name)
+void
+GeneralUserObject::addVectorPostprocessorDependencyHelper(
+    const VectorPostprocessorName & name) const
 {
-  _depend_vars.insert(_pars.get<VectorPostprocessorName>(name));
-  return UserObject::getVectorPostprocessorValue(name, vector_name);
-}
-
-const VectorPostprocessorValue &
-GeneralUserObject::getVectorPostprocessorValueByName(const VectorPostprocessorName & name,
-                                                     const std::string & vector_name)
-{
+  UserObject::addVectorPostprocessorDependencyHelper(name);
   _depend_vars.insert(name);
-  return UserObject::getVectorPostprocessorValueByName(name, vector_name);
-}
-
-const VectorPostprocessorValue &
-GeneralUserObject::getVectorPostprocessorValue(const std::string & name,
-                                               const std::string & vector_name,
-                                               bool use_broadcast)
-{
-  _depend_vars.insert(_pars.get<VectorPostprocessorName>(name));
-  return UserObject::getVectorPostprocessorValue(name, vector_name, use_broadcast);
-}
-
-const VectorPostprocessorValue &
-GeneralUserObject::getVectorPostprocessorValueByName(const VectorPostprocessorName & name,
-                                                     const std::string & vector_name,
-                                                     bool use_broadcast)
-{
-  _depend_vars.insert(name);
-  return UserObject::getVectorPostprocessorValueByName(name, vector_name, use_broadcast);
 }
 
 void
@@ -112,4 +66,10 @@ GeneralUserObject::subdomainSetup()
 {
   mooseError("GeneralUserObjects do not execute subdomainSetup method, this function does nothing "
              "and should not be used.");
+}
+
+void
+GeneralUserObject::addReporterDependencyHelper(const ReporterName & reporter_name)
+{
+  _depend_vars.insert(reporter_name.getObjectName());
 }

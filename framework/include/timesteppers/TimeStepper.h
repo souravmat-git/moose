@@ -13,12 +13,8 @@
 #include "Restartable.h"
 #include "ScalarCoupleable.h"
 
-class TimeStepper;
 class FEProblemBase;
 class Transient;
-
-template <>
-InputParameters validParams<TimeStepper>();
 
 /**
  * Base class for time stepping
@@ -86,6 +82,12 @@ public:
   Real getCurrentDT() { return _current_dt; }
 
   virtual void forceTimeStep(Real dt);
+
+  /**
+   * Set the number of time steps
+   * @param num_steps number of time steps
+   */
+  virtual void forceNumSteps(const unsigned int num_steps);
 
   ///@{
   /**

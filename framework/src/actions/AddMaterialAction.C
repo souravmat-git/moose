@@ -12,12 +12,12 @@
 
 registerMooseAction("MooseApp", AddMaterialAction, "add_material");
 
-defineLegacyParams(AddMaterialAction);
-
 InputParameters
 AddMaterialAction::validParams()
 {
-  return MooseObjectAction::validParams();
+  InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a Material object to the simulation.");
+  return params;
 }
 
 AddMaterialAction::AddMaterialAction(InputParameters params) : MooseObjectAction(params) {}

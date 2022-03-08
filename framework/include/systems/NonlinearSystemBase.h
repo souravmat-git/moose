@@ -37,12 +37,13 @@ class DirichletBCBase;
 class ADDirichletBCBase;
 class DGKernelBase;
 class InterfaceKernelBase;
-class ScalarKernel;
+class ScalarKernelBase;
 class DiracKernel;
-class NodalKernel;
+class NodalKernelBase;
 class Split;
 class KernelBase;
 class BoundaryCondition;
+class ResidualObject;
 
 // libMesh forward declarations
 namespace libMesh
@@ -51,6 +52,8 @@ template <typename T>
 class NumericVector;
 template <typename T>
 class SparseMatrix;
+template <typename T>
+class DiagonalMatrix;
 } // namespace libMesh
 
 /**
@@ -73,7 +76,6 @@ public:
    */
   virtual void turnOffJacobian();
 
-  virtual void addExtraVectors() override;
   virtual void solve() override = 0;
   virtual void restoreSolutions() override;
 
@@ -84,6 +86,8 @@ public:
 
   virtual NonlinearSolver<Number> * nonlinearSolver() = 0;
 
+  virtual SNES getSNES() = 0;
+
   virtual unsigned int getCurrentNonlinearIterationNumber() = 0;
 
   /**
@@ -93,8 +97,10 @@ public:
   virtual bool computingInitialResidual() { return _computing_initial_residual; }
 
   // Setup Functions ////
-  virtual void initialSetup();
-  virtual void timestepSetup();
+  virtual void initialSetup() override;
+  virtual void timestepSetup() override;
+  virtual void residualSetup() override;
+  virtual void jacobianSetup() override;
 
   virtual void setupFiniteDifferencedPreconditioner() = 0;
   void setupFieldDecomposition();
@@ -238,7 +244,7 @@ public:
   /**
    * Sets the value of constrained variables in the solution vector.
    */
-  void setConstraintSlaveValues(NumericVector<Number> & solution, bool displaced);
+  void setConstraintSecondaryValues(NumericVector<Number> & solution, bool displaced);
 
   /**
    * Add residual contributions from Constraints
@@ -267,13 +273,6 @@ public:
   void computeResidual(NumericVector<Number> & residual, TagID tag_id);
 
   /**
-   * Finds the implicit sparsity graph between geometrically related dofs.
-   */
-  void
-  findImplicitGeometricCouplingEntries(GeometricSearchData & geom_search_data,
-                                       std::map<dof_id_type, std::vector<dof_id_type>> & graph);
-
-  /**
    * Adds entries to the Jacobian in the correct positions for couplings coming from dofs being
    * coupled that
    * are related geometrically (i.e. near each other across a gap).
@@ -300,7 +299,7 @@ public:
   /**
    * Method used to obtain scaling factors for variables
    */
-  virtual void computeScaling();
+  void computeScaling();
 
   /**
    * Associate jacobian to systemMatrixTag, and then form a matrix for all the tags
@@ -342,6 +341,7 @@ public:
    */
   void onTimestepBegin();
 
+  using SystemBase::subdomainSetup;
   /**
    * Called from assembling when we hit a new subdomain
    * @param subdomain ID of the new subdomain
@@ -615,25 +615,16 @@ public:
   virtual System & system() override { return _sys; }
   virtual const System & system() const override { return _sys; }
 
-  NumericVector<Number> * solutionPreviousNewton() override { return _solution_previous_nl; }
-  const NumericVector<Number> * solutionPreviousNewton() const override
-  {
-    return _solution_previous_nl;
-  }
-
   virtual void setSolutionUDotOld(const NumericVector<Number> & u_dot_old);
 
   virtual void setSolutionUDotDotOld(const NumericVector<Number> & u_dotdot_old);
 
   virtual void setPreviousNewtonSolution(const NumericVector<Number> & soln);
 
-  virtual TagID timeVectorTag() override { return _Re_time_tag; }
-
-  virtual TagID nonTimeVectorTag() override { return _Re_non_time_tag; }
-
-  virtual TagID residualVectorTag() override { return _Re_tag; }
-
-  virtual TagID systemMatrixTag() override { return _Ke_system_tag; }
+  TagID timeVectorTag() const override { return _Re_time_tag; }
+  TagID nonTimeVectorTag() const override { return _Re_non_time_tag; }
+  TagID residualVectorTag() const override { return _Re_tag; }
+  TagID systemMatrixTag() const override { return _Ke_system_tag; }
 
   bool computeScalingOnce() const { return _compute_scaling_once; }
   void computeScalingOnce(bool compute_scaling_once)
@@ -654,6 +645,12 @@ public:
   void scalingGroupVariables(const std::vector<std::vector<std::string>> & scaling_group_variables)
   {
     _scaling_group_variables = scaling_group_variables;
+  }
+
+  bool offDiagonalsInAutoScaling() const { return _off_diagonals_in_auto_scaling; }
+  void offDiagonalsInAutoScaling(bool off_diagonals_in_auto_scaling)
+  {
+    _off_diagonals_in_auto_scaling = off_diagonals_in_auto_scaling;
   }
 
 #ifndef MOOSE_SPARSE_AD
@@ -720,9 +717,32 @@ protected:
   /**
    * Do mortar constraint residual/jacobian computations
    */
-  void mortarConstraints(bool displaced);
+  void mortarConstraints();
 
-protected:
+  /**
+   * Compute a "Jacobian" for automatic scaling purposes
+   */
+  virtual void computeScalingJacobian() = 0;
+
+  /**
+   * Compute a "residual" for automatic scaling purposes
+   */
+  virtual void computeScalingResidual() = 0;
+
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+  /**
+   * Assemble the numeric vector of scaling factors such that it can be used during assembly of the
+   * system matrix
+   */
+  void assembleScalingVector();
+#endif
+
+  /**
+   * Called after any ResidualObject-derived objects are added
+   * to the system.
+   */
+  virtual void postAddResidualObject(ResidualObject &) {}
+
   NumericVector<Number> & solutionInternal() const override { return *_sys.solution; }
 
   /// solution vector from nonlinear solver
@@ -732,9 +752,6 @@ protected:
 
   /// Serialized version of the solution vector
   NumericVector<Number> & _serialized_solution;
-
-  /// Solution vector of the previous nonlinear iterate
-  NumericVector<Number> * _solution_previous_nl;
 
   /// Copy of the residual vector
   NumericVector<Number> & _residual_copy;
@@ -783,7 +800,7 @@ protected:
   ///@{
   /// Kernel Storage
   MooseObjectTagWarehouse<KernelBase> _kernels;
-  MooseObjectTagWarehouse<ScalarKernel> _scalar_kernels;
+  MooseObjectTagWarehouse<ScalarKernelBase> _scalar_kernels;
   MooseObjectTagWarehouse<DGKernelBase> _dg_kernels;
   MooseObjectTagWarehouse<InterfaceKernelBase> _interface_kernels;
 
@@ -810,7 +827,7 @@ protected:
   MooseObjectWarehouse<GeneralDamper> _general_dampers;
 
   /// NodalKernels for each thread
-  MooseObjectTagWarehouse<NodalKernel> _nodal_kernels;
+  MooseObjectTagWarehouse<NodalKernelBase> _nodal_kernels;
 
   /// Decomposition splits
   MooseObjectWarehouseBase<Split> _splits; // use base b/c there are no setup methods
@@ -829,9 +846,9 @@ protected:
 
   /// Whether or not to use a finite differenced preconditioner
   bool _use_finite_differenced_preconditioner;
-#ifdef LIBMESH_HAVE_PETSC
+
   MatFDColoring _fdcoloring;
-#endif
+
   /// Whether or not the system can be decomposed into splits
   bool _have_decomposition;
   /// Name of the top-level split of the decomposition
@@ -892,20 +909,6 @@ protected:
 
   std::vector<dof_id_type> _var_all_dof_indices;
 
-  /// Timers
-  PerfID _compute_residual_tags_timer;
-  PerfID _compute_residual_internal_timer;
-  PerfID _kernels_timer;
-  PerfID _scalar_kernels_timer;
-  PerfID _nodal_kernels_timer;
-  PerfID _nodal_kernel_bcs_timer;
-  PerfID _nodal_bcs_timer;
-  PerfID _compute_jacobian_tags_timer;
-  PerfID _compute_jacobian_blocks_timer;
-  PerfID _compute_dampers_timer;
-  PerfID _compute_dirac_timer;
-  PerfID _compute_scaling_timer;
-
   /// Flag used to indicate whether we have already computed the scaling Jacobian
   bool _computed_scaling;
 
@@ -924,7 +927,25 @@ protected:
   /// like for solid/fluid mechanics
   std::vector<std::vector<std::string>> _scaling_group_variables;
 
+  /// Whether to include off diagonals when determining automatic scaling factors
+  bool _off_diagonals_in_auto_scaling;
+
+  /// A diagonal matrix used for computing scaling
+  std::unique_ptr<DiagonalMatrix<Number>> _scaling_matrix;
+
 private:
+  /**
+   * Finds the implicit sparsity graph between geometrically related dofs.
+   */
+  void findImplicitGeometricCouplingEntries(
+      GeometricSearchData & geom_search_data,
+      std::unordered_map<dof_id_type, std::vector<dof_id_type>> & graph);
+
+  /**
+   * Setup group scaling containers
+   */
+  void setupScalingGrouping();
+
   /// Functors for computing undisplaced mortar constraints
   std::unordered_map<std::pair<BoundaryID, BoundaryID>, ComputeMortarFunctor>
       _undisplaced_mortar_functors;
@@ -940,4 +961,13 @@ private:
 
   /// The current states of the solution (0 = current, 1 = old, etc)
   std::vector<NumericVector<Number> *> _solution_state;
+
+  /// Whether we've initialized the automatic scaling data structures
+  bool _auto_scaling_initd;
+
+  /// A map from variable index to group variable index and it's associated (inverse) scaling factor
+  std::unordered_map<unsigned int, unsigned int> _var_to_group_var;
+
+  /// The number of scaling groups
+  std::size_t _num_scaling_groups;
 };

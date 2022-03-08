@@ -12,6 +12,9 @@
 #include "MooseMesh.h"
 #include "Conversion.h"
 #include "NonlinearSystem.h"
+
+#include "libmesh/int_range.h"
+
 #include <Eigen/Dense>
 
 #include <fstream>
@@ -28,6 +31,9 @@ EBSDReader::validParams()
       "custom_columns", 0, "Number of additional custom data columns to read from the EBSD file");
   params.addParam<unsigned int>("bins", 20, "Number of bins to segregate quaternions");
   params.addParam<Real>("L_norm", 1, "Specifies the type of average the user intends to perform");
+  params.addParam<std::string>("ebsd_meshgenerator",
+                               "Specify the name of the EBSDMeshGenerator. The EBSDReader can "
+                               "autodetect this, if only one such MeshGenerator exists.");
   return params;
 }
 
@@ -61,33 +67,76 @@ EBSDReader::readFile()
   if (_app.isRecovering())
     return;
 
-  // Fetch and check mesh
-  EBSDMesh * mesh = dynamic_cast<EBSDMesh *>(&_mesh);
-  if (mesh == NULL)
-    mooseError("Please use an EBSDMesh in your simulation.");
-  std::ifstream stream_in(mesh->getEBSDFilename().c_str());
-  if (!stream_in)
-    mooseError("Can't open EBSD file: ", mesh->getEBSDFilename());
+  std::string ebsd_filename;
+  EBSDMeshGenerator::Geometry geometry;
 
-  const EBSDMesh::EBSDMeshGeometry & g = mesh->getEBSDGeometry();
+  // Fetch and check mesh or meshgenerators
+  EBSDMesh * mesh = dynamic_cast<EBSDMesh *>(&_mesh);
+  if (mesh != NULL)
+  {
+    ebsd_filename = mesh->getEBSDFilename();
+    geometry = mesh->getEBSDGeometry();
+  }
+  else
+  {
+    std::string ebsd_meshgenerator_name;
+    if (isParamValid("ebsd_meshgenerator"))
+      ebsd_meshgenerator_name = getParam<std::string>("ebsd_meshgenerator");
+    else
+    {
+      auto meshgenerator_names = _app.getMeshGeneratorNames();
+      for (auto & mgn : meshgenerator_names)
+      {
+        const EBSDMeshGenerator * emg =
+            dynamic_cast<const EBSDMeshGenerator *>(&_app.getMeshGenerator(mgn));
+        if (emg)
+        {
+          if (!ebsd_meshgenerator_name.empty())
+            mooseError("Found multiple EBSDMeshGenerator objects (",
+                       ebsd_meshgenerator_name,
+                       " and ",
+                       mgn,
+                       "). Use the 'ebsd_meshgenerator' parameter to specify which one to use.");
+          ebsd_meshgenerator_name = mgn;
+        }
+      }
+
+      if (ebsd_meshgenerator_name.empty())
+        mooseError("Failed to autodetect an EBSDMeshGenerator (or a deprecated EBSDMesh object).");
+    }
+
+    // get the selected or detected mesh generator
+    const EBSDMeshGenerator * emg =
+        dynamic_cast<const EBSDMeshGenerator *>(&_app.getMeshGenerator(ebsd_meshgenerator_name));
+    if (!emg)
+      paramError("ebsd_meshgenerator", "No valid EBSDMeshGenerator object found.");
+
+    ebsd_filename = emg->getEBSDFilename();
+    geometry = emg->getEBSDGeometry();
+  }
+
+  std::ifstream stream_in(ebsd_filename.c_str());
+  if (!stream_in)
+    mooseError("Can't open EBSD file: ", ebsd_filename);
+
   // Copy file header data from the EBSDMesh
-  _dx = g.d[0];
-  _nx = g.n[0];
-  _minx = g.min[0];
+  _dx = geometry.d[0];
+  _nx = geometry.n[0];
+  _minx = geometry.min[0];
   _maxx = _minx + _dx * _nx;
 
-  _dy = g.d[1];
-  _ny = g.n[1];
-  _miny = g.min[1];
+  _dy = geometry.d[1];
+  _ny = geometry.n[1];
+  _miny = geometry.min[1];
   _maxy = _miny + _dy * _ny;
 
-  _dz = g.d[2];
-  _nz = g.n[2];
-  _minz = g.min[2];
+  _dz = geometry.d[2];
+  _nz = geometry.n[2];
+  _minz = geometry.min[2];
   _maxz = _minz + _dz * _nz;
 
   // Resize the _data array
-  unsigned total_size = g.dim < 3 ? _nx * _ny : _nx * _ny * _nz;
+  unsigned total_size = geometry.dim < 3 ? _nx * _ny : _nx * _ny * _nz;
   _data.resize(total_size);
 
   std::string line;
@@ -115,7 +164,7 @@ EBSDReader::readFile()
           mooseError("Unable to read in EBSD custom data column #", i);
 
       if (x < _minx || y < _miny || x > _maxx || y > _maxy ||
-          (g.dim == 3 && (z < _minz || z > _maxz)))
+          (geometry.dim == 3 && (z < _minz || z > _maxz)))
         mooseError("EBSD Data ouside of the domain declared in the header ([",
                    _minx,
                    ':',
@@ -129,7 +178,7 @@ EBSDReader::readFile()
                    ':',
                    _maxz,
                    "]) dim=",
-                   g.dim,
+                   geometry.dim,
                    "\n",
                    line);
 
@@ -150,7 +199,7 @@ EBSDReader::readFile()
   _avg_angles.resize(_grain_num);
 
   // clear the averages
-  for (unsigned int i = 0; i < _grain_num; ++i)
+  for (const auto i : make_range(_grain_num))
   {
     EBSDAvgData & a = _avg_data[i];
     a._symmetry = a._phase = a._n = 0;
@@ -176,7 +225,6 @@ EBSDReader::readFile()
 
     // convert Euler angles to quaternions
     Eigen::Quaternion<Real> q = angles.toQuaternion();
-
     quat[_global_id_map[j._feature_id]].push_back(q);
 
     if (a._n == 0)
@@ -198,15 +246,8 @@ EBSDReader::readFile()
     a._p += j._p;
     a._n++;
   }
-  // creating a vector of maps to store the quaternion count for each bin index
-  std::vector<
-      std::map<std::tuple<unsigned int, unsigned int, unsigned int, unsigned int>, unsigned int>>
-      feature_weights(_grain_num);
-  // creating a vector of vectors to store the bin index corresponding to a quaternion
-  std::vector<std::vector<std::tuple<unsigned int, unsigned int, unsigned int, unsigned int>>>
-      quat_to_bin(_grain_num);
 
-  for (unsigned int i = 0; i < _grain_num; i++)
+  for (const auto i : make_range(_grain_num))
   {
     EBSDAvgData & a = _avg_data[i];
     EulerAngles & b = _avg_angles[i];
@@ -214,35 +255,17 @@ EBSDReader::readFile()
     if (a._n == 0)
       continue;
 
-    Real w_index, x_index, y_index, z_index;
-    Real w, x, y, z;
-    std::vector<std::tuple<double, Eigen::VectorXd>> eigen_vectors_and_values;
+    // creating a map to store the quaternion count for each bin index
+    std::map<std::tuple<int, int, int, int>, unsigned int> feature_weights;
 
-    // creating an empty map
-    feature_weights.push_back(
-        std::map<std::tuple<unsigned int, unsigned int, unsigned int, unsigned int>,
-                 unsigned int>());
-
-    // looping through quaternions of each grain
-    for (unsigned int k = 0; k < quat[i].size(); k++)
+    // looping through all quaternions of the current grain
+    for (const auto & q : quat[i])
     {
-      std::tuple<unsigned int, unsigned int, unsigned int, unsigned int> bin;
-      w_index = int((quat[i][k].w() + 1) * 0.5 * _bins);
-      x_index = int((quat[i][k].x() + 1) * 0.5 * _bins);
-      y_index = int((quat[i][k].y() + 1) * 0.5 * _bins);
-      z_index = int((quat[i][k].z() + 1) * 0.5 * _bins);
-
-      bin = std::make_tuple(w_index, x_index, y_index, z_index);
-
-      // storing the bincorresponding to the quaternion quat[i][k]
-      quat_to_bin[i].push_back(bin);
-
-      // storing the bin name and its corresponding size value
-      auto j = feature_weights[i].find(bin);
-      if (j == feature_weights[i].end())
-        feature_weights[i].emplace_hint(j, bin, 1);
-      else
-        j->second++;
+      const auto bin = std::make_tuple<int, int, int, int>(std::floor(q.w() * 0.5 * _bins),
+                                                           std::floor(q.x() * 0.5 * _bins),
+                                                           std::floor(q.y() * 0.5 * _bins),
+                                                           std::floor(q.z() * 0.5 * _bins));
+      feature_weights[bin]++;
     }
 
     /**
@@ -250,71 +273,58 @@ EBSDReader::readFile()
      * "Averaging quaternions." Journal of Guidance, Control, and Dynamics 30,
      * no. 4 (2007): 1193-1197.
      * A 4 by N matrix (Q) is constructed, where N is the number of quaternions.
-     * A weight matrix (W) is created. The eigen vector corresponding to the
-     * maximum eigen value of Q*W*Q' is the weighted average quaternion
-     **/
+     * A weight matrix (W) is created. The eigenvector corresponding to the
+     * maximum eigenvalue of Q*W*Q' is the weighted average quaternion
+     */
 
-    // creating a quaternion matrix
-    Eigen::MatrixXd quat_mat(4, quat[i].size());
-    // creating the weight matrix
-    Eigen::MatrixXd weight = Eigen::MatrixXd::Identity(quat[i].size(), quat[i].size());
+    // quaternion average matrix Q*w*Q^T
+    typedef Eigen::Matrix<Real, 4, 4> Matrix4x4;
+    Matrix4x4 quat_mat = Matrix4x4::Zero();
+    typedef Eigen::Matrix<Real, 4, 1> Vector4;
 
-    unsigned int bin_size;
     bool data_quality_ok = false;
     Real total_weight = 0.0;
-
-    for (unsigned int j = 0; j < quat[i].size(); j++)
+    for (const auto & q : quat[i])
     {
-      bin_size = feature_weights[i][quat_to_bin[i][j]];
-      w = quat[i][j].w();
-      x = quat[i][j].x();
-      y = quat[i][j].y();
-      z = quat[i][j].z();
+      Vector4 v(q.w(), q.x(), q.y(), q.z());
 
-      // instantiating columns of the matrix
-      quat_mat.col(j) << w, x, y, z;
-      // assigning weights to each quaternion
-      weight(j, j) = std::pow(bin_size, _L_norm);
-      total_weight += weight(j, j);
+      const auto bin = std::make_tuple<int, int, int, int>(std::floor(q.w() * 0.5 * _bins),
+                                                           std::floor(q.x() * 0.5 * _bins),
+                                                           std::floor(q.y() * 0.5 * _bins),
+                                                           std::floor(q.z() * 0.5 * _bins));
+      const auto bin_size = feature_weights[bin];
+      const auto weight = std::pow(bin_size, _L_norm);
+      total_weight += weight;
+
+      quat_mat += v * weight * v.transpose();
+
       /**
-       * If no bin exists which has atleast 50% of total quaternions in a grain
+       * If no bin exists which has at least 50% of total quaternions in a grain
        * then the EBSD data may not be reliable
        * Note: The limit 50% is arbitrary
        */
-      if (bin_size / quat[i].size() > 0.5)
+      if (bin_size * 2 > quat[i].size())
         data_quality_ok = true;
     }
 
-    weight = weight / total_weight;
+    quat_mat *= 1.0 / total_weight;
 
     // throws a warning if EBSD data is not reliable
     if (!data_quality_ok)
-      _console << COLOR_YELLOW << "EBSD data may not be reliable"
-               << "\n"
-               << COLOR_DEFAULT;
+      _console << COLOR_YELLOW << "EBSD orientation data may not be reliable for grain " << i
+               << '\n'
+               << COLOR_DEFAULT << std::flush;
 
-    // compute eigen values and eigen vectors
-    Eigen::EigenSolver<Eigen::MatrixXd> EigenSolver(quat_mat * weight * quat_mat.transpose());
-    Eigen::VectorXd eigen_values = EigenSolver.eigenvalues().real();
-    Eigen::MatrixXd eigen_vectors = EigenSolver.eigenvectors().real();
+    // compute eigenvalues and eigenvectors
+    Eigen::EigenSolver<Matrix4x4> EigenSolver(quat_mat);
+    Vector4 eigen_values = EigenSolver.eigenvalues().real();
+    Matrix4x4 eigen_vectors = EigenSolver.eigenvectors().real();
 
-    // creating a tuple of eigen values and eigen vectors
-    for (unsigned int i = 0; i < eigen_values.size(); i++)
-    {
-      std::tuple<double, Eigen::VectorXd> vec_and_val(eigen_values[i], eigen_vectors.col(i));
-      eigen_vectors_and_values.push_back(vec_and_val);
-    }
-    // Sorting the eigen values and vectors in ascending order of eigen values
-    auto j = std::max_element(eigen_vectors_and_values.begin(),
-                              eigen_vectors_and_values.end(),
-                              [&](const std::tuple<double, Eigen::VectorXd> & a,
-                                  const std::tuple<double, Eigen::VectorXd> & b) -> bool {
-                                return std::get<0>(a) < std::get<0>(b);
-                              });
-    // Selecting eigen vector corresponding to max eigen value to compute average euler angle
-    Eigen::Quaternion<Real> q(
-        std::get<1>(*j)(0), std::get<1>(*j)(1), std::get<1>(*j)(2), std::get<1>(*j)(3));
-
+    // Selecting eigenvector corresponding to max eigenvalue to compute average Euler angle
+    Vector4::Index max_index = 0;
+    eigen_values.maxCoeff(&max_index);
+    const auto max_vec = eigen_vectors.col(max_index);
+    const Eigen::Quaternion<Real> q(max_vec(0), max_vec(1), max_vec(2), max_vec(3));
     b = EulerAngles(q);
 
     // link the EulerAngles into the EBSDAvgData for access via the functors
@@ -334,7 +344,7 @@ EBSDReader::readFile()
       a._custom[i] /= Real(a._n);
   }
   // Build maps to indicate the weights with which grain and phase data
-  // from the surrounding elements contributes to a node fo IC purposes
+  // from the surrounding elements contributes to a node for IC purposes
   buildNodeWeightMaps();
 }
 
@@ -492,7 +502,7 @@ EBSDReader::buildNodeWeightMaps()
 
         // Retrieve EBSD grain number for the current element index
         const Elem * elem = mesh.elem_ptr(elem_id);
-        const EBSDReader::EBSDPointData & d = getData(elem->centroid());
+        const EBSDReader::EBSDPointData & d = getData(elem->vertex_average());
 
         // get the (global) grain ID for the EBSD feature ID
         const unsigned int global_id = getGlobalID(d._feature_id);
@@ -533,7 +543,7 @@ EBSDReader::getPointDataAccessFunctor(const MooseEnum & field_name) const
     default:
     {
       // check for custom columns
-      for (unsigned int i = 0; i < _custom_columns; ++i)
+      for (const auto i : make_range(_custom_columns))
         if (field_name == "CUSTOM" + Moose::stringify(i))
         {
           ret_val = new EBSDPointDataCustom(i);
@@ -582,7 +592,7 @@ EBSDReader::getAvgDataAccessFunctor(const MooseEnum & field_name) const
     default:
     {
       // check for custom columns
-      for (unsigned int i = 0; i < _custom_columns; ++i)
+      for (const auto i : make_range(_custom_columns))
         if (field_name == "CUSTOM" + Moose::stringify(i))
         {
           ret_val = new EBSDAvgDataCustom(i);

@@ -19,6 +19,7 @@
 #include "RestartableData.h"
 #include "ConsoleStreamInterface.h"
 #include "PerfGraph.h"
+#include "PerfGraphInterface.h"
 #include "TheWarehouse.h"
 #include "RankMap.h"
 
@@ -31,21 +32,23 @@
 #include <map>
 #include <set>
 #include <unordered_set>
+#include <typeindex>
 
 // Forward declarations
 class Executioner;
-class MooseApp;
+class Executor;
+class NullExecutor;
 class Backup;
 class FEProblemBase;
-class MeshModifier;
 class MeshGenerator;
 class InputParameterWarehouse;
 class SystemInfo;
 class CommandLine;
 class RelationshipManager;
-
-template <>
-InputParameters validParams<MooseApp>();
+namespace libMesh
+{
+class ExodusII_IO;
+}
 
 /**
  * Base class for MOOSE-based applications
@@ -57,9 +60,27 @@ InputParameters validParams<MooseApp>();
  *
  * Each application should register its own objects and register its own special syntax
  */
-class MooseApp : public ConsoleStreamInterface, public libMesh::ParallelObject
+class MooseApp : public ConsoleStreamInterface,
+                 public PerfGraphInterface,
+                 public libMesh::ParallelObject
 {
 public:
+  /**
+   * Stores configuration options relating to the fixed-point solving
+   * capability.  This is used for communicating input-file-based config from
+   * the MultiApp object/syntax to the execution (e.g. executor) system.
+   */
+  struct FixedPointConfig
+  {
+    FixedPointConfig() : sub_relaxation_factor(1.0) {}
+    /// relaxation factor to be used for a MultiApp's subapps.
+    Real sub_relaxation_factor;
+    /// The names of variables to transform for fixed point solve algorithms (e.g. secant, etc.).
+    std::vector<std::string> sub_transformed_vars;
+    /// The names of postprocessors to transform for fixed point solve algorithms (e.g. secant, etc.).
+    std::vector<PostprocessorName> sub_transformed_pps;
+  };
+
   static const RestartableDataMapName MESH_META_DATA;
 
   static InputParameters validParams();
@@ -77,12 +98,19 @@ public:
    */
   const std::string & name() const { return _name; }
 
-  virtual void checkRegistryLabels();
-
   /**
    * Get printable name of the application.
    */
   virtual std::string getPrintableName() const { return "Application"; }
+
+  virtual std::string appBinaryName() const
+  {
+    auto name = Moose::getExecutableName();
+    name = name.substr(0, name.find_last_of("-"));
+    if (name.find_first_of("/") != std::string::npos)
+      name = name.substr(name.find_first_of("/") + 1, std::string::npos);
+    return name;
+  }
 
   /**
    * Get the parameters of the object
@@ -152,6 +180,10 @@ public:
    * Return a writable reference to the ActionWarehouse associated with this app
    */
   ActionWarehouse & actionWarehouse() { return _action_warehouse; }
+  /**
+   * Return a const reference to the ActionWarehouse associated with this app
+   */
+  const ActionWarehouse & actionWarehouse() const { return _action_warehouse; }
 
   /**
    * Returns a writable reference to the parser
@@ -171,7 +203,10 @@ public:
   /**
    * Returns the input file name that was set with setInputFileName
    */
-  std::string getInputFileName() const { return _input_filename; }
+  std::string getInputFileName() const
+  {
+    return _input_filenames.empty() ? "" : _input_filenames.back();
+  }
 
   /**
    * Override the selection of the output file base name.
@@ -255,7 +290,7 @@ public:
   Real getGlobalTimeOffset() const { return _global_time_offset; }
 
   /**
-   * Return the filename that was parsed
+   * Return the primary (first) filename that was parsed
    * Note: When stripLeadingPath is false, this function returns the same name as
    *       getInputFileName() method when the input file is not a link.
    */
@@ -280,12 +315,65 @@ public:
   /**
    * Retrieve the Executioner for this App
    */
-  Executioner * getExecutioner() const { return _executioner.get(); }
+  Executioner * getExecutioner() const;
+  Executor * getExecutor() const { return _executor.get(); }
+  NullExecutor * getNullExecutor() const { return _null_executor.get(); }
+  bool useExecutor() const { return _use_executor; }
+  FEProblemBase & feProblem() const;
 
   /**
    * Set the Executioner for this App
    */
   void setExecutioner(std::shared_ptr<Executioner> && executioner) { _executioner = executioner; }
+  void setExecutor(std::shared_ptr<Executor> && executor) { _executor = executor; }
+  void
+  addExecutor(const std::string & type, const std::string & name, const InputParameters & params);
+
+  /**
+   * Adds the parameters for an Executor to the list of parameters.  This is done
+   * so that the Executors can be created in _exactly_ the correct order.
+   */
+  void addExecutorParams(const std::string & type,
+                         const std::string & name,
+                         const InputParameters & params);
+
+private:
+  /**
+   * Internal function used to recursively create the executor objects.
+   *
+   * Called by createExecutors
+   *
+   * @param current_executor_name The name of the executor currently needing to be built
+   * @param possible_roots The names of executors that are currently candidates for being the root
+   */
+  void recursivelyCreateExecutors(const std::string & current_executor_name,
+                                  std::list<std::string> & possible_roots,
+                                  std::list<std::string> & current_branch);
+
+public:
+  /**
+   * After adding all of the Executor Params - this function will actually cause all of them to be
+   * built
+   */
+  void createExecutors();
+
+  /**
+   * Get an Executor
+   *
+   * @param name The name of the Executor
+   * @param fail_if_not_found Whether or not to fail if the executor doesn't exist.  If this is
+   * false then this function will return a NullExecutor
+   */
+  Executor & getExecutor(const std::string & name, bool fail_if_not_found = true);
+
+  /**
+   * This info is stored here because we need a "globalish" place to put it in
+   * order to allow communication between a multiapp and solver-specific
+   * internals (i.e. relating to fixed-point inner loops like picard, etc.)
+   * for handling subapp-specific modifications necessary for those solve
+   * processes.
+   */
+  FixedPointConfig & fixedPointConfig() { return _fixed_point_config; }
 
   /**
    * Returns a writable Boolean indicating whether this app will use a Nonlinear or Eigen System.
@@ -320,10 +408,26 @@ public:
   std::shared_ptr<CommandLine> commandLine() const { return _command_line; }
 
   /**
-   * Returns a writable Boolean to determine whether or not we need to
-   * use a separate reader to read the mesh BEFORE we create the mesh.
+   * Set the flag to indicate whether or not we need to use a separate Exodus reader to read the
+   * mesh BEFORE we create the mesh.
    */
-  bool & setFileRestart() { return _initial_from_file; }
+  void setExodusFileRestart(bool flag) { _initial_from_file = flag; }
+
+  /**
+   * Whether or not we need to use a separate Exodus reader to read the mesh BEFORE we create the
+   * mesh.
+   */
+  bool getExodusFileRestart() const { return _initial_from_file; }
+
+  /**
+   * Set the Exodus reader to restart variables from an Exodus mesh file
+   */
+  void setExReaderForRestart(std::shared_ptr<ExodusII_IO> && exreader) { _ex_reader = exreader; }
+
+  /**
+   * Get the Exodus reader to restart variables from an Exodus mesh file
+   */
+  ExodusII_IO * getExReaderForRestart() const { return _ex_reader.get(); }
 
   /**
    * Actually build everything in the input file.
@@ -505,6 +609,15 @@ public:
                                                  bool read_only,
                                                  const RestartableDataMapName & metaname = "");
 
+  /*
+   * Check if a restartable meta data exists or not.
+   *
+   * @param name The full (unique) name.
+   * @param metaname The name to the meta data storage
+   */
+  bool hasRestartableMetaData(const std::string & name,
+                              const RestartableDataMapName & metaname) const;
+
   /**
    * Return reference to the restartable data object
    * @return A const reference to the restartable data object
@@ -585,37 +698,6 @@ public:
   const MooseMesh * masterDisplacedMesh() const { return _master_displaced_mesh; }
 
   /**
-   * Add a mesh modifier that will act on the meshes in the system
-   */
-  void addMeshModifier(const std::string & modifier_name,
-                       const std::string & name,
-                       InputParameters parameters);
-
-  /**
-   * Get a mesh modifier with its name
-   */
-  const MeshModifier & getMeshModifier(const std::string & name) const;
-
-  /**
-   * Get names of all mesh modifiers
-   * Note: This function should be called after all mesh modifiers are added with the
-   * 'add_mesh_modifier' task. The returned value will be undefined and depends on the ordering that
-   * mesh modifiers are added by MOOSE if the function is called during the 'add_mesh_modifier'
-   * task.
-   */
-  std::vector<std::string> getMeshModifierNames() const;
-
-  /**
-   * Clear all mesh modifers
-   */
-  void clearMeshModifiers();
-
-  /**
-   * Execute and clear the Mesh Modifiers data structure
-   */
-  void executeMeshModifiers();
-
-  /**
    * Set final mesh generator name
    */
   void setFinalMeshGeneratorName(const std::string & generator_name);
@@ -666,6 +748,11 @@ public:
   void executeMeshGenerators();
 
   /**
+   * Whether this app is executing mesh generators
+   */
+  bool executingMeshGenerators() const { return _executing_mesh_generators; }
+
+  /**
    * Get the generated mesh generated by executeMeshGenerators();
    */
   std::unique_ptr<MeshBase> getMeshGeneratorMesh(bool check_unique = true);
@@ -706,12 +793,35 @@ public:
    */
   bool addRelationshipManager(std::shared_ptr<RelationshipManager> relationship_manager);
 
+private:
+  /**
+   * Purge this relationship manager from meshes and DofMaps and finally from us. This method is
+   * private because only this object knows when we should remove relationship managers: when we are
+   * adding relationship managers to this object's storage, we perform an operator>= comparison
+   * between our existing RMs and the RM we are trying to add. If any comparison returns true, we do
+   * not add the new RM because the comparison indicates that we would gain no new coverage.
+   * However, if no comparison return true, then we add the new RM and we turn the comparison
+   * around! Consequently if our new RM is >= than any of our preexisting RMs, we remove those
+   * preexisting RMs using this method
+   */
+  void removeRelationshipManager(std::shared_ptr<RelationshipManager> relationship_manager);
+
+public:
   /**
    * Attach the relationship managers of the given type
    * Note: Geometric relationship managers that are supposed to be attached late
    * will be attached when Algebraic are attached.
    */
-  void attachRelationshipManagers(Moose::RelationshipManagerType rm_type);
+  void attachRelationshipManagers(Moose::RelationshipManagerType rm_type,
+                                  bool attach_geometric_rm_final = false);
+
+  /**
+   * Attach geometric relationship managers to the given \p MeshBase object. This API is designed to
+   * work with \p MeshGenerators which are executed at the very beginning of a simulation. No
+   * attempt will be made to add relationship managers to a displaced mesh, because it doesn't exist
+   * yet.
+   */
+  void attachRelationshipManagers(MeshBase & mesh, MooseMesh & moose_mesh);
 
   /**
    * Retrieve the relationship managers
@@ -748,20 +858,10 @@ public:
   /**
    * Return the container of relationship managers
    */
-  const std::vector<std::shared_ptr<RelationshipManager>> & relationshipManagers() const
+  const std::set<std::shared_ptr<RelationshipManager>> & relationshipManagers() const
   {
     return _relationship_managers;
   }
-
-  /**
-   * Loop through RMs and call dofmap_reinit
-   */
-  void dofMapReinitForRMs();
-
-  /**
-   * Loop through RMs and call mesh_reinit
-   */
-  void meshReinitForRMs();
 
   /**
    * Function to check the integrity of the restartable meta data structure
@@ -788,6 +888,31 @@ public:
     return _restartable_meta_data.end();
   }
   ///@}
+
+  /**
+   * Whether this application should by default error on Jacobian nonzero reallocations. The
+   * application level setting can always be overridden by setting the \p
+   * error_on_jacobian_nonzero_reallocation parameter in the \p Problem block of the input file
+   */
+  virtual bool errorOnJacobianNonzeroReallocation() const { return false; }
+
+  /**
+   * Registers an interface object for accessing with getInterfaceObjects.
+   *
+   * This should be called within the constructor of the interface in interest.
+   */
+  template <class T>
+  void registerInterfaceObject(T & interface);
+
+  /**
+   * Gets the registered interface objects for a given interface.
+   *
+   * For this to work, the interface must register itself using registerInterfaceObject.
+   */
+  template <class T>
+  const std::vector<T *> & getInterfaceObjects() const;
+
+  static void addAppParam(InputParameters & params);
 
 protected:
   /**
@@ -844,14 +969,8 @@ protected:
   /// The MPI communicator this App is going to use
   const std::shared_ptr<Parallel::Communicator> _comm;
 
-  /// The PerfGraph object for this applciation
-  PerfGraph _perf_graph;
-
-  /// The RankMap is a useful object for determining how
-  const RankMap _rank_map;
-
-  /// Input file name used
-  std::string _input_filename;
+  /// Input file names used
+  std::vector<std::string> _input_filenames;
 
   /// The output file basename
   std::string _output_file_base;
@@ -883,6 +1002,21 @@ protected:
   /// OutputWarehouse object for this App
   OutputWarehouse _output_warehouse;
 
+  /// Where the restartable data is held (indexed on tid)
+  RestartableDataMaps _restartable_data;
+
+  /**
+   * Data names that will only be read from the restart file during RECOVERY.
+   * e.g. these names are _excluded_ during restart.
+   */
+  DataNames _recoverable_data_names;
+
+  /// The PerfGraph object for this application (recoverable)
+  PerfGraph & _perf_graph;
+
+  /// The RankMap is a useful object for determining how the processes are laid out on the physical hardware
+  const RankMap _rank_map;
+
   /// Input parameter storage structure (this is a raw pointer so the destruction time can be explicitly controlled)
   InputParameterWarehouse * _input_parameter_warehouse;
 
@@ -897,6 +1031,28 @@ protected:
 
   /// Pointer to the executioner of this run (typically build by actions)
   std::shared_ptr<Executioner> _executioner;
+
+  /// Pointer to the Executor of this run
+  std::shared_ptr<Executor> _executor;
+
+  /// Pointers to all of the Executors for this run
+  std::map<std::string, std::shared_ptr<Executor>> _executors;
+
+  /// Used in building the Executors
+  /// Maps the name of the Executor block to the <type, params>
+  std::unordered_map<std::string, std::pair<std::string, std::unique_ptr<InputParameters>>>
+      _executor_params;
+
+  /// Multiapp-related fixed point algorithm configuration details
+  /// primarily intended  to be passed to and used by the executioner/executor system.
+  FixedPointConfig _fixed_point_config;
+
+  /// Indicates whether we are operating in the new/experimental executor mode
+  /// instead of using the legacy executioner system.
+  const bool _use_executor;
+
+  /// Used to return an executor that does nothing
+  std::shared_ptr<NullExecutor> _null_executor;
 
   /// Boolean to indicate whether to use a Nonlinear or EigenSystem (inspected by actions)
   bool _use_nonlinear;
@@ -923,6 +1079,9 @@ protected:
 
   /// This variable indicates when a request has been made to restart from an Exodus file
   bool _initial_from_file;
+
+  /// The Exodus reader when _initial_from_file is set to true
+  std::shared_ptr<ExodusII_IO> _ex_reader;
 
   /// This variable indicates that DistributedMesh should be used for the libMesh mesh underlying MooseMesh.
   bool _distributed_mesh_on_command_line;
@@ -957,12 +1116,37 @@ protected:
   /// true if we want to just check the input file
   bool _check_input;
 
-  std::vector<std::shared_ptr<RelationshipManager>> _relationship_managers;
+  /// The relationship managers that have been added
+  std::set<std::shared_ptr<RelationshipManager>> _relationship_managers;
+
+  /// The relationship managers that have been attached (type -> RMs)
+  std::map<Moose::RelationshipManagerType, std::set<const RelationshipManager *>>
+      _attached_relationship_managers;
+
+  /// A map from undisplaced relationship managers to their displaced clone (stored as the base
+  /// GhostingFunctor). Anytime we clone in attachRelationshipManagers we create a map entry from
+  /// the cloned undisplaced relationship manager to its displaced clone counterpart. We leverage
+  /// this map when removing relationship managers/ghosting functors
+  std::unordered_map<RelationshipManager *, std::shared_ptr<GhostingFunctor>> _undisp_to_disp_rms;
 
   /// The library, registration method and the handle to the method
   std::map<std::pair<std::string, std::string>, void *> _lib_handles;
 
 private:
+  ///@{
+  /// Structs that are used in the _interface_registry
+  struct InterfaceRegistryObjectsBase
+  {
+    virtual ~InterfaceRegistryObjectsBase() {}
+  };
+
+  template <class T>
+  struct InterfaceRegistryObjects : public InterfaceRegistryObjectsBase
+  {
+    std::vector<T *> _objects;
+  };
+  ///@}
+
   /** Method for creating the minimum required actions for an application (no input file)
    *
    * Mimics the following input file:
@@ -994,18 +1178,46 @@ private:
    */
   void createMeshGeneratorOrder();
 
-  /// Where the restartable data is held (indexed on tid)
-  RestartableDataMaps _restartable_data;
+  /**
+   * @return whether we have created any clones for the provided template relationship manager and
+   * mesh yet. This may be false for instance when we are in the initial add relationship manager
+   * stage and haven't attempted attaching any relationship managers to the mesh or dof map yet
+   * (which is when we generate the clones). It's also maybe possible that we've created a clone of
+   * a given \p template_rm but not for the provided mesh so we return false in that case as well
+   */
+  bool hasRMClone(const RelationshipManager & template_rm, const MeshBase & mesh) const;
+
+  /**
+   * Return the relationship manager clone originally created from the provided template
+   * relationship manager and mesh
+   */
+  RelationshipManager & getRMClone(const RelationshipManager & template_rm,
+                                   const MeshBase & mesh) const;
+
+  /**
+   * Take an input relationship manager, clone it, and then initialize it with provided mesh and
+   * optional \p dof_map
+   * @param template_rm The relationship manager template from which we will clone
+   * @param mesh The mesh to use for initialization
+   * @param dof_map An optional parameter that, if provided, will be used to help init the cloned
+   * relationship manager
+   * @return a reference to the cloned and initialized relationship manager
+   */
+  RelationshipManager & createRMFromTemplateAndInit(const RelationshipManager & template_rm,
+                                                    MeshBase & mesh,
+                                                    const DofMap * dof_map = nullptr);
+
+  /**
+   * Creates a recoverable PerfGraph.
+   *
+   * This is a separate method so that it can be used in the constructor (multiple calls
+   * are required to declare it).
+   */
+  PerfGraph & createRecoverablePerfGraph();
 
   /// General storage for custom RestartableData that can be added to from outside applications
   std::unordered_map<RestartableDataMapName, std::pair<RestartableDataMap, std::string>>
       _restartable_meta_data;
-
-  /**
-   * Data names that will only be read from the restart file during RECOVERY.
-   * e.g. these names are _excluded_ during restart.
-   */
-  DataNames _recoverable_data_names;
 
   /// Enumeration for holding the valid types of dynamic registrations allowed
   enum RegistrationType
@@ -1029,9 +1241,6 @@ private:
   /// The displaced mesh from master app
   const MooseMesh * const _master_displaced_mesh;
 
-  /// Holds the mesh modifiers until they have completed, then this structure is cleared
-  std::map<std::string, std::shared_ptr<MeshModifier>> _mesh_modifiers;
-
   /// Holds the mesh generators until they have completed, then this structure is cleared
   std::map<std::string, std::shared_ptr<MeshGenerator>> _mesh_generators;
 
@@ -1053,27 +1262,30 @@ private:
   /// Execution flags for this App
   ExecFlagEnum _execute_flags;
 
-  /// Timers
-  const PerfID _setup_timer;
-  const PerfID _setup_options_timer;
-  const PerfID _run_input_file_timer;
-  const PerfID _execute_timer;
-  const PerfID _execute_executioner_timer;
-  const PerfID _restore_timer;
-  const PerfID _run_timer;
-  const PerfID _execute_mesh_modifiers_timer;
-  const PerfID _execute_mesh_generators_timer;
-  const PerfID _restore_cached_backup_timer;
-  const PerfID _create_minimal_app_timer;
-
   /// Whether to turn on automatic scaling by default
   const bool _automatic_automatic_scaling;
+
+  /// Whether the app is executing all mesh generators
+  bool _executing_mesh_generators;
 
   /// Whether the mesh generator MeshBase has been popped off its storage container and is no
   /// longer accessible
   bool _popped_final_mesh_generator;
 
-  bool _profiling = false;
+  /// CPU profiling
+  bool _cpu_profiling = false;
+
+  /// Memory profiling
+  bool _heap_profiling = false;
+
+  /// Map from a template relationship manager to a map in which the key-value pairs represent the \p
+  /// MeshBase object and the clone of the template relationship manager, e.g. the top-level map key
+  std::map<const RelationshipManager *,
+           std::map<const MeshBase *, std::unique_ptr<RelationshipManager>>>
+      _template_to_clones;
+
+  /// Registration for interface objects
+  std::map<std::type_index, std::unique_ptr<InterfaceRegistryObjectsBase>> _interface_registry;
 
   // Allow FEProblemBase to set the recover/restart state, so make it a friend
   friend class FEProblemBase;
@@ -1093,4 +1305,39 @@ const T &
 MooseApp::getParam(const std::string & name) const
 {
   return InputParameters::getParamHelper(name, _pars, static_cast<T *>(0));
+}
+
+template <class T>
+void
+MooseApp::registerInterfaceObject(T & interface)
+{
+  static_assert(!std::is_base_of<MooseObject, T>::value, "T is not an interface");
+
+  InterfaceRegistryObjects<T> * registry = nullptr;
+  auto it = _interface_registry.find(typeid(T));
+  if (it == _interface_registry.end())
+  {
+    auto new_registry = std::make_unique<InterfaceRegistryObjects<T>>();
+    registry = new_registry.get();
+    _interface_registry.emplace(typeid(T), std::move(new_registry));
+  }
+  else
+    registry = static_cast<InterfaceRegistryObjects<T> *>(it->second.get());
+
+  mooseAssert(std::count(registry->_objects.begin(), registry->_objects.end(), &interface) == 0,
+              "Interface already registered");
+  registry->_objects.push_back(&interface);
+}
+
+template <class T>
+const std::vector<T *> &
+MooseApp::getInterfaceObjects() const
+{
+  static_assert(!std::is_base_of<MooseObject, T>::value, "T is not an interface");
+
+  const auto it = _interface_registry.find(typeid(T));
+  if (it != _interface_registry.end())
+    return static_cast<InterfaceRegistryObjects<T> *>(it->second.get())->_objects;
+  const static std::vector<T *> empty;
+  return empty;
 }

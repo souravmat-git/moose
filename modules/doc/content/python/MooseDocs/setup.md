@@ -1,7 +1,7 @@
 # MooseDocs Setup
 
 Any MOOSE-based application can use the MooseDocs system to create custom websites. If a current
-[MOOSE package](getting_started/index.md) is installed then the necessary dependencies
+[MOOSE package](getting_started/installation/index.md) is installed then the necessary dependencies
 exist. Also, if you have recently created an application with stork (after Aug. 15,
 2018) then your application will have the files for a simple website created. The sections below will
 aid in setting up your application if you do not have the dependencies or the necessary documentation
@@ -30,7 +30,7 @@ The configuration file contains information on how to build the website, additio
 this file may be found at [MooseDocs/config.md].
 
 Once you have a basic website running the next step is to document your code, it is best to refer to
-the MOOSE instructions for documentation (see [MooseDocs/generate.md]). In general, applications
+the MOOSE instructions for documentation (see [framework/documenting.md]). In general, applications
 mimic the MOOSE process.
 
 ## Dependencies

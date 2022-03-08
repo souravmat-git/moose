@@ -58,9 +58,8 @@ GrainTracker::validParams()
       "ElementSideNeighborLayers",
       Moose::RelationshipManagerType::GEOMETRIC,
 
-      [](const InputParameters & obj_params, InputParameters & rm_params) {
-        rm_params.set<unsigned short>("layers") = obj_params.get<unsigned short>("halo_level");
-      }
+      [](const InputParameters & obj_params, InputParameters & rm_params)
+      { rm_params.set<unsigned short>("layers") = obj_params.get<unsigned short>("halo_level"); }
 
   );
 
@@ -97,12 +96,7 @@ GrainTracker::GrainTracker(const InputParameters & parameters)
     _reserve_grain_first_index(0),
     _old_max_grain_id(0),
     _max_curr_grain_id(declareRestartableData<unsigned int>("max_curr_grain_id", invalid_id)),
-    _is_transient(_subproblem.isTransient()),
-    _finalize_timer(registerTimedSection("finalize", 1)),
-    _remap_timer(registerTimedSection("remapGrains", 2)),
-    _track_grains(registerTimedSection("trackGrains", 2)),
-    _broadcast_update(registerTimedSection("broadCastUpdate", 2)),
-    _update_field_info(registerTimedSection("updateFieldInfo", 2))
+    _is_transient(_subproblem.isTransient())
 {
   if (_tolerate_failure)
     paramInfo("tolerate_failure",
@@ -305,7 +299,7 @@ GrainTracker::prepopulateState(const FeatureFloodCount & ffc_object)
    * _feature_sets
    * _feature_count
    */
-  if (_is_master)
+  if (_is_primary)
   {
     const auto & features = ffc_object.getFeatures();
     for (auto & feature : features)
@@ -332,7 +326,7 @@ GrainTracker::finalize()
   if (_t_step < _tracking_step)
     return;
 
-  TIME_SECTION(_finalize_timer);
+  TIME_SECTION("finalize", 3, "Finalizing GrainTracker");
 
   // Expand the depth of the halos around all grains
   auto num_halo_layers = _halo_level >= 1
@@ -373,7 +367,7 @@ GrainTracker::finalize()
 
   updateFieldInfo();
   if (_verbosity_level > 1)
-    _console << "Finished inside of updateFieldInfo\n";
+    _console << "Finished inside of updateFieldInfo" << std::endl;
 
   // Set the first time flag false here (after all methods of finalize() have completed)
   _first_time = false;
@@ -386,12 +380,12 @@ GrainTracker::finalize()
 void
 GrainTracker::broadcastAndUpdateGrainData()
 {
-  TIME_SECTION(_broadcast_update);
+  TIME_SECTION("broadcastAndUpdateGrainData", 3, "Broadcasting and Updating Grain Data");
 
   std::vector<PartialFeatureData> root_feature_data;
   std::vector<std::string> send_buffer(1), recv_buffer;
 
-  if (_is_master)
+  if (_is_primary)
   {
     root_feature_data.reserve(_feature_sets.size());
 
@@ -399,7 +393,8 @@ GrainTracker::broadcastAndUpdateGrainData()
     std::transform(_feature_sets.begin(),
                    _feature_sets.end(),
                    std::back_inserter(root_feature_data),
-                   [](FeatureData & feature) {
+                   [](FeatureData & feature)
+                   {
                      PartialFeatureData partial_feature;
                      partial_feature.boundary_intersection = feature._boundary_intersection;
                      partial_feature.id = feature._id;
@@ -421,7 +416,7 @@ GrainTracker::broadcastAndUpdateGrainData()
                                        std::back_inserter(recv_buffer));
 
   // Unpack and update
-  if (!_is_master)
+  if (!_is_primary)
   {
     std::istringstream iss;
     iss.str(recv_buffer[0]);
@@ -455,7 +450,7 @@ GrainTracker::assignGrains()
    * doesn't require valid grainIDs (relies on _min_entity_id and _var_index). These will be the
    * unique grain numbers that we must track for remainder of the simulation.
    */
-  if (_is_master)
+  if (_is_primary)
   {
     // Find the largest grain ID, this requires sorting if the ID is not already set
     sortAndLabel();
@@ -474,13 +469,13 @@ GrainTracker::assignGrains()
     for (auto & grain : _feature_sets)
       grain._status = Status::MARKED; // Mark the grain
 
-  } // is_master
+  } // is_primary
 
   /*************************************************************
    ****************** COLLECTIVE WORK SECTION ******************
    *************************************************************/
 
-  // Make IDs on all non-master ranks consistent
+  // Make IDs on all non-primary ranks consistent
   scatterAndUpdateRanks();
 
   // Build up an id to index map
@@ -496,7 +491,7 @@ GrainTracker::assignGrains()
 void
 GrainTracker::trackGrains()
 {
-  TIME_SECTION(_track_grains);
+  TIME_SECTION("trackGrains", 3, "Tracking Grains");
 
   mooseAssert(!_first_time, "Track grains may only be called when _tracking_step > _t_step");
 
@@ -504,10 +499,10 @@ GrainTracker::trackGrains()
   auto _old_max_grain_id = _max_curr_grain_id;
 
   /**
-   * Only the master rank does tracking, the remaining ranks
-   * wait to receive local to global indices from the master.
+   * Only the primary rank does tracking, the remaining ranks
+   * wait to receive local to global indices from the primary.
    */
-  if (_is_master)
+  if (_is_primary)
   {
     // Reset Status on active unique grains
     std::vector<unsigned int> map_sizes(_maps_size);
@@ -843,13 +838,13 @@ GrainTracker::trackGrains()
         }
       }
     }
-  } // is_master
+  } // is_primary
 
   /*************************************************************
    ****************** COLLECTIVE WORK SECTION ******************
    *************************************************************/
 
-  // Make IDs on all non-master ranks consistent
+  // Make IDs on all non-primary ranks consistent
   scatterAndUpdateRanks();
 
   // Build up an id to index map
@@ -880,7 +875,7 @@ GrainTracker::trackGrains()
 void
 GrainTracker::newGrainCreated(unsigned int new_grain_id)
 {
-  if (!_first_time && _is_master)
+  if (!_first_time && _is_primary)
   {
     mooseAssert(new_grain_id < _feature_id_to_local_index.size(), "new_grain_id is out of bounds");
     auto grain_index = _feature_id_to_local_index[new_grain_id];
@@ -917,7 +912,7 @@ GrainTracker::remapGrains()
   if (_t_step < _tracking_step)
     return;
 
-  TIME_SECTION(_remap_timer);
+  TIME_SECTION("remapGrains", 3, "Remapping Grains");
 
   if (_verbosity_level > 1)
     _console << "Running remap Grains\n" << std::endl;
@@ -941,7 +936,7 @@ GrainTracker::remapGrains()
    * Additionally we need to record each grain's variable index so that we can communicate
    * changes to the non-root ranks later in a single batch.
    */
-  if (_is_master)
+  if (_is_primary)
   {
     // Build the map to detect difference in _var_index mappings after the remap operation
     std::map<unsigned int, std::size_t> grain_id_to_existing_var_index;
@@ -1097,7 +1092,7 @@ GrainTracker::remapGrains()
         mooseError("Split grain remapped - This case is currently not handled");
 
     /**
-     * The remapping loop is complete but only on the master process.
+     * The remapping loop is complete but only on the primary process.
      * Now we need to build the remap map and communicate it to the
      * remaining processors.
      */
@@ -1119,7 +1114,7 @@ GrainTracker::remapGrains()
 
         /**
          * Since the remapping algorithm only runs on the root process,
-         * the variable index on the master's grains is inconsistent from
+         * the variable index on the primary's grains is inconsistent from
          * the rest of the ranks. These are the grains with a status of
          * DIRTY. As we build this map we will temporarily switch these
          * variable indices back to the correct value so that all
@@ -1553,7 +1548,7 @@ GrainTracker::swapSolutionValuesHelper(Node * curr_node,
 void
 GrainTracker::updateFieldInfo()
 {
-  TIME_SECTION(_update_field_info);
+  TIME_SECTION("updateFieldInfo", 3, "Updating Field Info");
 
   for (MooseIndex(_maps_size) map_num = 0; map_num < _maps_size; ++map_num)
     _feature_maps[map_num].clear();
@@ -1572,14 +1567,14 @@ GrainTracker::updateFieldInfo()
       if (_is_elemental)
       {
         const Elem * elem = _mesh.elemPtr(entity);
-        std::vector<Point> centroid(1, elem->centroid());
+        std::vector<Point> centroid(1, elem->vertex_average());
         if (_poly_ic_uo && _first_time)
         {
           entity_value = _poly_ic_uo->getVariableValue(grain._var_index, centroid[0]);
         }
         else
         {
-          _fe_problem.reinitElemPhys(elem, centroid, 0, /* suppress_displaced_init = */ true);
+          _fe_problem.reinitElemPhys(elem, centroid, 0);
           entity_value = _vars[curr_var]->sln()[0];
         }
       }
@@ -1643,7 +1638,7 @@ GrainTracker::communicateHaloMap()
 
     const bool isDistributedMesh = _mesh.isDistributedMesh();
 
-    if (_is_master)
+    if (_is_primary)
     {
       std::vector<std::vector<std::pair<std::size_t, dof_id_type>>> root_halo_ids(_n_procs);
       counts.resize(_n_procs);

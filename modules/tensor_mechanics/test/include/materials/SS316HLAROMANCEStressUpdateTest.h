@@ -9,32 +9,25 @@
 
 #pragma once
 
-#include "ADLAROMANCEStressUpdateBase.h"
+#include "LAROMANCEStressUpdateBase.h"
 
-class SS316HLAROMANCEStressUpdateTest : public ADLAROMANCEStressUpdateBase
+template <bool is_ad>
+class SS316HLAROMANCEStressUpdateTestTempl : public LAROMANCEStressUpdateBaseTempl<is_ad>
 {
 public:
   static InputParameters validParams();
 
-  SS316HLAROMANCEStressUpdateTest(const InputParameters & parameters);
+  SS316HLAROMANCEStressUpdateTestTempl(const InputParameters & parameters);
 
 protected:
-  /// Returns vector of the functions to use for the conversion of input variables.
-  virtual std::vector<std::vector<ROMInputTransform>> getTransform() override;
+  virtual std::vector<std::vector<std::vector<ROMInputTransform>>> getTransform() override;
+  virtual std::vector<std::vector<std::vector<Real>>> getTransformCoefs() override;
+  virtual std::vector<std::vector<std::vector<Real>>> getInputLimits() override;
+  virtual std::vector<std::vector<std::vector<Real>>> getCoefs() override;
 
-  /// Returns factors for the functions for the conversion functions given in getTransform
-  virtual std::vector<std::vector<Real>> getTransformCoefs() override;
-
-  /* Returns human-readable limits for the inputs. Inputs ordering is
-   * 0: mobile_old
-   * 1: immobile_old
-   * 2: trial stress,
-   * 3: effective strain old,
-   * 4: temperature
-   * 5: environmental factor (optional)
-   */
-  virtual std::vector<std::vector<Real>> getInputLimits() override;
-
-  /// Material specific coefficients multiplied by the Legendre polynomials for each of the input variables
-  virtual std::vector<std::vector<Real>> getCoefs() override;
+  virtual bool substeppingCapabilityEnabled() override;
+  virtual Real romStrainCutoff() override { return 1.0e-10; }
 };
+
+typedef SS316HLAROMANCEStressUpdateTestTempl<false> SS316HLAROMANCEStressUpdateTest;
+typedef SS316HLAROMANCEStressUpdateTestTempl<true> ADSS316HLAROMANCEStressUpdateTest;

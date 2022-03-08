@@ -20,11 +20,14 @@
     execute_on = INITIAL
     outputs = none
   []
+[]
+
+[Reporters]
   [results]
-    type = SurrogateTester
+    type = EvaluateSurrogate
     model = surrogate
     sampler = test
-    output_samples = true
+    parallel_type = ROOT
     execute_on = final
   []
 []
@@ -40,8 +43,7 @@
   [train]
     type = NearestPointTrainer
     sampler = sample
-    results_vpp = values
-    results_vector = g_values
+    response = values/g_values
   []
 []
 

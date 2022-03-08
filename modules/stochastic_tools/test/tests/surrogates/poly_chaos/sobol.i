@@ -22,11 +22,14 @@
     execute_on = INITIAL
     outputs = none
   []
+[]
+
+[Reporters]
   [sobol]
-    type = PolynomialChaosSobolStatistics
+    type = PolynomialChaosReporter
     pc_name = poly_chaos
-    sensitivity_order = 'all total'
-    execute_on = final
+    include_sobol = true
+    execute_on = timestep_end
   []
 []
 
@@ -40,16 +43,18 @@
 [Trainers]
   [poly_chaos]
     type = PolynomialChaosTrainer
-    execute_on = final
+    execute_on = timestep_end
     order = 4
     distributions = 'uniform uniform uniform uniform uniform uniform'
     sampler = sample
-    results_vpp = results
-    results_vector = g_values
+    response = results/g_values
   []
 []
 
 [Outputs]
   execute_on = 'FINAL'
-  csv = true
+  [out]
+    type = JSON
+    execute_system_information_on = none
+  []
 []

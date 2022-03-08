@@ -35,7 +35,7 @@ class NavigationExtension(Extension):
                           "The former creates a 'mega men' and the later uses dropdowns.")
         config['google-cse'] = (None, "Enable Google search by supplying the Google 'search engine ID'.")
         config['search'] = (True, "Enable/disable the search bar.")
-        config['home'] = ('', "The homepage for the website.")
+        config['home'] = ('/index.md', "The homepage for the website.")
         config['repo'] = (None, "The source code repository.")
         config['name'] = (None, "The name of the website (e.g., MOOSE)")
         config['long-name'] = (None, "A long version of the page name that is used in the title, 'name' by default.")
@@ -79,7 +79,13 @@ class NavigationExtension(Extension):
 
     def initPage(self, page):
         """Initialize page with Extension settings."""
-        self.initConfig(page, 'breadcrumbs', 'name', 'sections', 'scrollspy', 'google-cse', 'search')
+        self.initConfig(page, 'google-cse',
+                              'search',
+                              'name',
+                              'breadcrumbs',
+                              'sections',
+                              'scrollspy',
+                              'collapsible-sections')
         if page.local.endswith('.menu.md'):
             self.setConfig(page, 'breadcrumbs', False)
         page['search'] = list()
@@ -147,13 +153,29 @@ class NavigationExtension(Extension):
         The 'search' option is used by internal apps that require a search.
         """
         dest = self.translator.get('destination')
-        home = self.get('home')
         iname = os.path.join(dest, 'js', 'search_index.js')
         items = []
 
+        # TODO: Remove the ability to use a URL for 'home'
+        home_param = self.get('home')
+        home = self.translator.findPage(home_param.lstrip('/'),
+                                        exact=home_param.startswith('/'),
+                                        throw_on_zero=False)
+        if home is None:
+            LOG.warning("The use of a URL in the 'home' option is deprecated. By default the home " \
+                        "page is set to '/index.md', which is the 'index.md' at the root content " \
+                        "directory of the website. If this is correct for your website then " \
+                        "remove this option from the config.yml, otherwise set the value to " \
+                        "the desired markdown page, use a leading '/' for exact match.")
+            home = self.get('home')
+
         for page in self.translator.getPages():
-            location = page.destination.replace(dest, home)
-            for data in page['search']:
+            if isinstance(home, pages.Page):
+                location = page.relativeDestination(home)
+            else:
+                location = page.destination.replace(dest, home)
+
+            for data in page.get('search', list()):
                 url = '{}#{}'.format(location, data['bookmark'])
                 items.append(dict(title=data['title'], text=data['text'], location=url))
 
@@ -170,10 +192,22 @@ class NavigationExtension(Extension):
             page[page.PageNodeBase]: The current page being converted.
         """
         name = self.getConfig(page, 'name')
+
+        # TODO: Remove the ability to use a URL for 'home' (see `postExecute`)
+        home_param = self.get('home')
+        home = self.translator.findPage(home_param.lstrip('/'),
+                                        exact=home_param.startswith('/'),
+                                        throw_on_zero=False)
+        if home is not None:
+            href = home.relativeDestination(page)
+        else:
+            href = str(self.get('home', '#!'))
+
         if name is not None:
             a = html.Tag(None, 'a', class_='left moose-logo hide-on-med-and-down',
-                         href=str(self.get('home', '#!')),
-                         string=str(name))
+                         href=href,
+                         string=str(name),
+                         id_='home-button')
             nav.insert(0, a)
 
     def _addRepo(self, nav, page):
@@ -212,13 +246,15 @@ class NavigationExtension(Extension):
 
         # Locate h1 heading, if it is found extract the rendered text
         h = heading.find_heading(page)
-        page_name = page.name#h.text() if h else page.name
+        page_name = page.name
         long_name = self.get('long-name')
         name = self.get('name')
-        if long_name is not None:
+        if h is not None:
+            html.Tag(head, 'title', string='{} | {}'.format(h.text(), name))
+        elif long_name is not None:
             html.Tag(head, 'title', string=long_name)
         elif name is not None:
-            html.Tag(head, 'title', string='{}|{}'.format(page_name, name))
+            html.Tag(head, 'title', string='{} | {}'.format(page_name, name))
         else:
             html.Tag(head, 'title', string=str(page_name))
 
@@ -322,7 +358,7 @@ class NavigationExtension(Extension):
             collapsible[list]: A list with six entries indicating the sections to create as
                                collapsible.
         """
-        collapsible = self.get('collapsible-sections')
+        collapsible = self.getConfig(page, 'collapsible-sections')
         if isinstance(collapsible, str):
             collapsible = eval(collapsible)
 

@@ -4,8 +4,9 @@
     --dark-blue: rgba(0, 44, 78, 1.0);
     --gray: rgba(117, 117, 117, 1.0);
     /* darkmode */
-    --darkmode-back: rgba(35, 35, 40, 1.0);
+    --darkmode-back: rgba(35, 35, 35, 1.0);
     --darkmode-card: rgba(20, 20, 20, 1.0);
+    --darkmode-image-card: rgba(10, 10, 10, 1.0);
     --darkmode-fore: rgba(200, 200, 200, 1.0);
     --dark-navbar: rgba(39, 63, 99, 1.0);
     --darker-highlight: rgba(100, 100, 100, 1.0);
@@ -68,10 +69,15 @@ main {
     vertical-align:bottom;
 }
 
+.moose-tight-inline-icon {
+    font-size:inherit;
+    line-height:inherit;
+}
+
 .tabs .tab a:hover, .tabs .tab a.active {
 	background-color: transparent;
   color: var(--inl-blue);
-}rend
+}
 
 .moose-html-rendered-tab{
   background-color:#F5F6CE;
@@ -91,12 +97,8 @@ a {
 }
 
 .tabs .indicator {
-	background-color: var(--inl-blue);
-}
-
-
-.card .card-content{
-    padding:10px;
+    background-color: var(--inl-blue);
+    height:4px;
 }
 
 .card-content img{
@@ -106,6 +108,10 @@ a {
 .card .card-title{
     font-weight:100;
     font-size:130%;
+}
+
+.card .card-content{
+    padding:0;
 }
 
 .moose-exception {
@@ -188,6 +194,10 @@ div.moose-modal-button {
 }
 html, body {
   height: 100%;
+}
+
+.moose-video-div video.moose-video {
+  display: block;
 }
 
 img.moose-image{
@@ -294,8 +304,22 @@ h6 {
     margin-bottom:6px;
 }
 
+h1 + p,
+h2 + p,
+h3 + p,
+h4 + p,
+h5 + p,
+h6 + pg{
+    margin-top:0;
+}
+
 ul {
      margin-left:1.5rem;
+}
+
+div.moose-pysyntax-class .moose-pysyntax-member-heading,
+div.moose-pysyntax-class .moose-pysyntax-member-heading ~ *{
+    margin-left:40px;
 }
 
 /* SEARCH RESULTS */
@@ -398,7 +422,8 @@ blockquote {
 }
 
 .moose-caption{
-  font-size:100%;
+    font-size:100%;
+    margin:0;
 }
 
 .moose-caption-heading{
@@ -473,6 +498,10 @@ li{
     padding-left:15px;
 }
 
+.collapsible li{
+    padding-left:0;
+}
+
 .moose-chip{
     margin-left: 10px;
     bottom: 8px;
@@ -539,7 +568,8 @@ li{
 .moose-parameter-description span,
 .moose-parameter-description-default span,
 .moose-parameter-description-cpptype span,
-.moose-parameter-description-options span{
+.moose-parameter-description-options span,
+.moose-parameter-description-controllable span{
     padding-right:10px;
     font-weight:100;
 }
@@ -786,42 +816,32 @@ li p {
   margin-bottom: 0;
 }
 
-.moose-card{
-    height:340px;
-    width:100%;
-    display:block;
-}
-
-.moose-card .card-image{
-    height:260px;
-}
-
-.moose-card .card-content{
-    height: auto;
-    width: auto;
-}
-
-.moose-card .card-image .material-placeholder .moose-image{
-    max-height:260px;
-    max-width:100%;
-    margin:auto;
-    width:auto;
-}
-
-/*
-.card{
-  display:table;
-}
-
-.card .card-image,
-.card .card-content{
-  display:table-row;
-}
-*/
-
 .moose-error,
 .moose-katex-error{
     color: red;
+}
+
+
+/*https://coderwall.com/p/ovxeha/fit-to-container-video-image-in-css-aspect-ratio-friendly*/
+.moose-card div.card-image,
+.moose-card div.card-image div.moose-video-div{
+    height:420px;
+    text-align:center;
+}
+.moose-card div.card-image div.moose-video-div:before{
+    content:"";
+    width:1px;
+    height:100%;
+    display:inline-block;
+    vertical-align:middle;
+    margin-left:-1px;
+}
+.moose-card div.card-image div.moose-video-div video.moose-video,
+.moose-card div.card-image div.material-placeholder{
+    max-width:100%;
+    max-height:100%;
+    display:inline-block;
+    vertical-align:middle;
 }
 
 span.badge.new{
@@ -931,60 +951,6 @@ span.badge.new.pass{
   list-style-type: none;
 }
 
-.reveal .slides{
-  position: relative;
-  text-align: left;
-}
-
-.reveal .slides not(.overview){
-  overflow: scroll;
-}
-
-.reveal h1 {
-    font-size:3rem;
-    font-weight:600;
-}
-
-.reveal h2 {
-    font-size:2.5rem;
-    font-weight:300;
-}
-
-.reveal h3 {
-    font-size:2.0rem;
-    font-weight:300;
-}
-
-.reveal h4 {
-    font-size:1.5rem;
-    font-weight:300;
-}
-
-.reveal p, .reveal a, .reveal li{
-    font-size:1.5rem;
-}
-
-.reveal pre{
-  font-size: 1.0rem;
-  line-height: normal;
-  width: 100%;
-}
-
-.reveal ul:not(.browser-default) li{
-  list-style-type: disc;
-}
-
-.reveal section img{
-  border: none;
-  box-shadow: none;
-}
-
-.reveal .moose-copy-button{
-    bottom: 0;
-    left: 0;
-}
-
-
 /* COLLAPSIBLE SECTIONS */
 summary {
   display: block;
@@ -1044,6 +1010,7 @@ div.moose-mega-menu-content{
    background: var(--darkmode-back);
    color: var(--darkmode-fore);
  }
+
  /* Google Custom Search (CSE) */
  .cse .gsc-control-cse, .gsc-control-cse {
    background-color: var(--darkmode-back) !important;
@@ -1122,11 +1089,14 @@ div.moose-mega-menu-content{
    background-color: var(--darkmode-back);
  }
  .card {
-   background-color: var(--darkmode-card);
+   background-color: transparent;
  }
  .card .card-reveal {
    background-color: var(--darkmode-card);
    color: var(--darkmode-fore);
+ }
+ .moose-card div.card-image{
+    background-color:var(--darkmode-image-card);
  }
  .collection.with-header .collection-header {
    color: white;
@@ -1139,17 +1109,23 @@ div.moose-mega-menu-content{
    border: 1px solid #000;
  }
  .collection .collection-item {
-   background-color: var(--darkmode-card);
+   background-color: var(--darkmode-back);
    border-bottom: 1px solid #000;
  }
  .collapsible-header {
-   background-color: var(--darkmode-card);
+   background-color: var(--darkmode-back);
    border-bottom: 1px solid #000;
  }
  .collapsible {
    border-top: 1px solid #000;
    border-right: 1px solid #000;
    border-left: 1px solid #000;
+ }
+ .collapsible-body {
+   border-bottom: 1px solid #000;
+ }
+ span.badge {
+     color: white;
  }
  a {
    color: var(--links-dark);
@@ -1186,4 +1162,38 @@ div.moose-mega-menu-content{
  code {
    color: white;
  }
+ #moose-search-box{
+   color: white;
+ }
+ #gsc-i-id1{
+   padding:8px !important;
+   background:var(--darkmode-card) !important;
+   color:white;
+ }
+
+ .tabs{
+     background-color:var(--dark-navbar);
+ }
+
+ .tabs .tab a:hover,
+ .tabs .tab a.active,
+ .tabs .tab a {
+     background-color: transparent;
+     color: white;
+}
+}
+
+div.moose-algorithm-line {
+  display: flex;
+  justify-content: space-between;
+}
+
+div.moose-algorithm {
+    border-left: solid 10px gray;
+    border-right: solid 2px black;
+    border-top: solid 2px black;
+    border-bottom: solid 2px black;
+    padding-left:10px;
+    padding-right:10px;
+    line-height:15px;
 }

@@ -14,8 +14,6 @@
 
 registerMooseObject("MooseApp", NumRelationshipManagers);
 
-defineLegacyParams(NumRelationshipManagers);
-
 InputParameters
 NumRelationshipManagers::validParams()
 {
@@ -46,19 +44,19 @@ NumRelationshipManagers::getValue()
   unsigned int count = 0;
   if (_rm_type == "GEOMETRIC")
   {
-    for (const auto rm : rms)
+    for (const auto & rm : rms)
       if (rm->isType(Moose::RelationshipManagerType::GEOMETRIC))
         ++count;
   }
   else if (_rm_type == "ALGEBRAIC")
   {
-    for (const auto rm : rms)
+    for (const auto & rm : rms)
       if (rm->isType(Moose::RelationshipManagerType::ALGEBRAIC))
         ++count;
   }
   else if (_rm_type == "COUPLING")
   {
-    for (const auto rm : rms)
+    for (const auto & rm : rms)
       if (rm->isType(Moose::RelationshipManagerType::COUPLING))
         ++count;
   }

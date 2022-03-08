@@ -12,10 +12,7 @@
 #include "SubProblem.h"
 #include "Conversion.h"
 #include "UserObject.h"
-#include "VectorPostprocessorData.h"
 #include "FEProblem.h"
-
-defineLegacyParams(VectorPostprocessor);
 
 InputParameters
 VectorPostprocessor::validParams()
@@ -51,30 +48,102 @@ VectorPostprocessor::validParams()
   return params;
 }
 
-VectorPostprocessor::VectorPostprocessor(const InputParameters & parameters)
-  : OutputInterface(parameters),
-    _vpp_name(MooseUtils::shortName(parameters.get<std::string>("_object_name"))),
-    _vpp_fe_problem(parameters.getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
-    _parallel_type(parameters.get<MooseEnum>("parallel_type")),
-    _vpp_tid(parameters.isParamValid("_tid") ? parameters.get<THREAD_ID>("_tid") : 0),
-    _contains_complete_history(parameters.get<bool>("contains_complete_history")),
+VectorPostprocessor::VectorPostprocessor(const MooseObject * moose_object)
+  : OutputInterface(moose_object->parameters()),
+    _vpp_name(MooseUtils::shortName(moose_object->parameters().get<std::string>("_object_name"))),
+    _vpp_fe_problem(
+        *moose_object->parameters().getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
+    _parallel_type(moose_object->parameters().get<MooseEnum>("parallel_type")),
+    _vpp_moose_object(*moose_object),
+    _vpp_tid(moose_object->parameters().isParamValid("_tid")
+                 ? moose_object->parameters().get<THREAD_ID>("_tid")
+                 : 0),
+    _contains_complete_history(moose_object->parameters().get<bool>("contains_complete_history")),
     _is_distributed(_parallel_type == "DISTRIBUTED"),
-    _is_broadcast(_is_distributed || !parameters.get<bool>("_auto_broadcast"))
+    _is_broadcast(_is_distributed || !moose_object->parameters().get<bool>("_auto_broadcast"))
 {
-}
-
-VectorPostprocessorValue &
-VectorPostprocessor::getVector(const std::string & vector_name)
-{
-  return _vpp_fe_problem->getVectorPostprocessorValue(_vpp_name, vector_name);
 }
 
 VectorPostprocessorValue &
 VectorPostprocessor::declareVector(const std::string & vector_name)
 {
+  _vector_names.insert(vector_name);
+
   if (_vpp_tid)
     return _thread_local_vectors.emplace(vector_name, VectorPostprocessorValue()).first->second;
-  else
-    return _vpp_fe_problem->declareVectorPostprocessorVector(
-        _vpp_name, vector_name, _contains_complete_history, _is_broadcast, _is_distributed);
+
+  // _is_broadcast = true (_auto_broadcast = false) then data is produced in a replicated manner
+  ReporterMode mode = REPORTER_MODE_ROOT;
+  if (_is_broadcast)
+    mode = REPORTER_MODE_REPLICATED;
+  if (_is_distributed)
+    mode = REPORTER_MODE_DISTRIBUTED;
+
+  return _vpp_fe_problem.getReporterData(ReporterData::WriteKey())
+      .declareReporterValue<VectorPostprocessorValue,
+                            VectorPostprocessorContext<VectorPostprocessorValue>>(
+          VectorPostprocessorReporterName(_vpp_name, vector_name), mode, _vpp_moose_object);
+}
+
+const std::set<std::string> &
+VectorPostprocessor::getVectorNames() const
+{
+  return _vector_names;
+}
+
+// Explicit instantiation
+template class VectorPostprocessorContext<VectorPostprocessorValue>;
+const ReporterMode REPORTER_MODE_VPP_SCATTER("VPP_SCATTER");
+
+template <typename T>
+VectorPostprocessorContext<T>::VectorPostprocessorContext(const libMesh::ParallelObject & other,
+                                                          const MooseObject & producer,
+                                                          ReporterState<T> & state)
+  : ReporterGeneralContext<T>(other, producer, state)
+{
+}
+
+template <typename T>
+void
+VectorPostprocessorContext<T>::finalize()
+{
+  ReporterGeneralContext<T>::finalize();
+
+  const auto & consumer_modes = this->state().getConsumers();
+  auto func = [](const std::pair<ReporterMode, const MooseObject *> & mode_pair)
+  { return mode_pair.first == REPORTER_MODE_VPP_SCATTER; };
+  if (std::find_if(consumer_modes.begin(), consumer_modes.end(), func) != consumer_modes.end())
+  {
+    const T & value = this->state().value();
+    if (this->processor_id() == 0 && value.size() != this->n_processors())
+      mooseError("The VectorPostprocessor value to be scatter has a length of ",
+                 value.size(),
+                 "; it must be the same length as the number of processors (",
+                 this->n_processors(),
+                 ").");
+
+    this->comm().scatter(value, _scatter_value);
+  }
+}
+
+template <typename T>
+void
+VectorPostprocessorContext<T>::copyValuesBack()
+{
+  ReporterGeneralContext<T>::copyValuesBack();
+  _scatter_value_old = _scatter_value;
+}
+
+template <typename T>
+const ScatterVectorPostprocessorValue &
+VectorPostprocessorContext<T>::getScatterValue() const
+{
+  return _scatter_value;
+}
+
+template <typename T>
+const ScatterVectorPostprocessorValue &
+VectorPostprocessorContext<T>::getScatterValueOld() const
+{
+  return _scatter_value_old;
 }

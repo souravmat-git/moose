@@ -39,7 +39,7 @@ public:
 
   virtual void updateContactStatefulData(bool beginning_of_step = false);
 
-  virtual Real computeQpSlaveValue() override;
+  virtual Real computeQpSecondaryValue() override;
 
   virtual Real computeQpResidual(Moose::ConstraintType type) override;
 
@@ -65,7 +65,7 @@ public:
                                         unsigned int jvar) override;
 
   /**
-   * Get the dof indices of the nodes connected to the slave node for a specific variable
+   * Get the dof indices of the nodes connected to the secondary node for a specific variable
    * @param var_num The number of the variable for which dof indices are gathered
    * @return bool indicating whether the coupled variable is one of the displacement variables
    */
@@ -80,13 +80,14 @@ public:
    */
   bool getCoupledVarComponent(unsigned int var_num, unsigned int & component);
 
-  virtual bool addCouplingEntriesToJacobian() override { return _master_slave_jacobian; }
+  virtual bool addCouplingEntriesToJacobian() override { return _primary_secondary_jacobian; }
 
   bool shouldApply() override;
   void computeContactForce(PenetrationInfo * pinfo, bool update_contact_set);
 
 protected:
   MooseSharedPointer<DisplacedProblem> _displaced_problem;
+  Real gapOffset(const Node * node);
   Real nodalArea(PenetrationInfo & pinfo);
   Real getPenalty(PenetrationInfo & pinfo);
   Real getTangentialPenalty(PenetrationInfo & pinfo);
@@ -113,14 +114,20 @@ protected:
   std::vector<unsigned int> _vars;
   std::vector<MooseVariable *> _var_objects;
 
+  /// gap offset from either secondary, primary or both
+  const bool _has_secondary_gap_offset;
+  const MooseVariable * const _secondary_gap_offset_var;
+  const bool _has_mapped_primary_gap_offset;
+  const MooseVariable * const _mapped_primary_gap_offset_var;
+
   MooseVariable * _nodal_area_var;
   SystemBase & _aux_system;
   const NumericVector<Number> * const _aux_solution;
 
-  /// Whether to include coupling between the master and slave nodes in the Jacobian
-  const bool _master_slave_jacobian;
-  /// Whether to include coupling terms with the nodes connected to the slave nodes in the Jacobian
-  const bool _connected_slave_nodes_jacobian;
+  /// Whether to include coupling between the primary and secondary nodes in the Jacobian
+  const bool _primary_secondary_jacobian;
+  /// Whether to include coupling terms with the nodes connected to the secondary nodes in the Jacobian
+  const bool _connected_secondary_nodes_jacobian;
   /// Whether to include coupling terms with non-displacement variables in the Jacobian
   const bool _non_displacement_vars_jacobian;
 

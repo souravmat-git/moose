@@ -18,12 +18,12 @@
 
 registerMooseObject("MooseApp", MaterialVectorPostprocessor);
 
-defineLegacyParams(MaterialVectorPostprocessor);
-
 InputParameters
 MaterialVectorPostprocessor::validParams()
 {
   InputParameters params = ElementVectorPostprocessor::validParams();
+  params.addClassDescription("Records all scalar material properties of a material object on "
+                             "elements at the indicated execution points.");
   params.addRequiredParam<MaterialName>("material",
                                         "Material for which all properties will be recorded.");
   params.addRequiredParam<std::vector<unsigned int>>(
@@ -151,13 +151,16 @@ MaterialVectorPostprocessor::sortVecs()
   std::vector<size_t> ind;
   ind.resize(_elem_ids.size());
   std::iota(ind.begin(), ind.end(), 0);
-  std::sort(ind.begin(), ind.end(), [&](size_t a, size_t b) -> bool {
-    if (_elem_ids[a] == _elem_ids[b])
-    {
-      return _qp_ids[a] < _qp_ids[b];
-    }
-    return _elem_ids[a] < _elem_ids[b];
-  });
+  std::sort(ind.begin(),
+            ind.end(),
+            [&](size_t a, size_t b) -> bool
+            {
+              if (_elem_ids[a] == _elem_ids[b])
+              {
+                return _qp_ids[a] < _qp_ids[b];
+              }
+              return _elem_ids[a] < _elem_ids[b];
+            });
 
   Moose::applyIndices(_elem_ids, ind);
   Moose::applyIndices(_qp_ids, ind);

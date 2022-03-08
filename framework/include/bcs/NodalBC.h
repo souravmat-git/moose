@@ -14,12 +14,6 @@
 #include "CoupleableMooseVariableDependencyIntermediateInterface.h"
 #include "MooseVariableInterface.h"
 
-// Forward declarations
-class NodalBC;
-
-template <>
-InputParameters validParams<NodalBC>();
-
 /**
  * Base class for deriving any boundary condition that works at nodes
  */
@@ -34,7 +28,7 @@ public:
    * Gets the variable this BC is active on
    * @return the variable
    */
-  virtual MooseVariable & variable() override { return _var; }
+  virtual const MooseVariable & variable() const override { return _var; }
   virtual void computeResidual() override;
   virtual void computeJacobian() override;
   virtual void computeOffDiagJacobian(unsigned int jvar) override;

@@ -78,3 +78,34 @@ ADPowerLawCreepStressUpdate::computeDerivative(const ADReal & effective_trial_st
                                        _exp_time;
   return creep_rate_derivative * _dt - 1.0;
 }
+
+Real
+ADPowerLawCreepStressUpdate::computeStrainEnergyRateDensity(
+    const ADMaterialProperty<RankTwoTensor> & stress,
+    const ADMaterialProperty<RankTwoTensor> & strain_rate)
+{
+  if (_n_exponent <= 1)
+    return 0.0;
+
+  Real creep_factor = _n_exponent / (_n_exponent + 1);
+
+  return MetaPhysicL::raw_value(creep_factor * stress[_qp].doubleContraction((strain_rate)[_qp]));
+}
+
+void
+ADPowerLawCreepStressUpdate::computeStressFinalize(const ADRankTwoTensor & plastic_strain_increment)
+{
+  _creep_strain[_qp] += plastic_strain_increment;
+}
+
+void
+ADPowerLawCreepStressUpdate::resetIncrementalMaterialProperties()
+{
+  _creep_strain[_qp] = _creep_strain_old[_qp];
+}
+
+bool
+ADPowerLawCreepStressUpdate::substeppingCapabilityEnabled()
+{
+  return getParam<bool>("use_substep");
+}

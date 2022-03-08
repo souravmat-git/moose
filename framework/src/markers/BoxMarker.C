@@ -12,8 +12,6 @@
 
 registerMooseObject("MooseApp", BoxMarker);
 
-defineLegacyParams(BoxMarker);
-
 InputParameters
 BoxMarker::validParams()
 {
@@ -37,8 +35,8 @@ BoxMarker::validParams()
 
 BoxMarker::BoxMarker(const InputParameters & parameters)
   : Marker(parameters),
-    _inside((MarkerValue)(int)parameters.get<MooseEnum>("inside")),
-    _outside((MarkerValue)(int)parameters.get<MooseEnum>("outside")),
+    _inside(parameters.get<MooseEnum>("inside").getEnum<MarkerValue>()),
+    _outside(parameters.get<MooseEnum>("outside").getEnum<MarkerValue>()),
     _bounding_box(MooseUtils::buildBoundingBox(parameters.get<RealVectorValue>("bottom_left"),
                                                parameters.get<RealVectorValue>("top_right")))
 {
@@ -47,7 +45,7 @@ BoxMarker::BoxMarker(const InputParameters & parameters)
 Marker::MarkerValue
 BoxMarker::computeElementMarker()
 {
-  RealVectorValue centroid = _current_elem->centroid();
+  RealVectorValue centroid = _current_elem->vertex_average();
 
   if (_bounding_box.contains_point(centroid))
     return _inside;

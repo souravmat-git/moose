@@ -21,7 +21,6 @@ SamplerData::validParams()
   InputParameters params = GeneralVectorPostprocessor::validParams();
   params.addClassDescription(
       "Tool for extracting Sampler object data and storing in VectorPostprocessor vectors.");
-  params += SamplerInterface::validParams();
   params.addRequiredParam<SamplerName>("sampler",
                                        "The sample from which to extract distribution data.");
 
@@ -40,7 +39,6 @@ SamplerData::validParams()
 
 SamplerData::SamplerData(const InputParameters & parameters)
   : GeneralVectorPostprocessor(parameters),
-    SamplerInterface(this),
     _sampler(getSampler("sampler")),
     _sampler_method(getParam<MooseEnum>("sampler_method"))
 {
@@ -63,10 +61,13 @@ SamplerData::execute()
 {
   if (_sampler_method == "get_global_samples")
   {
-    DenseMatrix<Real> data = _sampler.getGlobalSamples();
-    for (unsigned int j = 0; j < data.n(); ++j)
-      for (unsigned int i = 0; i < data.m(); ++i)
-        (*_sample_vectors[j])[i] = data(i, j);
+    if (processor_id() == 0)
+    {
+      DenseMatrix<Real> data = _sampler.getGlobalSamples();
+      for (unsigned int j = 0; j < data.n(); ++j)
+        for (unsigned int i = 0; i < data.m(); ++i)
+          (*_sample_vectors[j])[i] = data(i, j);
+    }
   }
 
   else if (_sampler_method == "get_local_samples")
@@ -91,9 +92,11 @@ SamplerData::execute()
 void
 SamplerData::finalize()
 {
-  if (_sampler_method != "get_global_samples")
+  if (!isDistributed() && _sampler_method != "get_global_samples")
+  {
     for (auto & ppv_ptr : _sample_vectors)
       _communicator.gather(0, *ppv_ptr);
+  }
 }
 
 void

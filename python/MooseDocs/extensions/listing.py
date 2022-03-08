@@ -6,7 +6,6 @@
 #*
 #* Licensed under LGPL 2.1, please see LICENSE for details
 #* https://www.gnu.org/licenses/lgpl-2.1.html
-
 import os
 import pyhit
 import moosetree
@@ -16,7 +15,7 @@ from .. import common
 from ..common import exceptions
 from ..base import LatexRenderer
 from ..tree import tokens, latex
-from . import core, command, floats
+from . import core, command, floats, modal
 
 Listing = tokens.newToken('Listing', floats.Float)
 ListingCode = tokens.newToken('ListingCode', core.Code)
@@ -38,7 +37,7 @@ class ListingExtension(command.CommandExtension):
         return config
 
     def extend(self, reader, renderer):
-        self.requires(core, command, floats)
+        self.requires(core, command, floats, modal)
         self.addCommand(reader, LocalListingCommand())
         self.addCommand(reader, FileListingCommand())
         self.addCommand(reader, InputListingCommand())
@@ -68,23 +67,21 @@ class LocalListingCommand(command.CommandComponent):
     def defaultSettings():
         settings = command.CommandComponent.defaultSettings()
         settings.update(floats.caption_settings())
-        settings.update(common.extractContentSettings())
         settings['max-height'] = ('350px', "The default height for listing content.")
         settings['language'] = (None, "The language to use for highlighting, if not supplied it " \
                                       "will be inferred from the extension (if possible).")
         return settings
 
-    def createToken(self, parent, info, page):
-        flt = floats.create_float(parent, self.extension, self.reader, page, self.settings,
+    def createToken(self, parent, info, page, settings):
+        flt = floats.create_float(parent, self.extension, self.reader, page, settings,
                                   token_type=Listing)
         content = info['inline'] if 'inline' in info else info['block']
-        code = core.Code(flt, style="max-height:{};".format(self.settings['max-height']),
-                         language=self.settings['language'], content=content)
+        code = core.Code(flt, style="max-height:{};".format(settings['max-height']),
+                         language=settings['language'], content=content)
 
         if flt is parent:
-            code.attributes.update(**self.attributes)
-
-        if flt is not parent:
+            code.attributes.update(**self.attributes(settings))
+        else:
             code.name = 'ListingCode' #TODO: Find a better way
 
         return parent
@@ -96,61 +93,42 @@ class FileListingCommand(LocalListingCommand):
     @staticmethod
     def defaultSettings():
         settings = LocalListingCommand.defaultSettings()
+        settings['link'] = (True, "Show the complete file via a link; overridden by SourceExtension")
         settings.update(common.extractContentSettings())
-        settings['link'] = (None, "Include a link to the filename after the listing.")
         return settings
 
-    def createToken(self, parent, info, page):
+    def createToken(self, parent, info, page, settings):
         """
         Build the tokens needed for displaying code listing.
         """
 
         filename = common.check_filenames(info['subcommand'])
-        flt = floats.create_float(parent, self.extension, self.reader, page, self.settings,
+        flt = floats.create_float(parent, self.extension, self.reader, page, settings,
                                   token_type=Listing)
         # Create code token
-        lang = self.settings.get('language')
-        content = self.extractContent(filename)
+        lang = settings.get('language')
+        content = self.extractContent(filename, settings)
         lang = lang if lang else common.get_language(filename)
 
-        code = core.Code(flt, style="max-height:{};".format(self.settings['max-height']),
+        code = core.Code(flt, style="max-height:{};".format(settings['max-height']),
                          content=content, language=lang)
-        if flt is parent:
-            code.attributes.update(**self.attributes)
 
-        if flt is not parent:
+        if flt is parent:
+            code.attributes.update(**self.attributes(settings))
+        else:
             code.name = 'ListingCode' #TODO: Find a better way
 
-        # Add bottom modal
-        link = self.settings['link']
-        link = link if link is not None else self.extension['modal-link']
-        if link:
-            rel_filename = os.path.relpath(filename, MooseDocs.ROOT_DIR)
-
-            # Get the complete file
-            content = common.read(filename)
-            settings = common.get_settings_as_dict(common.extractContentSettings())
-            settings['strip-header'] = False
-            content, _ = common.extractContent(content, settings)
-
-            # Create modal for display the files a popup
-            code = core.Code(None, language=lang, content=content)
-            link = floats.create_modal_link(flt,
-                                            url=str(rel_filename),
-                                            content=code,
-                                            title=str(filename),
-                                            string='({})'.format(rel_filename))
-            link.name = 'ListingLink'
-            link['data-tooltip'] = str(rel_filename)
+        if settings['link']:
+            modal.ModalSourceLink(flt, src=filename, language=lang)
 
         return parent
 
-    def extractContent(self, filename):
+    def extractContent(self, filename, settings):
         """
         Extract content to display in listing code box.
         """
         content = common.read(filename)
-        content, _ = common.extractContent(content, self.settings)
+        content, _ = common.extractContent(content, settings)
         return content
 
 
@@ -160,36 +138,71 @@ class InputListingCommand(FileListingCommand):
     """
 
     COMMAND = 'listing'
-    SUBCOMMAND = 'i'
+    SUBCOMMAND = ('i', 'hit')
 
     @staticmethod
     def defaultSettings():
         settings = FileListingCommand.defaultSettings()
         settings['block'] = (None, 'Space separated list of input file block names to include.')
+        settings['remove'] = (None, 'Space separated list of input file block and/or parameter ' \
+                                    'names to remove. The full path to parameters must be used, ' \
+                                    'e.g., `Kernels/diffusion/variable`.')
         return settings
 
-    def extractContent(self, filename):
+    def extractContent(self, filename, settings):
         """Extract the file contents for display."""
-        if self.settings['block']:
-            content = self.extractInputBlocks(filename, self.settings['block'])
+        if any([settings['block'], settings['remove']]):
+            hit = self.extractInputBlocks(filename, settings['block'] or '')
+            content = self.removeInputBlocks(hit, settings['remove'] or '')
         else:
             content = common.read(filename)
 
-        content, _ = common.extractContent(content, self.settings)
+        content, _ = common.extractContent(content, settings)
         return content
 
     @staticmethod
     def extractInputBlocks(filename, blocks):
-        """Remove input file block(s)"""
+        """Read input file block(s)"""
         hit = pyhit.load(filename)
         out = []
-        for block in blocks.split(' '):
-            node = moosetree.find(hit, lambda n: n.fullpath.endswith(block))
+        for block in blocks.split():
+            node = moosetree.find(hit, lambda n: n.fullpath.endswith(block.strip('/')))
             if node is None:
                 msg = "Unable to find block '{}' in {}."
                 raise exceptions.MooseDocsException(msg, block, filename)
             out.append(str(node.render()))
-        return '\n'.join(out)
+        return pyhit.parse('\n'.join(out)) if out else hit
+
+    @staticmethod
+    def removeInputBlocks(hit, remove):
+        """Remove input file block(s) and/or parameter(s)"""
+        for r in remove.split():
+            for node in moosetree.iterate(hit):
+                block, param = InputListingCommand.removeHelper(node, r)
+                if block is not None:
+                    if param is None:
+                        node.remove()
+                    else:
+                        node.removeParam(param)
+                    break
+
+            if block is None:
+                msg = 'Unable to locate block or parameter with name: {}'
+                raise exceptions.MooseDocsException(msg, r)
+
+        return str(hit.render())
+
+    @staticmethod
+    def removeHelper(node, block):
+        if node.fullpath.endswith(block):
+            return node, None
+
+        if '/' in block:
+            block, param = block.rsplit('/', 1)
+            if (node.fullpath.strip('/') == block.strip('/')) and (param in node):
+                return node, param
+
+        return None, None
 
 def get_listing_options(token):
     opts = latex.Bracket(None)

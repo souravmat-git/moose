@@ -15,12 +15,11 @@
 
 registerMooseAction("MooseApp", AddControlAction, "add_control");
 
-defineLegacyParams(AddControlAction);
-
 InputParameters
 AddControlAction::validParams()
 {
   InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a Control object to the simulation.");
   return params;
 }
 

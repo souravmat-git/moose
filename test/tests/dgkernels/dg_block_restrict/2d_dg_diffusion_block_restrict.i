@@ -17,19 +17,15 @@
   [./interface]
     input = subdomain1
     type = SideSetsBetweenSubdomainsGenerator
-    master_block = '1'
+    primary_block = '1'
     paired_block = '0'
-    new_boundary = 'master1_interface'
+    new_boundary = 'primary1_interface'
   [../]
   [./boundaries]
     input = interface
     type = BreakBoundaryOnSubdomainGenerator
     boundaries = 'left bottom'
   [../]
-[]
-
-[Problem]
-  kernel_coverage_check = false
 []
 
 [Variables]
@@ -66,10 +62,10 @@
     variable = u
     boundary = 'left_to_1 bottom_to_1'
   [../]
-  [./master1_inteface]
+  [./primary1_inteface]
     type = VacuumBC
     variable = u
-    boundary = 'master1_interface'
+    boundary = 'primary1_interface'
   [../]
 []
 
@@ -84,6 +80,10 @@
 [Executioner]
   type = Steady
   nl_abs_tol = 1e-12
+[]
+
+[Problem]
+  kernel_coverage_check = false
 []
 
 [Outputs]

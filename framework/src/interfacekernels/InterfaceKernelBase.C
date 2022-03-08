@@ -16,19 +16,13 @@
 
 #include "libmesh/quadrature.h"
 
-defineLegacyParams(InterfaceKernelBase);
-
 InputParameters
 InterfaceKernelBase::validParams()
 {
-  InputParameters params = MooseObject::validParams();
-  params += TransientInterface::validParams();
+  InputParameters params = NeighborResidualObject::validParams();
   params += BoundaryRestrictable::validParams();
-  params += MeshChangedInterface::validParams();
-  params += TaggingInterface::validParams();
+  params += TwoMaterialPropertyInterface::validParams();
 
-  params.addRequiredParam<NonlinearVariableName>(
-      "variable", "The name of the variable that this boundary condition applies to");
   params.addParam<bool>("use_displaced_mesh",
                         false,
                         "Whether or not this object should use the "
@@ -59,13 +53,13 @@ InterfaceKernelBase::validParams()
       save_in_var_side,
       "This parameter must exist if save_in variables are specified and must have the same length "
       "as save_in. This vector specifies whether the corresponding aux_var should save-in "
-      "residual contributions from the master ('m') or slave side ('s').");
+      "residual contributions from the primary ('p') or secondary side ('s').");
   params.addParam<MultiMooseEnum>(
       "diag_save_in_var_side",
       save_in_var_side,
       "This parameter must exist if diag_save_in variables are specified and must have the same "
       "length as diag_save_in. This vector specifies whether the corresponding aux_var should "
-      "save-in jacobian contributions from the master ('m') or slave side ('s').");
+      "save-in jacobian contributions from the primary ('p') or secondary side ('s').");
 
   // InterfaceKernels always need one layer of ghosting.
   params.addRelationshipManager("ElementSideNeighborLayers",
@@ -80,23 +74,11 @@ Threads::spin_mutex InterfaceKernelBase::_resid_vars_mutex;
 Threads::spin_mutex InterfaceKernelBase::_jacoby_vars_mutex;
 
 InterfaceKernelBase::InterfaceKernelBase(const InputParameters & parameters)
-  : MooseObject(parameters),
+  : NeighborResidualObject(parameters),
     BoundaryRestrictable(this, false), // false for _not_ nodal
-    SetupInterface(this),
-    TransientInterface(this),
-    FunctionInterface(this),
-    UserObjectInterface(this),
-    PostprocessorInterface(this),
     NeighborCoupleableMooseVariableDependencyIntermediateInterface(this, false, false),
-    Restartable(this, "InterfaceKernels"),
-    MeshChangedInterface(parameters),
     TwoMaterialPropertyInterface(this, Moose::EMPTY_BLOCK_IDS, boundaryIDs()),
-    TaggingInterface(this),
-    _subproblem(*getCheckedPointerParam<SubProblem *>("_subproblem")),
-    _sys(*getCheckedPointerParam<SystemBase *>("_sys")),
-    _tid(parameters.get<THREAD_ID>("_tid")),
-    _assembly(_subproblem.assembly(_tid)),
-    _mesh(_subproblem.mesh()),
+    ElementIDInterface(this),
     _current_elem(_assembly.elem()),
     _current_elem_volume(_assembly.elemVolume()),
     _neighbor_elem(_assembly.neighbor()),
@@ -121,4 +103,10 @@ const Real &
 InterfaceKernelBase::getNeighborElemVolume()
 {
   return _assembly.neighborVolume();
+}
+
+void
+InterfaceKernelBase::prepareShapes(const unsigned int var_num)
+{
+  _subproblem.prepareFaceShapes(var_num, _tid);
 }

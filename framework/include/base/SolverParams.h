@@ -25,6 +25,9 @@ public:
   Moose::EigenProblemType _eigen_problem_type;
   Moose::WhichEigenPairs _which_eigen_pairs;
   bool _eigen_matrix_free;
+  bool _eigen_matrix_vector_mult;
   bool _customized_pc_for_eigen;
   bool _precond_matrix_free;
+  unsigned int _free_power_iterations;
+  unsigned int _extra_power_iterations;
 };

@@ -9,13 +9,13 @@ Extensions:
     MooseDocs.extensions.navigation:
         name: MOOSE Phase Field Module
         repo: https://github.com/idaholab/moose
-        home: /modules/phase_field
+        home: /modules/phase_field/index.md
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/modules/phase_field
-        hide:
-            framework: !include framework/doc/hidden.yml
-            phase_field: !include modules/phase_field/doc/hidden.yml
-        remove: !include framework/doc/remove.yml
+        remove:
+            framework: !include framework/doc/remove.yml
+        unregister:
+            framework: !include framework/doc/unregister.yml
         includes:
             - framework/include
             - modules/phase_field/include
@@ -27,6 +27,7 @@ Extensions:
         active: True
     MooseDocs.extensions.sqa:
         active: True
+        reports: !include modules/phase_field/doc/sqa_reports.yml
         categories:
             framework: !include framework/doc/sqa_framework.yml
             phase_field: !include modules/phase_field/doc/sqa_phase_field.yml

@@ -21,6 +21,7 @@
       csvdiff = 'master_transient_out_storage_0000.csv master_transient_out_storage_0001.csv '
                 'master_transient_out_storage_0002.csv master_transient_out_storage_0003.csv'
       prereq = transient/normal
+      max_parallel = 5
 
       detail = 'with sub-applications batches using in-memory restore functionality.'
     []

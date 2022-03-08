@@ -26,11 +26,11 @@ PorousFlowPeacemanBorehole::validParams()
       "to/from the borehole is multiplied by |character|, so usually character = +/- "
       "1, but you can specify other quantities to provide an overall scaling to the "
       "flow if you like.");
-  params.addRequiredParam<Real>("bottom_p_or_t",
-                                "For function_of=pressure, this parameter is the "
-                                "pressure at the bottom of the borehole, "
-                                "otherwise it is the temperature at the bottom of "
-                                "the borehole");
+  params.addRequiredParam<FunctionName>("bottom_p_or_t",
+                                        "For function_of=pressure, this function is the "
+                                        "pressure at the bottom of the borehole, "
+                                        "otherwise it is the temperature at the bottom of "
+                                        "the borehole");
   params.addRequiredParam<RealVectorValue>(
       "unit_weight",
       "(fluid_density*gravitational_acceleration) as a vector pointing downwards.  "
@@ -68,7 +68,7 @@ PorousFlowPeacemanBorehole::validParams()
 PorousFlowPeacemanBorehole::PorousFlowPeacemanBorehole(const InputParameters & parameters)
   : PorousFlowLineSink(parameters),
     _character(getFunction("character")),
-    _p_bot(getParam<Real>("bottom_p_or_t")),
+    _p_bot(getFunction("bottom_p_or_t")),
     _unit_weight(getParam<RealVectorValue>("unit_weight")),
     _re_constant(getParam<Real>("re_constant")),
     _well_constant(getParam<Real>("well_constant")),
@@ -219,7 +219,8 @@ PorousFlowPeacemanBorehole::computeQpBaseOutflow(unsigned current_dirac_ptid) co
   if (character == 0.0)
     return 0.0;
 
-  const Real bh_pressure = _p_bot + _unit_weight * (_q_point[_qp] - _bottom_point);
+  const Real bh_pressure =
+      _p_bot.value(_t, _q_point[_qp]) + _unit_weight * (_q_point[_qp] - _bottom_point);
   const Real pp = ptqp();
 
   Real outflow = 0.0; // this is the flow rate from porespace out of the system
@@ -235,7 +236,7 @@ PorousFlowPeacemanBorehole::computeQpBaseOutflow(unsigned current_dirac_ptid) co
                                    _rot_matrix[current_dirac_ptid - 1],
                                    _half_seg_len[current_dirac_ptid - 1],
                                    _current_elem,
-                                   _rs[current_dirac_ptid]);
+                                   _weight->at(current_dirac_ptid));
       outflow += wc * (pp - bh_pressure);
     }
   }
@@ -250,7 +251,7 @@ PorousFlowPeacemanBorehole::computeQpBaseOutflow(unsigned current_dirac_ptid) co
                                    _rot_matrix[current_dirac_ptid],
                                    _half_seg_len[current_dirac_ptid],
                                    _current_elem,
-                                   _rs[current_dirac_ptid]);
+                                   _weight->at(current_dirac_ptid));
       outflow += wc * (pp - bh_pressure);
     }
   }
@@ -275,7 +276,8 @@ PorousFlowPeacemanBorehole::computeQpBaseOutflowJacobian(unsigned jvar,
     return;
   const unsigned pvar = _dictator.porousFlowVariableNum(jvar);
 
-  const Real bh_pressure = _p_bot + _unit_weight * (_q_point[_qp] - _bottom_point);
+  const Real bh_pressure =
+      _p_bot.value(_t, _q_point[_qp]) + _unit_weight * (_q_point[_qp] - _bottom_point);
   const Real pp = ptqp();
   const Real pp_prime = dptqp(pvar) * _phi[_j][_qp];
 
@@ -289,7 +291,7 @@ PorousFlowPeacemanBorehole::computeQpBaseOutflowJacobian(unsigned jvar,
                                    _rot_matrix[current_dirac_ptid - 1],
                                    _half_seg_len[current_dirac_ptid - 1],
                                    _current_elem,
-                                   _rs[current_dirac_ptid]);
+                                   _weight->at(current_dirac_ptid));
       outflowp += wc * pp_prime;
       outflow += wc * (pp - bh_pressure);
     }
@@ -305,7 +307,7 @@ PorousFlowPeacemanBorehole::computeQpBaseOutflowJacobian(unsigned jvar,
                                    _rot_matrix[current_dirac_ptid],
                                    _half_seg_len[current_dirac_ptid],
                                    _current_elem,
-                                   _rs[current_dirac_ptid]);
+                                   _weight->at(current_dirac_ptid));
       outflowp += wc * pp_prime;
       outflow += wc * (pp - bh_pressure);
     }

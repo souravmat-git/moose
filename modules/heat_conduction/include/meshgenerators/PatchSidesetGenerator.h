@@ -27,20 +27,40 @@ public:
 
   std::unique_ptr<MeshBase> generate() override;
 
+  unsigned int nPatches() const { return _n_patches; }
+
 protected:
   /// returns the name of the _n_patches subdivisions derived from _sideset
   std::vector<BoundaryName> sidesetNameHelper(const std::string & base_name) const;
 
   Elem * boundaryElementHelper(MeshBase & mesh, libMesh::ElemType type) const;
 
+  /// a function for implementing custom partitioning
+  void partition(MeshBase & mesh);
+
+  /**
+   * Checks partitions and makes sure every partition has at least one elem.
+   * If a partition is empty, it's removed and the remaining ones are "renamed"
+   */
+  void checkPartitionAndCompress(MeshBase & mesh);
+
   std::unique_ptr<MeshBase> & _input;
+
+  /// dimensionality of the sidesets to partition
+  unsigned int _dim;
 
   /// the number of patches that this sideset generator divides _sideset into
   unsigned int _n_patches;
 
   /// The sideset that will be subdivided
-  const boundary_id_type & _sideset;
+  const BoundaryName & _sideset_name;
 
   /// the name of the partitioner being used
   MooseEnum _partitioner_name;
+
+  /// The sideset that will be subdivided
+  subdomain_id_type _sideset;
+
+  /// number of elements of the boundary mesh
+  dof_id_type _n_boundary_mesh_elems;
 };

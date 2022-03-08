@@ -23,8 +23,6 @@
 #include "libmesh/libmesh_common.h"
 #include "libmesh/quadrature.h"
 
-defineLegacyParams(DGKernel);
-
 InputParameters
 DGKernel::validParams()
 {
@@ -126,8 +124,11 @@ DGKernel::computeElemNeighResidual(Moose::DGResidualType type)
     prepareVectorTagNeighbor(_assembly, _var.number());
 
   for (_qp = 0; _qp < _qrule->n_points(); _qp++)
+  {
+    precalculateQpResidual(type);
     for (_i = 0; _i < test_space.size(); _i++)
       _local_re(_i) += _JxW[_qp] * _coord[_qp] * computeQpResidual(type);
+  }
 
   accumulateTaggedLocalResidual();
 
@@ -157,9 +158,12 @@ DGKernel::computeElemNeighJacobian(Moose::DGJacobianType type)
     prepareMatrixTagNeighbor(_assembly, _var.number(), _var.number(), type);
 
   for (_qp = 0; _qp < _qrule->n_points(); _qp++)
+  {
+    precalculateQpJacobian(type);
     for (_i = 0; _i < test_space.size(); _i++)
       for (_j = 0; _j < loc_phi.size(); _j++)
         _local_ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpJacobian(type);
+  }
 
   accumulateTaggedLocalMatrix();
 
@@ -182,7 +186,8 @@ DGKernel::computeElemNeighJacobian(Moose::DGJacobianType type)
 }
 
 void
-DGKernel::computeOffDiagElemNeighJacobian(Moose::DGJacobianType type, unsigned int jvar)
+DGKernel::computeOffDiagElemNeighJacobian(Moose::DGJacobianType type,
+                                          const MooseVariableFEBase & jvar)
 {
   const VariableTestValue & test_space =
       (type == Moose::ElementElement || type == Moose::ElementNeighbor) ? _test : _test_neighbor;
@@ -190,14 +195,21 @@ DGKernel::computeOffDiagElemNeighJacobian(Moose::DGJacobianType type, unsigned i
       (type == Moose::ElementElement || type == Moose::NeighborElement) ? _phi : _phi_neighbor;
 
   if (type == Moose::ElementElement)
-    prepareMatrixTag(_assembly, _var.number(), jvar);
+    prepareMatrixTag(_assembly, _var.number(), jvar.number());
   else
-    prepareMatrixTagNeighbor(_assembly, _var.number(), jvar, type);
+    prepareMatrixTagNeighbor(_assembly, _var.number(), jvar.number(), type);
+
+  if (_local_ke.n() == 0 || _local_ke.m() == 0)
+    return;
 
   for (_qp = 0; _qp < _qrule->n_points(); _qp++)
+  {
+    precalculateQpOffDiagJacobian(type, jvar);
     for (_i = 0; _i < test_space.size(); _i++)
       for (_j = 0; _j < loc_phi.size(); _j++)
-        _local_ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(type, jvar);
+        _local_ke(_i, _j) +=
+            _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(type, jvar.number());
+  }
 
   accumulateTaggedLocalMatrix();
 }

@@ -11,8 +11,6 @@
 
 #include "InterfaceMaterial.h"
 
-#include "Function.h"
-
 // Forward Declarations
 class Function;
 
@@ -20,6 +18,8 @@ class SideSetHeatTransferMaterial : public InterfaceMaterial
 {
 public:
   SideSetHeatTransferMaterial(const InputParameters & parameters);
+
+  static InputParameters validParams();
 
 protected:
   virtual void computeQpProperties() override;
@@ -45,9 +45,9 @@ protected:
   /// Material property handles
   MaterialProperty<Real> & _cond;
   MaterialProperty<Real> & _Tbulk;
-  MaterialProperty<Real> & _h_master;
+  MaterialProperty<Real> & _h_primary;
   MaterialProperty<Real> & _h_neighbor;
-  MaterialProperty<Real> & _emmissivity_eff_master;
+  MaterialProperty<Real> & _emmissivity_eff_primary;
   MaterialProperty<Real> & _emmissivity_eff_neighbor;
 
   /// Stefan-Boltzmann constant in W/cm^2-K^4

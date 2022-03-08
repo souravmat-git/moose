@@ -11,12 +11,6 @@
 
 #include "MeshGenerator.h"
 
-// Forward declarations
-class MeshSideSetGenerator;
-
-template <>
-InputParameters validParams<MeshSideSetGenerator>();
-
 /**
  * Add lower dimensional elements along the faces contained in a side set
  */
@@ -30,9 +24,9 @@ public:
   std::unique_ptr<MeshBase> generate() override;
 
 protected:
+  /// Mesh to add the sidesets to
   std::unique_ptr<MeshBase> & _input;
 
   /// Block ID to assign to the region
   const subdomain_id_type _block_id;
 };
-

@@ -23,14 +23,11 @@ CoupledPressureAction::validParams()
   params.addRequiredParam<std::vector<BoundaryName>>(
       "boundary", "The list of boundary IDs from the mesh where the pressure will be applied");
 
-  params.addParam<VariableName>("disp_x", "The x displacement");
-  params.addParam<VariableName>("disp_y", "The y displacement");
-  params.addParam<VariableName>("disp_z", "The z displacement");
-
   params.addParam<std::vector<VariableName>>(
       "displacements",
       "The displacements appropriate for the simulation geometry and coordinate system");
 
+  params.addParam<bool>("use_displaced_mesh", true, "Whether to use the displaced mesh.");
   params.addParam<std::vector<AuxVariableName>>("save_in_disp_x",
                                                 "The save_in variables for x displacement");
   params.addParam<std::vector<AuxVariableName>>("save_in_disp_y",
@@ -58,23 +55,7 @@ CoupledPressureAction::act()
 {
   const std::string kernel_name = "CoupledPressureBC";
 
-  std::vector<VariableName> displacements;
-  if (isParamValid("displacements"))
-    displacements = getParam<std::vector<VariableName>>("displacements");
-  else
-  {
-    // Legacy parameter scheme for displacements
-    if (!isParamValid("disp_x"))
-      mooseError("Specify displacement variables using the `displacements` parameter.");
-    displacements.push_back(getParam<VariableName>("disp_x"));
-
-    if (isParamValid("disp_y"))
-    {
-      displacements.push_back(getParam<VariableName>("disp_y"));
-      if (isParamValid("disp_z"))
-        displacements.push_back(getParam<VariableName>("disp_z"));
-    }
-  }
+  std::vector<VariableName> displacements = getParam<std::vector<VariableName>>("displacements");
 
   // Create pressure BCs
   for (unsigned int i = 0; i < displacements.size(); ++i)
@@ -85,7 +66,7 @@ CoupledPressureAction::act()
     InputParameters params = _factory.getValidParams(kernel_name);
     params.applySpecificParameters(parameters(), {"boundary"});
     params.set<std::vector<VariableName>>("pressure") = {getParam<VariableName>("pressure")};
-    params.set<bool>("use_displaced_mesh") = true;
+    params.set<bool>("use_displaced_mesh") = getParam<bool>("use_displaced_mesh");
     params.set<unsigned int>("component") = i;
     params.set<NonlinearVariableName>("variable") = displacements[i];
 

@@ -10,6 +10,7 @@
 #pragma once
 
 #include "GeochemicalDatabaseReader.h"
+#include "GeochemistryKineticRateCalculator.h"
 #include <unordered_map>
 #include "DenseMatrix.h"
 #include <libmesh/dense_vector.h>
@@ -25,8 +26,36 @@ struct SurfaceComplexationInfo
 {
   SurfaceComplexationInfo(){};
 
+  bool operator==(const SurfaceComplexationInfo & rhs) const
+  {
+    return surface_area == rhs.surface_area && sorption_sites == rhs.sorption_sites;
+  };
+
   Real surface_area;
   std::map<std::string, Real> sorption_sites;
+};
+
+/**
+ * A single rate expression for the kinetic species with index kinetic_species_index.
+ */
+struct KineticRateDefinition
+{
+  KineticRateDefinition(unsigned kinetic_species_index,
+                        const std::vector<Real> & promoting_indices,
+                        const KineticRateUserDescription & description)
+    : kinetic_species_index(kinetic_species_index),
+      promoting_indices(promoting_indices),
+      description(description){};
+
+  bool operator==(const KineticRateDefinition & rhs) const
+  {
+    return (kinetic_species_index == rhs.kinetic_species_index) &&
+           (promoting_indices == rhs.promoting_indices) && (description == rhs.description);
+  };
+
+  unsigned kinetic_species_index;
+  std::vector<Real> promoting_indices;
+  KineticRateUserDescription description;
 };
 
 /**
@@ -40,10 +69,58 @@ struct SurfaceComplexationInfo
  */
 struct ModelGeochemicalDatabase
 {
-  ModelGeochemicalDatabase(){};
+  /**
+   * Constructor sets original_database.  Also initializes swap_to_original_basis to "nothing" in an
+   * attempt to reduce memory consumption
+   */
+  ModelGeochemicalDatabase(const GeochemicalDatabaseReader & db)
+    : original_database(&db), swap_to_original_basis(DenseMatrix<Real>()){};
 
-  /// temperatures defined in the database
-  std::vector<Real> temperatures;
+  bool operator==(const ModelGeochemicalDatabase & rhs) const
+  {
+    return (original_database == rhs.original_database) &&
+           (basis_species_index == rhs.basis_species_index) &&
+           (basis_species_name == rhs.basis_species_name) &&
+           (basis_species_mineral == rhs.basis_species_mineral) &&
+           (basis_species_gas == rhs.basis_species_gas) &&
+           (basis_species_transported == rhs.basis_species_transported) &&
+           (basis_species_charge == rhs.basis_species_charge) &&
+           (basis_species_radius == rhs.basis_species_radius) &&
+           (basis_species_molecular_weight == rhs.basis_species_molecular_weight) &&
+           (basis_species_molecular_volume == rhs.basis_species_molecular_volume) &&
+           (eqm_species_index == rhs.eqm_species_index) &&
+           (eqm_species_name == rhs.eqm_species_name) &&
+           (eqm_species_mineral == rhs.eqm_species_mineral) &&
+           (eqm_species_gas == rhs.eqm_species_gas) &&
+           (eqm_species_transported == rhs.eqm_species_transported) &&
+           (eqm_species_charge == rhs.eqm_species_charge) &&
+           (eqm_species_radius == rhs.eqm_species_radius) &&
+           (eqm_species_molecular_weight == rhs.eqm_species_molecular_weight) &&
+           (eqm_species_molecular_volume == rhs.eqm_species_molecular_volume) &&
+           (eqm_stoichiometry == rhs.eqm_stoichiometry) && (eqm_log10K == rhs.eqm_log10K) &&
+           (surface_sorption_name == rhs.surface_sorption_name) &&
+           (surface_sorption_area == rhs.surface_sorption_area) &&
+           (surface_sorption_related == rhs.surface_sorption_related) &&
+           (surface_sorption_number == rhs.surface_sorption_number) &&
+           (redox_lhs == rhs.redox_lhs) && (redox_stoichiometry == rhs.redox_stoichiometry) &&
+           (redox_log10K == rhs.redox_log10K) &&
+           (surface_complexation_info == rhs.surface_complexation_info) &&
+           (gas_chi == rhs.gas_chi) && (kin_species_index == rhs.kin_species_index) &&
+           (kin_species_name == rhs.kin_species_name) &&
+           (kin_species_mineral == rhs.kin_species_mineral) &&
+           (kin_species_transported == rhs.kin_species_transported) &&
+           (kin_species_charge == rhs.kin_species_charge) &&
+           (kin_species_molecular_weight == rhs.kin_species_molecular_weight) &&
+           (kin_species_molecular_volume == rhs.kin_species_molecular_volume) &&
+           (kin_log10K == rhs.kin_log10K) && (kin_stoichiometry == rhs.kin_stoichiometry) &&
+           (kin_rate == rhs.kin_rate) &&
+           (have_swapped_out_of_basis == rhs.have_swapped_out_of_basis) &&
+           (have_swapped_into_basis == rhs.have_swapped_into_basis) &&
+           (swap_to_original_basis == rhs.swap_to_original_basis);
+  };
+
+  /// a pointer to the original database used to build this ModelGeochemicalDatabase
+  const GeochemicalDatabaseReader * original_database;
 
   /**
    * basis_species_index[name] = index of the basis species, within all ModelGeochemicalDatabase
@@ -60,11 +137,11 @@ struct ModelGeochemicalDatabase
   /// basis_species_gas[j] = true iff the j^th basis species is a gas
   std::vector<bool> basis_species_gas;
 
+  /// basis_species_transported[j] = true iff the j^th basis species is transported in reactive-transport sims
+  std::vector<bool> basis_species_transported;
+
   /// all quantities have a charge (mineral charge = 0, gas charge = 0, oxide charge = 0)
   std::vector<Real> basis_species_charge;
-
-  /// all quantities have a molecular weight (g)
-  std::vector<Real> basis_species_weight;
 
   /// all quantities have an ionic radius (Angstrom) for computing activity (mineral radius = 0, gas radius = 0, surface species radius = 0)
   std::vector<Real> basis_species_radius;
@@ -91,6 +168,9 @@ struct ModelGeochemicalDatabase
 
   /// eqm_species_gas[i] = true iff the i^th equilibrium species is a gas
   std::vector<bool> eqm_species_gas;
+
+  /// eqm_species_transported[i] = true iff the i^th eqm species is transported in reactive-transport sims
+  std::vector<bool> eqm_species_transported;
 
   /// all quantities have a charge (mineral charge = 0, gas charge = 0, oxide charge = 0)
   std::vector<Real> eqm_species_charge;
@@ -196,20 +276,66 @@ struct ModelGeochemicalDatabase
   /// kin_species_mineral[j] = true iff the j^th kinetic species is a mineral
   std::vector<bool> kin_species_mineral;
 
+  /// kin_species_transported[j] = true iff the j^th kinetic species is transported in reactive-transport sims
+  std::vector<bool> kin_species_transported;
+
   /// all kinetic quantities have a charge (mineral charge = 0)
   std::vector<Real> kin_species_charge;
 
-  /// all quantities have a molecular weight (g)
+  /// all quantities have a molecular weight (g/mol)
   std::vector<Real> kin_species_molecular_weight;
 
-  /// all quantities have a molecular volume (cm^3) (only nonzero for minerals, however)
+  /// all quantities have a molecular volume (cm^3/mol) (only nonzero for minerals, however)
   std::vector<Real> kin_species_molecular_volume;
+
+  /**
+   * kin_log10K(i, j) = log10(equilibrium constant for the i^th kinetic species at the j^th
+   * temperature point
+   */
+  DenseMatrix<Real> kin_log10K;
 
   /**
    * kin_stoichiometry(i, j) = stoichiometric coefficient for kinetic species "i" in terms of
    * the basis species "j"
    */
   DenseMatrix<Real> kin_stoichiometry;
+
+  /**
+   * rates given to kinetic species.  See the method addKineticRate for a detailed description. This
+   * quantity is organised in such a way that a solver can loop through kin_rate, calculting the
+   * rates and applying them to the kin_rate[i].kinetic_species_index species
+   */
+  std::vector<KineticRateDefinition> kin_rate;
+
+  /**
+   * Species that have been swapped out of the basis.  Every time a swap is performed on the
+   * ModelGeochemicalDatabase, the basis-index of the species removed from the basis is appended to
+   * this list
+   */
+  std::vector<unsigned> have_swapped_out_of_basis;
+
+  /**
+   * Species that have been swapped into the basis.  Every time a swap is performed on the
+   * ModelGeochemicalDatabase, the equilibrium-index of the species added to the basis is appended
+   * to this list
+   */
+  std::vector<unsigned> have_swapped_into_basis;
+
+  /**
+   * Swap matrix that allows expression in terms of the original basis.  When a swap is performed
+   * bulk_new = S^-1^T * bulk_old,
+   * where S is the swap matrix (and S^-1^T is the transposed inverse of S)
+   * Hence, upon multiple swaps (S_1 followed by S_2 followed by S_3, etc)
+   * bulk_new = S_n^-1^T * S_{n-1}^-1^T * ... * S_1^-1^T * bulk_original
+   * So
+   * bulk_original = (S_n * S_{n-1} * ... * S_1)^T * bulk_new
+   * swap_to_original_basis = S_n * S_{n-1} * ... * S_1
+   * swap_to_original_basis is initialized to  DenseMatrix<Real>(), ie, a zero-sized matrix, to
+   * reduce memory usage.  The first time a swap is performed, it is set to the swap matrix
+   * generated in the GeochemistrySpeciesSwapper, and every time a swap is performed on the
+   * ModelGeochemicalDatabase this is updated
+   */
+  DenseMatrix<Real> swap_to_original_basis;
 };
 
 /**
@@ -290,7 +416,7 @@ public:
    * @param redox_e The name of the free electron, eg e-.  For redox pairs that are in
    * disequilibrium to be correctly recorded, and hence their Nernst potentials to be computed
    * easily, the equilibrium reaction for redox_e must involve redox_ox, and the basis species must
-   * be chosen so that redox_e is an equilibrium species.
+   * be chosen so that redox_e is an equilibrium species according to the database reader
    */
   PertinentGeochemicalSystem(const GeochemicalDatabaseReader & db,
                              const std::vector<std::string> & basis_species,
@@ -304,6 +430,24 @@ public:
 
   /// Return a reference to the ModelGeochemicalDatabase structure
   const ModelGeochemicalDatabase & modelGeochemicalDatabase() const;
+
+  /**
+   * Adds a rate description for kinetic_species.  Note that a single kinetic species can have
+   * multiple rates prescribed to it (by calling this method multiple times): they are added
+   * together to give an overall rate.
+   */
+  void addKineticRate(const KineticRateUserDescription & description);
+
+  /**
+   * @param name species name
+   * @return the index of the species in the original basis
+   */
+  unsigned getIndexOfOriginalBasisSpecies(const std::string & name) const;
+
+  /**
+   * @return a vector of names of the original basis species
+   */
+  std::vector<std::string> originalBasisNames() const;
 
 private:
   /// The database
@@ -369,9 +513,21 @@ private:
   void buildBasis(const std::vector<std::string> & basis_species);
 
   /**
-   * using the minerals list, this method builds _mineral_index and _mineral_info
+   * using the minerals list, this method builds _mineral_index and _mineral_info, unless minerals =
+   * {"*"}, in which case buildAllMinerals is used instead
    */
   void buildMinerals(const std::vector<std::string> & minerals);
+
+  /**
+   * If minerals = {"*"} then populate _mineral_index and _mineral_info with all relevant minerals
+   * This is called in the constructor after buildSecondarySpecies and buildKineticMinerals because
+   * it adds to _mineral_index and _mineral_info all minerals that:
+   * - are not kinetic minerals (these have been identified by buildKineticMinerals) and
+   * - whose stoichiometry depends on the basis species specified in the constructor or on secondary
+   * species (which are redox couples, secondary species and surface species) that depend on these
+   * basis species.  These secondary species have already been identified by buildSecondarySpecies.
+   */
+  void buildAllMinerals(const std::vector<std::string> & minerals);
 
   /**
    * using the gas list, this method builds _gas_index and _gas_info
@@ -404,6 +560,12 @@ private:
   void buildSecondarySpecies();
 
   /**
+   * @return true if _redox_e appears as a secondary species in the database and that its
+   * stoichiometry can be expressed in terms of basis species
+   */
+  bool checkRedoxe();
+
+  /**
    * Check that all minerals in mineral_info have reactions that involve only the
    * basis_species or secondary_species.   Check that if a mineral in this list is also a
    * "sorbing mineral", its sorbing sites are present in the basis_species list
@@ -432,4 +594,13 @@ private:
    * Fully populate the ModelGeochemicalDatabase
    */
   void createModel();
+
+  /**
+   * Extract the stoichiometry and log10K for the _redox_e species.  This is called during
+   * createModel()
+   * @param redox_e_stoichiometry upon exit will contain the stoichiometry for the _redox_e species
+   * @param redox_e_log10K upon exit will contain the log10K info for the _redox_e species
+   */
+  void buildRedoxeInfo(std::vector<Real> & redox_e_stoichiometry,
+                       std::vector<Real> & redox_e_log10K);
 };

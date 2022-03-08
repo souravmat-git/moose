@@ -9,8 +9,6 @@
 
 #include "InternalSidePostprocessor.h"
 
-defineLegacyParams(InternalSidePostprocessor);
-
 InputParameters
 InternalSidePostprocessor::validParams()
 {
@@ -20,6 +18,6 @@ InternalSidePostprocessor::validParams()
 }
 
 InternalSidePostprocessor::InternalSidePostprocessor(const InputParameters & parameters)
-  : InternalSideUserObject(parameters), Postprocessor(parameters)
+  : InternalSideUserObject(parameters), Postprocessor(this)
 {
 }

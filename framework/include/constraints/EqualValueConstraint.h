@@ -24,4 +24,23 @@ public:
 
 protected:
   ADReal computeQpResidual(Moose::MortarType mortar_type) final;
+
+  /// The secondary face lower dimensional element (not the mortar element!) volume
+  const Real & _lower_secondary_volume;
+
+  /// The primary face lower dimensional element volume (not the mortar element!)
+  const Real & _lower_primary_volume;
+
+  /// The stabilization parameter
+  const Real _delta;
+
+  /// The diffusion coefficient on the secondary side
+  const ADMaterialProperty<Real> & _diff_secondary;
+
+  /// The diffusion coefficient on the primary side
+  const ADMaterialProperty<Real> & _diff_primary;
+
+  /// whether to perform stabilization. We have this parameter to save computational cost in the
+  /// unstabilized case
+  const bool _stabilize;
 };

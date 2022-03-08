@@ -332,7 +332,6 @@ ElementFragmentAlgorithm::reset()
   _new_nodes.clear();
   _child_elements.clear();
   _parent_elements.clear();
-  //  _merged_edge_map.clear();
   _crack_tip_elements.clear();
   _inverse_connectivity.clear();
 
@@ -343,11 +342,7 @@ ElementFragmentAlgorithm::reset()
     mit->second = NULL;
   }
   _permanent_nodes.clear();
-  //  for (mit = EmbeddedNodes.begin(); mit != EmbeddedNodes.end(); ++mit )
-  //  {
-  //    delete mit->second;
-  //    mit->second = NULL;
-  //  }
+
   for (mit = _temp_nodes.begin(); mit != _temp_nodes.end(); ++mit)
   {
     delete mit->second;
@@ -598,7 +593,7 @@ ElementFragmentAlgorithm::getElemByID(unsigned int id)
 unsigned int
 ElementFragmentAlgorithm::getElemIdByNodes(unsigned int * node_id)
 {
-  unsigned int elem_id = 99999;
+  unsigned int elem_id = std::numeric_limits<unsigned int>::max();
   std::map<unsigned int, EFAElement *>::iterator eit;
   for (eit = _elements.begin(); eit != _elements.end(); ++eit)
   {

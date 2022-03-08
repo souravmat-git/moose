@@ -68,23 +68,23 @@ public:
   /**
    * Method for linking control parameters of different names
    */
-  void addControllableParameterConnection(const MooseObjectParameterName & master,
-                                          const MooseObjectParameterName & slave,
+  void addControllableParameterConnection(const MooseObjectParameterName & primary,
+                                          const MooseObjectParameterName & secondary,
                                           bool error_on_empty = true);
 
   /**
    * Method for creating alias to an existing controllable parameters.
    *
    * @param alias The new name to serve as an alias.
-   * @param slave The name of the slave parameter to be aliased.
+   * @param secondary The name of the secondary parameter to be aliased.
    */
   void addControllableParameterAlias(const MooseObjectParameterName & alias,
-                                     const MooseObjectParameterName & slave);
+                                     const MooseObjectParameterName & secondary);
 
   /**
    * Method for creating alias for all shared controllable parameters between the two objects.
    */
-  void addControllableObjectAlias(const MooseObjectName & alias, const MooseObjectName & slave);
+  void addControllableObjectAlias(const MooseObjectName & alias, const MooseObjectName & secondary);
 
   /***
    * Helper method for printing controllable items.
@@ -97,6 +97,12 @@ public:
    */
   template <typename T>
   std::vector<T> getControllableParameterValues(const MooseObjectParameterName & input) const;
+
+  /**
+   * Return a vector of parameters names matching the supplied name.
+   */
+  std::vector<MooseObjectParameterName>
+  getControllableParameterNames(const MooseObjectParameterName & input) const;
 
 private:
   /// Storage for the InputParameters objects
@@ -122,8 +128,9 @@ private:
    * This method is private, because only the factories that are creating objects should be
    * able to call this method.
    */
-  InputParameters &
-  addInputParameters(const std::string & name, InputParameters & parameters, THREAD_ID tid = 0);
+  InputParameters & addInputParameters(const std::string & name,
+                                       const InputParameters & parameters,
+                                       THREAD_ID tid = 0);
 
   /**
    * Allows for the deletion and cleanup of an object while the simulation is running.
@@ -167,8 +174,8 @@ private:
 
   ///@{
   /// The factory is allowed to call addInputParameters and removeInputParameters.
-  friend MooseObjectPtr
-  Factory::create(const std::string &, const std::string &, InputParameters &, THREAD_ID, bool);
+  friend MooseObjectPtr Factory::create(
+      const std::string &, const std::string &, const InputParameters &, THREAD_ID, bool);
   friend void Factory::releaseSharedObjects(const MooseObject &, THREAD_ID);
   ///@}
 

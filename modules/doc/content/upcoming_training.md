@@ -1,5 +1,14 @@
-## Upcoming Training Events
+!alert! note title=Training and Events prefix=False center-title=True
 
-- [MOOSE Training Workshop (webinar), June 9 - 10, 2020 8:00am to 4:00pm MDT](https://attendee.gotowebinar.com/register/3351154618519053325)
+!style halign=center style=font-size:110%;font-weight:200;margin-bottom:10px;
+There are no upcoming MOOSE training or events, but please refer to the
+[discussion forum](https://github.com/idaholab/moose/discussions) and
+[announcement](https://groups.google.com/forum/#!forum/moose-announce) mailing list for
+information about future events.
 
-  After registering, you will receive a confirmation email containing information about joining the webinar. The schedule can be found [here](https://docs.google.com/document/d/1HtIUHOPcaZJR1fJPHdJaPugvntefAVNEX8IzDlDe8qI/edit?usp=sharing).
+!media https://www.youtube.com/embed/2tJwBsYaLaI
+
+!style halign=center style=font-weight:100;font-style:italic;
+MOOSE training webinar given on June 9--10, 2020.
+
+!alert-end!

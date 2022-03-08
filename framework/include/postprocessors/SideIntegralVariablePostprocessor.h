@@ -12,12 +12,6 @@
 #include "SideIntegralPostprocessor.h"
 #include "MooseVariableInterface.h"
 
-// Forward Declarations
-class SideIntegralVariablePostprocessor;
-
-template <>
-InputParameters validParams<SideIntegralVariablePostprocessor>();
-
 /**
  * This postprocessor computes a surface integral of the specified variable.
  *
@@ -39,4 +33,6 @@ protected:
   const VariableValue & _u;
   /// Holds the solution gradient at the current quadrature points
   const VariableGradient & _grad_u;
+  /// Whether this is acting on a finite volume variable
+  const bool _fv;
 };

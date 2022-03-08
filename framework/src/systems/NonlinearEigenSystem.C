@@ -21,15 +21,17 @@
 #include "TimeIntegrator.h"
 #include "SlepcSupport.h"
 #include "DGKernelBase.h"
-#include "ScalarKernel.h"
+#include "ScalarKernelBase.h"
+#include "MooseVariableScalar.h"
+#include "ResidualObject.h"
 
-#include "libmesh/eigen_system.h"
 #include "libmesh/libmesh_config.h"
 #include "libmesh/petsc_matrix.h"
 #include "libmesh/sparse_matrix.h"
+#include "libmesh/diagonal_matrix.h"
 #include "libmesh/petsc_shell_matrix.h"
 
-#if LIBMESH_HAVE_SLEPC
+#ifdef LIBMESH_HAVE_SLEPC
 
 namespace Moose
 {
@@ -50,9 +52,9 @@ assemble_matrix(EquationSystems & es, const std::string & system_name)
     // We need to do an unnecessary assembly,
     // if you use PETSc that is older than 3.13.
 #if PETSC_RELEASE_LESS_THAN(3, 13, 0)
-    if (eigen_system.matrix_B)
-      p->computeJacobianTag(*eigen_system.current_local_solution.get(),
-                            *eigen_system.matrix_B,
+    if (eigen_system.has_matrix_B())
+      p->computeJacobianTag(*eigen_system.current_local_solution,
+                            eigen_system.get_matrix_B(),
                             eigen_nl.eigenMatrixTag());
 #endif
     return;
@@ -63,8 +65,8 @@ assemble_matrix(EquationSystems & es, const std::string & system_name)
   // we only need to form a preconditioning matrix
   if (eigen_system.use_shell_matrices() && !eigen_system.use_shell_precond_matrix())
   {
-    p->computeJacobianTag(*eigen_system.current_local_solution.get(),
-                          *eigen_system.precond_matrix,
+    p->computeJacobianTag(*eigen_system.current_local_solution,
+                          eigen_system.get_precond_matrix(),
                           eigen_nl.precondMatrixTag());
     return;
   }
@@ -73,22 +75,22 @@ assemble_matrix(EquationSystems & es, const std::string & system_name)
   // we assemble A and B together
   if (eigen_system.generalized())
   {
-    p->computeJacobianAB(*eigen_system.current_local_solution.get(),
-                         *eigen_system.matrix_A,
-                         *eigen_system.matrix_B,
+    p->computeJacobianAB(*eigen_system.current_local_solution,
+                         eigen_system.get_matrix_A(),
+                         eigen_system.get_matrix_B(),
                          eigen_nl.nonEigenMatrixTag(),
                          eigen_nl.eigenMatrixTag());
 #if LIBMESH_HAVE_SLEPC
     if (p->negativeSignEigenKernel())
-      MatScale(static_cast<PetscMatrix<Number> &>(*eigen_system.matrix_B).mat(), -1.0);
+      MatScale(static_cast<PetscMatrix<Number> &>(eigen_system.get_matrix_B()).mat(), -1.0);
 #endif
     return;
   }
 
   // If it is a linear eigenvalue problem, we assemble matrix A
   {
-    p->computeJacobianTag(*eigen_system.current_local_solution.get(),
-                          *eigen_system.matrix_A,
+    p->computeJacobianTag(*eigen_system.current_local_solution,
+                          eigen_system.get_matrix_A(),
                           eigen_nl.nonEigenMatrixTag());
 
     return;
@@ -97,15 +99,28 @@ assemble_matrix(EquationSystems & es, const std::string & system_name)
 }
 
 NonlinearEigenSystem::NonlinearEigenSystem(EigenProblem & eigen_problem, const std::string & name)
-  : NonlinearSystemBase(
-        eigen_problem, eigen_problem.es().add_system<TransientEigenSystem>(name), name),
-    _transient_sys(eigen_problem.es().get_system<TransientEigenSystem>(name)),
+  : NonlinearSystemBase(eigen_problem, eigen_problem.es().add_system<EigenSystem>(name), name),
+    _eigen_sys(eigen_problem.es().get_system<EigenSystem>(name)),
     _eigen_problem(eigen_problem),
+    _solver_configuration(nullptr),
     _n_eigen_pairs_required(eigen_problem.getNEigenPairsRequired()),
     _work_rhs_vector_AX(addVector("work_rhs_vector_Ax", false, PARALLEL)),
-    _work_rhs_vector_BX(addVector("work_rhs_vector_Bx", false, PARALLEL))
+    _work_rhs_vector_BX(addVector("work_rhs_vector_Bx", false, PARALLEL)),
+    _precond_matrix_includes_eigen(false),
+    _preconditioner(nullptr)
 {
   sys().attach_assemble_function(Moose::assemble_matrix);
+
+  SlepcEigenSolver<Number> * solver =
+      cast_ptr<SlepcEigenSolver<Number> *>(_eigen_sys.eigen_solver.get());
+
+  if (!solver)
+    mooseError("A slepc eigen solver is required");
+
+  // setup of our class @SlepcSolverConfiguration
+  _solver_configuration = std::make_unique<SlepcEigenSolverConfiguration>(eigen_problem, *solver);
+
+  solver->set_solver_configuration(*_solver_configuration);
 
   _Ax_tag = eigen_problem.addVectorTag("Ax_tag");
 
@@ -115,10 +130,6 @@ NonlinearEigenSystem::NonlinearEigenSystem(EigenProblem & eigen_problem, const s
 
   _B_tag = eigen_problem.addMatrixTag("Eigen");
 
-  /// Forcefully init the default solution states to match those available in libMesh
-  /// Must be called here because it would call virtuals in the parent class
-  solutionState(_default_solution_states);
-
   // By default, _precond_tag and _A_tag will share the same
   // objects. If we want to include eigen contributions to
   // the preconditioning matrix, and then _precond_tag will
@@ -127,82 +138,45 @@ NonlinearEigenSystem::NonlinearEigenSystem(EigenProblem & eigen_problem, const s
 }
 
 void
-NonlinearEigenSystem::initialSetup()
+NonlinearEigenSystem::postAddResidualObject(ResidualObject & object)
 {
-  NonlinearSystemBase::initialSetup();
-  // DG kernels
-  addEigenTagToMooseObjects(_dg_kernels);
-  // Regular kernels
-  addEigenTagToMooseObjects(_kernels);
-  // Nodal BCs (we do not care about IBCs)
-  addEigenTagToMooseObjects(_nodal_bcs);
-  // Scalar kernels
-  addEigenTagToMooseObjects(_scalar_kernels);
-  // IntegratedBCs
-  addEigenTagToMooseObjects(_integrated_bcs);
-  // If the precond matrix needs to include eigen kernels,
-  // we assign precond tag to all objects except nodal BCs.
-  // Mathematically speaking, we can not add eigen nodal BCs
-  // since they will overwrite non-eigen nodal BCs contributions.
-  if (_precond_matrix_includes_eigen)
+  // If it is an eigen dirichlet boundary condition, we should skip it because their
+  // contributions should be zero. If we do not skip it, preconditioning matrix will
+  // be singular because boundary elements are zero.
+  if (_precond_matrix_includes_eigen && !dynamic_cast<EigenDirichletBC *>(&object) &&
+      !dynamic_cast<EigenArrayDirichletBC *>(&object))
+    object.useMatrixTag(_precond_tag);
+
+  auto & vtags = object.getVectorTags();
+  auto & mtags = object.getMatrixTags();
+  // If it is an eigen kernel, mark its variable as eigen
+  if (vtags.find(_Bx_tag) != vtags.end() || mtags.find(_B_tag) != mtags.end())
   {
-    // DG kernels
-    addPrecondTagToMooseObjects(_dg_kernels);
-    // Regular kernels
-    addPrecondTagToMooseObjects(_kernels);
-    // Scalar kernels
-    addPrecondTagToMooseObjects(_scalar_kernels);
-    // IntegratedBCs
-    addPrecondTagToMooseObjects(_integrated_bcs);
+    auto vname = object.variable().name();
+    if (hasScalarVariable(vname))
+      getScalarVariable(0, vname).eigen(true);
+    else
+      getVariable(0, vname).eigen(true);
   }
-}
 
-template <typename T>
-void
-NonlinearEigenSystem::addPrecondTagToMooseObjects(MooseObjectTagWarehouse<T> & warehouse)
-{
-  for (THREAD_ID tid = 0; tid < warehouse.numThreads(); tid++)
+  // If this is not an eigen kernel
+  // If there is no vector eigen tag and no matrix eigen tag,
+  // then we consider this as noneigen kernel
+  if (vtags.find(_Bx_tag) == vtags.end() && mtags.find(_B_tag) == mtags.end())
   {
-    // Get all objects out from the warehouse
-    auto & objects = warehouse.getObjects(tid);
-
-    // Assign precond tag to all objects
-    for (auto & object : objects)
-      object->useMatrixTag(_precond_tag);
+    // Noneigen Vector tag
+    object.useVectorTag(_Ax_tag);
+    // Noneigen Matrix tag
+    object.useMatrixTag(_A_tag);
+    // Noneigen Kernels
+    object.useMatrixTag(_precond_tag);
   }
-}
-
-template <typename T>
-void
-NonlinearEigenSystem::addEigenTagToMooseObjects(MooseObjectTagWarehouse<T> & warehouse)
-{
-  for (THREAD_ID tid = 0; tid < warehouse.numThreads(); tid++)
+  else
   {
-    auto & objects = warehouse.getObjects(tid);
-
-    for (auto & object : objects)
-    {
-      auto & vtags = object->getVectorTags();
-      // If this is not an eigen kernel
-      if (vtags.find(_Bx_tag) == vtags.end())
-      {
-        object->useVectorTag(_Ax_tag);
-        // Noneigen Kernels
-        object->useMatrixTag(_precond_tag);
-      }
-      else // also associate eigen matrix tag if this is a eigen kernel
-        object->useMatrixTag(_B_tag);
-
-      auto & mtags = object->getMatrixTags();
-      if (mtags.find(_B_tag) == mtags.end())
-      {
-        object->useMatrixTag(_A_tag);
-        // Noneigen Kernels
-        object->useMatrixTag(_precond_tag);
-      }
-      else
-        object->useVectorTag(_Bx_tag);
-    }
+    // Associate the eigen matrix tag and the vector tag
+    // if this is a eigen kernel
+    object.useMatrixTag(_B_tag);
+    object.useVectorTag(_Bx_tag);
   }
 }
 
@@ -215,14 +189,40 @@ NonlinearEigenSystem::solve()
   // Initialize the solution vector using a predictor and known values from nodal bcs
   setInitialSolution();
 
+  // Now that the initial solution has ben set, potentially perform a residual/Jacobian evaluation
+  // to determine variable scaling factors
+  if (_automatic_scaling)
+  {
+    if (_compute_scaling_once)
+    {
+      if (!_computed_scaling)
+      {
+        computeScaling();
+        _computed_scaling = true;
+      }
+    }
+    else
+      computeScaling();
+  }
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+  // We do not know a priori what variable a global degree of freedom corresponds to, so we need a
+  // map from global dof to scaling factor. We just use a ghosted NumericVector for that mapping
+  assembleScalingVector();
+#endif
+
 // In DEBUG mode, Libmesh will check the residual automatically. This may cause
 // an error because B does not need to assembly by default.
 // When PETSc is older than 3.13, we always need to do an extra assembly,
 // so we do not do "close" here
 #if DEBUG && !PETSC_RELEASE_LESS_THAN(3, 13, 0)
-  if (_eigen_problem.isGeneralizedEigenvalueProblem() && sys().matrix_B)
-    sys().matrix_B->close();
+  if (sys().has_matrix_B())
+    sys().get_matrix_B().close();
 #endif
+
+  // We apply initial guess for only nonlinear solver
+  if (_eigen_problem.isNonlinearEigenvalueSolver())
+    _eigen_sys.set_initial_space(solution());
+
   // Solve the transient problem if we have a time integrator; the
   // steady problem if not.
   if (_time_integrator)
@@ -253,43 +253,41 @@ NonlinearEigenSystem::solve()
 void
 NonlinearEigenSystem::attachSLEPcCallbacks()
 {
+  // Tell libmesh not close matrices before solve
+  _eigen_sys.get_eigen_solver().set_close_matrix_before_solve(false);
+
   // Matrix A
-  if (_transient_sys.matrix_A)
+  if (_eigen_sys.has_matrix_A())
   {
-    Mat mat = static_cast<PetscMatrix<Number> &>(*_transient_sys.matrix_A).mat();
+    Mat mat = static_cast<PetscMatrix<Number> &>(_eigen_sys.get_matrix_A()).mat();
 
     Moose::SlepcSupport::attachCallbacksToMat(_eigen_problem, mat, false);
-
-    // Tell libmesh not close matrices before solve
-    _transient_sys.eigen_solver->set_close_matrix_before_solve(false);
   }
 
   // Matrix B
-  if (_transient_sys.matrix_B)
+  if (_eigen_sys.has_matrix_B())
   {
-    Mat mat = static_cast<PetscMatrix<Number> &>(*_transient_sys.matrix_B).mat();
+    Mat mat = static_cast<PetscMatrix<Number> &>(_eigen_sys.get_matrix_B()).mat();
 
     Moose::SlepcSupport::attachCallbacksToMat(_eigen_problem, mat, true);
   }
 
   // Shell matrix A
-  if (_transient_sys.shell_matrix_A)
+  if (_eigen_sys.has_shell_matrix_A())
   {
-    Mat mat = static_cast<PetscShellMatrix<Number> &>(*_transient_sys.shell_matrix_A).mat();
+    Mat mat = static_cast<PetscShellMatrix<Number> &>(_eigen_sys.get_shell_matrix_A()).mat();
 
     // Attach callbacks for nonlinear eigenvalue solver
     Moose::SlepcSupport::attachCallbacksToMat(_eigen_problem, mat, false);
 
     // Set MatMult operations for shell
     Moose::SlepcSupport::setOperationsForShellMat(_eigen_problem, mat, false);
-
-    _transient_sys.eigen_solver->set_close_matrix_before_solve(false);
   }
 
   // Shell matrix B
-  if (_transient_sys.shell_matrix_B)
+  if (_eigen_sys.has_shell_matrix_B())
   {
-    Mat mat = static_cast<PetscShellMatrix<Number> &>(*_transient_sys.shell_matrix_B).mat();
+    Mat mat = static_cast<PetscShellMatrix<Number> &>(_eigen_sys.get_shell_matrix_B()).mat();
 
     Moose::SlepcSupport::attachCallbacksToMat(_eigen_problem, mat, true);
 
@@ -298,17 +296,17 @@ NonlinearEigenSystem::attachSLEPcCallbacks()
   }
 
   // Preconditioning matrix
-  if (_transient_sys.precond_matrix)
+  if (_eigen_sys.has_precond_matrix())
   {
-    Mat mat = static_cast<PetscMatrix<Number> &>(*_transient_sys.precond_matrix).mat();
+    Mat mat = static_cast<PetscMatrix<Number> &>(_eigen_sys.get_precond_matrix()).mat();
 
     Moose::SlepcSupport::attachCallbacksToMat(_eigen_problem, mat, true);
   }
 
   // Shell preconditioning matrix
-  if (_transient_sys.shell_precond_matrix)
+  if (_eigen_sys.has_shell_precond_matrix())
   {
-    Mat mat = static_cast<PetscShellMatrix<Number> &>(*_transient_sys.shell_precond_matrix).mat();
+    Mat mat = static_cast<PetscShellMatrix<Number> &>(_eigen_sys.get_shell_precond_matrix()).mat();
 
     Moose::SlepcSupport::attachCallbacksToMat(_eigen_problem, mat, true);
   }
@@ -329,7 +327,7 @@ NonlinearEigenSystem::setupFiniteDifferencedPreconditioner()
 bool
 NonlinearEigenSystem::converged()
 {
-  return _transient_sys.get_n_converged();
+  return _eigen_sys.get_n_converged();
 }
 
 unsigned int
@@ -362,6 +360,33 @@ NonlinearEigenSystem::nonlinearSolver()
 {
   mooseError("did not implement yet \n");
   return NULL;
+}
+
+SNES
+NonlinearEigenSystem::getSNES()
+{
+  EPS eps = getEPS();
+
+  if (_eigen_problem.isNonlinearEigenvalueSolver())
+  {
+    SNES snes = nullptr;
+    Moose::SlepcSupport::mooseSlepcEPSGetSNES(eps, &snes);
+    return snes;
+  }
+  else
+    mooseError("There is no SNES in linear eigen solver");
+}
+
+EPS
+NonlinearEigenSystem::getEPS()
+{
+  SlepcEigenSolver<Number> * solver =
+      cast_ptr<SlepcEigenSolver<Number> *>(&(*_eigen_sys.eigen_solver));
+
+  if (!solver)
+    mooseError("Unable to retrieve eigen solver");
+
+  return solver->eps();
 }
 
 void
@@ -408,16 +433,18 @@ NonlinearEigenSystem::getConvergedEigenvalue(dof_id_type n) const
   unsigned int n_converged_eigenvalues = getNumConvergedEigenvalues();
   if (n >= n_converged_eigenvalues)
     mooseError(n, " not in [0, ", n_converged_eigenvalues, ")");
-  return _transient_sys.get_eigenvalue(n);
+  return _eigen_sys.get_eigenvalue(n);
 }
 
 std::pair<Real, Real>
 NonlinearEigenSystem::getConvergedEigenpair(dof_id_type n) const
 {
   unsigned int n_converged_eigenvalues = getNumConvergedEigenvalues();
+
   if (n >= n_converged_eigenvalues)
     mooseError(n, " not in [0, ", n_converged_eigenvalues, ")");
-  return _transient_sys.get_eigenpair(n);
+
+  return _eigen_sys.get_eigenpair(n);
 }
 
 void
@@ -440,6 +467,36 @@ void
 NonlinearEigenSystem::turnOffJacobian()
 {
   // Let us do nothing at the current moment
+}
+
+void
+NonlinearEigenSystem::computeScalingJacobian()
+{
+  _eigen_problem.computeJacobianTag(*_current_solution, *_scaling_matrix, precondMatrixTag());
+}
+
+void
+NonlinearEigenSystem::computeScalingResidual()
+{
+  _eigen_problem.computeResidualTag(*_current_solution, RHS(), nonEigenVectorTag());
+}
+
+std::set<TagID>
+NonlinearEigenSystem::defaultVectorTags() const
+{
+  auto tags = NonlinearSystemBase::defaultVectorTags();
+  tags.insert(eigenVectorTag());
+  tags.insert(nonEigenVectorTag());
+  return tags;
+}
+
+std::set<TagID>
+NonlinearEigenSystem::defaultMatrixTags() const
+{
+  auto tags = NonlinearSystemBase::defaultMatrixTags();
+  tags.insert(eigenMatrixTag());
+  tags.insert(nonEigenMatrixTag());
+  return tags;
 }
 
 #else

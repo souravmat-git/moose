@@ -20,8 +20,6 @@
 
 registerMooseObject("MooseApp", GreaterThanLessThanPostprocessor);
 
-defineLegacyParams(GreaterThanLessThanPostprocessor);
-
 InputParameters
 GreaterThanLessThanPostprocessor::validParams()
 {
@@ -66,7 +64,7 @@ GreaterThanLessThanPostprocessor::initialize()
 void
 GreaterThanLessThanPostprocessor::execute()
 {
-  AllLocalDofIndicesThread aldit(_fe_problem.getNonlinearSystemBase().system(), {_var.name()});
+  AllLocalDofIndicesThread aldit(_fe_problem, {_var.name()});
 
   if (_subdomain_restricted)
   {
@@ -86,13 +84,13 @@ GreaterThanLessThanPostprocessor::execute()
 
   if (_comparator == "greater")
   {
-    for (auto dof : aldit._all_dof_indices)
+    for (auto dof : aldit.getDofIndices())
       if (solution(dof) > _value)
         ++_count;
   }
   else if (_comparator == "less")
   {
-    for (auto dof : aldit._all_dof_indices)
+    for (auto dof : aldit.getDofIndices())
       if (solution(dof) < _value)
         ++_count;
   }

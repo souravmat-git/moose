@@ -9,11 +9,13 @@ Extensions:
     MooseDocs.extensions.navigation:
         name: MOOSE rDG Module
         repo: https://github.com/idaholab/moose
-        home: /modules/rdg
+        home: /modules/rdg/index.md
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/modules/rdg
-        hide: !include framework/doc/hidden.yml
-        remove: !include framework/doc/remove.yml
+        remove:
+            framework: !include framework/doc/remove.yml
+        unregister:
+            framework: !include framework/doc/unregister.yml
         includes:
             - framework/include
             - modules/rdg/include
@@ -21,4 +23,11 @@ Extensions:
         shortcuts: !include framework/doc/globals.yml
     MooseDocs.extensions.acronym:
         acronyms: !include framework/doc/acronyms.yml
-    MooseDocs.extensions.sqa: disable
+    MooseDocs.extensions.template:
+        active: True
+    MooseDocs.extensions.sqa:
+        active: True
+        reports: !include modules/rdg/doc/sqa_reports.yml
+        categories:
+            framework: !include framework/doc/sqa_framework.yml
+            rdg: !include modules/rdg/doc/sqa_rdg.yml

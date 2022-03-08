@@ -25,8 +25,7 @@
 #include <unistd.h>
 
 registerMooseAction("MooseApp", CommonOutputAction, "common_output");
-
-defineLegacyParams(CommonOutputAction);
+registerMooseAction("MooseApp", CommonOutputAction, "add_output");
 
 InputParameters
 CommonOutputAction::validParams()
@@ -49,6 +48,10 @@ CommonOutputAction::validParams()
                         false,
                         "Output the vector postprocessors to a *.xml "
                         "file using the default XML output.");
+  params.addParam<bool>("json",
+                        false,
+                        "Output Reporter values to a *.json "
+                        "file using the default JSON output.");
   params.addParam<bool>(
       "vtk", false, "Output the results using the default settings for VTKOutput output");
   params.addParam<bool>(
@@ -113,12 +116,28 @@ CommonOutputAction::validParams()
   params.addParam<bool>(
       "perf_graph", false, "Enable printing of the performance graph to the screen (Console)");
 
+  params.addParam<bool>("perf_graph_live", true, "Enables printing of live progress messages");
+  params.addParam<Real>(
+      "perf_graph_live_time_limit", 5.0, "Time (in seconds) to wait before printing a message.");
+  params.addParam<unsigned int>(
+      "perf_graph_live_mem_limit", 100, "Memory (in MB) to cause a message to be printed.");
+
   params.addParam<bool>("print_mesh_changed_info",
                         false,
                         "When true, each time the mesh is changed the mesh information is printed");
   params.addParam<bool>("print_linear_residuals",
                         true,
                         "Enable printing of linear residuals to the screen (Console)");
+  params.addParam<bool>("print_nonlinear_converged_reason",
+                        true,
+                        "Enable/disable printing of the nonlinear solver convergence reason to the "
+                        "screen. This parameter only affects the output of the third-party solver "
+                        "(e.g. PETSc), not MOOSE itself.");
+  params.addParam<bool>("print_linear_converged_reason",
+                        true,
+                        "Enable/disable printing of the linear solver convergence reason to the "
+                        "screen. This parameter only affects the output of the third-party solver "
+                        "(e.g. PETSc), not MOOSE itself.");
 
   // Return object
   return params;
@@ -132,80 +151,109 @@ CommonOutputAction::CommonOutputAction(InputParameters params)
 void
 CommonOutputAction::act()
 {
-  // Store the common output parameters in the OutputWarehouse
-  _app.getOutputWarehouse().setCommonParameters(&_pars);
+  if (_current_task == "common_output")
+  {
+    // Store the common output parameters in the OutputWarehouse
+    _app.getOutputWarehouse().setCommonParameters(&_pars);
 
 // Create the actions for the short-cut methods
 #ifdef LIBMESH_HAVE_EXODUS_API
-  if (getParam<bool>("exodus"))
-    create("Exodus");
+    if (getParam<bool>("exodus"))
+      create("Exodus");
 #else
-  if (getParam<bool>("exodus"))
-    mooseWarning("Exodus output requested but not enabled through libMesh");
+    if (getParam<bool>("exodus"))
+      mooseWarning("Exodus output requested but not enabled through libMesh");
 #endif
 
 #ifdef LIBMESH_HAVE_NEMESIS_API
-  if (getParam<bool>("nemesis"))
-    create("Nemesis");
+    if (getParam<bool>("nemesis"))
+      create("Nemesis");
 #else
-  if (getParam<bool>("nemesis"))
-    mooseWarning("Nemesis output requested but not enabled through libMesh");
+    if (getParam<bool>("nemesis"))
+      mooseWarning("Nemesis output requested but not enabled through libMesh");
 #endif
 
-  // Only create a Console if screen output was not created
-  if (getParam<bool>("console") && !hasConsole())
-    create("Console");
-  else
-    _pars.set<bool>("console") = false;
+    // Only create a Console if screen output was not created
+    if (getParam<bool>("console") && !hasConsole())
+      create("Console");
+    else
+      _pars.set<bool>("console") = false;
 
-  if (getParam<bool>("csv"))
-    create("CSV");
+    if (getParam<bool>("csv"))
+      create("CSV");
 
-  if (getParam<bool>("xml"))
-    create("XMLOutput");
+    if (getParam<bool>("xml"))
+      create("XMLOutput");
+
+    if (getParam<bool>("json"))
+      create("JSON");
 
 #ifdef LIBMESH_HAVE_VTK
-  if (getParam<bool>("vtk"))
-    create("VTK");
+    if (getParam<bool>("vtk"))
+      create("VTK");
 #else
-  if (getParam<bool>("vtk"))
-    mooseWarning("VTK output requested but not enabled through libMesh");
+    if (getParam<bool>("vtk"))
+      mooseWarning("VTK output requested but not enabled through libMesh");
 #endif
 
-  if (getParam<bool>("xda"))
-    create("XDA");
+    if (getParam<bool>("xda"))
+      create("XDA");
 
-  if (getParam<bool>("xdr"))
-    create("XDR");
+    if (getParam<bool>("xdr"))
+      create("XDR");
 
-  if (getParam<bool>("checkpoint"))
-    create("Checkpoint");
+    if (getParam<bool>("checkpoint"))
+      create("Checkpoint");
 
-  if (getParam<bool>("gmv"))
-    create("GMV");
+    if (getParam<bool>("gmv"))
+      create("GMV");
 
-  if (getParam<bool>("tecplot"))
-    create("Tecplot");
+    if (getParam<bool>("tecplot"))
+      create("Tecplot");
 
-  if (getParam<bool>("gnuplot"))
-    create("Gnuplot");
+    if (getParam<bool>("gnuplot"))
+      create("Gnuplot");
 
-  if (getParam<bool>("solution_history"))
-    create("SolutionHistory");
+    if (getParam<bool>("solution_history"))
+      create("SolutionHistory");
 
-  if (getParam<bool>("dofmap"))
-    create("DOFMap");
+    if (getParam<bool>("dofmap"))
+      create("DOFMap");
 
-  if (getParam<bool>("controls") || _app.getParam<bool>("show_controls"))
-    create("ControlOutput");
+    if (getParam<bool>("controls") || _app.getParam<bool>("show_controls"))
+      create("ControlOutput");
 
-  if (!_app.getParam<bool>("no_timing") &&
-      (getParam<bool>("perf_graph") || getParam<bool>("print_perf_log") ||
-       _app.getParam<bool>("timing")))
-    create("PerfGraphOutput");
+    if (!_app.getParam<bool>("no_timing") &&
+        (getParam<bool>("perf_graph") || getParam<bool>("print_perf_log") ||
+         _app.getParam<bool>("timing")))
+      create("PerfGraphOutput");
 
-  if (!getParam<bool>("color"))
-    Moose::setColorConsole(false);
+    if (!_app.getParam<bool>("no_timing") && getParam<bool>("perf_graph_live"))
+      perfGraph().setLivePrintActive(true);
+    else
+      perfGraph().setLivePrintActive(false);
+
+    perfGraph().setLiveTimeLimit(getParam<Real>("perf_graph_live_time_limit"));
+    perfGraph().setLiveMemoryLimit(getParam<unsigned int>("perf_graph_live_mem_limit"));
+
+    if (!getParam<bool>("color"))
+      Moose::setColorConsole(false);
+  }
+  else if (_current_task == "add_output")
+  {
+    // More like remove output. This can't be done during the "common_output" task because the
+    // finite element problem is not yet constructed
+
+    if (!getParam<bool>("console") || (isParamValid("print_nonlinear_converged_reason") &&
+                                       !getParam<bool>("print_nonlinear_converged_reason")))
+      Moose::PetscSupport::disableNonlinearConvergedReason(*_problem);
+
+    if (!getParam<bool>("console") || (isParamValid("print_linear_converged_reason") &&
+                                       !getParam<bool>("print_linear_converged_reason")))
+      Moose::PetscSupport::disableLinearConvergedReason(*_problem);
+  }
+  else
+    mooseError("unrecognized task ", _current_task, " in CommonOutputAction.");
 }
 
 void

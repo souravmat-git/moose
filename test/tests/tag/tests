@@ -38,6 +38,15 @@
       detail = 'multiple numeric matrices simultaneously.'
     []
   []
+  [tag_vector_error]
+    type = 'RunException'
+    input = '2d_diffusion_tag_vector.i'
+    expect_err = 'The AuxVariable this AuxKernel is acting on has to have the same order and family '
+                 'as the variable \'v\''
+    cli_args = 'Mesh/square/second=true Variables/u/order=SECOND'
+    requirement = 'The system shall throw an error when the variable orders and families for the '
+                  'tagged and the auxiliary output variables do not match.'
+  []
 
   [systems]
     requirement = 'The system shall support filling in labeled or "tagged" vectors or matrices from:'
@@ -83,7 +92,7 @@
       input = 'tag_dirac_kernels.i'
       exodiff = 'tag_dirac_kernels_out.e'
 
-      detail = 'the Dirac kernel system, and'
+      detail = 'the Dirac kernel system,'
     []
 
     [test_tag_nodal_kernels]
@@ -91,7 +100,24 @@
       input = 'tag_nodal_kernels.i'
       exodiff = 'tag_nodal_kernels_out.e'
 
-      detail = 'the nodal kernel system.'
+      detail = 'the nodal kernel system, and'
     []
+
+    [test_eigen]
+      type = 'Exodiff'
+      input = 'eigen_tag.i'
+      exodiff = 'eigen_tag_out.e'
+      slepc_version = '>=3.8.0'
+      detail = 'the eigen system.'
+    []
+  []
+
+  [controls-tagging]
+    type = 'Exodiff'
+    input = 'controls-tagging.i'
+    exodiff = 'controls-tagging_out.e'
+    requirement = 'Cached Active object state will be maintained correctly even when objects\' '
+                  'active state changes during runtime.'
+    issues = '#15515'
   []
 []

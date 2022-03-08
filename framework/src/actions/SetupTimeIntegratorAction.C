@@ -13,12 +13,11 @@
 
 registerMooseAction("MooseApp", SetupTimeIntegratorAction, "setup_time_integrator");
 
-defineLegacyParams(SetupTimeIntegratorAction);
-
 InputParameters
 SetupTimeIntegratorAction::validParams()
 {
   InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a TimeIntegrator object to the simulation.");
   return params;
 }
 

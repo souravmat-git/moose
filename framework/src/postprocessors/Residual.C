@@ -15,18 +15,13 @@
 
 registerMooseObject("MooseApp", Residual);
 
-defineLegacyParams(Residual);
-
 InputParameters
 Residual::validParams()
 {
-  MooseEnum residual_types("FINAL INITIAL_BEFORE_PRESET INITIAL_AFTER_PRESET", "FINAL");
-
   InputParameters params = GeneralPostprocessor::validParams();
-  params.addParam<MooseEnum>("residual_type",
-                             residual_types,
-                             "Type of residual to be reported.  Choices are: " +
-                                 residual_types.getRawNames());
+  params.addClassDescription("Report the non-linear residual.");
+  MooseEnum residual_types("FINAL INITIAL_BEFORE_PRESET INITIAL_AFTER_PRESET", "FINAL");
+  params.addParam<MooseEnum>("residual_type", residual_types, "Type of residual to be reported.");
   return params;
 }
 

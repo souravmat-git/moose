@@ -42,10 +42,15 @@
     poissons_ratio = 0.3
   [../]
   [./stress]
-    type = ADComputeMultiplePorousInelasticStress
+    type = ADComputeMultipleInelasticStress
     inelastic_models = 'one two'
-    initial_porosity = 0.1
     outputs = all
+  [../]
+  [./porosity]
+    type = ADPorosityFromStrain
+    initial_porosity = 0.1
+    inelastic_strain = 'combined_inelastic_strain'
+    outputs = 'all'
   [../]
 
   [./one]
@@ -65,7 +70,7 @@
     relative_tolerance = 1e-11
   [../]
   [./coef]
-    type = ParsedMaterial
+    type = ADParsedMaterial
     f_name = coef
     # Example of creep power law
     function = '0.5e-18 * exp(-4e4 / 1.987 / 1200)'

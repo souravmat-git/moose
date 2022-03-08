@@ -29,22 +29,15 @@ class FunctionParserBase
 #endif
 
 #include <tuple>
+#include <unordered_map>
 
 // Forward declarations
 class Action;
 class InputParameters;
-class MooseApp;
 class MooseEnum;
 class MooseObject;
 class MultiMooseEnum;
 class Problem;
-
-/**
- * This is the templated validParams() function that every
- * MooseObject-derived class is required to specialize.
- */
-template <class T>
-InputParameters validParams();
 
 /**
  * The main MOOSE class responsible for handling user-defined
@@ -97,6 +90,20 @@ public:
    */
   template <typename T>
   T & set(const std::string & name, bool quiet_mode = false);
+
+  /**
+   * Given a series of parameters names and values, sets each name to
+   * the corresponding value.  Any number of name, value pairs can be
+   * supplied.
+   *
+   * Note that each \p value must be of the correct type for the
+   * parameter of that name, not merely of a type convertible to the
+   * correct type.
+   *
+   * @param name The name of the first parameter to set
+   */
+  template <typename T, typename... Ts>
+  void setParameters(const std::string & name, const T & value, Ts... extra_input_parameters);
 
   /**
    * Runs a range on the supplied parameter if it exists and throws an error if that check fails.
@@ -308,6 +315,17 @@ public:
   void addCoupledVar(const std::string & name, const std::string & doc_string);
 
   /**
+   * This method adds a deprecated coupled variable name pair.  The parser will look for variable
+   * name pair in the input file and can return a reference to the storage location
+   * for the coupled variable if found. The doc string for the deprecated variable will be
+   * constructed from the doc string for the new variable. A deprecation message will also be
+   * automatically generated
+   */
+  void addDeprecatedCoupledVar(const std::string & old_name,
+                               const std::string & new_name,
+                               const std::string & removal_date = "");
+
+  /**
    * This method adds a coupled variable name pair.  The parser will look for variable
    * name pair in the input file and can return a reference to the storage location
    * for the coupled variable if found
@@ -423,7 +441,7 @@ public:
   /**
    * Prints the type of the requested parameter by name
    */
-  std::string type(const std::string & name);
+  std::string type(const std::string & name) const;
 
   /**
    * Returns a Boolean indicating whether the specified parameter is private or not
@@ -571,6 +589,14 @@ public:
   const std::set<std::string> & getCoupledVariableParamNames() const { return _coupled_vars; }
 
   /**
+   * Return the new to deprecated variable name map
+   */
+  const std::unordered_map<std::string, std::string> & getNewToDeprecatedVarMap() const
+  {
+    return _new_to_deprecated_coupled_vars;
+  }
+
+  /**
    * Return whether or not the coupled variable exists
    * @param coupling_name The name of the coupled variable to test for
    * @return True if the variable exists in the coupled variables for this InputParameters object
@@ -612,35 +638,6 @@ public:
    * Returns the auto build vectors for all parameters.
    */
   std::map<std::string, std::pair<std::string, std::string>> getAutoBuildVectors() const;
-
-  /**
-   * Get the default value for a postprocessor added with addPostprocessor
-   * @param name The name of the postprocessor
-   * @param suppress_error If true, the error check is suppressed
-   * @param index The index in the default postprocessor vector
-   * @return The default value for the postprocessor
-   */
-  const PostprocessorValue & getDefaultPostprocessorValue(const std::string & name,
-                                                          bool suppress_error = false,
-                                                          unsigned int index = 0) const;
-
-  /**
-   * Set the default value for a postprocessor added with addPostprocessor
-   * @param name The name of the postprocessor
-   * @value value The value of the postprocessor default to set
-   * @param index The index in the default postprocessor vector
-   */
-  void setDefaultPostprocessorValue(const std::string & name,
-                                    const PostprocessorValue & value,
-                                    unsigned int index = 0);
-
-  /**
-   * Returns true if a default PostprocessorValue is defined
-   * @param name The name of the postprocessor
-   * @param index The index in the default postprocessor vector
-   * @return True if a default value exists
-   */
-  bool hasDefaultPostprocessorValue(const std::string & name, unsigned int index = 0) const;
 
   // BEGIN APPLY PARAMETER METHODS
   /**
@@ -739,6 +736,19 @@ public:
                                                const std::vector<T> * the_type);
   ///@}
 
+  using Parameters::get;
+
+  /// Combine two vector parameters into a single vector of pairs
+  template <typename R1,
+            typename R2,
+            typename V1 = typename std::conditional<std::is_same<R1, MooseEnumItem>::value,
+                                                    MultiMooseEnum,
+                                                    std::vector<R1>>::type,
+            typename V2 = typename std::conditional<std::is_same<R2, MooseEnumItem>::value,
+                                                    MultiMooseEnum,
+                                                    std::vector<R2>>::type>
+  std::vector<std::pair<R1, R2>> get(const std::string & param1, const std::string & param2) const;
+
   /**
    * Return list of controllable parameters
    */
@@ -803,6 +813,9 @@ public:
   std::string & paramFullpath(const std::string & param) { return at(param)._param_fullpath; }
   ///@}
 
+  /// generate error message prefix with parameter name and location (if available)
+  std::string errorPrefix(const std::string & param) const;
+
   /**
    * Get/set a string representing the raw, unmodified token text for the given param.  This is
    * usually only set/useable for file-path type parameters.
@@ -823,18 +836,45 @@ public:
   bool shouldIgnore(const std::string & name);
 
   /**
-   * Getter for the _vector_of_postprocessors flag in parameters
-   *
-   * @param pp_name The name of the postprocessor parameter
+   * @returns True if the parameter with name \p name is of type T.
    */
-  bool isSinglePostprocessor(const std::string & pp_name) const
-  {
-    return !_params.find(pp_name)->second._vector_of_postprocessors;
-  }
+  template <typename T>
+  bool isType(const std::string & name) const;
+
+  /**
+   * @returns True if these parameters were constructed using the legacy method.
+   **/
+  bool fromLegacyConstruction() const { return _from_legacy_construction; }
 
 private:
   // Private constructor so that InputParameters can only be created in certain places.
   InputParameters();
+
+  /**
+   * Method to terminate the recursive setParameters definition
+   */
+  void setParameters() {}
+
+  /**
+   * Helper that uses overloading to distinguish adding commandline parameters of
+   * a scalar and a vector kind. Vector parameters are options that may appear multiple
+   * times on the command line (like -i).
+   */
+  template <typename T>
+  void addCommandLineParamHelper(const std::string & name,
+                                 const std::string & syntax,
+                                 const std::string & doc_string,
+                                 T *);
+  template <typename T>
+  void addCommandLineParamHelper(const std::string & name,
+                                 const std::string & syntax,
+                                 const std::string & doc_string,
+                                 std::vector<T> *);
+
+  /**
+   * Private method for setting deprecated coupled variable documentation strings
+   */
+  void setDeprecatedVarDocString(const std::string & new_name, const std::string & doc_string);
 
   struct Metadata
   {
@@ -861,10 +901,6 @@ private:
     bool _have_coupled_default = false;
     /// The default value for optionally coupled variables
     std::vector<Real> _coupled_default = {0};
-    /// are pps provided as single pp or as vector of pps
-    bool _vector_of_postprocessors = false;
-    std::vector<bool> _have_default_postprocessor_val = {false};
-    std::vector<PostprocessorValue> _default_postprocessor_val = {0};
     /// True if a parameters value was set by addParam, and not set again.
     bool _set_by_add_param = false;
     /// The reserved option names for a parameter
@@ -921,24 +957,6 @@ private:
   template <typename T, typename S>
   void setParamHelper(const std::string & name, T & l_value, const S & r_value);
 
-  /**
-   * Reserve space for default postprocessor values
-   * @param name The name of the postprocessor
-   * @param size Number of entries required in default p
-   */
-  void reserveDefaultPostprocessorValueStorage(const std::string & name, unsigned int size);
-
-  /**
-   * Setter for the _vector_of_postprocessors flag in parameters
-   *
-   * @param pp_name The name of the postprocessor parameter
-   * @param b value that _vector_of_postprocessors is set to
-   */
-  void setVectorOfPostprocessors(const std::string & pp_name, bool b)
-  {
-    _params[pp_name]._vector_of_postprocessors = b;
-  }
-
   /// original location of input block (i.e. filename,linenum) - used for nice error messages.
   std::string _block_location;
 
@@ -983,10 +1001,20 @@ private:
   /// A flag for toggling the error message in the copy constructor.
   bool _allow_copy;
 
+  /// Whether or not these parameters were constructed using legacy contruction (remove with #19440)
+  bool _from_legacy_construction;
+
+  /// A map from deprecated coupled variable names to the new blessed name
+  std::unordered_map<std::string, std::string> _new_to_deprecated_coupled_vars;
+
   // These are the only objects allowed to _create_ InputParameters
   friend InputParameters emptyInputParameters();
   friend class InputParameterWarehouse;
   friend class Parser;
+
+  // For setting _from_legacy_construction (remove with #19440)
+  template <typename T>
+  friend InputParameters validParams();
 };
 
 template <typename T>
@@ -1014,6 +1042,16 @@ InputParameters::set(const std::string & name, bool quiet_mode)
   setHelper<T>(name);
 
   return cast_ptr<Parameter<T> *>(_values[name])->set();
+}
+
+template <typename T, typename... Ts>
+void
+InputParameters::setParameters(const std::string & name,
+                               const T & value,
+                               Ts... extra_input_parameters)
+{
+  this->set<T>(name) = value;
+  this->setParameters(extra_input_parameters...);
 }
 
 template <typename T, typename UP_T>
@@ -1364,7 +1402,7 @@ template <typename T>
 void
 InputParameters::checkConsistentType(const std::string & name) const
 {
-  // Do we have a paremeter with the same name but a different type?
+  // Do we have a parameter with the same name but a different type?
   InputParameters::const_iterator it = _values.find(name);
   if (it != _values.end() && dynamic_cast<const Parameter<T> *>(it->second) == NULL)
     mooseError("Attempting to set parameter \"",
@@ -1385,6 +1423,7 @@ InputParameters::suppressParameter(const std::string & name)
 
   _params[name]._required = false;
   _params[name]._is_private = true;
+  _params[name]._controllable = false;
 }
 
 template <typename T>
@@ -1523,8 +1562,16 @@ template <>
 void InputParameters::setParamHelper<MaterialPropertyName, int>(const std::string & /*name*/,
                                                                 MaterialPropertyName & l_value,
                                                                 const int & r_value);
+
 template <>
-void InputParameters::setHelper<std::vector<PostprocessorName>>(const std::string & name);
+void InputParameters::setParamHelper<MooseFunctorName, Real>(const std::string & /*name*/,
+                                                             MooseFunctorName & l_value,
+                                                             const Real & r_value);
+
+template <>
+void InputParameters::setParamHelper<MooseFunctorName, int>(const std::string & /*name*/,
+                                                            MooseFunctorName & l_value,
+                                                            const int & r_value);
 
 template <typename T>
 const T &
@@ -1558,7 +1605,49 @@ InputParameters::getParamHelper(const std::string & name,
   return pars.get<std::vector<T>>(name);
 }
 
+template <typename R1, typename R2, typename V1, typename V2>
+std::vector<std::pair<R1, R2>>
+InputParameters::get(const std::string & param1, const std::string & param2) const
+{
+  const auto & v1 = get<V1>(param1);
+  const auto & v2 = get<V2>(param2);
+
+  auto controllable = getControllableParameters();
+  if (controllable.count(param1) || controllable.count(param2))
+    mooseError(errorPrefix(param1),
+               " and/or ",
+               errorPrefix(param2) +
+                   " are controllable parameters and cannot be retireved using "
+                   "the MooseObject::getParam/InputParameters::get methods for pairs");
+
+  if (v1.size() != v2.size())
+    mooseError("Vector parameters ",
+               errorPrefix(param1),
+               "(size: ",
+               v1.size(),
+               ") and " + errorPrefix(param2),
+               "(size: ",
+               v2.size(),
+               ") are of different lengths \n");
+
+  std::vector<std::pair<R1, R2>> parameter_pairs;
+  auto i1 = v1.begin();
+  auto i2 = v2.begin();
+  for (; i1 != v1.end() && i2 != v2.end(); ++i1, ++i2)
+    parameter_pairs.emplace_back(std::make_pair(*i1, *i2));
+  return parameter_pairs;
+}
+
 InputParameters emptyInputParameters();
+
+template <typename T>
+bool
+InputParameters::isType(const std::string & name) const
+{
+  if (!_params.count(name))
+    mooseError("Parameter \"", name, "\" is not valid.");
+  return have_parameter<T>(name);
+}
 
 template <class T>
 InputParameters
@@ -1567,9 +1656,35 @@ validParams()
   // If users forgot to make their (old) validParams, they screwed up and
   // should get an error - so it is okay for us to try to call the new
   // validParams static function - which will error if they didn't implement
-  // the new function.  We can't have the old static assert that use to be
-  // here because then the sfinae for toggling between old and new-style
-  // templating will always see this function and call it even if an object
-  // has *only* the new style validParams.
-  return T::validParams();
+  // the new function
+  auto params = T::validParams();
+
+  // If calling the static member method worked, we didn't build these parameters
+  // using the legacy method. Therefore, we won't throw an error for this object
+  // in CheckLegacyParamsAction. This should be removed with the closure of #19439.
+  params._from_legacy_construction = false;
+
+  return params;
+}
+
+namespace moose
+{
+namespace internal
+{
+/**
+ * Calls the valid parameter method for the object of type T.
+ *
+ * This isn't necessary anymore, but is hanging around until we finally
+ * get rid of all mention of the legacy parameter construction. Once
+ * #19439 is closed, we can replace
+ * moose::internal::callValidParams<T>() -> T::validParams(), and we
+ * should return T::validParams() here instead.
+ */
+template <typename T>
+InputParameters
+callValidParams()
+{
+  return validParams<T>();
+}
+}
 }

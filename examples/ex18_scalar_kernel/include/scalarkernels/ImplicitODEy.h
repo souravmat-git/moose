@@ -12,22 +12,6 @@
 #include "ODEKernel.h"
 
 /**
- * The forward declaration is so that we can declare the validParams function
- * before we actually define the class... that way the definition isn't lost
- * at the bottom of the file.
- */
-
-// Forward Declarations
-class ImplicitODEy;
-
-/**
- * validParams returns the parameters that this Kernel accepts / needs
- * The actual body of the function MUST be in the .C file.
- */
-template <>
-InputParameters validParams<ImplicitODEy>();
-
-/**
  * Kernel that implements the ODE for y-variable
  *
  * ODE: y' = 4 * x + y
@@ -39,6 +23,12 @@ public:
    * Constructor
    */
   ImplicitODEy(const InputParameters & parameters);
+
+  /**
+   * validParams returns the parameters that this Kernel accepts / needs
+   * The actual body of the function MUST be in the .C file.
+   */
+  static InputParameters validParams();
 
 protected:
   /**
@@ -61,16 +51,15 @@ protected:
    * This is essentially the partial derivative of the residual with respect to
    * the variable that is coupled into this kernel.
    */
-  virtual Real computeQpOffDiagJacobian(unsigned int jvar) override;
+  virtual Real computeQpOffDiagJacobianScalar(unsigned int jvar) override;
 
   /**
    * Needed for computing off-diagonal terms in Jacobian
    */
-  unsigned int _x_var;
+  const unsigned int _x_var;
 
   /**
    * Coupled scalar variable values
    */
   const VariableValue & _x;
 };
-

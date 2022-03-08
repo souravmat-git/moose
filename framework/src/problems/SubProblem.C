@@ -17,12 +17,12 @@
 #include "MooseArray.h"
 #include "SystemBase.h"
 #include "Assembly.h"
+#include "MooseObjectName.h"
+#include "RelationshipManager.h"
 
 #include "libmesh/equation_systems.h"
 #include "libmesh/system.h"
 #include "libmesh/dof_map.h"
-
-defineLegacyParams(SubProblem);
 
 InputParameters
 SubProblem::validParams()
@@ -46,9 +46,9 @@ SubProblem::SubProblem(const InputParameters & parameters)
     _nonlocal_cm(),
     _requires_nonlocal_coupling(false),
     _default_ghosting(getParam<bool>("default_ghosting")),
-    _rz_coord_axis(1), // default to RZ rotation around y-axis
     _currently_computing_jacobian(false),
     _computing_nonlinear_residual(false),
+    _currently_computing_residual(false),
     _safe_access_tagged_matrices(false),
     _safe_access_tagged_vectors(false),
     _have_ad_objects(false),
@@ -63,6 +63,8 @@ SubProblem::SubProblem(const InputParameters & parameters)
   _active_fe_var_coupleable_vector_tags.resize(n_threads);
   _active_sc_var_coupleable_matrix_tags.resize(n_threads);
   _active_sc_var_coupleable_vector_tags.resize(n_threads);
+
+  _functors.resize(n_threads);
 }
 
 SubProblem::~SubProblem() {}
@@ -164,7 +166,12 @@ SubProblem::getVectorTagID(const TagName & tag_name) const
   if (search != _vector_tags_name_map.end())
     return search->second;
 
-  mooseError("Vector tag '", tag_name_upper, "' does not exist");
+  std::string message =
+      tag_name_upper == "TIME"
+          ? ".\n\nThis may occur if "
+            "you have a TimeKernel in your problem but did not specify a transient executioner."
+          : "";
+  mooseError("Vector tag '", tag_name_upper, "' does not exist", message);
 }
 
 TagName
@@ -389,31 +396,6 @@ SubProblem::clearActiveElementalMooseVariables(THREAD_ID tid)
   _active_elemental_moose_variables[tid].clear();
 }
 
-void
-SubProblem::setActiveMaterialProperties(const std::set<unsigned int> & mat_prop_ids, THREAD_ID tid)
-{
-  if (!mat_prop_ids.empty())
-    _active_material_property_ids[tid] = mat_prop_ids;
-}
-
-const std::set<unsigned int> &
-SubProblem::getActiveMaterialProperties(THREAD_ID tid) const
-{
-  return _active_material_property_ids[tid];
-}
-
-bool
-SubProblem::hasActiveMaterialProperties(THREAD_ID tid) const
-{
-  return !_active_material_property_ids[tid].empty();
-}
-
-void
-SubProblem::clearActiveMaterialProperties(THREAD_ID tid)
-{
-  _active_material_property_ids[tid].clear();
-}
-
 std::set<SubdomainID>
 SubProblem::getMaterialPropertyBlocks(const std::string & prop_name)
 {
@@ -578,6 +560,8 @@ SubProblem::checkBlockMatProps()
   // Variable for storing all available blocks/boundaries from the mesh
   std::set<SubdomainID> all_ids(mesh().meshSubdomains());
 
+  std::stringstream errors;
+
   // Loop through the properties to check
   for (const auto & check_it : _map_block_material_props_check)
   {
@@ -607,16 +591,15 @@ SubProblem::checkBlockMatProps()
           std::string check_name = restrictionSubdomainCheckName(id);
           if (check_name.empty())
             check_name = std::to_string(id);
-          mooseError("Material property '",
-                     prop_it.second,
-                     "', requested by '",
-                     prop_it.first,
-                     "' is not defined on block ",
-                     check_name);
+          errors << "Material property '" << prop_it.second << "', requested by '" << prop_it.first
+                 << "' is not defined on block " << check_name << "\n";
         }
       }
     }
   }
+
+  if (!errors.str().empty())
+    mooseError(errors.str());
 }
 
 void
@@ -627,6 +610,8 @@ SubProblem::checkBoundaryMatProps()
 
   // Variable for storing all available blocks/boundaries from the mesh
   std::set<BoundaryID> all_ids(mesh().getBoundaryIDs());
+
+  std::stringstream errors;
 
   // Loop through the properties to check
   for (const auto & check_it : _map_boundary_material_props_check)
@@ -657,16 +642,15 @@ SubProblem::checkBoundaryMatProps()
           std::string check_name = restrictionBoundaryCheckName(id);
           if (check_name.empty())
             check_name = std::to_string(id);
-          mooseError("Material property '",
-                     prop_it.second,
-                     "', requested by '",
-                     prop_it.first,
-                     "' is not defined on boundary ",
-                     check_name);
+          errors << "Material property '" << prop_it.second << "', requested by '" << prop_it.first
+                 << "' is not defined on boundary " << check_name << "\n";
         }
       }
     }
   }
+
+  if (!errors.str().empty())
+    mooseError(errors.str());
 }
 
 void
@@ -679,6 +663,18 @@ bool
 SubProblem::isMatPropRequested(const std::string & prop_name) const
 {
   return _material_property_requested.find(prop_name) != _material_property_requested.end();
+}
+
+void
+SubProblem::addConsumedPropertyName(const MooseObjectName & obj_name, const std::string & prop_name)
+{
+  _consumed_material_properties[obj_name].insert(prop_name);
+}
+
+const std::map<MooseObjectName, std::set<std::string>> &
+SubProblem::getConsumedPropertyMap() const
+{
+  return _consumed_material_properties;
 }
 
 DiracKernelInfo &
@@ -737,10 +733,7 @@ SubProblem::setCurrentBoundaryID(BoundaryID bid, THREAD_ID tid)
 unsigned int
 SubProblem::getAxisymmetricRadialCoord() const
 {
-  if (_rz_coord_axis == 0)
-    return 1; // if the rotation axis is x (0), then the radial direction is y (1)
-  else
-    return 0; // otherwise the radial direction is assumed to be x, i.e., the rotation axis is y
+  return mesh().getAxisymmetricRadialCoord();
 }
 
 MooseVariableFEBase &
@@ -748,8 +741,8 @@ SubProblem::getVariableHelper(THREAD_ID tid,
                               const std::string & var_name,
                               Moose::VarKindType expected_var_type,
                               Moose::VarFieldType expected_var_field_type,
-                              SystemBase & nl,
-                              SystemBase & aux)
+                              const SystemBase & nl,
+                              const SystemBase & aux) const
 {
   // Eventual return value
   MooseVariableFEBase * var = nullptr;
@@ -887,19 +880,96 @@ SubProblem::reinitLowerDElem(const Elem * elem,
 }
 
 void
+SubProblem::reinitNeighborLowerDElem(const Elem * elem, THREAD_ID tid)
+{
+  assembly(tid).reinitNeighborLowerDElem(elem);
+}
+
+void
 SubProblem::reinitMortarElem(const Elem * elem, THREAD_ID tid)
 {
   assembly(tid).reinitMortarElem(elem);
 }
 
 void
+SubProblem::cloneAlgebraicGhostingFunctor(GhostingFunctor & algebraic_gf, bool to_mesh)
+{
+  EquationSystems & eq = es();
+  const auto n_sys = eq.n_systems();
+
+  auto pr = _root_alg_gf_to_sys_clones.emplace(
+      &algebraic_gf, std::vector<std::shared_ptr<GhostingFunctor>>(n_sys - 1));
+  mooseAssert(pr.second, "We are adding a duplicate algebraic ghosting functor");
+  auto & clones_vec = pr.first->second;
+
+  for (MooseIndex(n_sys) i = 1; i < n_sys; ++i)
+  {
+    DofMap & dof_map = eq.get_system(i).get_dof_map();
+    std::shared_ptr<GhostingFunctor> clone_alg_gf = algebraic_gf.clone();
+    std::dynamic_pointer_cast<RelationshipManager>(clone_alg_gf)
+        ->init(*algebraic_gf.get_mesh(), &dof_map);
+    dof_map.add_algebraic_ghosting_functor(clone_alg_gf, to_mesh);
+    clones_vec[i - 1] = clone_alg_gf;
+  }
+}
+
+void
 SubProblem::addAlgebraicGhostingFunctor(GhostingFunctor & algebraic_gf, bool to_mesh)
 {
   EquationSystems & eq = es();
-  auto n_sys = eq.n_systems();
+  const auto n_sys = eq.n_systems();
+  if (!n_sys)
+    return;
 
-  for (MooseIndex(n_sys) i = 0; i < n_sys; ++i)
-    eq.get_system(i).get_dof_map().add_algebraic_ghosting_functor(algebraic_gf, to_mesh);
+  eq.get_system(0).get_dof_map().add_algebraic_ghosting_functor(algebraic_gf, to_mesh);
+  cloneAlgebraicGhostingFunctor(algebraic_gf, to_mesh);
+}
+
+void
+SubProblem::addAlgebraicGhostingFunctor(std::shared_ptr<GhostingFunctor> algebraic_gf, bool to_mesh)
+{
+  EquationSystems & eq = es();
+  const auto n_sys = eq.n_systems();
+  if (!n_sys)
+    return;
+
+  eq.get_system(0).get_dof_map().add_algebraic_ghosting_functor(algebraic_gf, to_mesh);
+  cloneAlgebraicGhostingFunctor(*algebraic_gf, to_mesh);
+}
+
+void
+SubProblem::removeAlgebraicGhostingFunctor(GhostingFunctor & algebraic_gf)
+{
+  EquationSystems & eq = es();
+  const auto n_sys = eq.n_systems();
+
+#ifndef NDEBUG
+  const DofMap & nl_dof_map = eq.get_system(0).get_dof_map();
+  const bool found_in_root_sys =
+      std::find(nl_dof_map.algebraic_ghosting_functors_begin(),
+                nl_dof_map.algebraic_ghosting_functors_end(),
+                &algebraic_gf) != nl_dof_map.algebraic_ghosting_functors_end();
+  const bool found_in_our_map =
+      _root_alg_gf_to_sys_clones.find(&algebraic_gf) != _root_alg_gf_to_sys_clones.end();
+  mooseAssert(found_in_root_sys == found_in_our_map,
+              "If the ghosting functor exists in the root DofMap, then we need to have a key for "
+              "it in our gf to clones map");
+#endif
+
+  eq.get_system(0).get_dof_map().remove_algebraic_ghosting_functor(algebraic_gf);
+
+  auto it = _root_alg_gf_to_sys_clones.find(&algebraic_gf);
+  if (it == _root_alg_gf_to_sys_clones.end())
+    return;
+
+  auto & clones_vec = it->second;
+  mooseAssert((n_sys - 1) == clones_vec.size(),
+              "The size of the gf clones vector doesn't match the number of systems minus one");
+
+  for (const auto i : make_range(n_sys))
+    eq.get_system(i + 1).get_dof_map().remove_algebraic_ghosting_functor(*clones_vec[i]);
+
+  _root_alg_gf_to_sys_clones.erase(it->first);
 }
 
 void
@@ -912,4 +982,71 @@ bool
 SubProblem::automaticScaling() const
 {
   return systemBaseNonlinear().automaticScaling();
+}
+
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+void
+SubProblem::hasScalingVector()
+{
+  for (const THREAD_ID tid : make_range(libMesh::n_threads()))
+    assembly(tid).hasScalingVector();
+}
+#endif
+
+void
+SubProblem::clearAllDofIndices()
+{
+  systemBaseNonlinear().clearAllDofIndices();
+  systemBaseAuxiliary().clearAllDofIndices();
+}
+
+void
+SubProblem::timestepSetup()
+{
+  for (auto & map : _functors)
+    for (auto & pr : map)
+      pr.second->timestepSetup();
+}
+
+void
+SubProblem::residualSetup()
+{
+  for (auto & map : _functors)
+    for (auto & pr : map)
+      pr.second->residualSetup();
+}
+
+void
+SubProblem::jacobianSetup()
+{
+  for (auto & map : _functors)
+    for (auto & pr : map)
+      pr.second->jacobianSetup();
+}
+
+void
+SubProblem::initialSetup()
+{
+  for (const auto & functors : _functors)
+    for (const auto & pr : functors)
+      if (pr.second->wrapsNull())
+        mooseError("No functor ever provided with name '",
+                   pr.first,
+                   "', which was requested by '",
+                   MooseUtils::join(libmesh_map_find(_functor_to_requestors, pr.first), ","),
+                   "'.");
+}
+
+bool
+SubProblem::hasFunctor(const std::string & name, const THREAD_ID tid) const
+{
+  mooseAssert(tid < _functors.size(), "Too large a thread ID");
+  auto & functors = _functors[tid];
+  return (functors.find(name) != functors.end());
+}
+
+Moose::CoordinateSystemType
+SubProblem::getCoordSystem(SubdomainID sid) const
+{
+  return mesh().getCoordSystem(sid);
 }

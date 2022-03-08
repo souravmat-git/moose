@@ -12,9 +12,6 @@
 // STL includes
 #include <string>
 
-// Forward declarations
-class MooseApp;
-
 /**
  * Class for containing MooseEnum item information.
  */
@@ -22,6 +19,7 @@ class MooseEnumItem
 {
 public:
   static const int INVALID_ID;
+  MooseEnumItem();
   MooseEnumItem(const std::string & name, const int & id = INVALID_ID);
   ~MooseEnumItem() = default;
   MooseEnumItem(const MooseEnumItem & other);
@@ -100,4 +98,3 @@ private:
   /// The numeric value for item
   int _id;
 };
-

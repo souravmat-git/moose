@@ -23,7 +23,7 @@
 
   [./left_interior]
     type = SideSetsBetweenSubdomainsGenerator
-    master_block = 1
+    primary_block = 1
     paired_block = 2
     new_boundary = left_interior
     input = break_sides
@@ -31,7 +31,7 @@
 
   [./right_interior]
     type = SideSetsBetweenSubdomainsGenerator
-    master_block = 3
+    primary_block = 3
     paired_block = 2
     new_boundary = right_interior
     input = left_interior
@@ -39,8 +39,8 @@
   [./rename]
     type = RenameBlockGenerator
     input = right_interior
-    old_block_id = '1 2 3'
-    new_block_id = '1 4 3'
+    old_block = '1 2 3'
+    new_block = '1 4 3'
   [../]
 []
 

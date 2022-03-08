@@ -18,15 +18,11 @@
 // Forward declarations
 class InputParameters;
 class MooseObject;
-class TaggingInterface;
 class SubProblem;
 class Assembly;
 
 template <typename T>
 InputParameters validParams();
-
-template <>
-InputParameters validParams<TaggingInterface>();
 
 class TaggingInterface
 {
@@ -131,7 +127,7 @@ public:
   void assignTaggedLocalMatrix();
 
 protected:
-  /// The vectors this Kernel will contribute to
+  /// The residual tag ids this Kernel will contribute to
   std::set<TagID> _vector_tags;
 
   /// The matrices this Kernel will contribute to

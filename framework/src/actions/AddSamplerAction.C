@@ -12,12 +12,12 @@
 
 registerMooseAction("MooseApp", AddSamplerAction, "add_sampler");
 
-defineLegacyParams(AddSamplerAction);
-
 InputParameters
 AddSamplerAction::validParams()
 {
-  return MooseObjectAction::validParams();
+  InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a Sampler object to the simulation.");
+  return params;
 }
 
 AddSamplerAction::AddSamplerAction(InputParameters params) : MooseObjectAction(params) {}

@@ -7,7 +7,7 @@
 #* Licensed under LGPL 2.1, please see LICENSE for details
 #* https://www.gnu.org/licenses/lgpl-2.1.html
 
-import re, os
+import re, os, shutil
 from Tester import Tester
 from TestHarness import util
 
@@ -68,6 +68,17 @@ class RunApp(Tester):
             return self.specs['input'].strip()
         else:
             return None # Not all testers that inherit from RunApp have an input file
+
+    def getInputFileContents(self):
+        input_file = self.getInputFile()
+        if input_file and os.path.exists(os.path.join(self.getTestDir(), input_file)):
+            with open(os.path.join(self.getTestDir(), input_file), 'r') as f:
+                input_file = f.read()
+        # Test is supposed to have an input file, but we couldn't find it. Don't error on that event here, and
+        # instead allow the TestHarness to continue. It will error appropriately elsewhere.
+        else:
+            input_file = None
+        return input_file
 
     def checkRunnable(self, options):
         if options.enable_recover:
@@ -131,7 +142,7 @@ class RunApp(Tester):
         cli_args = list(specs['cli_args'])
 
         # Check for built application
-        if not options.dry_run and not os.path.exists(specs['executable']):
+        if shutil.which(specs['executable']) is None:
             self.setStatus(self.fail, 'Application not found')
             return ''
 

@@ -91,7 +91,7 @@ operator<<(std::ostream & os, const std::tuple<T...> & tup)
   } while (0)
 
 #ifdef NDEBUG
-#define mooseAssert(asserted, msg)
+#define mooseAssert(asserted, msg) ((void)0)
 #else
 #define mooseAssert(asserted, msg)                                                                 \
   do                                                                                               \
@@ -190,12 +190,13 @@ template <typename S, typename... Args>
 void
 mooseInfoStream(S & oss, Args &&... args)
 {
-  mooseDoOnce({
-    std::ostringstream ss;
-    mooseStreamAll(ss, args...);
-    std::string msg = mooseMsgFmt(ss.str(), "*** Info ***", COLOR_CYAN);
-    oss << msg << std::flush;
-  });
+  mooseDoOnce(
+      {
+        std::ostringstream ss;
+        mooseStreamAll(ss, args...);
+        std::string msg = mooseMsgFmt(ss.str(), "*** Info ***", COLOR_CYAN);
+        oss << msg << std::flush;
+      });
 }
 
 template <typename S, typename... Args>
@@ -212,7 +213,8 @@ mooseDeprecatedStream(S & oss, bool expired, Args &&... args)
                   expired ? COLOR_RED : COLOR_YELLOW);
               oss << msg;
               ss.str("");
-              if (Moose::show_trace) {
+              if (Moose::show_trace)
+              {
                 if (libMesh::global_n_processors() == 1)
                   print_trace(ss);
                 else

@@ -1,4 +1,12 @@
 #!/bin/bash
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
 
 function printusage {
     echo "Usage:    stork.sh <name>"
@@ -105,6 +113,7 @@ rm -f $dir/Makefile.*
 rm -f $dir/unit/Makefile.*
 rm -f $dir/run_tests.*
 rm -f $dir/src/base/StorkApp.C.*
+rm -f $dir/test/src/base/StorkTestApp.C.*
 rm -f $dir/doc/config.yml.*
 rm -f $dir/doc/moosedocs.py.*
 
@@ -126,7 +135,7 @@ if [[ "$kind" == "app" ]]; then
     echo "         cd $dir"
     echo "         git remote add origin https://github.com/YourGitHubUserName/$dstnamelow"
     echo '         git commit -m "initial commit"'
-    echo "         git push -u origin master"
+    echo "         git push -u origin main"
     echo ""
     echo "To automatically enforce MOOSE C++ code style in your commits, run:"
     echo ""

@@ -14,8 +14,6 @@
 
 registerMooseObject("MooseApp", SpiralAnnularMesh);
 
-defineLegacyParams(SpiralAnnularMesh);
-
 InputParameters
 SpiralAnnularMesh::validParams()
 {
@@ -67,7 +65,7 @@ SpiralAnnularMesh::SpiralAnnularMesh(const InputParameters & parameters)
 std::unique_ptr<MooseMesh>
 SpiralAnnularMesh::safeClone() const
 {
-  return libmesh_make_unique<SpiralAnnularMesh>(*this);
+  return std::make_unique<SpiralAnnularMesh>(*this);
 }
 
 void
@@ -88,7 +86,8 @@ SpiralAnnularMesh::buildMesh()
     // We capture parameters which don't need to change from the current scope at
     // the time this lambda is declared. The values are not updated later, so we
     // can't use this for e.g. f, df, and alpha.
-    auto newton = [this, n](Real & f, Real & df, const Real & alpha) {
+    auto newton = [this, n](Real & f, Real & df, const Real & alpha)
+    {
       f = (1. - std::pow(alpha, n + 1)) / (1. - alpha) -
           (_outer_radius - _inner_radius) / _initial_delta_r;
       df = (-(n + 1) * (1 - alpha) * std::pow(alpha, n) + (1. - std::pow(alpha, n + 1))) /
@@ -122,6 +121,7 @@ SpiralAnnularMesh::buildMesh()
 
   // Mesh we are eventually going to create.
   MeshBase & mesh = getMesh();
+  BoundaryInfo & boundary_info = mesh.get_boundary_info();
 
   // Data structure that holds pointers to the Nodes of each ring.
   std::vector<std::vector<Node *>> ring_nodes(_num_rings);
@@ -171,7 +171,7 @@ SpiralAnnularMesh::buildMesh()
 
         // Add interior faces to 'cylinder' sideset if we are on ring 0.
         if (r == 0)
-          mesh.boundary_info->add_side(elem->id(), /*side=*/2, _cylinder_bid);
+          boundary_info.add_side(elem->id(), /*side=*/2, _cylinder_bid);
       }
 
       // Outer ring (n*, n+1*, n+1)
@@ -187,7 +187,7 @@ SpiralAnnularMesh::buildMesh()
         // Add exterior faces to 'exterior' sideset if we're on the last ring.
         // Note: this code appears in two places since we could end on either an even or odd ring.
         if (r == _num_rings - 2)
-          mesh.boundary_info->add_side(elem->id(), /*side=*/0, _exterior_bid);
+          boundary_info.add_side(elem->id(), /*side=*/0, _exterior_bid);
       }
     }
     else
@@ -216,7 +216,7 @@ SpiralAnnularMesh::buildMesh()
 
         // Add exterior faces to 'exterior' sideset if we're on the last ring.
         if (r == _num_rings - 2)
-          mesh.boundary_info->add_side(elem->id(), /*side=*/0, _exterior_bid);
+          boundary_info.add_side(elem->id(), /*side=*/0, _exterior_bid);
       }
     }
   }
@@ -233,8 +233,8 @@ SpiralAnnularMesh::buildMesh()
   }
 
   // Create sideset names.
-  mesh.boundary_info->sideset_name(_cylinder_bid) = "cylinder";
-  mesh.boundary_info->sideset_name(_exterior_bid) = "exterior";
+  boundary_info.sideset_name(_cylinder_bid) = "cylinder";
+  boundary_info.sideset_name(_exterior_bid) = "exterior";
 
   // Find neighbors, etc.
   mesh.prepare_for_use();

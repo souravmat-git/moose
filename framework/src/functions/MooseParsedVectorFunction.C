@@ -12,13 +12,12 @@
 
 registerMooseObjectAliased("MooseApp", MooseParsedVectorFunction, "ParsedVectorFunction");
 
-defineLegacyParams(MooseParsedVectorFunction);
-
 InputParameters
 MooseParsedVectorFunction::validParams()
 {
   InputParameters params = Function::validParams();
   params += MooseParsedFunctionBase::validParams();
+  params.addClassDescription("Return a vector component values based on a string function.");
   params.addParam<std::string>("value_x", "0", "x-component of function.");
   params.addParam<std::string>("value_y", "0", "y-component of function.");
   params.addParam<std::string>("value_z", "0", "z-component of function.");
@@ -66,10 +65,10 @@ MooseParsedVectorFunction::initialSetup()
     tid = getParam<THREAD_ID>("_tid");
 
   if (!_function_ptr)
-    _function_ptr = libmesh_make_unique<MooseParsedFunctionWrapper>(
+    _function_ptr = std::make_unique<MooseParsedFunctionWrapper>(
         _pfb_feproblem, _vector_value, _vars, _vals, tid);
 
   if (!_curl_function_ptr)
-    _curl_function_ptr = libmesh_make_unique<MooseParsedFunctionWrapper>(
+    _curl_function_ptr = std::make_unique<MooseParsedFunctionWrapper>(
         _pfb_feproblem, _curl_value, _vars, _vals, tid);
 }

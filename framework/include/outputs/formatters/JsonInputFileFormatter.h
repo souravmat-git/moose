@@ -8,13 +8,13 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #pragma once
-
-#include "json/json.h"
+#include <sstream>
+#include "nlohmann/json.h"
 
 /**
- * This class produces produces a dump of the InputFileParameters that appears like the normal input
+ * This class produces produces a dump of the InputParameters that appears like the normal input
  * file syntax.
- * Different from InputFileFormatter in that it takes its input from JsonSyntaxTree.
+ * It is different from InputFileFormatter in that it takes its input from JsonSyntaxTree.
  */
 class JsonInputFileFormatter
 {
@@ -25,7 +25,7 @@ public:
    * Returns a string representation of the tree in input file format.
    * @param root The root node of the tree to output.
    */
-  std::string toString(const moosecontrib::Json::Value & root);
+  std::string toString(const nlohmann::json & root);
 
 protected:
   /**
@@ -43,24 +43,22 @@ protected:
    * @param block Json holding data for the block.
    * @param top Whether this is a top level block.
    */
-  void
-  addBlock(const std::string & name, const moosecontrib::Json::Value & block, bool top = false);
+  void addBlock(const std::string & name, const nlohmann::json & block, bool top = false);
 
   /**
    * Add a comment to the block. It will add the proper indentation and #.
    * @param comment The comment to add.
    */
-  void addParameters(const moosecontrib::Json::Value & params);
+  void addParameters(const nlohmann::json & params);
 
   /**
    * Add a dictionary of type blocks to the output.
    * @param key This will be used to get the dictionary of types from block.
    * @param block The Json data that is the parent of the types data.
    */
-  void addTypes(const std::string & key, const moosecontrib::Json::Value & block);
+  void addTypes(const std::string & key, const nlohmann::json & block);
 
   const int _spaces;
   int _level;
   std::ostringstream _stream;
 };
-

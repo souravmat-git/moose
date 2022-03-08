@@ -16,8 +16,6 @@
 
 registerMooseObject("MooseApp", ElementPointNeighborLayers);
 
-defineLegacyParams(ElementPointNeighborLayers);
-
 InputParameters
 ElementPointNeighborLayers::validParams()
 {
@@ -38,6 +36,17 @@ ElementPointNeighborLayers::ElementPointNeighborLayers(const InputParameters & p
 {
 }
 
+ElementPointNeighborLayers::ElementPointNeighborLayers(const ElementPointNeighborLayers & others)
+  : FunctorRelationshipManager(others), _layers(others._layers)
+{
+}
+
+std::unique_ptr<GhostingFunctor>
+ElementPointNeighborLayers::clone() const
+{
+  return std::make_unique<ElementPointNeighborLayers>(*this);
+}
+
 std::string
 ElementPointNeighborLayers::getInfo() const
 {
@@ -50,19 +59,19 @@ ElementPointNeighborLayers::getInfo() const
 }
 
 bool
-ElementPointNeighborLayers::operator==(const RelationshipManager & rhs) const
+ElementPointNeighborLayers::operator>=(const RelationshipManager & rhs) const
 {
   const auto * rm = dynamic_cast<const ElementPointNeighborLayers *>(&rhs);
   if (!rm)
     return false;
   else
-    return _layers == rm->_layers && isType(rm->_rm_type);
+    return _layers >= rm->_layers && baseGreaterEqual(*rm);
 }
 
 void
-ElementPointNeighborLayers::internalInit()
+ElementPointNeighborLayers::internalInitWithMesh(const MeshBase &)
 {
-  auto functor = libmesh_make_unique<PointNeighborCoupling>();
+  auto functor = std::make_unique<PointNeighborCoupling>();
   functor->set_n_levels(_layers);
 
   _functor = std::move(functor);

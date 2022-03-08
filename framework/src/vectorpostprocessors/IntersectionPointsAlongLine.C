@@ -16,12 +16,12 @@
 
 registerMooseObject("MooseApp", IntersectionPointsAlongLine);
 
-defineLegacyParams(IntersectionPointsAlongLine);
-
 InputParameters
 IntersectionPointsAlongLine::validParams()
 {
   InputParameters params = GeneralVectorPostprocessor::validParams();
+  params.addClassDescription(
+      "Get the intersection points for all of the elements that are intersected by a line.");
   params.addRequiredParam<Point>("start", "The beginning of the line");
   params.addRequiredParam<Point>("end", "The end of the line");
   return params;

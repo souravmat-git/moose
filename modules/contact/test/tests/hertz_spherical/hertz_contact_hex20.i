@@ -32,6 +32,7 @@
 
 [Mesh]#Comment
   file = hertz_contact_hex20.e
+  allow_renumbering = false
 [] # Mesh
 
 [Problem]
@@ -121,7 +122,6 @@
   [./all]
     add_variables = true
     strain = SMALL
-    use_displaced_mesh = false
     extra_vector_tags = 'ref'
     save_in = 'saved_x saved_y saved_z'
   [../]
@@ -223,8 +223,8 @@
 
 [Contact]
   [./dummy_name]
-    master = 1000
-    slave = 100
+    primary = 1000
+    secondary = 100
 
     normalize_penalty = true
     tangential_tolerance = 1e-3
@@ -235,8 +235,8 @@
 #[Dampers]
 #  [./contact_slip]
 #    type = ContactSlipDamper
-#    master = 1000
-#    slave = 100
+#    primary = 1000
+#    secondary = 100
 #  [../]
 #[]
 

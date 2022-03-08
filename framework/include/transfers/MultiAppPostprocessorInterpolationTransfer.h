@@ -12,12 +12,6 @@
 // MOOSE includes
 #include "MultiAppTransfer.h"
 
-// Forward declarations
-class MultiAppPostprocessorInterpolationTransfer;
-
-template <>
-InputParameters validParams<MultiAppPostprocessorInterpolationTransfer>();
-
 /**
  * Transfers from spatially varying PostprocessorInterpolations in a MultiApp to the "master"
  * system.
@@ -39,4 +33,6 @@ protected:
   Real _power;
   MooseEnum _interp_type;
   Real _radius;
+
+  bool _nodal;
 };

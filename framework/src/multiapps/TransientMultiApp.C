@@ -13,7 +13,7 @@
 #include "AllLocalDofIndicesThread.h"
 #include "AuxiliarySystem.h"
 #include "Console.h"
-#include "LayeredSideFluxAverage.h"
+#include "LayeredSideDiffusiveFluxAverage.h"
 #include "MooseMesh.h"
 #include "Output.h"
 #include "TimeStepper.h"
@@ -24,8 +24,6 @@
 #include "libmesh/numeric_vector.h"
 
 registerMooseObject("MooseApp", TransientMultiApp);
-
-defineLegacyParams(TransientMultiApp);
 
 InputParameters
 TransientMultiApp::validParams()
@@ -178,6 +176,8 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
   if (!_has_an_app)
     return true;
 
+  TIME_SECTION(_solve_step_timer);
+
   _auto_advance = auto_advance;
 
   _console << COLOR_CYAN << "Solving MultiApp '" << name() << "' with target time " << target_time
@@ -208,7 +208,7 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
       Real app_time_offset = _apps[i]->getGlobalTimeOffset();
 
       // Maybe this MultiApp was already solved
-      if ((ex->getTime() + app_time_offset + 2e-14 >= target_time) ||
+      if ((ex->getTime() + app_time_offset + ex->timestepTol() >= target_time) ||
           (ex->getTime() >= ex->endTime()))
         continue;
 
@@ -232,11 +232,11 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
           transfer_old.close();
 
           // Snag all of the local dof indices for all of these variables
-          AllLocalDofIndicesThread aldit(libmesh_aux_system, _transferred_vars);
+          AllLocalDofIndicesThread aldit(problem, _transferred_vars);
           ConstElemRange & elem_range = *problem.mesh().getActiveLocalElementRange();
           Threads::parallel_reduce(elem_range, aldit);
 
-          _transferred_dofs = aldit._all_dof_indices;
+          _transferred_dofs = aldit.getDofIndices();
         }
 
         // Disable/enable output for sub cycling
@@ -249,13 +249,20 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
 
         bool at_steady = false;
 
-        if (_first && !_app.isRecovering())
+        // ADL: During restart, there is already an FEProblemBase::advanceState that occurs at the
+        // end of TransientMultiApp::setupApp. advanceState, along with copying the solutions
+        // backwards in time/state, also *moves* (note it doesn't copy!) stateful material
+        // properties backwards (through swapping). So if restarting from a full-solve steady
+        // multi-app for example, then after one advance state, we will have good information in old
+        // and no information in current. But then if we advance again we no longer have good data
+        // in the old material properties, so don't advance here if we're restarting
+        if (_first && !_app.isRecovering() && !_app.isRestarting())
           problem.advanceState();
 
         bool local_first = _first;
 
         // Now do all of the solves we need
-        while ((!at_steady && ex->getTime() + app_time_offset + 2e-14 < target_time) ||
+        while ((!at_steady && ex->getTime() + app_time_offset + ex->timestepTol() < target_time) ||
                !ex->lastSolveConverged())
         {
           if (local_first != true)
@@ -363,7 +370,14 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
       }
       else
       {
-        if (_first && !_app.isRecovering())
+        // ADL: During restart, there is already an FEProblemBase::advanceState that occurs at the
+        // end of TransientMultiApp::setupApp. advanceState, along with copying the solutions
+        // backwards in time/state, also *moves* (note it doesn't copy!) stateful material
+        // properties backwards (through swapping). So if restarting from a full-solve steady
+        // multi-app for example, then after one advance state, we will have good information in old
+        // and no information in current. But then if we advance again we no longer have good data
+        // in the old material properties, so don't advance here if we're restarting
+        if (_first && !_app.isRecovering() && !_app.isRestarting())
           problem.advanceState();
 
         if (auto_advance)
@@ -513,15 +527,15 @@ TransientMultiApp::incrementTStep(Real target_time)
       Real app_time_offset = _apps[i]->getGlobalTimeOffset();
 
       // Only increment the step if we are after (target_time) the
-      // start_time (app_time_offset) of this sub_app.
-      if (app_time_offset < target_time)
+      // start_time (added to app_time_offset) of this sub_app.
+      if (_apps[i]->getStartTime() + app_time_offset < target_time)
         ex->incrementStepOrReject();
     }
   }
 }
 
 void
-TransientMultiApp::finishStep()
+TransientMultiApp::finishStep(bool recurse_through_multiapp_levels)
 {
   if (!_sub_cycling)
   {
@@ -530,6 +544,13 @@ TransientMultiApp::finishStep()
       Transient * ex = _transient_executioners[i];
       ex->endStep();
       ex->postStep();
+      if (recurse_through_multiapp_levels)
+      {
+        ex->feProblem().finishMultiAppStep(EXEC_TIMESTEP_BEGIN,
+                                           /*recurse_through_multiapp_levels=*/true);
+        ex->feProblem().finishMultiAppStep(EXEC_TIMESTEP_END,
+                                           /*recurse_through_multiapp_levels=*/true);
+      }
     }
   }
 }
@@ -571,7 +592,8 @@ TransientMultiApp::computeDT()
   return smallest_dt;
 }
 
-void TransientMultiApp::resetApp(
+void
+TransientMultiApp::resetApp(
     unsigned int global_app,
     Real /*time*/) // FIXME: Note that we are passing in time but also grabbing it below
 {
@@ -597,7 +619,8 @@ void TransientMultiApp::resetApp(
   }
 }
 
-void TransientMultiApp::setupApp(unsigned int i, Real /*time*/) // FIXME: Should we be passing time?
+void
+TransientMultiApp::setupApp(unsigned int i, Real /*time*/) // FIXME: Should we be passing time?
 {
   auto & app = _apps[i];
   Transient * ex = dynamic_cast<Transient *>(app->getExecutioner());
@@ -610,10 +633,8 @@ void TransientMultiApp::setupApp(unsigned int i, Real /*time*/) // FIXME: Should
   // Update the file numbers for the outputs from the parent application
   app->getOutputWarehouse().setFileNumbers(_app.getOutputFileNumbers());
 
-  // Call initialization method of Executioner (Note, this preforms the output of the initial time
-  // step, if desired)
-  ex->init();
-
+  // Add these vectors before we call init on the executioner because that will try to restore these
+  // vectors in a restart context
   if (_interpolate_transfers)
   {
     AuxiliarySystem & aux_system = problem.getAuxiliarySystem();
@@ -625,6 +646,10 @@ void TransientMultiApp::setupApp(unsigned int i, Real /*time*/) // FIXME: Should
     // This will be where we'll transfer the value to for the "target" time
     libmesh_aux_system.add_vector("transfer", false);
   }
+
+  // Call initialization method of Executioner (Note, this preforms the output of the initial time
+  // step, if desired)
+  ex->init();
 
   ex->preExecute();
   if (!_app.isRecovering())

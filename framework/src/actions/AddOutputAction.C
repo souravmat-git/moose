@@ -23,13 +23,14 @@
 
 registerMooseAction("MooseApp", AddOutputAction, "add_output");
 
-defineLegacyParams(AddOutputAction);
-
 InputParameters
 AddOutputAction::validParams()
 {
   InputParameters params = MooseObjectAction::validParams();
   params.addClassDescription("Action responsible for creating Output objects.");
+  // This is to help with input file validation.  FEProblem adds file_base to
+  // all objects that don't have it set from the input file.
+  params.set<std::vector<std::string>>("_object_params_set_by_action") = {"file_base"};
   return params;
 }
 

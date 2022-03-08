@@ -13,13 +13,8 @@
 #include "Constraint.h"
 #include "NeighborCoupleableMooseVariableDependencyIntermediateInterface.h"
 
-// Forward Declarations
-class ElemElemConstraint;
 class ElementPairInfo;
 class FEProblemBase;
-
-template <>
-InputParameters validParams<ElemElemConstraint>();
 
 class ElemElemConstraint : public Constraint,
                            public NeighborCoupleableMooseVariableDependencyIntermediateInterface,
@@ -48,7 +43,7 @@ public:
   /**
    * Computes the residual for the current side.
    */
-  virtual void computeResidual();
+  virtual void computeResidual() override;
 
   /**
    * Computes the element/neighbor-element/neighbor Jacobian
@@ -58,7 +53,7 @@ public:
   /**
    * Computes the jacobian for the current side.
    */
-  virtual void computeJacobian();
+  virtual void computeJacobian() override;
 
   /**
    * Get the interface ID
@@ -68,7 +63,7 @@ public:
   /**
    * The variable number that this object operates on.
    */
-  MooseVariable & variable() { return _var; }
+  const MooseVariable & variable() const override { return _var; }
 
 protected:
   FEProblemBase & _fe_problem;
@@ -133,4 +128,3 @@ protected:
    */
   virtual Real computeQpJacobian(Moose::DGJacobianType type) = 0;
 };
-

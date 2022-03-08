@@ -36,7 +36,7 @@ PertinentGeochemicalSystem::PertinentGeochemicalSystem(
     _secondary_info(),
     _redox_ox(redox_ox),
     _redox_e(redox_e),
-    _model()
+    _model(_db)
 {
   // Use the constructor info to build the "index" and "info" structures
   buildBasis(basis_species);
@@ -50,6 +50,9 @@ PertinentGeochemicalSystem::PertinentGeochemicalSystem(
   // "secondary species" and "surface species"
   buildSecondarySpecies();
 
+  // Build minerals in the case that minerals = {"*"}
+  buildAllMinerals(minerals);
+
   // Check that everything can be expressed in terms of the basis, possibly via redox and secondary
   // species
   checkMinerals(_mineral_info);
@@ -60,6 +63,32 @@ PertinentGeochemicalSystem::PertinentGeochemicalSystem(
 
   // Populate _model
   createModel();
+}
+
+unsigned
+PertinentGeochemicalSystem::getIndexOfOriginalBasisSpecies(const std::string & name) const
+{
+  try
+  {
+    return _basis_index.at(name);
+  }
+  catch (const std::out_of_range &)
+  {
+    mooseError("species ", name, " is not in the original basis");
+  }
+  catch (...)
+  {
+    throw;
+  }
+}
+
+std::vector<std::string>
+PertinentGeochemicalSystem::originalBasisNames() const
+{
+  std::vector<std::string> names(_basis_info.size());
+  for (const auto & name_ind : _basis_index)
+    names[name_ind.second] = name_ind.first;
+  return names;
 }
 
 void
@@ -96,6 +125,8 @@ void
 PertinentGeochemicalSystem::buildMinerals(const std::vector<std::string> & minerals)
 {
   unsigned ind = 0;
+  if (minerals.size() == 1 && minerals[0] == "*")
+    return; // buildAllMinerals is called later
   for (const auto & name : minerals)
   {
     if (_mineral_index.count(name) == 1)
@@ -207,8 +238,11 @@ PertinentGeochemicalSystem::buildSecondarySpecies()
 
   // run through all secondary species, including them if:
   // - their reaction involves only basis_species, or secondary species already encountered
+  // - the name is not _redox_e (which is usually "e-" the free electron)
   for (const auto & name : _db.secondarySpeciesNames())
   {
+    if (name == _redox_e)
+      continue;
     const GeochemistryEquilibriumSpecies ss = _db.getEquilibriumSpecies({name})[name];
     // check all reaction species are in the basis
     bool all_species_in_basis_or_sec = true;
@@ -260,6 +294,87 @@ PertinentGeochemicalSystem::buildSecondarySpecies()
       }
     }
   }
+}
+
+void
+PertinentGeochemicalSystem::buildAllMinerals(const std::vector<std::string> & minerals)
+{
+  if (!(minerals.size() == 1 && minerals[0] == "*"))
+    return; // buildMinerals has done its job of building _mineral_info and _mineral_index
+  unsigned ind = 0;
+  for (const auto & name_ms : _db.getMineralSpecies(_db.mineralSpeciesNames()))
+  {
+    if (_kinetic_mineral_index.count(name_ms.first) == 1)
+      continue;
+    bool known_basis_only = true;
+    for (const auto & basis_stoi : name_ms.second.basis_species)
+    {
+      if (_basis_index.count(basis_stoi.first) == 0 &&
+          _secondary_index.count(basis_stoi.first) == 0)
+      {
+        known_basis_only = false;
+        break;
+      }
+    }
+    if (known_basis_only)
+    {
+      _mineral_index.emplace(name_ms.first, ind);
+      ind += 1;
+      _mineral_info.push_back(name_ms.second);
+    }
+  }
+}
+
+bool
+PertinentGeochemicalSystem::checkRedoxe()
+{
+  bool found = false;
+  for (const auto & name : _db.secondarySpeciesNames())
+    if (name == _redox_e)
+    {
+      found = true;
+      const GeochemistryEquilibriumSpecies ss = _db.getEquilibriumSpecies({name})[name];
+      for (const auto & element : ss.basis_species)
+        if (_basis_index.count(element.first) == 0 && _secondary_index.count(element.first) == 0)
+          return false;
+    }
+  return found;
+}
+
+void
+PertinentGeochemicalSystem::buildRedoxeInfo(std::vector<Real> & redox_e_stoichiometry,
+                                            std::vector<Real> & redox_e_log10K)
+{
+  const unsigned num_basis = _basis_info.size();
+  const unsigned numT = _db.getTemperatures().size();
+  redox_e_stoichiometry.assign(num_basis, 0.0);
+  redox_e_log10K.assign(numT, 0.0);
+  for (const auto & name : _db.secondarySpeciesNames())
+    if (name == _redox_e)
+    {
+      const GeochemistryEquilibriumSpecies ss = _db.getEquilibriumSpecies({name})[name];
+      for (unsigned i = 0; i < numT; ++i)
+        redox_e_log10K[i] = ss.equilibrium_const[i];
+      for (const auto & react : ss.basis_species)
+      {
+        const Real stoi_coeff = react.second;
+        if (_model.basis_species_index.count(react.first) == 1)
+        {
+          const unsigned col = _model.basis_species_index[react.first];
+          redox_e_stoichiometry[col] += react.second;
+        }
+        else if (_secondary_index.count(react.first) == 1)
+        {
+          // reaction species is not a basis component, but a secondary component.
+          // So express stoichiometry in terms of the secondary component's reaction
+          const unsigned sec_row = _model.eqm_species_index[react.first];
+          for (unsigned i = 0; i < numT; ++i)
+            redox_e_log10K[i] += stoi_coeff * _model.eqm_log10K(sec_row, i);
+          for (unsigned col = 0; col < num_basis; ++col)
+            redox_e_stoichiometry[col] += stoi_coeff * _model.eqm_stoichiometry(sec_row, col);
+        }
+      }
+    }
 }
 
 void
@@ -317,8 +432,6 @@ PertinentGeochemicalSystem::createModel()
   const unsigned num_temperatures = _db.getTemperatures().size();
   unsigned ind = 0;
 
-  _model.temperatures = _db.getTemperatures();
-
   // create basis_species_index map
   _model.basis_species_index = _basis_index;
 
@@ -332,6 +445,10 @@ PertinentGeochemicalSystem::createModel()
 
   // initially no basis species are gases
   _model.basis_species_gas = std::vector<bool>(num_cols, false);
+
+  // initially all basis species are involved in transport (this gets modified for surface species
+  // below)
+  _model.basis_species_transported = std::vector<bool>(num_cols, true);
 
   // record the charge
   _model.basis_species_charge = std::vector<Real>(num_cols, 0.0);
@@ -399,6 +516,12 @@ PertinentGeochemicalSystem::createModel()
     _model.eqm_species_gas[_model.eqm_species_index[species.name]] = false;
   for (const auto & species : _gas_info)
     _model.eqm_species_gas[_model.eqm_species_index[species.name]] = true;
+
+  // create the eqm_species_transported vector (true for non-minerals) - gets modified below for
+  // surface species
+  _model.eqm_species_transported = std::vector<bool>(num_rows, true);
+  for (const auto & species : _mineral_info)
+    _model.eqm_species_transported[_model.eqm_species_index.at(species.name)] = false;
 
   // record the charge
   _model.eqm_species_charge =
@@ -484,16 +607,21 @@ PertinentGeochemicalSystem::createModel()
   // Build the redox information, if any.  Here we express any O2(aq) in the redox equations in
   // terms of redox_e (which is usually e-)
   _model.redox_lhs = _redox_e;
+  std::vector<Real> redox_e_stoichiometry(num_cols, 0.0);
+  std::vector<Real> redox_e_log10K(num_temperatures, 0.0);
   std::vector<Real> redox_stoi;
   std::vector<Real> redox_log10K;
-  if (_model.basis_species_index.count(_redox_ox) == 1 &&
-      _model.eqm_species_index.count(_redox_e) == 1)
+  if ((_model.basis_species_index.count(_redox_ox) == 1) && checkRedoxe())
   {
-    const unsigned o2_index = _model.basis_species_index.at(_redox_ox);
-    const unsigned free_el_index = _model.eqm_species_index.at(_redox_e);
+    // construct the stoichiometry and log10K for _redox_e and put it
+    buildRedoxeInfo(redox_e_stoichiometry, redox_e_log10K);
+    redox_stoi.insert(redox_stoi.end(), redox_e_stoichiometry.begin(), redox_e_stoichiometry.end());
+    redox_log10K.insert(redox_log10K.end(), redox_e_log10K.begin(), redox_e_log10K.end());
     // the electron reaction is
-    // e- = nuw_i * basis_i + beta * O2(aq), where we've pulled out the O2(aq) because it's special
-    const Real beta = _model.eqm_stoichiometry(free_el_index, o2_index);
+    // e- = nuw_i * basis_i + beta * O2(aq), where we've pulled out the O2(aq) because it's
+    // special
+    const unsigned o2_index = _model.basis_species_index.at(_redox_ox);
+    const Real beta = redox_e_stoichiometry[o2_index];
     if (beta != 0.0)
     {
       for (const auto & bs : _model.basis_species_index)
@@ -518,9 +646,9 @@ PertinentGeochemicalSystem::createModel()
           if (!only_involves_basis_species)
             continue;
           // Reaction is now
-          // redox = nu_i * basis_i + alpha * O2(aq), where we've pulled the O2(aq) out because it's
-          // special. Now pull the redox couple to the RHS of the reaction, so we have
-          // 0 = -redox + nu_i * basis_i + alpha * O2(aq)
+          // redox = nu_i * basis_i + alpha * O2(aq), where we've pulled the O2(aq) out because
+          // it's special. Now pull the redox couple to the RHS of the reaction, so we have 0 =
+          // -redox + nu_i * basis_i + alpha * O2(aq)
           stoi[bs.second] = -1.0;
           // check that the stoichiometry involves O2(aq)
           const Real alpha = stoi[o2_index];
@@ -532,14 +660,14 @@ PertinentGeochemicalSystem::createModel()
             stoi[basis_i] *= -beta / alpha;
           // add the equation to e- = nuw_i * basis_i + beta * O2(aq)
           for (unsigned basis_i = 0; basis_i < num_cols; ++basis_i)
-            stoi[basis_i] += _model.eqm_stoichiometry(free_el_index, basis_i);
+            stoi[basis_i] += redox_e_stoichiometry[basis_i];
           // now the reation is e- = nuw_i * basis_i - beta/alpha * (-redox + nu_i * basis_i)
           redox_stoi.insert(redox_stoi.end(), stoi.begin(), stoi.end());
 
           // record the equilibrium constants
           for (unsigned temp = 0; temp < num_temperatures; ++temp)
             redox_log10K.push_back((-beta / alpha) * rs.equilibrium_const[temp] +
-                                   _model.eqm_log10K(free_el_index, temp));
+                                   redox_e_log10K[temp]);
         }
     }
   }
@@ -564,6 +692,7 @@ PertinentGeochemicalSystem::createModel()
     ms.molecular_volume = 0.0;
     ms.basis_species = species.basis_species;
     ms.molecular_weight = species.molecular_weight;
+    ms.equilibrium_const = species.equilibrium_const;
     overlap_kin.push_back(ms);
   }
   for (const auto & species : _kinetic_surface_info)
@@ -573,6 +702,9 @@ PertinentGeochemicalSystem::createModel()
     ms.molecular_volume = 0.0;
     ms.basis_species = species.basis_species;
     ms.molecular_weight = species.molecular_weight;
+    const Real T0 = _db.getTemperatures()[0];
+    for (const auto & temp : _db.getTemperatures())
+      ms.equilibrium_const.push_back(species.log10K + species.dlog10KdT * (temp - T0));
     overlap_kin.push_back(ms);
   }
   const unsigned num_kin = overlap_kin.size();
@@ -593,6 +725,13 @@ PertinentGeochemicalSystem::createModel()
     _model.kin_species_mineral[_model.kin_species_index[species.name]] = false;
   for (const auto & species : _kinetic_surface_info)
     _model.kin_species_mineral[_model.kin_species_index[species.name]] = false;
+
+  // create the kin_species_transported vector (false for minerals and surface species)
+  _model.kin_species_transported = std::vector<bool>(num_kin, true);
+  for (const auto & species : _kinetic_mineral_info)
+    _model.kin_species_transported[_model.kin_species_index.at(species.name)] = false;
+  for (const auto & species : _kinetic_surface_info)
+    _model.kin_species_transported[_model.kin_species_index.at(species.name)] = false;
 
   // build the kin_species_charge info
   _model.kin_species_charge = std::vector<Real>(num_kin, 0.0);
@@ -615,11 +754,14 @@ PertinentGeochemicalSystem::createModel()
 
   // extract the stoichiometry
   _model.kin_stoichiometry.resize(num_kin, num_cols);
+  _model.kin_log10K.resize(num_kin, num_temperatures);
 
   // populate the stoichiometry
   for (const auto & species : overlap_kin)
   {
     const unsigned row = _model.kin_species_index[species.name];
+    for (unsigned i = 0; i < num_temperatures; ++i)
+      _model.kin_log10K(row, i) = species.equilibrium_const[i];
     for (const auto & react : species.basis_species)
     {
       const Real stoi_coeff = react.second;
@@ -633,6 +775,8 @@ PertinentGeochemicalSystem::createModel()
         // reaction species is not a basis component, but a secondary component.
         // So express stoichiometry in terms of the secondary component's reaction
         const unsigned sec_row = _model.eqm_species_index[react.first];
+        for (unsigned i = 0; i < num_temperatures; ++i)
+          _model.kin_log10K(row, i) += stoi_coeff * _model.eqm_log10K(sec_row, i);
         for (unsigned col = 0; col < num_cols; ++col)
           _model.kin_stoichiometry(row, col) += stoi_coeff * _model.eqm_stoichiometry(sec_row, col);
       }
@@ -654,12 +798,18 @@ PertinentGeochemicalSystem::createModel()
       else
         all_sorbing_sites.push_back(name_frac.first);
 
-  // build the information related to surface sorption
+  // build the information related to surface sorption, and modify the species_transported vectors
   _model.surface_sorption_related.assign(num_rows, false);
   _model.surface_sorption_number.assign(num_rows, 99);
   for (const auto & name_info :
        _model.surface_complexation_info) // all minerals involved in surface complexation
   {
+    for (const auto & name_frac :
+         name_info.second.sorption_sites) // all sorption sites on the given mineral
+    {
+      const unsigned basis_index_of_sorption_site = _model.basis_species_index.at(name_frac.first);
+      _model.basis_species_transported[basis_index_of_sorption_site] = false;
+    }
     bool mineral_involved_in_eqm = false;
     for (const auto & name_frac :
          name_info.second.sorption_sites) // all sorption sites on the given mineral
@@ -690,6 +840,7 @@ PertinentGeochemicalSystem::createModel()
                        ") to have a reaction involving more than one sorbing site");
           _model.surface_sorption_related[j] = true;
           _model.surface_sorption_number[j] = num_surface_sorption;
+          _model.eqm_species_transported[j] = false;
         }
     }
   }
@@ -699,4 +850,38 @@ const ModelGeochemicalDatabase &
 PertinentGeochemicalSystem::modelGeochemicalDatabase() const
 {
   return _model;
+}
+
+void
+PertinentGeochemicalSystem::addKineticRate(const KineticRateUserDescription & description)
+{
+  const std::string kinetic_species = description.kinetic_species_name;
+  if (_model.kin_species_index.count(kinetic_species) == 0)
+    mooseError("Cannot prescribe a kinetic rate to species ",
+               kinetic_species,
+               " since it is not a kinetic species");
+  const unsigned kinetic_species_index = _model.kin_species_index.at(kinetic_species);
+
+  // build the promoting index list
+  const unsigned num_pro = description.promoting_species.size();
+  const unsigned num_basis = _model.basis_species_name.size();
+  const unsigned num_eqm = _model.eqm_species_name.size();
+  std::vector<Real> promoting_ind(num_basis + num_eqm, 0.0);
+  for (unsigned i = 0; i < num_pro; ++i)
+  {
+    unsigned index = 0;
+    const std::string promoting_species = description.promoting_species[i];
+    if (_model.basis_species_index.count(promoting_species) == 1)
+      index = _model.basis_species_index.at(promoting_species);
+    else if (_model.eqm_species_index.count(promoting_species) == 1)
+      index = num_basis + _model.eqm_species_index.at(promoting_species);
+    else
+      mooseError(
+          "Promoting species ", promoting_species, " must be a basis or a secondary species");
+    promoting_ind[index] = description.promoting_indices[i];
+  }
+
+  // append the result to kin_rate
+  _model.kin_rate.push_back(
+      KineticRateDefinition(kinetic_species_index, promoting_ind, description));
 }

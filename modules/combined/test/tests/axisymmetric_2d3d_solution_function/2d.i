@@ -1,8 +1,6 @@
 [GlobalParams]
   order = FIRST
   family = LAGRANGE
-  disp_x = disp_x
-  disp_y = disp_y
   displacements = 'disp_x disp_y'
 []
 
@@ -112,8 +110,8 @@
   [./disp_y]
     type = EqualValueBoundaryConstraint
     variable = disp_y
-    master = '65'
-    slave = '3'
+    primary = '65'
+    secondary = '3'
     penalty = 1e18
   [../]
 []

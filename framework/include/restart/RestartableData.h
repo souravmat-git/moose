@@ -11,11 +11,16 @@
 
 // MOOSE includes
 #include "DataIO.h"
+#include "JsonIO.h"
+#include "MooseUtils.h"
 
 // C++ includes
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+
+// JSON object
+#include "nlohmann/json.h"
 
 // Forward declarations
 class RestartableDataValue;
@@ -60,6 +65,10 @@ public:
   virtual void store(std::ostream & stream) = 0;
   virtual void load(std::istream & stream) = 0;
 
+  // save/load to JSON object
+  virtual void toJSON(nlohmann::json & json) const = 0;
+  virtual void fromJSON(const nlohmann::json & json) = 0;
+
 protected:
   /// The full (unique) name of this particular piece of data.
   std::string _name;
@@ -80,17 +89,19 @@ public:
    * Constructor
    * @param name The full (unique) name for this piece of data.
    * @param context 'typeless' pointer to user-specific data.
+   * @param arg Forwarded arguments that are passed to the constructor of the data.
    */
-  RestartableData(std::string name, void * context) : RestartableDataValue(name, context)
+  template <typename... Params>
+  RestartableData(std::string name, void * context, Params &&... args)
+    : RestartableDataValue(name, context),
+      _value_ptr(std::make_unique<T>(std::forward<Params>(args)...))
   {
-    _value_ptr = libmesh_make_unique<T>();
   }
 
   /**
    * @returns a read-only reference to the parameter value.
    */
-  T & get() { return *_value_ptr; }
-  // const T & get() const { return *_value_ptr; } // TODO: This should be used; above deprecated
+  const T & get() const { return *_value_ptr; }
 
   /**
    * @returns a writable reference to the parameter value.
@@ -117,9 +128,19 @@ public:
    */
   virtual void load(std::istream & stream) override;
 
+  /**
+   * Store the restartable data into a JSON object
+   */
+  virtual void toJSON(nlohmann::json & json) const override;
+
+  /**
+   * Load the restartable data into a JSON object
+   */
+  virtual void fromJSON(const nlohmann::json & json) override;
+
 private:
   /// Stored value.
-  std::unique_ptr<T> _value_ptr;
+  const std::unique_ptr<T> _value_ptr;
 };
 
 // ------------------------------------------------------------
@@ -128,7 +149,7 @@ template <typename T>
 inline std::string
 RestartableData<T>::type()
 {
-  return typeid(T).name();
+  return MooseUtils::prettyCppType<T>();
 }
 
 template <typename T>
@@ -152,6 +173,24 @@ inline void
 RestartableData<T>::load(std::istream & stream)
 {
   loadHelper(stream, *_value_ptr, _context);
+}
+
+template <typename T>
+inline void
+RestartableData<T>::toJSON(nlohmann::json & /*json*/) const
+{
+  // TODO: see JsonIO.h
+  // T & tmp = *_value_ptr;
+  // storeHelper(json, tmp, _context);
+}
+
+template <typename T>
+inline void
+RestartableData<T>::fromJSON(const nlohmann::json & /*json*/)
+{
+  // TODO: see JsonIO.h
+  // T & tmp = *_value_ptr;
+  // loadHelper(json, tmp, _context);
 }
 
 /**

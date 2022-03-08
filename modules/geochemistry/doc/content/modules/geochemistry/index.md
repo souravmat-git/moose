@@ -1,36 +1,62 @@
 # The geochemistry module
 
-The `geochemistry` module is designed to solve reactive transport in geochemical systems.  The `geochemistry` module is currently in development.  The documentation describes the module's functionality, but does not currently include any description of the MOOSE implementation.
+## Overview
 
-The `geochemistry` module's functionality is a subset of that described in [!cite](bethke_2007).  Various aspects have not yet been included, such as the virial Pitzer/HMW models for activity.  The `geochemistry` module is currently focussed on simulation of "GeoTES" systems, which operate between between $25^{\circ}$C and $300^{\circ}$C.
+The geochemistry module is designed to solve geochemical models.  The capabilities include:
 
-The `geochemistry` module consists of two broad parts: the reactions and the transport.
+- equilibrium aqueous systems
+- redox disequilibrium
+- sorption and surface complexation
+- kinetics
+- all these combined with fluid and heat transport
 
-## Reactions
+The geochemistry module is designed to interface easily with the porous-flow module so that complicated reactive transport scenarios can be studied.
 
-- [An introduction to equilibrium reactions, equilibrium constants, etc](equilibrium_reactions.md)
-- [The database](database.md)
-- [Equilibrium in aqueous solutions, sorption, mathematical equations and the numerical solution procedure](equilibrium.md)
-- [Kinetics](kinetics.md)
-- [Activity coefficients](activity_coefficients.md) and [gas fugacity](fugacity.md)
-- [The chemical component basis](basis.md) and [basis swaps](swap.md)
-- [Reaction paths available in the `geochemistry` module](reaction_paths.md)
-- [Definitions of chemistry terminology and notation used](geochemistry_nomenclature.md)
+!media geotes_weber_tensleep_3D.png caption=Temperature, porosity, pH and free volume of Quartz after 90 days of injection in a 3D reactive-transport model.  id=geotes_wt_3Da.fig
 
-## Transport
+## Details
 
-- [Transport in the `geochemistry` module](transport.md)
+- [Theory, numerical solution technique and computational aspects](geochemistry/theory/index.md)
+- [Examples](geochemistry/tests_and_examples/index.md)
+- [Description of input-file objects](geochemistry/systems.md)
+- [A to Z index of these webpages](geochemistry/contents.md)
 
-## Tests and Examples
+## Installation and usage
 
-Although the MOOSE code is incomplete, some [documentation of future `geochemistry` tests](tests_and_examples/geochemistry_tests_and_examples.md) has been written.
+After installing MOOSE using the "Getting Started" instructions (above), only the "framework" will have been compiled.  To compile any of the physics modules, including the geochemistry module, use the following instructions run from the command line:
 
-## Implementation
+```bash
+cd ~/projects/moose/modules
+make
+cd ~/projects/moose/modules/geochemistry
+make
+cd ~/projects/moose/modules/geochemistry/unit
+make
+```
 
-- [Database reader](geochemistry_database_reader.md)
+(If your computer has $N$ cores, the `make` process may be sped up by using the command `make -j`$N$ instead of simply `make`.)
 
+Check that the geochemistry module is correctly compiled using the following instructions:
 
+```bash
+cd ~/projects/moose/modules/geochemistry/unit
+./run_tests
+cd ~/projects/moose/modules/geochemistry
+./run_tests
+```
 
+Virtually all the tests should run and pass.  Some may be "skipped" due to a particular computer setup (for instance, not enough threads).  (If your computer has $N$ cores, the `run_tests` command may be sped up by using the command `./run_tests -j`$N$ instead of simply `./run_tests`.)
 
+The geochemistry executable is called `geochemistry-opt` and is found at `~/projects/moose/modules/geochemistry`.  This may be used to run pure geochemistry simulations.  For example, to run the [cooling a solution in contact with feldspars example](tests_and_examples/cooling_feldspar.md):
 
-!bibtex bibliography
+```bash
+cd ~/projects/moose/modules/geochemistry/test/tests/time_dependent_reactions
+../../../geochemistry-opt -i cooling.i
+```
+
+For coupled reactive-transport simulations using the PorousFlow module, the `combined-opt` executable must be used.  For example, to run the [Weber-Tensleep GeoTES example](tests_and_examples/geotes_weber_tensleep.md) from the command line:
+
+```bash
+cd ~/projects/moose/modules/combined/examples/geochem-porous_flow/geotes_weber_tensleep
+../../../combined-opt -i exchanger.i
+```

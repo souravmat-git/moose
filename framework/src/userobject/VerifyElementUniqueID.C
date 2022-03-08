@@ -14,12 +14,11 @@
 
 registerMooseObject("MooseApp", VerifyElementUniqueID);
 
-defineLegacyParams(VerifyElementUniqueID);
-
 InputParameters
 VerifyElementUniqueID::validParams()
 {
   InputParameters params = ElementUserObject::validParams();
+  params.addClassDescription("Verifies that all element ids are unique.");
   return params;
 }
 

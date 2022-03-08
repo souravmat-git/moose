@@ -1,15 +1,17 @@
 [Mesh]
-  type = GeneratedMesh
-  dim = 2
+  [gen]
+    type = GeneratedMeshGenerator
+    dim = 2
 
-  nx = 10
-  ny = 10
+    nx = 10
+    ny = 10
 
-  xmin = 0.0
-  xmax = 1.0
+    xmin = 0.0
+    xmax = 1.0
 
-  ymin = 0.0
-  ymax = 10.0
+    ymin = 0.0
+    ymax = 10.0
+  []
 
   [./Partitioner]
     type = LibmeshPartitioner
@@ -22,8 +24,6 @@
   [./u]
     order = FIRST
     family = LAGRANGE
-    initial_from_file_var = u
-    initial_from_file_timestep = 2
   [../]
 []
 

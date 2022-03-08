@@ -11,6 +11,7 @@
 
 #include "MooseArray.h"
 #include "MooseTypes.h"
+#include "MeshChangedInterface.h"
 
 #include "libmesh/tensor_tools.h"
 #include "libmesh/vector_value.h"
@@ -32,8 +33,13 @@ class Assembly;
 template <typename>
 class MooseVariableFV;
 
+namespace libMesh
+{
+class QBase;
+}
+
 template <typename OutputType>
-class MooseVariableDataFV
+class MooseVariableDataFV : public MeshChangedInterface
 {
 public:
   // type for gradient, second and divergence of template class OutputType
@@ -156,25 +162,20 @@ public:
     return _ad_grad_u;
   }
 
+  const ADTemplateVariableGradient<OutputType> & adGradSlnDot() const
+  {
+    mooseError("Gradient of time derivative not yet implemented for FV");
+  }
+
   const ADTemplateVariableSecond<OutputType> & adSecondSln() const
   {
     _need_ad = _need_ad_second_u = true;
     return _ad_second_u;
   }
 
-  const ADTemplateVariableValue<OutputType> & adUDot() const
-  {
-    _need_ad = _need_ad_u_dot = true;
+  const ADTemplateVariableValue<OutputType> & adUDot() const;
 
-    if (!_time_integrator)
-      // If we don't have a time integrator (this will be the case for variables that are a part of
-      // the AuxiliarySystem) then we have no way to calculate _ad_u_dot and we are just going to
-      // copy the values from _u_dot. Of course in order to be able to do that we need to calculate
-      // _u_dot
-      _need_u_dot = true;
-
-    return _ad_u_dot;
-  }
+  const ADTemplateVariableValue<OutputType> & adUDotDot() const;
 
   const FieldVariableValue & uDot() const;
 
@@ -201,7 +202,12 @@ public:
    */
   void setDofValues(const DenseVector<OutputData> & values);
 
+  ///@{
+  /**
+   * dof value setters
+   */
   void setDofValue(const OutputData & value, unsigned int index);
+  ///@}
 
   OutputData
   getElementalValue(const Elem * elem, Moose::SolutionState state, unsigned int idx = 0) const;
@@ -269,6 +275,14 @@ public:
   /// checks if a Dirichlet BC exists on this face
   bool hasDirichletBC() const { return _has_dirichlet_bc; }
 
+  /**
+   * The oldest solution state that is requested for this variable
+   * (0 = current, 1 = old, 2 = older, etc).
+   */
+  unsigned int oldestSolutionStateRequested() const;
+
+  void meshChanged() override;
+
 private:
   void initializeSolnVars();
 
@@ -280,6 +294,11 @@ private:
   void fetchDoFValues();
   void fetchADDoFValues();
   void zeroSizeDofValues();
+
+  /**
+   * Helper method that tells us whether it's safe to compute _ad_u_dot
+   */
+  bool safeToComputeADUDot() const;
 
   /// A const reference to the owning MooseVariableFE object
   const MooseVariableFV<OutputType> & _var;
@@ -368,7 +387,9 @@ private:
   mutable bool _need_ad;
   mutable bool _need_ad_u;
   mutable bool _need_ad_u_dot;
+  mutable bool _need_ad_u_dotdot;
   mutable bool _need_ad_grad_u;
+  mutable bool _need_ad_grad_u_dot;
   mutable bool _need_ad_second_u;
 
   /// local solution flags
@@ -435,7 +456,10 @@ private:
   ADTemplateVariableSecond<OutputShape> _ad_second_u;
   MooseArray<DualReal> _ad_dof_values;
   MooseArray<DualReal> _ad_dofs_dot;
+  MooseArray<DualReal> _ad_dofs_dotdot;
   ADTemplateVariableValue<OutputShape> _ad_u_dot;
+  ADTemplateVariableValue<OutputShape> _ad_u_dotdot;
+  ADTemplateVariableGradient<OutputShape> _ad_grad_u_dot;
 
   // time derivatives
 
@@ -482,6 +506,12 @@ private:
 
   /// Whether this variable is being calculated on a displaced system
   const bool _displaced;
+
+  /// The quadrature rule
+  const QBase * _qrule;
+
+  /// A dummy ADReal variable
+  ADReal _ad_real_dummy = 0;
 };
 
 /////////////////////// General template definitions //////////////////////////////////////
@@ -492,4 +522,43 @@ MooseVariableDataFV<OutputType>::adDofValues() const
 {
   _need_ad = true;
   return _ad_dof_values;
+}
+
+template <typename OutputType>
+inline bool
+MooseVariableDataFV<OutputType>::safeToComputeADUDot() const
+{
+  // If we don't have a time integrator then we have no way to calculate _ad_u_dot because we rely
+  // on calls to TimeIntegrator::computeADTimeDerivatives. Another potential situation where
+  // _ad_u_dot computation is potentially troublesome is if we are an auxiliary variable which uses
+  // the auxiliary system copy of the time integrator. Some derived time integrator classes do setup
+  // in their solve() method, and that solve() method only happens for the nonlinear system copy of
+  // the time integrator.
+  return _time_integrator && (_var.kind() == Moose::VAR_NONLINEAR);
+}
+
+template <typename OutputType>
+inline const ADTemplateVariableValue<OutputType> &
+MooseVariableDataFV<OutputType>::adUDot() const
+{
+  _need_ad = _need_ad_u_dot = true;
+
+  if (!safeToComputeADUDot())
+    // We will just copy the value of _u_dot into _ad_u_dot
+    _need_u_dot = true;
+
+  return _ad_u_dot;
+}
+
+template <typename OutputType>
+const ADTemplateVariableValue<OutputType> &
+MooseVariableDataFV<OutputType>::adUDotDot() const
+{
+  _need_ad = _need_ad_u_dotdot = true;
+
+  if (!safeToComputeADUDot())
+    // We will just copy the value of _u_dotdot into _ad_u_dotdot
+    _need_u_dotdot = true;
+
+  return _ad_u_dotdot;
 }

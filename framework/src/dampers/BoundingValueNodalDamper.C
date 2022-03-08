@@ -11,12 +11,11 @@
 
 registerMooseObject("MooseApp", BoundingValueNodalDamper);
 
-defineLegacyParams(BoundingValueNodalDamper);
-
 InputParameters
 BoundingValueNodalDamper::validParams()
 {
   InputParameters params = NodalDamper::validParams();
+  params.addClassDescription("Limits the value of a variable to be within user-specified bounds.");
   params.addParam<Real>("max_value",
                         std::numeric_limits<Real>::max(),
                         "The maximum permissible iterative value for the variable.");

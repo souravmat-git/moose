@@ -11,12 +11,6 @@
 
 #include "MeshGenerator.h"
 
-// Forward declarations
-class FileMeshGenerator;
-
-template <>
-InputParameters validParams<FileMeshGenerator>();
-
 /**
  * Generates a mesh by reading it from an file.
  */
@@ -30,6 +24,9 @@ public:
   std::unique_ptr<MeshBase> generate() override;
 
 protected:
+  /// the path/name of the file containing the mesh
   const MeshFileName & _file_name;
-};
 
+  /// whether to skip partitioning after loading the mesh
+  const bool _skip_partitioning;
+};

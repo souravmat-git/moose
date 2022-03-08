@@ -11,12 +11,11 @@
 
 registerMooseObject("MooseApp", ConstantDamper);
 
-defineLegacyParams(ConstantDamper);
-
 InputParameters
 ConstantDamper::validParams()
 {
   InputParameters params = GeneralDamper::validParams();
+  params.addClassDescription("Modifies the non-linear step by applying a constant damping factor.");
   params.addRequiredParam<Real>("damping",
                                 "The percentage (between 0 and 1) of the newton update to take.");
   return params;

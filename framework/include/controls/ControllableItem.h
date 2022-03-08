@@ -18,8 +18,8 @@
  * An intermediate object for building a "controllable item", where an "item" can refer to multiple
  * input parameters with different names.
  *
- * The name supplied to the constructor is considered the "master" parameter. The parameter(s) added
- * via the connect method are considered the slaves.
+ * The name supplied to the constructor is considered the "master" parameter. The parameter(s)
+ * added via the connect method are considered the secondaries.
  *
  * In general, an ControllableItem will have a one-to-one relationship with an input parameter
  * value, but in some instances it is desirable to connect parameters with different names together.
@@ -176,7 +176,8 @@ ControllableItem::check() const
 {
   return std::all_of(_pairs.begin(),
                      _pairs.end(),
-                     [](std::pair<MooseObjectParameterName, libMesh::Parameters::Value *> pair) {
+                     [](std::pair<MooseObjectParameterName, libMesh::Parameters::Value *> pair)
+                     {
                        libMesh::Parameters::Parameter<T> * param =
                            dynamic_cast<libMesh::Parameters::Parameter<T> *>(pair.second);
                        return param != nullptr;
@@ -196,4 +197,3 @@ public:
 private:
   MooseObjectParameterName _name;
 };
-

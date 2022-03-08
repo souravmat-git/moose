@@ -15,13 +15,11 @@
 
 registerMooseAction("MooseApp", AddMeshGeneratorAction, "add_mesh_generator");
 
-defineLegacyParams(AddMeshGeneratorAction);
-
 InputParameters
 AddMeshGeneratorAction::validParams()
 {
   InputParameters params = MooseObjectAction::validParams();
-  params.addClassDescription("Action for adding mesh generator objects");
+  params.addClassDescription("Add a MeshGenerator object to the simulation.");
   return params;
 }
 

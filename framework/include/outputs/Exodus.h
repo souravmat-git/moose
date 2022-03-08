@@ -12,17 +12,11 @@
 // MOOSE includes
 #include "OversampleOutput.h"
 
-// Forward declarations
-class Exodus;
-
 // libMesh forward declarations
 namespace libMesh
 {
 class ExodusII_IO;
 }
-
-template <>
-InputParameters validParams<Exodus>();
 
 /**
  * Class for output data to the ExodusII format
@@ -129,6 +123,11 @@ protected:
    * Writes the input file to the ExodusII output
    */
   virtual void outputInput() override;
+
+  /**
+   * Writes the Reporter values to the ExodusII output
+   */
+  virtual void outputReporters() override;
 
   /**
    * Returns the current filename, this method handles the -s000 suffix

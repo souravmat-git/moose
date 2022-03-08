@@ -14,7 +14,7 @@ registerMooseObject("MiscApp", ADDensity);
 InputParameters
 ADDensity::validParams()
 {
-  InputParameters params = ADMaterial::validParams();
+  InputParameters params = Material::validParams();
   params.addClassDescription("Creates density AD material property");
   params.addCoupledVar(
       "displacements",
@@ -24,14 +24,16 @@ ADDensity::validParams()
 }
 
 ADDensity::ADDensity(const InputParameters & parameters)
-  : ADMaterial(parameters),
+  : Material(parameters),
     _coord_system(getBlockCoordSystem()),
-    _disp_r(coupledComponents("displacements") ? adCoupledValue("displacements", 0) : _ad_zero),
     _initial_density(getParam<Real>("density")),
+    _disp_r(coupledComponents("displacements") ? adCoupledValue("displacements", 0) : _ad_zero),
+    _grad_disp(adCoupledGradients("displacements")),
     _density(declareADProperty<Real>("density"))
 {
   if (getParam<bool>("use_displaced_mesh"))
-    paramError("ADDensity needs to act on an undisplaced mesh. Use of a displaced mesh leads to "
+    paramError("use_displaced_mesh",
+               "ADDensity needs to act on an undisplaced mesh. Use of a displaced mesh leads to "
                "incorrect gradient values");
 
   // get coupled gradients
@@ -41,10 +43,6 @@ ADDensity::ADDensity(const InputParameters & parameters)
     paramError(
         "displacements",
         "The system uses a displaced problem but 'displacements' are not provided in ADDensity.");
-
-  _grad_disp.resize(ndisp);
-  for (unsigned int i = 0; i < ndisp; ++i)
-    _grad_disp[i] = &adCoupledGradient("displacements", i);
 
   // fill remaining components with zero
   _grad_disp.resize(3, &_ad_grad_zero);

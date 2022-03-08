@@ -17,8 +17,6 @@
 
 registerMooseObject("MooseApp", ParsedSubdomainMeshGenerator);
 
-defineLegacyParams(ParsedSubdomainMeshGenerator);
-
 InputParameters
 ParsedSubdomainMeshGenerator::validParams()
 {
@@ -72,7 +70,7 @@ ParsedSubdomainMeshGenerator::ParsedSubdomainMeshGenerator(const InputParameters
   if (_func_F->Parse(_function, "x,y,z") >= 0)
     mooseError("Invalid function\n",
                _function,
-               "\nin ParsedSubdomainMeshModifier ",
+               "\nin ParsedSubdomainMeshGenerator ",
                name(),
                ".\n",
                _func_F->ErrorMsg());
@@ -88,9 +86,9 @@ ParsedSubdomainMeshGenerator::generate()
   // Loop over the elements
   for (const auto & elem : mesh->active_element_ptr_range())
   {
-    _func_params[0] = elem->centroid()(0);
-    _func_params[1] = elem->centroid()(1);
-    _func_params[2] = elem->centroid()(2);
+    _func_params[0] = elem->vertex_average()(0);
+    _func_params[1] = elem->vertex_average()(1);
+    _func_params[2] = elem->vertex_average()(2);
     bool contains = evaluate(_func_F);
 
     if (contains && std::find(_excluded_ids.begin(), _excluded_ids.end(), elem->subdomain_id()) ==

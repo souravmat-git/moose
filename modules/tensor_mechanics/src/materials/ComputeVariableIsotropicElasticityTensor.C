@@ -17,10 +17,10 @@ ComputeVariableIsotropicElasticityTensor::validParams()
   InputParameters params = ComputeElasticityTensorBase::validParams();
   params.addClassDescription("Compute an isotropic elasticity tensor for elastic constants that "
                              "change as a function of material properties");
-  params.addRequiredParam<MaterialPropertyName>("youngs_modulus",
-                                                "Name of material defining the Young's Modulus");
-  params.addRequiredParam<MaterialPropertyName>("poissons_ratio",
-                                                "Name of material defining the Poisson's Ratio");
+  params.addRequiredParam<MaterialPropertyName>(
+      "youngs_modulus", "Name of material property defining the Young's Modulus");
+  params.addRequiredParam<MaterialPropertyName>(
+      "poissons_ratio", "Name of material property defining the Poisson's Ratio");
   params.addRequiredCoupledVar(
       "args", "Variable dependence for the Young's Modulus and Poisson's Ratio materials");
   return params;
@@ -119,7 +119,7 @@ ComputeVariableIsotropicElasticityTensor::computeQpElasticityTensor()
                            2.0 * E * nu * dnu / ((1.0 + nu) * (1.0 - 2.0 * nu) * (1.0 - 2.0 * nu));
       const Real dG = dE / (2.0 * (1.0 + nu)) - 2.0 * E * dnu / (4.0 * (1.0 + nu) * (1.0 + nu));
 
-      (*_delasticity_tensor[i])[_qp].fillGeneralIsotropic(dlambda, dG, 0.0);
+      (*_delasticity_tensor[i])[_qp].fillSymmetricIsotropic(dlambda, dG);
     }
 
     for (unsigned int j = i; j < _num_args; ++j)
@@ -149,7 +149,7 @@ ComputeVariableIsotropicElasticityTensor::computeQpElasticityTensor()
                          (0.5 * d2E - (E * d2nu + dEi * dnuj + dEj * dnui) / (2.0 * nu + 2.0) +
                           dnui * dnuj * E / ((nu + 1.0) * (nu + 1.0)));
 
-        (*_d2elasticity_tensor[i][j])[_qp].fillGeneralIsotropic(d2lambda, d2G, 0.0);
+        (*_d2elasticity_tensor[i][j])[_qp].fillSymmetricIsotropic(d2lambda, d2G);
       }
   }
 }

@@ -12,12 +12,12 @@
 
 registerMooseAction("MooseApp", AddAuxVariableAction, "add_aux_variable");
 
-defineLegacyParams(AddAuxVariableAction);
-
 InputParameters
 AddAuxVariableAction::validParams()
 {
-  return AddVariableAction::validParams();
+  InputParameters params = AddVariableAction::validParams();
+  params.addClassDescription("Add auxiliary variable to the simulation.");
+  return params;
 }
 
 AddAuxVariableAction::AddAuxVariableAction(InputParameters params) : AddVariableAction(params) {}

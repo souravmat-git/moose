@@ -11,55 +11,29 @@
 
 // local includes
 #include "MooseArray.h"
-#include "MooseObject.h"
+#include "NeighborResidualObject.h"
 #include "BoundaryRestrictable.h"
-#include "SetupInterface.h"
-#include "TransientInterface.h"
-#include "UserObjectInterface.h"
-#include "PostprocessorInterface.h"
 #include "NeighborCoupleableMooseVariableDependencyIntermediateInterface.h"
-#include "FunctionInterface.h"
-#include "Restartable.h"
-#include "MeshChangedInterface.h"
 #include "TwoMaterialPropertyInterface.h"
-#include "TaggingInterface.h"
-
-// Forward Declarations
-class InterfaceKernelBase;
-
-template <>
-InputParameters validParams<InterfaceKernelBase>();
+#include "ElementIDInterface.h"
 
 /**
  * InterfaceKernelBase is the base class for all InterfaceKernel type classes.
  */
 
-class InterfaceKernelBase : public MooseObject,
+class InterfaceKernelBase : public NeighborResidualObject,
                             public BoundaryRestrictable,
-                            public SetupInterface,
-                            public TransientInterface,
-                            public FunctionInterface,
-                            public UserObjectInterface,
-                            public PostprocessorInterface,
                             public NeighborCoupleableMooseVariableDependencyIntermediateInterface,
-                            public Restartable,
-                            public MeshChangedInterface,
                             public TwoMaterialPropertyInterface,
-                            public TaggingInterface
+                            public ElementIDInterface
 {
 public:
   static InputParameters validParams();
 
   InterfaceKernelBase(const InputParameters & parameters);
 
-  /// The master variable that this interface kernel operates on
-  virtual MooseVariableFEBase & variable() const = 0;
-
   /// The neighbor variable number that this interface kernel operates on
   virtual const MooseVariableFEBase & neighborVariable() const = 0;
-
-  /// Return a reference to the subproblem.
-  SubProblem & subProblem() { return _subproblem; }
 
   /**
    * Using the passed DGResidual type, selects the correct test function space and residual block,
@@ -81,17 +55,13 @@ public:
    */
   virtual void computeOffDiagElemNeighJacobian(Moose::DGJacobianType type, unsigned int jvar) = 0;
 
-  /// Selects the correct Jacobian type and routine to call for the master variable jacobian
+  /// Selects the correct Jacobian type and routine to call for the primary variable jacobian
   virtual void computeElementOffDiagJacobian(unsigned int jvar) = 0;
 
-  /// Selects the correct Jacobian type and routine to call for the slave variable jacobian
+  /// Selects the correct Jacobian type and routine to call for the secondary variable jacobian
   virtual void computeNeighborOffDiagJacobian(unsigned int jvar) = 0;
 
-  /// Computes the residual for the current side.
-  virtual void computeResidual() = 0;
-
-  /// Computes the jacobian for the current side.
-  virtual void computeJacobian() = 0;
+  void prepareShapes(unsigned int var_num) override final;
 
 protected:
   /// Compute jacobians at quadrature points
@@ -105,21 +75,6 @@ protected:
 
   /// The volume of the current neighbor
   const Real & getNeighborElemVolume();
-
-  /// Reference to the controlling finite element problem
-  SubProblem & _subproblem;
-
-  /// Reference to the nonlinear system
-  SystemBase & _sys;
-
-  /// The thread ID
-  THREAD_ID _tid;
-
-  /// Problem assembly
-  Assembly & _assembly;
-
-  /// The problem mesh
-  MooseMesh & _mesh;
 
   /// Pointer reference to the current element
   const Elem * const & _current_elem;
@@ -164,48 +119,48 @@ protected:
   unsigned int _i, _j;
 
   /** MultiMooseEnum specifying whether residual save-in
-   * aux variables correspond to master or slave side
+   * aux variables correspond to primary or secondary side
    */
   MultiMooseEnum _save_in_var_side;
 
   /** The names of the aux variables that will be used to save-in residuals
-   * (includes both master and slave variable names)
+   * (includes both primary and secondary variable names)
    */
   std::vector<AuxVariableName> _save_in_strings;
 
-  /// Whether there are master residual aux variables
-  bool _has_master_residuals_saved_in;
+  /// Whether there are primary residual aux variables
+  bool _has_primary_residuals_saved_in;
 
-  /// The aux variables to save the master residual contributions to
-  std::vector<MooseVariableFEBase *> _master_save_in_residual_variables;
+  /// The aux variables to save the primary residual contributions to
+  std::vector<MooseVariableFEBase *> _primary_save_in_residual_variables;
 
-  /// Whether there are slave residual aux variables
-  bool _has_slave_residuals_saved_in;
+  /// Whether there are secondary residual aux variables
+  bool _has_secondary_residuals_saved_in;
 
-  /// The aux variables to save the slave contributions to
-  std::vector<MooseVariableFEBase *> _slave_save_in_residual_variables;
+  /// The aux variables to save the secondary contributions to
+  std::vector<MooseVariableFEBase *> _secondary_save_in_residual_variables;
 
   /** MultiMooseEnum specifying whether jacobian save-in
-   * aux variables correspond to master or slave side
+   * aux variables correspond to primary or secondary side
    */
   MultiMooseEnum _diag_save_in_var_side;
 
   /** The names of the aux variables that will be used to save-in jacobians
-   * (includes both master and slave variable names)
+   * (includes both primary and secondary variable names)
    */
   std::vector<AuxVariableName> _diag_save_in_strings;
 
-  /// Whether there are master jacobian aux variables
-  bool _has_master_jacobians_saved_in;
+  /// Whether there are primary jacobian aux variables
+  bool _has_primary_jacobians_saved_in;
 
-  /// The aux variables to save the diagonal Jacobian contributions of the master variables to
-  std::vector<MooseVariableFEBase *> _master_save_in_jacobian_variables;
+  /// The aux variables to save the diagonal Jacobian contributions of the primary variables to
+  std::vector<MooseVariableFEBase *> _primary_save_in_jacobian_variables;
 
-  /// Whether there are slave jacobian aux variables
-  bool _has_slave_jacobians_saved_in;
+  /// Whether there are secondary jacobian aux variables
+  bool _has_secondary_jacobians_saved_in;
 
-  /// The aux variables to save the diagonal Jacobian contributions of the slave variables to
-  std::vector<MooseVariableFEBase *> _slave_save_in_jacobian_variables;
+  /// The aux variables to save the diagonal Jacobian contributions of the secondary variables to
+  std::vector<MooseVariableFEBase *> _secondary_save_in_jacobian_variables;
 
   /// Mutex that prevents multiple threads from saving into the residual aux_var at the same time
   static Threads::spin_mutex _resid_vars_mutex;

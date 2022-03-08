@@ -14,7 +14,7 @@ registerMooseObject("PhaseFieldTestApp", ADTestDerivativeFunction);
 InputParameters
 ADTestDerivativeFunction::validParams()
 {
-  InputParameters params = ADMaterial::validParams();
+  InputParameters params = Material::validParams();
   params.addClassDescription(
       "Material that implements the a function of one variable and its first derivative.");
   MooseEnum functionEnum("F1 F2 F3");
@@ -29,19 +29,16 @@ ADTestDerivativeFunction::validParams()
 }
 
 ADTestDerivativeFunction::ADTestDerivativeFunction(const InputParameters & parameters)
-  : ADMaterial(parameters),
+  : Material(parameters),
     _function(getParam<MooseEnum>("function").template getEnum<FunctionEnum>()),
-    _op(coupledComponents("op")),
+    _op(adCoupledValues("op")),
     _f_name(getParam<MaterialPropertyName>("f_name")),
     _prop_F(declareADProperty<Real>(_f_name)),
     _prop_dFdop(coupledComponents("op"))
 {
   for (std::size_t i = 0; i < _op.size(); ++i)
-  {
-    _op[i] = &adCoupledValue("op", i);
     _prop_dFdop[i] = &declareADProperty<Real>(
         derivativePropertyNameFirst(_f_name, this->getVar("op", i)->name()));
-  }
 
   if (_function == FunctionEnum::F1 && _op.size() != 1)
     paramError("op", "Specify exactly one variable to an F1 type function.");

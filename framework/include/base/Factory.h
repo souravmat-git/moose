@@ -61,7 +61,6 @@ class InputParameters;
 #define registerDistribution(name) registerObject(name)
 #define registerSampler(name) registerObject(name)
 #define registerMesh(name) registerObject(name)
-#define registerMeshModifier(name) registerObject(name)
 #define registerConstraint(name) registerObject(name)
 #define registerScalarKernel(name) registerObject(name)
 #define registerUserObject(name) registerObject(name)
@@ -97,7 +96,6 @@ class InputParameters;
 #define registerNamedDistribution(obj, name) registerNamedObject(obj, name)
 #define registerNamedSampler(obj, name) registerNamedObject(obj, name)
 #define registerNamedMesh(obj, name) registerNamedObject(obj, name)
-#define registerNamedMeshModifier(name) registerNamedObject(obj, name)
 #define registerNamedConstraint(obj, name) registerNamedObject(obj, name)
 #define registerNamedUserObject(obj, name) registerNamedObject(obj, name)
 #define registerNamedPreconditioner(obj, name) registerNamedObject(obj, name)
@@ -138,16 +136,6 @@ using buildPtr = MooseObjectPtr (*)(const InputParameters & parameters);
 using registeredMooseObjectIterator = std::map<std::string, paramsPtr>::iterator;
 
 /**
- * Build an object of type T
- */
-template <class T>
-MooseObjectPtr
-buildObject(const InputParameters & parameters)
-{
-  return std::make_shared<T>(parameters);
-}
-
-/**
  * Generic factory class for build all sorts of objects
  */
 class Factory
@@ -163,7 +151,7 @@ public:
   template <typename T>
   void reg(const std::string & obj_name, const std::string & file = "", int line = -1)
   {
-    reg("", obj_name, &buildObject<T>, &validParams<T>, "", "", file, line);
+    reg("", obj_name, &buildObject<T>, &moose::internal::callValidParams<T>, "", "", file, line);
   }
 
   void reg(const std::string & label,
@@ -199,8 +187,8 @@ public:
   /**
    * Register a deprecated object that expires
    * @param obj_name The name of the object to register
-   * @param t_str String containing the expiration date for the object in "MM/DD/YYYY HH:MM" format.
-   * Note that the HH:MM is not optional
+   * @param t_str String containing the expiration date for the object in "MM/DD/YYYY HH:MM"
+   * format. Note that the HH:MM is not optional
    *
    * Note: Params file and line are supplied by the macro
    */
@@ -210,7 +198,7 @@ public:
                      const std::string & file,
                      int line)
   {
-    reg("", obj_name, &buildObject<T>, &validParams<T>, t_str, "", file, line);
+    reg("", obj_name, &buildObject<T>, &moose::internal::callValidParams<T>, t_str, "", file, line);
   }
 
   /**
@@ -229,7 +217,14 @@ public:
                    const std::string & file,
                    int line)
   {
-    reg("", dep_obj, &buildObject<T>, &validParams<T>, time_str, replacement_name, file, line);
+    reg("",
+        dep_obj,
+        &buildObject<T>,
+        &moose::internal::callValidParams<T>,
+        time_str,
+        replacement_name,
+        file,
+        line);
   }
 
   /**
@@ -271,7 +266,6 @@ public:
    * @return Parameters of the object
    */
   InputParameters getValidParams(const std::string & name);
-  InputParameters getADValidParams(const std::string & name);
 
   /**
    * Build an object (must be registered) - THIS METHOD IS DEPRECATED (Use create<T>())
@@ -284,7 +278,7 @@ public:
    */
   std::shared_ptr<MooseObject> create(const std::string & obj_name,
                                       const std::string & name,
-                                      InputParameters & parameters,
+                                      const InputParameters & parameters,
                                       THREAD_ID tid = 0,
                                       bool print_deprecated = true);
 
@@ -299,7 +293,7 @@ public:
   template <typename T>
   std::shared_ptr<T> create(const std::string & obj_name,
                             const std::string & name,
-                            InputParameters & parameters,
+                            const InputParameters & parameters,
                             THREAD_ID tid = 0)
   {
     std::shared_ptr<T> new_object =
@@ -351,10 +345,11 @@ public:
 
   MooseApp & app() { return _app; }
 
-protected:
+private:
   /**
    * Parse time string (mm/dd/yyyy HH:MM)
-   * @param t_str String with the object expiration date, this must be in the form mm/dd/yyyy HH:MM
+   * @param t_str String with the object expiration date, this must be in the form mm/dd/yyyy
+   * HH:MM
    * @return A time_t object with the expiration date
    */
   std::time_t parseTime(std::string);
@@ -369,6 +364,15 @@ protected:
    * Prints error information when an object is not registered
    */
   void reportUnregisteredError(const std::string & obj_name) const;
+
+  /**
+   * Build an object of type T
+   */
+  template <typename T>
+  static MooseObjectPtr buildObject(const InputParameters & parameters)
+  {
+    return std::make_shared<T>(parameters);
+  }
 
   /// Reference to the application
   MooseApp & _app;
@@ -392,9 +396,6 @@ protected:
 
   /// The list of objects that may be registered
   std::set<std::string> _registerable_objects;
-
-  /// Object id count
-  MooseObjectID _object_count;
 
   /// Constructed Moose Object types
   std::set<std::string> _constructed_types;

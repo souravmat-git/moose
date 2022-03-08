@@ -77,9 +77,9 @@ class ReaderComponent(Component, mixins.ReaderObject):
         the default settings for the component, see core.py for examples.
         """
         settings = dict()
-        settings['style'] = ('', "The style settings that are passed to rendered HTML tag.")
-        settings['class'] = ('', "The class settings to be passed to rendered HTML tag.")
-        settings['id'] = ('', "The class settings to be passed to the rendered tag.")
+        settings['style'] = (None, "The style settings that are passed to rendered HTML tag.")
+        settings['class'] = (None, "The class settings to be passed to rendered HTML tag.")
+        settings['id'] = (None, "The class settings to be passed to the rendered tag.")
         return settings
 
     def __init__(self):
@@ -88,9 +88,6 @@ class ReaderComponent(Component, mixins.ReaderObject):
         """
         Component.__init__(self)
         mixins.ReaderObject.__init__(self)
-
-        # Local settings, this is updated by __call__ just prior to calling the createToken()
-        self.__settings = None
 
         # Check return type of default settings
         defaults = self.defaultSettings()
@@ -118,45 +115,30 @@ class ReaderComponent(Component, mixins.ReaderObject):
         # Define the settings
         defaults = self.defaultSettings()
         if self.PARSE_SETTINGS and ('settings' in info):
-            self.__settings, _ = parse_settings(defaults, info['settings'])
+            settings, _ = parse_settings(defaults, info['settings'])
         else:
-            self.__settings = {k:v[0] for k, v in defaults.items()}
+            settings = {k:v[0] for k, v in defaults.items()}
 
-        # Call user method and reset settings
-        token = self.createToken(parent, info, page)
-        self.__settings = None
-        return token
+        return self.createToken(parent, info, page, settings)
 
-    @property
-    def attributes(self):
+    @staticmethod
+    def attributes(settings):
         """
         Return a dictionary with the common html settings.
 
         This property is only available from within the createToken method, it returns None when
         called externally.
         """
-        if self.__settings:
-            return {'style':self.settings['style'].strip(),
-                    'id':self.settings['id'].strip(),
-                    'class':self.settings['class'].strip()}
-        return dict()
+        out = dict()
+        if settings.get('style', None) is not None:
+            out['style'] = settings['style'].strip()
+        if settings.get('id', None) is not None:
+            out['id'] = settings['id'].strip()
+        if settings.get('class', None) is not None:
+            out['class'] = settings['class'].strip()
+        return out
 
-    @property
-    def settings(self):
-        """
-        Retrun a copy of the settings, without the setting descriptions.
-        """
-        return self.__settings
-
-    def setSettings(self, settings):
-        """
-        Method for defining the settings for this object directly.
-
-        This is required to allow for the command extension to work correctly.
-        """
-        self.__settings = settings
-
-    def createToken(self, parent, info, page):
+    def createToken(self, parent, info, page, settings):
         """
         Method designed to be implemented by child classes, this method should create the
         token for the AST based on the regex match.

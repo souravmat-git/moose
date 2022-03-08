@@ -12,14 +12,13 @@
 #include <algorithm>
 #include <limits>
 
-registerMooseObject("MooseApp", NodalMaxValue);
-
-defineLegacyParams(NodalMaxValue);
+registerMooseObjectReplaced("MooseApp", NodalMaxValue, "09/27/2021 00:00", NodalExtremeValue);
 
 InputParameters
 NodalMaxValue::validParams()
 {
   InputParameters params = NodalVariablePostprocessor::validParams();
+  params.addClassDescription("Computes the maximum (over all the nodal values) of a variable.");
   return params;
 }
 

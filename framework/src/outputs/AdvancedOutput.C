@@ -43,6 +43,13 @@ addAdvancedOutputParams(InputParameters & params)
       "A list of the variables and postprocessors that should be output to the Exodus file "
       "(may include Variables, ScalarVariables, and Postprocessor names).");
 
+  // Enable output of PP/VPP to JSON
+  params.addParam<bool>(
+      "postprocessors_as_reporters", false, "Output Postprocessors values as Reporter values.");
+  params.addParam<bool>("vectorpostprocessors_as_reporters",
+                        false,
+                        "Output VectorsPostprocessors vectors as Reporter values.");
+
   // 'Variables' Group
   params.addParamNamesToGroup("hide show", "Variables");
 
@@ -78,8 +85,6 @@ addAdvancedOutputParams(InputParameters & params)
 }
 }
 
-defineLegacyParams(AdvancedOutput);
-
 InputParameters
 AdvancedOutput::validParams()
 {
@@ -94,7 +99,7 @@ MultiMooseEnum
 AdvancedOutput::getOutputTypes()
 {
   return MultiMooseEnum("nodal=0 elemental=1 scalar=2 postprocessor=3 vector_postprocessor=4 "
-                        "input=5 system_information=6");
+                        "input=5 system_information=6 reporter=7");
 }
 
 // Enables the output types (see getOutputTypes) for an AdvancedOutput object
@@ -123,7 +128,10 @@ AdvancedOutput::AdvancedOutput(const InputParameters & parameters)
   : FileOutput(parameters),
     _elemental_as_nodal(isParamValid("elemental_as_nodal") ? getParam<bool>("elemental_as_nodal")
                                                            : false),
-    _scalar_as_nodal(isParamValid("scalar_as_nodal") ? getParam<bool>("scalar_as_nodal") : false)
+    _scalar_as_nodal(isParamValid("scalar_as_nodal") ? getParam<bool>("scalar_as_nodal") : false),
+    _reporter_data(_problem_ptr->getReporterData()),
+    _postprocessors_as_reporters(getParam<bool>("postprocessors_as_reporters")),
+    _vectorpostprocessors_as_reporters(getParam<bool>("vectorpostprocessors_as_reporters"))
 {
   _is_advanced = true;
   _advanced_execute_on = OutputOnWarehouse(_execute_on, parameters);
@@ -132,10 +140,14 @@ AdvancedOutput::AdvancedOutput(const InputParameters & parameters)
 void
 AdvancedOutput::initialSetup()
 {
-  // Do not initialize more than once
-  // This check is needed for YAK which calls Executioners from within Executioners
-  if (_initialized)
-    return;
+  init();
+}
+
+void
+AdvancedOutput::init()
+{
+  // Clear existing execute information lists
+  _execute_data.reset();
 
   // Initialize the available output
   initAvailableLists();
@@ -173,9 +185,6 @@ AdvancedOutput::initialSetup()
   // Initialize the execution flags
   for (auto & it : _advanced_execute_on)
     initExecutionTypes(it.first, it.second);
-
-  // Set the initialization flag
-  _initialized = true;
 }
 
 AdvancedOutput::~AdvancedOutput() {}
@@ -236,6 +245,13 @@ AdvancedOutput::outputInput()
              "'");
 }
 
+void
+AdvancedOutput::outputReporters()
+{
+  mooseError(
+      "Output of the Reporter value(s) is not support for this output object named '", name(), "'");
+}
+
 bool
 AdvancedOutput::shouldOutput(const ExecFlagType & type)
 {
@@ -251,6 +267,9 @@ AdvancedOutput::shouldOutput(const ExecFlagType & type)
 void
 AdvancedOutput::output(const ExecFlagType & type)
 {
+  // (re)initialize the list of available items for output
+  init();
+
   // Call the various output types, if data exists
   if (wantOutput("nodal", type))
   {
@@ -292,6 +311,12 @@ AdvancedOutput::output(const ExecFlagType & type)
   {
     outputInput();
     _last_execute_time["input"] = _time;
+  }
+
+  if (wantOutput("reporters", type))
+  {
+    outputReporters();
+    _last_execute_time["reporters"] = _time;
   }
 }
 
@@ -401,20 +426,22 @@ AdvancedOutput::initAvailableLists()
         else if (type.family == NEDELEC_ONE || type.family == LAGRANGE_VEC ||
                  type.family == MONOMIAL_VEC)
         {
+          const auto geom_type =
+              ((type.family == MONOMIAL_VEC) && (type.order == CONSTANT)) ? "elemental" : "nodal";
           switch (_es_ptr->get_mesh().spatial_dimension())
           {
             case 0:
             case 1:
-              _execute_data["nodal"].available.insert(vname);
+              _execute_data[geom_type].available.insert(vname);
               break;
             case 2:
-              _execute_data["nodal"].available.insert(vname + "_x");
-              _execute_data["nodal"].available.insert(vname + "_y");
+              _execute_data[geom_type].available.insert(vname + "_x");
+              _execute_data[geom_type].available.insert(vname + "_y");
               break;
             case 3:
-              _execute_data["nodal"].available.insert(vname + "_x");
-              _execute_data["nodal"].available.insert(vname + "_y");
-              _execute_data["nodal"].available.insert(vname + "_z");
+              _execute_data[geom_type].available.insert(vname + "_x");
+              _execute_data[geom_type].available.insert(vname + "_y");
+              _execute_data[geom_type].available.insert(vname + "_z");
               break;
           }
         }
@@ -426,6 +453,12 @@ AdvancedOutput::initAvailableLists()
     else if (_problem_ptr->hasScalarVariable(var_name))
       _execute_data["scalars"].available.insert(var_name);
   }
+
+  // Initialize Reporter name list
+  for (auto && r_name : _reporter_data.getReporterNames())
+    if ((_postprocessors_as_reporters || !r_name.isPostprocessor()) &&
+        (_vectorpostprocessors_as_reporters || !r_name.isVectorPostprocessor()))
+      _execute_data["reporters"].available.insert(r_name);
 }
 
 void
@@ -480,20 +513,22 @@ AdvancedOutput::initShowHideLists(const std::vector<VariableName> & show,
         else if (type.family == NEDELEC_ONE || type.family == LAGRANGE_VEC ||
                  type.family == MONOMIAL_VEC)
         {
+          const auto geom_type =
+              ((type.family == MONOMIAL_VEC) && (type.order == CONSTANT)) ? "elemental" : "nodal";
           switch (_es_ptr->get_mesh().spatial_dimension())
           {
             case 0:
             case 1:
-              _execute_data["nodal"].show.insert(vname);
+              _execute_data[geom_type].show.insert(vname);
               break;
             case 2:
-              _execute_data["nodal"].show.insert(vname + "_x");
-              _execute_data["nodal"].show.insert(vname + "_y");
+              _execute_data[geom_type].show.insert(vname + "_x");
+              _execute_data[geom_type].show.insert(vname + "_y");
               break;
             case 3:
-              _execute_data["nodal"].show.insert(vname + "_x");
-              _execute_data["nodal"].show.insert(vname + "_y");
-              _execute_data["nodal"].show.insert(vname + "_z");
+              _execute_data[geom_type].show.insert(vname + "_x");
+              _execute_data[geom_type].show.insert(vname + "_y");
+              _execute_data[geom_type].show.insert(vname + "_z");
               break;
           }
         }
@@ -503,10 +538,13 @@ AdvancedOutput::initShowHideLists(const std::vector<VariableName> & show,
     }
     else if (_problem_ptr->hasScalarVariable(var_name))
       _execute_data["scalars"].show.insert(var_name);
-    else if (_problem_ptr->hasPostprocessor(var_name))
+    else if (hasPostprocessorByName(var_name))
       _execute_data["postprocessors"].show.insert(var_name);
-    else if (_problem_ptr->hasVectorPostprocessor(var_name))
+    else if (hasVectorPostprocessorByName(var_name))
       _execute_data["vector_postprocessors"].show.insert(var_name);
+    else if ((var_name.find("/") != std::string::npos) &&
+             (hasReporterValueByName(ReporterName(var_name))))
+      _execute_data["reporters"].show.insert(var_name);
     else
       unknown.insert(var_name);
   }
@@ -553,10 +591,14 @@ AdvancedOutput::initShowHideLists(const std::vector<VariableName> & show,
     }
     else if (_problem_ptr->hasScalarVariable(var_name))
       _execute_data["scalars"].hide.insert(var_name);
-    else if (_problem_ptr->hasPostprocessor(var_name))
+    else if (hasPostprocessorByName(var_name))
       _execute_data["postprocessors"].hide.insert(var_name);
-    else if (_problem_ptr->hasVectorPostprocessor(var_name))
+    else if (hasVectorPostprocessorByName(var_name))
       _execute_data["vector_postprocessors"].hide.insert(var_name);
+    else if ((var_name.find("/") != std::string::npos) &&
+             (hasReporterValueByName(ReporterName(var_name))))
+      _execute_data["reporters"].hide.insert(var_name);
+
     else
       unknown.insert(var_name);
   }
@@ -581,7 +623,7 @@ AdvancedOutput::initOutputList(OutputData & data)
   std::set<std::string> & avail = data.available;
   std::set<std::string> & output = data.output;
 
-  // Append the list from OutputInterface objects
+  // Append to the hide list from OutputInterface objects
   std::set<std::string> interface_hide;
   _app.getOutputWarehouse().buildInterfaceHideVariables(name(), interface_hide);
   hide.insert(interface_hide.begin(), interface_hide.end());
@@ -649,7 +691,7 @@ AdvancedOutput::addValidParams(InputParameters & params, const MultiMooseEnum & 
                           "Flag indicating if material properties should be output");
     params.addParam<std::vector<std::string>>(
         "show_material_properties",
-        "List of materialproperties that should be written to the output");
+        "List of material properties that should be written to the output");
     params.addParamNamesToGroup("output_material_properties show_material_properties", "Materials");
   }
 
@@ -693,6 +735,14 @@ AdvancedOutput::addValidParams(InputParameters & params, const MultiMooseEnum & 
     params.addParamNamesToGroup("execute_vector_postprocessors_on", "Variables");
   }
 
+  // Reporters
+  if (types.contains("reporter"))
+  {
+    params.addParam<ExecFlagEnum>(
+        "execute_reporters_on", empty_execute_on, "Control of when Reporter values are output");
+    params.addParamNamesToGroup("execute_reporters_on", "Variables");
+  }
+
   // Input file
   if (types.contains("input"))
   {
@@ -714,11 +764,6 @@ AdvancedOutput::addValidParams(InputParameters & params, const MultiMooseEnum & 
 bool
 AdvancedOutput::hasOutputHelper(const std::string & name)
 {
-  if (!_initialized)
-    mooseError("The output object must be initialized before it may be determined if ",
-               name,
-               " output is enabled.");
-
   return !_execute_data[name].output.empty() && _advanced_execute_on.contains(name) &&
          _advanced_execute_on[name].isValid() && !_advanced_execute_on[name].contains("none");
 }
@@ -781,6 +826,18 @@ const std::set<std::string> &
 AdvancedOutput::getVectorPostprocessorOutput()
 {
   return _execute_data["vector_postprocessors"].output;
+}
+
+bool
+AdvancedOutput::hasReporterOutput()
+{
+  return hasOutputHelper("reporters");
+}
+
+const std::set<std::string> &
+AdvancedOutput::getReporterOutput()
+{
+  return _execute_data["reporters"].output;
 }
 
 const OutputOnWarehouse &

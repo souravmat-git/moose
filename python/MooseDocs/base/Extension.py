@@ -105,12 +105,13 @@ class Extension(mixins.ConfigObject, mixins.TranslatorObject):
         """
         pass
 
-    def preTokenize(self, page, ast):
+    def preTokenize(self, page, content, ast):
         """
         Called by Translator prior to tokenization.
 
         Inputs:
             page[pages.Source]: The source object representing the content
+            content[str]: The content read from the page
             ast[tokens.Token]: The root node of the token tree
         """
         pass
@@ -125,12 +126,13 @@ class Extension(mixins.ConfigObject, mixins.TranslatorObject):
         """
         pass
 
-    def preRender(self, page, result):
+    def preRender(self, page, ast, result):
         """
         Called by Translator prior to rendering.
 
         Inputs:
             page[pages.Source]: The source object representing the content
+            ast[tokens.Token]: The root node of the token tree
             result[tree.base.NodeBase]: The root node of the result tree
         """
         pass
@@ -163,3 +165,27 @@ class Extension(mixins.ConfigObject, mixins.TranslatorObject):
             page[pages.Source]: The source object representing the content
         """
         pass
+
+    def setAttribute(self, *args):
+        """
+        Set a global attribute to be communicated across processors.
+
+        This is designed to be called from the <pre/post><Read/Tokenize/Render/Write> methods
+        """
+        self.translator.executioner.setGlobalAttribute(*args)
+
+    def getAttribute(self, *args):
+        """
+        Get a global attribute to be communicated across processors.
+
+        This is designed to be called from the <pre/post><Read/Tokenize/Render/Write> methods
+        """
+        return self.translator.executioner.getGlobalAttribute(*args)
+
+    def getAttributeItems(self):
+        """
+        Return an iterator to the global attributes to be communicated across processors.
+
+        This is designed to be called from the <pre/post><Read/Tokenize/Render/Write> methods
+        """
+        return self.translator.executioner.getGlobalAttributeItems()

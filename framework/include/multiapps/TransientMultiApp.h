@@ -13,12 +13,7 @@
 
 #include "libmesh/numeric_vector.h"
 
-// Forward declarations
-class TransientMultiApp;
 class Transient;
-
-template <>
-InputParameters validParams<TransientMultiApp>();
 
 /**
  * MultiApp Implementation for Transient Apps.
@@ -41,7 +36,7 @@ public:
 
   virtual void incrementTStep(Real target_time) override;
 
-  virtual void finishStep() override;
+  virtual void finishStep(bool recurse_through_multiapp_levels = false) override;
 
   virtual bool needsRestoration() override;
 

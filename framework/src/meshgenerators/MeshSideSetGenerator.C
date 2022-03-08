@@ -19,8 +19,6 @@
 
 registerMooseObject("MooseApp", MeshSideSetGenerator);
 
-defineLegacyParams(MeshSideSetGenerator);
-
 InputParameters
 MeshSideSetGenerator::validParams()
 {
@@ -30,7 +28,7 @@ MeshSideSetGenerator::validParams()
   params.addClassDescription("Add lower dimensional elements along the faces contained in a side "
                              "set to set up mixed dimensional problems");
   params.addRequiredParam<std::vector<BoundaryName>>("boundaries",
-                                                     "The name of the boundary to mesh");
+                                                     "The names of the boundaries to mesh");
   params.addRequiredParam<subdomain_id_type>(
       "block_id", "Subdomain id to set for the new elements along the boundary");
   params.addParam<SubdomainName>(
@@ -79,7 +77,7 @@ MeshSideSetGenerator::generate()
     auto bc_id = std::get<2>(t);
 
     std::unique_ptr<BndElement> bndElem =
-        libmesh_make_unique<BndElement>(mesh->elem_ptr(elem_id), side_id, bc_id);
+        std::make_unique<BndElement>(mesh->elem_ptr(elem_id), side_id, bc_id);
     bnd_elems.push_back(std::move(bndElem));
     bnd_elem_ids[bc_id].insert(elem_id);
   }

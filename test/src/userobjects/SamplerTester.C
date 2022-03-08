@@ -11,8 +11,6 @@
 
 registerMooseObject("MooseTestApp", SamplerTester);
 
-defineLegacyParams(SamplerTester);
-
 InputParameters
 SamplerTester::validParams()
 {
@@ -30,7 +28,6 @@ SamplerTester::validParams()
 
 SamplerTester::SamplerTester(const InputParameters & parameters)
   : GeneralPostprocessor(parameters),
-    SamplerInterface(this),
     _sampler(getSampler("sampler")),
     _test_type(getParam<MooseEnum>("test_type"))
 {

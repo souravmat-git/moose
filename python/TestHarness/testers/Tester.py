@@ -26,14 +26,14 @@ class Tester(MooseObject):
 
         # Common Options
         params.addRequiredParam('type', "The type of test of Tester to create for this test.")
-        params.addParam('max_time',   300, "The maximum in seconds that the test will be allowed to run.")
+        params.addParam('max_time',   int(os.getenv('MOOSE_TEST_MAX_TIME', 300)), "The maximum in seconds that the test will be allowed to run.")
         params.addParam('skip',     "Provide a reason this test will be skipped.")
         params.addParam('deleted',         "Tests that only show up when using the '-e' option (Permanently skipped or not implemented).")
         params.addParam('unique_test_id', "The unique hash given to a test")
 
         params.addParam('heavy',    False, "Set to True if this test should only be run when the '--heavy' option is used.")
         params.addParam('group',       [], "A list of groups for which this test belongs.")
-        params.addParam('prereq',      [], "A list of prereq tests that need to run successfully before launching this test.")
+        params.addParam('prereq',      [], "A list of prereq tests that need to run successfully before launching this test. When 'prereq = ALL', TestHarness will run this test last. Multiple 'prereq = ALL' tests, or tests that depend on a 'prereq = ALL' test will result in cyclic errors. Naming a test 'ALL' when using 'prereq = ALL' will also result in an error.")
         params.addParam('skip_checks', False, "Tells the TestHarness to skip additional checks (This parameter is set automatically by the TestHarness during recovery tests)")
         params.addParam('scale_refine',    0, "The number of refinements to do when scaling")
         params.addParam('success_message', 'OK', "The successful message")
@@ -53,8 +53,11 @@ class Tester(MooseObject):
         params.addParam('petsc_version', ['ALL'], "A list of petsc versions for which this test will run on, supports normal comparison operators ('<', '>', etc...)")
         params.addParam('petsc_version_release', ['ALL'], "A test that runs against PETSc master if FALSE ('ALL', 'TRUE', 'FALSE')")
         params.addParam('slepc_version', [], "A list of slepc versions for which this test will run on, supports normal comparison operators ('<', '>', etc...)")
+        params.addParam('exodus_version', ['ALL'], "A list of Exodus versions for which this test will run on, supports normal comparison operators ('<', '>', etc...)")
         params.addParam('mesh_mode',     ['ALL'], "A list of mesh modes for which this test will run ('DISTRIBUTED', 'REPLICATED')")
+        params.addParam('min_ad_size',   None, "A minimum AD size for which this test will run")
         params.addParam('ad_mode',       ['ALL'], "A list of AD modes for which this test will run ('SPARSE', 'NONSPARSE')")
+        params.addParam('ad_indexing_type', ['ALL'], "A list of AD indexing types for which this test will run ('LOCAL', 'GLOBAL')")
         params.addParam('method',        ['ALL'], "A test that runs under certain executable configurations ('ALL', 'OPT', 'DBG', 'DEVEL', 'OPROF', 'PRO')")
         params.addParam('library_mode',  ['ALL'], "A test that only runs when libraries are built under certain configurations ('ALL', 'STATIC', 'DYNAMIC')")
         params.addParam('dtk',           ['ALL'], "A test that runs only if DTK is detected ('ALL', 'TRUE', 'FALSE')")
@@ -68,6 +71,7 @@ class Tester(MooseObject):
         params.addParam('threading',     ['ALL'], "A list of threading models ths tests runs with ('ALL', 'TBB', 'OPENMP', 'PTHREADS', 'NONE')")
         params.addParam('superlu',       ['ALL'], "A test that runs only if SuperLU is available via PETSc ('ALL', 'TRUE', 'FALSE')")
         params.addParam('mumps',         ['ALL'], "A test that runs only if MUMPS is available via PETSc ('ALL', 'TRUE', 'FALSE')")
+        params.addParam('strumpack',     ['ALL'], "A test that runs only if STRUMPACK is available via PETSc ('ALL', 'TRUE', 'FALSE')")
         params.addParam('chaco',         ['ALL'], "A test that runs only if Chaco (partitioner) is available via PETSc ('ALL', 'TRUE', 'FALSE')")
         params.addParam('parmetis',      ['ALL'], "A test that runs only if Parmetis (partitioner) is available via PETSc ('ALL', 'TRUE', 'FALSE')")
         params.addParam('party',         ['ALL'], "A test that runs only if Party (partitioner) is available via PETSc ('ALL', 'TRUE', 'FALSE')")
@@ -92,6 +96,7 @@ class Tester(MooseObject):
         params.addParam('python',        None, "Restrict the test to s specific version of python (e.g., 3.6 or 3.7.1).")
         params.addParam('required_python_packages', None, "Test will only run if the supplied python packages exist.")
         params.addParam('requires', None, "A list of programs required for the test to operate, as tested with shutil.which.")
+        params.addParam("working_directory", None, "When set, TestHarness will enter this directory before running test")
 
         # SQA
         params.addParam("requirement", None, "The SQA requirement that this test satisfies (e.g., 'The Marker system shall provide means to mark elements for refinement within a box region.')")
@@ -101,7 +106,8 @@ class Tester(MooseObject):
         params.addParam("validation", False, "Set to True to mark test as a validation problem.")
         params.addParam("verification", False, "Set to True to mark test as a verification problem.")
         params.addParam("deprecated", False, "When True the test is no longer considered part SQA process and as such does not include the need for a requirement definition.")
-        params.addParam("working_directory", None, "When set, TestHarness will enter this directory before running test")
+        params.addParam("collections", [], "A means for defining a collection of tests for SQA process.")
+        params.addParam("classification", 'functional', "A means for defining a requirement classification for SQA process.")
         return params
 
     # This is what will be checked for when we look for valid testers
@@ -203,6 +209,10 @@ class Tester(MooseObject):
         """ return moose directory """
         return self.specs['moose_dir']
 
+    def getMoosePythonDir(self):
+        """ return moose directory """
+        return self.specs['moose_python_dir']
+
     def getTestDir(self):
         """ return directory in which this tester is located """
         if self.specs['working_directory']:
@@ -229,6 +239,10 @@ class Tester(MooseObject):
 
     def getInputFile(self):
         """ return the input file if applicable to this Tester """
+        return None
+
+    def getInputFileContents(self):
+        """ return the contents of the input file applicable to this Tester """
         return None
 
     def getOutputFiles(self):
@@ -477,10 +491,8 @@ class Tester(MooseObject):
         # If we're testing with valgrind, then skip tests that require parallel or threads or don't meet the valgrind setting
         elif options.valgrind_mode != '':
             tmp_reason = ''
-            if self.specs['valgrind'].upper() == 'NONE':
-                tmp_reason = 'Valgrind==NONE'
-            elif self.specs['valgrind'].upper() == 'HEAVY' and options.valgrind_mode.upper() == 'NORMAL':
-                tmp_reason = 'Valgrind==HEAVY'
+            if self.specs['valgrind'].upper() != options.valgrind_mode.upper():
+                tmp_reason = 'Valgrind==' + self.specs['valgrind'].upper()
             elif int(self.specs['min_threads']) > 1:
                 tmp_reason = 'Valgrind requires non-threaded'
             elif self.specs["check_input"]:
@@ -490,6 +502,12 @@ class Tester(MooseObject):
         # If we're running in recover mode skip tests that have recover = false
         elif options.enable_recover and self.specs['recover'] == False:
             reasons['recover'] = 'NO RECOVER'
+
+        # AD size check
+        ad_size = int(util.getMooseConfigOption(self.specs['moose_dir'], 'ad_size').pop())
+        min_ad_size = self.specs['min_ad_size']
+        if min_ad_size is not None and int(min_ad_size) > ad_size:
+            reasons['min_ad_size'] = "Minimum AD size %d needed, but MOOSE is configured with %d" % (int(min_ad_size), ad_size)
 
         # Check for PETSc versions
         (petsc_status, petsc_version) = util.checkPetscVersion(checks, self.specs)
@@ -504,9 +522,17 @@ class Tester(MooseObject):
             elif slepc_version == None:
                 reasons['slepc_version'] = 'SLEPc is not installed'
 
+        # Check for ExodusII versions
+        (exodus_status, exodus_version) = util.checkExodusVersion(checks, self.specs)
+        if not exodus_status:
+            if checks['exodus_version'] != None:
+                reasons['exodus_version'] = 'using ExodusII ' + str(checks['exodus_version']) + ' REQ: ' + exodus_version
+            else:
+                reasons['exodus_version'] = 'Exodus version not detected. REQ: ' + exodus_version
+
         # PETSc and SLEPc is being explicitly checked above
-        local_checks = ['platform', 'compiler', 'mesh_mode', 'ad_mode', 'method', 'library_mode', 'dtk', 'unique_ids', 'vtk', 'tecplot',
-                        'petsc_debug', 'curl', 'superlu', 'mumps', 'cxx11', 'asio', 'unique_id', 'slepc', 'petsc_version_release', 'boost', 'fparser_jit',
+        local_checks = ['platform', 'compiler', 'mesh_mode', 'ad_mode', 'ad_indexing_type', 'method', 'library_mode', 'dtk', 'unique_ids', 'vtk', 'tecplot',
+                        'petsc_debug', 'curl', 'superlu', 'mumps', 'strumpack', 'cxx11', 'asio', 'unique_id', 'slepc', 'petsc_version_release', 'boost', 'fparser_jit',
                         'parmetis', 'chaco', 'party', 'ptscotch', 'threading', 'libpng']
         for check in local_checks:
             test_platforms = set()

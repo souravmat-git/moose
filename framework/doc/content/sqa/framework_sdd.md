@@ -64,7 +64,7 @@ to develop as each piece of end-user (developer) code that goes into the system 
 interface for the underlying systems that those object plug into. These descriptions are provided
 through developer-supplied "markdown" files that are required for all new objects that are developed
 as part of the framework, modules and derivative applications. More information about the design
-documentation can be found in [MooseDocs](MooseDocs/generate.md optional=True).
+documentation can be found in [framework/documenting.md].
 !template-end!
 
 !template! item key=system-scope
@@ -95,7 +95,7 @@ software is open-source and many features and even bugs can be offloaded to deve
 levels of knowledge and direction from the main design team. The primary list of software dependencies
 is listed below. This list is not meant to be exhaustive. Individual operating systems may require
 specific packages to be installed prior to using MOOSE, which can be found on the
-[Getting Started](getting_started/index.md optional=True) pages.
+[Install MOOSE](getting_started/installation/index.md optional=True) pages.
 
 | Software Dependency | Description |
 | :- | :- |
@@ -134,7 +134,7 @@ Concerns from many of the stakeholders are similar. These concerns include corre
 and performance. The mitigation plan for each of these can be addressed. For correctness, [!ac](MOOSE)
 development requires either regression or unit testing for all new code added to the repository.
 The project contains several comparisons against analytical solutions where possible and also
-other verification methods such as [MMS](/mms.md optional=True). For stability, [!ac](MOOSE) maintains
+other verification methods such as [MMS](python/mms.md optional=True). For stability, [!ac](MOOSE) maintains
 multiple branches to incorporate several layers of testing both internally and for dependent
 applications. Finally, performance tests are also performed as part of the the normal testing suite
 to monitor code change impacts to performance.

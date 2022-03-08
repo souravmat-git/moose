@@ -27,11 +27,11 @@
 [GlobalParams]
   volumetric_locking_correction = false
   displacements = 'disp_x disp_y disp_z'
-  order = SECOND
 []
 
 [Mesh]#Comment
   file = hertz_contact_hex27.e
+  allow_renumbering = false
 [] # Mesh
 
 [Functions]
@@ -108,7 +108,6 @@
   [./all]
     add_variables = true
     strain = SMALL
-    use_displaced_mesh = false
   #  extra_vector_tags = 'ref'
   [../]
 []
@@ -202,8 +201,8 @@
 
 [Contact]
   [./dummy_name]
-    master = 1000
-    slave = 100
+    primary = 1000
+    secondary = 100
 
     normalize_penalty = true
     tangential_tolerance = 1e-3

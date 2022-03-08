@@ -13,18 +13,121 @@
 #include "StochasticToolsApp.h"
 
 InputParameters
-SurrogateTrainer::validParams()
+SurrogateTrainerBase::validParams()
 {
   InputParameters params = GeneralUserObject::validParams();
-  params += SamplerInterface::validParams();
   params.registerBase("SurrogateTrainer");
   return params;
 }
 
-SurrogateTrainer::SurrogateTrainer(const InputParameters & parameters)
-  : GeneralUserObject(parameters),
-    SamplerInterface(this),
-    _model_meta_data_name(_type + "_" + name())
+SurrogateTrainerBase::SurrogateTrainerBase(const InputParameters & parameters)
+  : GeneralUserObject(parameters), _model_meta_data_name(_type + "_" + name())
 {
   _app.registerRestartableDataMapName(_model_meta_data_name, name());
+}
+
+InputParameters
+SurrogateTrainer::validParams()
+{
+  InputParameters params = SurrogateTrainerBase::validParams();
+  params.addRequiredParam<SamplerName>("sampler",
+                                       "Sampler used to create predictor and response data.");
+  params.addParam<ReporterName>(
+      "converged_reporter",
+      "Reporter value used to determine if a sample's multiapp solve converged.");
+  params.addParam<bool>("skip_unconverged_samples",
+                        false,
+                        "True to skip samples where the multiapp did not converge, "
+                        "'stochastic_reporter' is required to do this.");
+  return params;
+}
+
+SurrogateTrainer::SurrogateTrainer(const InputParameters & parameters)
+  : SurrogateTrainerBase(parameters),
+    _sampler(getSampler("sampler")),
+    _row_data(_sampler.getNumberOfCols()),
+    _skip_unconverged(getParam<bool>("skip_unconverged_samples")),
+    _converged(nullptr)
+{
+  if (_skip_unconverged)
+  {
+    if (!isParamValid("converged_reporter"))
+      paramError("skip_unconverged_samples",
+                 "'converged_reporter' needs to be specified to skip unconverged sample.");
+    _converged = &getTrainingData<bool>(getParam<ReporterName>("converged_reporter"));
+  }
+}
+
+void
+SurrogateTrainer::initialize()
+{
+  // Figure out if data is distributed
+  for (auto & pair : _training_data)
+  {
+    const ReporterName & name = pair.first;
+    TrainingDataBase & data = *pair.second;
+
+    const auto & mode = _fe_problem.getReporterData().getReporterMode(name);
+    if (mode == REPORTER_MODE_DISTRIBUTED || (mode == REPORTER_MODE_ROOT && processor_id() != 0))
+      data.isDistributed() = true;
+    else if (mode == REPORTER_MODE_REPLICATED ||
+             (mode == REPORTER_MODE_ROOT && processor_id() == 0))
+      data.isDistributed() = false;
+    else
+      mooseError("Predictor reporter value ", name, " is not of supported mode.");
+  }
+}
+
+void
+SurrogateTrainer::execute()
+{
+  checkIntegrity();
+
+  _row = _sampler.getLocalRowBegin();
+  _local_row = 0;
+
+  preTrain();
+
+  for (_row = _sampler.getLocalRowBegin(); _row < _sampler.getLocalRowEnd(); ++_row)
+  {
+    // Need to do this manually in order to keep the iterators valid
+    const std::vector<Real> data = _sampler.getNextLocalRow();
+    for (unsigned int i = 0; i < _row_data.size(); ++i)
+      _row_data[i] = data[i];
+
+    // Set training data
+    for (auto & pair : _training_data)
+      pair.second->setCurrentIndex((pair.second->isDistributed() ? _local_row : _row));
+
+    if (!_skip_unconverged || *_converged)
+      train();
+
+    _local_row++;
+  }
+
+  postTrain();
+}
+
+void
+SurrogateTrainer::checkIntegrity() const
+{
+  // Check that the number of sampler columns hasn't changed
+  if (_row_data.size() != _sampler.getNumberOfCols())
+    mooseError("Number of sampler columns has changed.");
+
+  // Check that training data is correctly sized
+  for (auto & pair : _training_data)
+  {
+    dof_id_type rsize = pair.second->size();
+    dof_id_type nrow =
+        pair.second->isDistributed() ? _sampler.getNumberOfLocalRows() : _sampler.getNumberOfRows();
+    if (rsize != nrow)
+      mooseError("Reporter value ",
+                 pair.first,
+                 " of size ",
+                 rsize,
+                 " does not match sampler size (",
+                 nrow,
+                 ").");
+  }
 }

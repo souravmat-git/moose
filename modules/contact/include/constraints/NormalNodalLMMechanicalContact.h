@@ -25,15 +25,16 @@ public:
   NormalNodalLMMechanicalContact(const InputParameters & parameters);
 
 protected:
-  virtual Real computeQpSlaveValue() override;
+  virtual Real computeQpSecondaryValue() override;
 
   virtual void computeResidual() override;
   virtual void computeJacobian() override;
-  virtual void computeOffDiagJacobian(unsigned jvar) override;
+  virtual void computeOffDiagJacobian(unsigned int jvar) override;
 
   virtual Real computeQpResidual(Moose::ConstraintType type) override;
   virtual Real computeQpJacobian(Moose::ConstraintJacobianType type) override;
-  virtual Real computeQpOffDiagJacobian(Moose::ConstraintJacobianType type, unsigned jvar) override;
+  virtual Real computeQpOffDiagJacobian(Moose::ConstraintJacobianType type,
+                                        unsigned int jvar) override;
 
   const unsigned _disp_y_id;
   const unsigned _disp_z_id;

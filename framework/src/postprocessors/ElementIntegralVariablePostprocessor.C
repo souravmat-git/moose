@@ -11,8 +11,6 @@
 
 registerMooseObject("MooseApp", ElementIntegralVariablePostprocessor);
 
-defineLegacyParams(ElementIntegralVariablePostprocessor);
-
 InputParameters
 ElementIntegralVariablePostprocessor::validParams()
 {
@@ -33,7 +31,7 @@ ElementIntegralVariablePostprocessor::ElementIntegralVariablePostprocessor(
     _u(coupledValue("variable")),
     _grad_u(coupledGradient("variable"))
 {
-  addMooseVariableDependency(mooseVariable());
+  addMooseVariableDependency(&mooseVariableField());
 }
 
 Real

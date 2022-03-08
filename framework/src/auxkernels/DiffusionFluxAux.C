@@ -8,18 +8,17 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "DiffusionFluxAux.h"
+#include "Assembly.h"
 
 registerMooseObject("MooseApp", DiffusionFluxAux);
-
-defineLegacyParams(DiffusionFluxAux);
 
 InputParameters
 DiffusionFluxAux::validParams()
 {
   InputParameters params = AuxKernel::validParams();
-  MooseEnum component("x y z");
+  MooseEnum component("x y z normal");
   params.addClassDescription("Compute components of flux vector for diffusion problems "
-                             "$(\\vv{J} = -D \\nabla C)$.");
+                             "$(\\vec{J} = -D \\nabla C)$.");
   params.addRequiredParam<MooseEnum>("component", component, "The desired component of flux.");
   params.addRequiredCoupledVar("diffusion_variable", "The name of the variable");
   params.addRequiredParam<MaterialPropertyName>(
@@ -30,14 +29,24 @@ DiffusionFluxAux::validParams()
 
 DiffusionFluxAux::DiffusionFluxAux(const InputParameters & parameters)
   : AuxKernel(parameters),
+    _use_normal(getParam<MooseEnum>("component") == "normal"),
     _component(getParam<MooseEnum>("component")),
     _grad_u(coupledGradient("diffusion_variable")),
-    _diffusion_coef(getMaterialProperty<Real>("diffusivity"))
+    _diffusion_coef(hasMaterialProperty<Real>("diffusivity")
+                        ? &getMaterialProperty<Real>("diffusivity")
+                        : nullptr),
+    _ad_diffusion_coef(!_diffusion_coef ? &getADMaterialProperty<Real>("diffusivity") : nullptr),
+    _normals(_assembly.normals())
 {
+  if (_use_normal && !isParamValid("boundary"))
+    paramError("boundary", "A boundary must be provided if using the normal component!");
 }
 
 Real
 DiffusionFluxAux::computeValue()
 {
-  return -_diffusion_coef[_qp] * _grad_u[_qp](_component);
+  const Real gradient = _use_normal ? _grad_u[_qp] * _normals[_qp] : _grad_u[_qp](_component);
+  const Real diffusion_coef = _diffusion_coef ? (*_diffusion_coef)[_qp]
+                                              : MetaPhysicL::raw_value((*_ad_diffusion_coef)[_qp]);
+  return -diffusion_coef * gradient;
 }

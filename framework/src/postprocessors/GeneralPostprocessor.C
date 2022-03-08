@@ -9,8 +9,6 @@
 
 #include "GeneralPostprocessor.h"
 
-defineLegacyParams(GeneralPostprocessor);
-
 InputParameters
 GeneralPostprocessor::validParams()
 {
@@ -20,6 +18,6 @@ GeneralPostprocessor::validParams()
 }
 
 GeneralPostprocessor::GeneralPostprocessor(const InputParameters & parameters)
-  : GeneralUserObject(parameters), Postprocessor(parameters)
+  : GeneralUserObject(parameters), Postprocessor(this)
 {
 }

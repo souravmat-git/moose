@@ -11,13 +11,12 @@
 
 registerMooseObject("MooseApp", LayeredSideAverage);
 
-defineLegacyParams(LayeredSideAverage);
-
 InputParameters
 LayeredSideAverage::validParams()
 {
   InputParameters params = LayeredSideIntegral::validParams();
-
+  params.addClassDescription("Computes side averages of a variable storing partial sums for the "
+                             "specified number of intervals in a direction (x,y,z).");
   return params;
 }
 
@@ -41,7 +40,7 @@ LayeredSideAverage::execute()
 {
   LayeredSideIntegral::execute();
 
-  unsigned int layer = getLayer(_current_elem->centroid());
+  unsigned int layer = getLayer(_current_elem->vertex_average());
   _layer_volumes[layer] += _current_side_volume;
 }
 

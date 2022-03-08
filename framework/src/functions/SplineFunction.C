@@ -11,12 +11,12 @@
 
 registerMooseObject("MooseApp", SplineFunction);
 
-defineLegacyParams(SplineFunction);
-
 InputParameters
 SplineFunction::validParams()
 {
   InputParameters params = Function::validParams();
+  params.addClassDescription(
+      "Define a spline function from interpolated data defined by input parameters.");
   MooseEnum component("x=0 y=1 z=2", "x");
   params.addParam<MooseEnum>(
       "component", component, "The component of the geometry point to interpolate with");
@@ -42,6 +42,12 @@ SplineFunction::SplineFunction(const InputParameters & parameters)
 
 Real
 SplineFunction::value(Real /*t*/, const Point & p) const
+{
+  return _ipol.sample(p(_component));
+}
+
+ADReal
+SplineFunction::value(const ADReal & /*t*/, const ADPoint & p) const
 {
   return _ipol.sample(p(_component));
 }

@@ -39,10 +39,12 @@ const ExecFlagType EXEC_FORCED("FORCED", 0x40);                 // 64
 const ExecFlagType EXEC_FAILED("FAILED", 0x80);                 // 128
 const ExecFlagType EXEC_CUSTOM("CUSTOM", 0x100);                // 256
 const ExecFlagType EXEC_SUBDOMAIN("SUBDOMAIN", 0x200);          // 512
+const ExecFlagType EXEC_ALWAYS("ALWAYS", 0x400);                // 1024
 const ExecFlagType EXEC_PRE_DISPLACE("PRE_DISPLACE");
 const ExecFlagType EXEC_SAME_AS_MULTIAPP("SAME_AS_MULTIAPP");
 const ExecFlagType EXEC_PRE_MULTIAPP_SETUP("PRE_MULTIAPP_SETUP");
 const ExecFlagType EXEC_TRANSFER("TRANSFER");
+const ExecFlagType EXEC_PRE_KERNELS("PRE_KERNELS");
 
 namespace Moose
 {
@@ -92,6 +94,8 @@ addActionTypes(Syntax & syntax)
   /**************************/
   registerMooseObjectTask("create_problem",               Problem,                false);
   registerMooseObjectTask("setup_executioner",            Executioner,            false);
+  registerMooseObjectTask("read_executor",                Executor,               false);
+  registerTask("add_executor", true);
 
   // This task does not construct an object, but it needs all of the parameters that
   // would normally be used to construct an object.
@@ -100,7 +104,6 @@ addActionTypes(Syntax & syntax)
   registerMooseObjectTask("setup_mesh",                   MooseMesh,              false);
   registerMooseObjectTask("set_mesh_base",                MooseMesh,              false);
   registerMooseObjectTask("init_mesh",                    MooseMesh,              false);
-  registerMooseObjectTask("add_mesh_modifier",            MeshModifier,           false);
   registerMooseObjectTask("add_mesh_generator",           MeshGenerator,          false);
   registerMooseObjectTask("append_mesh_generator",        MeshGenerator,          false);
 
@@ -124,6 +127,7 @@ addActionTypes(Syntax & syntax)
 
   registerMooseObjectTask("add_aux_kernel",               AuxKernel,              false);
   appendMooseObjectTask  ("add_aux_kernel",               VectorAuxKernel);
+  appendMooseObjectTask  ("add_aux_kernel",               ArrayAuxKernel);
 
   registerMooseObjectTask("add_scalar_kernel",            ScalarKernel,           false);
   registerMooseObjectTask("add_aux_scalar_kernel",        AuxScalarKernel,        false);
@@ -131,6 +135,7 @@ addActionTypes(Syntax & syntax)
   registerMooseObjectTask("add_dg_kernel",                DGKernel,               false);
   registerMooseObjectTask("add_fv_kernel",                FVKernel,               false);
   registerMooseObjectTask("add_fv_bc",                    FVBoundaryCondition,    false);
+  registerMooseObjectTask("add_fv_ik",                    FVInterfaceKernel,      false);
   registerMooseObjectTask("add_interface_kernel",         InterfaceKernel,        false);
   appendMooseObjectTask  ("add_interface_kernel",         VectorInterfaceKernel);
   registerMooseObjectTask("add_constraint",               Constraint,             false);
@@ -151,6 +156,7 @@ addActionTypes(Syntax & syntax)
 
   registerMooseObjectTask("add_postprocessor",            Postprocessor,          false);
   registerMooseObjectTask("add_vector_postprocessor",     VectorPostprocessor,    false);
+  registerMooseObjectTask("add_reporter",                 Reporter,               false);
 
   registerMooseObjectTask("add_indicator",                Indicator,              false);
   registerMooseObjectTask("add_marker",                   Marker,                 false);
@@ -165,6 +171,7 @@ addActionTypes(Syntax & syntax)
 
   // clang-format on
 
+  registerTask("check_legacy_params", true);
   registerTask("dynamic_object_registration", false);
   registerTask("common_output", true);
   registerTask("setup_recover_file_base", true);
@@ -177,14 +184,14 @@ addActionTypes(Syntax & syntax)
   registerTask("add_variable", false);
   registerTask("add_mortar_variable", false);
 
-  registerTask("execute_mesh_modifiers", false);
   registerTask("execute_mesh_generators", true);
   registerTask("uniform_refine_mesh", false);
   registerTask("prepare_mesh", false);
-  registerTask("delete_remote_elements_post_equation_systems_init", false);
+  registerTask("delete_remote_elements_after_late_geometric_ghosting", false);
   registerTask("setup_mesh_complete", true); // calls prepare
   registerTask("add_geometric_rm", false);
   registerTask("attach_geometric_rm", true);
+  registerTask("attach_geometric_rm_final", true);
 
   registerTask("init_displaced_problem", false);
 
@@ -200,6 +207,7 @@ addActionTypes(Syntax & syntax)
 
   registerTask("setup_dampers", true);
   registerTask("check_integrity", true);
+  registerTask("resolve_optional_materials", true);
   registerTask("check_integrity_early", true);
   registerTask("setup_quadrature", true);
 
@@ -214,6 +222,7 @@ addActionTypes(Syntax & syntax)
   registerTask("set_adaptivity_options", false);
   registerTask("add_mortar_interface", false);
   registerTask("coupling_functor_check", true);
+  registerTask("add_master_action_material", false);
 
   // Dummy Actions (useful for sync points in the dependencies)
   registerTask("setup_function_complete", false);
@@ -242,25 +251,24 @@ addActionTypes(Syntax & syntax)
    */
 
   // clang-format off
-  syntax.addDependencySets("(meta_action)"
+  syntax.addDependencySets("(check_legacy_params)"
+                           "(meta_action)"
                            "(dynamic_object_registration)"
                            "(common_output)"
                            "(set_global_params)"
                            "(setup_recover_file_base)"
+                           "(check_copy_nodal_vars)"
                            "(setup_mesh)"
+                           "(add_geometric_rm)"
+                           "(add_partitioner)"
                            "(add_mesh_generator)"
                            "(append_mesh_generator)"
                            "(execute_mesh_generators)"
                            "(recover_meta_data)"
                            "(set_mesh_base)"
-                           "(check_copy_nodal_vars)"
-                           "(add_partitioner)"
-                           "(add_geometric_rm)"
                            "(attach_geometric_rm)"
                            "(init_mesh)"
                            "(prepare_mesh)"
-                           "(add_mesh_modifier)"
-                           "(execute_mesh_modifiers)"
                            "(add_mortar_interface)"
                            "(uniform_refine_mesh)"
                            "(setup_mesh_complete)"
@@ -272,6 +280,8 @@ addActionTypes(Syntax & syntax)
                            "(setup_postprocessor_data)"
                            "(setup_time_integrator)"
                            "(setup_executioner)"
+                           "(read_executor)"
+                           "(add_executor)"
                            "(check_integrity_early)"
                            "(setup_predictor)"
                            "(init_displaced_problem)"
@@ -300,21 +310,26 @@ addActionTypes(Syntax & syntax)
                            "(add_transfer)"
                            "(copy_nodal_vars, copy_nodal_aux_vars)"
                            "(add_material)"
+                           "(add_master_action_material)"
                            "(add_output_aux_variables)"
-                           "(add_algebraic_rm)"
-                           "(add_coupling_rm)"
-                           "(attach_algebraic_rm)"
-                           "(attach_coupling_rm)"
-                           "(init_problem)"
-                           "(delete_remote_elements_post_equation_systems_init)"
                            "(add_output)"
                            "(add_postprocessor)"
                            "(add_vector_postprocessor)" // MaterialVectorPostprocessor requires this
                                                         // to be after material objects are created.
+                           "(add_reporter)"
                            "(add_aux_kernel, add_bc, add_damper, add_dirac_kernel, add_kernel,"
-                           " add_nodal_kernel, add_dg_kernel, add_fv_kernel, add_fv_bc, add_interface_kernel,"
-                           " add_scalar_kernel, add_aux_scalar_kernel, add_indicator, add_marker)"
+                           " add_nodal_kernel, add_dg_kernel, add_fv_kernel, add_fv_bc, add_fv_ik,"
+                           " add_interface_kernel, add_scalar_kernel, add_aux_scalar_kernel,"
+                           " add_indicator, add_marker)"
+                           "(resolve_optional_materials)"
+                           "(add_algebraic_rm)"
+                           "(add_coupling_rm)"
+                           "(attach_geometric_rm_final)"
+                           "(attach_algebraic_rm)"
+                           "(attach_coupling_rm)"
                            "(coupling_functor_check)"
+                           "(delete_remote_elements_after_late_geometric_ghosting)"
+                           "(init_problem)"
                            "(add_control)"
                            "(check_output)"
                            "(check_integrity)");
@@ -385,6 +400,7 @@ registerExecFlags(Factory & factory)
   registerExecFlag(EXEC_PRE_DISPLACE);
   registerExecFlag(EXEC_SAME_AS_MULTIAPP);
   registerExecFlag(EXEC_PRE_MULTIAPP_SETUP);
+  registerExecFlag(EXEC_PRE_KERNELS);
 }
 
 void
@@ -417,15 +433,6 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("SetupMeshCompleteAction", "Mesh");
   registerSyntax("CreateDisplacedProblemAction", "Mesh");
   registerSyntax("DisplayGhostingAction", "Mesh");
-
-  registerSyntax("AddMeshModifierAction", "MeshModifiers/*");
-
-  // Deprecated MeshGeneratorSyntax
-  registerSyntax("AddMeshGeneratorAction", "MeshGenerators/*");
-  syntax.deprecateActionSyntax("MeshGenerators/*",
-                               "The top-level [MeshGenerators] syntax is deprecated, please nest "
-                               "your generators under [Mesh]");
-
   registerSyntax("AddMeshGeneratorAction", "Mesh/*");
 
   registerSyntax("AddFunctionAction", "Functions/*");
@@ -459,13 +466,15 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
 
   registerSyntax("AddMaterialAction", "Materials/*");
 
-  registerSyntax("SetupPostprocessorDataAction", "Postprocessors/*");
   registerSyntax("AddPostprocessorAction", "Postprocessors/*");
   syntax.registerSyntaxType("Postprocessors/*", "PostprocessorName");
   syntax.registerSyntaxType("Postprocessors/*", "UserObjectName");
 
   registerSyntax("AddVectorPostprocessorAction", "VectorPostprocessors/*");
   syntax.registerSyntaxType("VectorPostprocessors/*", "VectorPostprocessorName");
+
+  registerSyntax("AddReporterAction", "Reporters/*");
+  syntax.registerSyntaxType("Reporters/*", "ReporterName");
 
   registerSyntax("AddDamperAction", "Dampers/*");
 
@@ -478,6 +487,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("AddFieldSplitAction", "Preconditioning/*/*");
 
   registerSyntax("CreateExecutionerAction", "Executioner");
+  registerSyntax("ReadExecutorParamsAction", "Executors/*");
   registerSyntax("SetupTimeStepperAction", "Executioner/TimeStepper");
   registerSyntax("SetupTimeIntegratorAction", "Executioner/TimeIntegrator");
 
@@ -494,6 +504,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("AddDGKernelAction", "DGKernels/*");
   registerSyntax("AddFVKernelAction", "FVKernels/*");
   registerSyntax("AddFVBCAction", "FVBCs/*");
+  registerSyntax("AddFVInterfaceKernelAction", "FVInterfaceKernels/*");
   registerSyntax("CheckFVBCAction", "FVBCs");
 
   registerSyntax("AddInterfaceKernelAction", "InterfaceKernels/*");
@@ -547,20 +558,16 @@ associateSyntax(Syntax & syntax, ActionFactory & action_factory)
 void
 setSolverDefaults(FEProblemBase & problem)
 {
-#ifdef LIBMESH_HAVE_PETSC
   // May be a touch expensive to create a new DM every time, but probably safer to do it this way
   Moose::PetscSupport::petscSetDefaults(problem);
-#endif // LIBMESH_HAVE_PETSC
 }
 
 MPI_Comm
 swapLibMeshComm(MPI_Comm new_comm)
 {
-#ifdef LIBMESH_HAVE_PETSC
   MPI_Comm old_comm = PETSC_COMM_WORLD;
   PETSC_COMM_WORLD = new_comm;
   return old_comm;
-#endif // LIBMESH_HAVE_PETSC
 }
 
 static bool _color_console = isatty(fileno(stdout));

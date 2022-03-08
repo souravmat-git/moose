@@ -12,6 +12,7 @@
 
 #include "libmesh/replicated_mesh.h"
 #include "libmesh/mesh_generation.h"
+#include "libmesh/mesh_modification.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/periodic_boundaries.h"
 #include "libmesh/periodic_boundary_base.h"
@@ -22,8 +23,6 @@
 #include <cmath> // provides round, not std::round (see http://www.cplusplus.com/reference/cmath/round/)
 
 registerMooseObject("MooseApp", GeneratedMeshGenerator);
-
-defineLegacyParams(GeneratedMeshGenerator);
 
 InputParameters
 GeneratedMeshGenerator::validParams()
@@ -51,6 +50,8 @@ GeneratedMeshGenerator::validParams()
                              "The type of element from libMesh to "
                              "generate (default: linear element for "
                              "requested dimension)");
+  params.addParam<std::vector<SubdomainID>>("subdomain_ids", "Subdomain IDs, default to all zero");
+
   params.addParam<bool>(
       "gauss_lobatto_grid",
       false,
@@ -70,6 +71,11 @@ GeneratedMeshGenerator::validParams()
       1.,
       "bias_z>=0.5 & bias_z<=2",
       "The amount by which to grow (or shrink) the cells in the z-direction.");
+
+  params.addParam<std::string>("boundary_name_prefix",
+                               "If provided, prefix the built in boundary names with this string");
+  params.addParam<boundary_id_type>(
+      "boundary_id_offset", 0, "This offset is added to the generated boundary IDs");
 
   params.addParamNamesToGroup("dim", "Main");
 
@@ -94,10 +100,15 @@ GeneratedMeshGenerator::GeneratedMeshGenerator(const InputParameters & parameter
     _ymax(declareMeshProperty("ymax", getParam<Real>("ymax"))),
     _zmin(declareMeshProperty("zmin", getParam<Real>("zmin"))),
     _zmax(declareMeshProperty("zmax", getParam<Real>("zmax"))),
+    _has_subdomain_ids(isParamValid("subdomain_ids")),
     _gauss_lobatto_grid(getParam<bool>("gauss_lobatto_grid")),
     _bias_x(getParam<Real>("bias_x")),
     _bias_y(getParam<Real>("bias_y")),
-    _bias_z(getParam<Real>("bias_z"))
+    _bias_z(getParam<Real>("bias_z")),
+    _boundary_name_prefix(isParamValid("boundary_name_prefix")
+                              ? getParam<std::string>("boundary_name_prefix") + "_"
+                              : ""),
+    _boundary_id_offset(getParam<boundary_id_type>("boundary_id_offset"))
 {
   if (_gauss_lobatto_grid && (_bias_x != 1.0 || _bias_y != 1.0 || _bias_z != 1.0))
     mooseError("Cannot apply both Gauss-Lobatto mesh grading and biasing at the same time.");
@@ -107,7 +118,7 @@ std::unique_ptr<MeshBase>
 GeneratedMeshGenerator::generate()
 {
   // Have MOOSE construct the correct libMesh::Mesh object using Mesh block and CLI parameters.
-  auto mesh = _mesh->buildMeshBaseObject();
+  auto mesh = buildMeshBaseObject();
 
   if (isParamValid("extra_element_integers"))
   {
@@ -176,6 +187,36 @@ GeneratedMeshGenerator::generate()
       break;
   }
 
+  if (_has_subdomain_ids)
+  {
+    auto & bids = getParam<std::vector<SubdomainID>>("subdomain_ids");
+    if (bids.size() != _nx * _ny * _nz)
+      paramError("subdomain_ids",
+                 "Size must equal to the product of number of elements in all directions");
+    for (auto & elem : mesh->element_ptr_range())
+    {
+      const Point p = elem->vertex_average();
+      unsigned int ix = std::floor((p(0) - _xmin) / (_xmax - _xmin) * _nx);
+      unsigned int iy = std::floor((p(1) - _ymin) / (_ymax - _ymin) * _ny);
+      unsigned int iz = std::floor((p(2) - _zmin) / (_zmax - _zmin) * _nz);
+      unsigned int i = iz * _nx * _ny + iy * _nx + ix;
+      elem->subdomain_id() = bids[i];
+    }
+  }
+
+  // rename and shift boundaries
+  BoundaryInfo & boundary_info = mesh->get_boundary_info();
+  const auto & mesh_boundary_ids = boundary_info.get_boundary_ids();
+  for (auto rit = mesh_boundary_ids.rbegin(); rit != mesh_boundary_ids.rend(); ++rit)
+  {
+    boundary_info.sideset_name(*rit + _boundary_id_offset) =
+        _boundary_name_prefix + boundary_info.sideset_name(*rit);
+    boundary_info.nodeset_name(*rit + _boundary_id_offset) =
+        _boundary_name_prefix + boundary_info.nodeset_name(*rit);
+
+    MeshTools::Modification::change_boundary_id(*mesh, *rit, *rit + _boundary_id_offset);
+  }
+
   // Apply the bias if any exists
   if (_bias_x != 1.0 || _bias_y != 1.0 || _bias_z != 1.0)
   {
@@ -201,8 +242,9 @@ GeneratedMeshGenerator::generate()
     for (unsigned int dir = 0; dir < LIBMESH_DIM; ++dir)
     {
       pows[dir].resize(nelem[dir] + 1);
-      for (unsigned int i = 0; i < pows[dir].size(); ++i)
-        pows[dir][i] = std::pow(bias[dir], static_cast<int>(i));
+      pows[dir][0] = 1.0;
+      for (unsigned int i = 1; i < pows[dir].size(); ++i)
+        pows[dir][i] = pows[dir][i - 1] * bias[dir];
     }
 
     // Loop over the nodes and move them to the desired location

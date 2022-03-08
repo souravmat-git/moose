@@ -8,9 +8,21 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #pragma once
+#include "Calculators.h"
+#include "NormalDistribution.h"
+#include "StochasticToolsUtils.h"
 
+#include "Shuffle.h"
 #include "MooseTypes.h"
 #include "MooseObject.h"
+#include "MooseEnum.h"
+#include "MooseError.h"
+#include "MooseRandom.h"
+
+#include "libmesh/parallel.h"
+#include "libmesh/parallel_sync.h"
+
+#include <memory>
 #include <vector>
 
 class MooseEnum;
@@ -19,23 +31,13 @@ class MooseRandom;
 
 namespace StochasticTools
 {
+template <typename InType, typename OutType>
 class Calculator;
-class BootstrapCalculator;
 
 /*
  * Return available bootstrap statistics calculators.
  */
 MooseEnum makeBootstrapCalculatorEnum();
-
-/*
- * Create const Bootstrap confidence level interface calculator for use by VectorPostprocessor
- * objects.
- */
-std::unique_ptr<const BootstrapCalculator> makeBootstrapCalculator(const MooseEnum &,
-                                                                   const libMesh::ParallelObject &,
-                                                                   const std::vector<Real> &,
-                                                                   unsigned int,
-                                                                   unsigned int);
 
 /**
  * Base class for computing bootstrap confidence level intervals. These classes follow the same
@@ -45,32 +47,22 @@ std::unique_ptr<const BootstrapCalculator> makeBootstrapCalculator(const MooseEn
  * @param replicates Number of bootstrap replicates to perform
  * @param seed Seed for random number generator
  */
+template <typename InType, typename OutType>
 class BootstrapCalculator : public libMesh::ParallelObject
 {
 public:
   BootstrapCalculator(const libMesh::ParallelObject & other,
+                      const std::string & name,
                       const std::vector<Real> & levels,
                       unsigned int replicates,
-                      unsigned int seed);
-  virtual ~BootstrapCalculator() = default;
-
-  /**
-   * Compute the bootstrap confidence level intervals.
-   * @param data Vector of data from which statistics are to be computed
-   * @param calc Calculator object defining the statistic to be computed
-   * @param is_distributed Flag indicating if the data is distributed in parallel
-   */
-  virtual std::vector<Real> compute(const std::vector<Real> & data,
-                                    const Calculator & calc,
-                                    const bool is_distributed) const = 0;
+                      unsigned int seed,
+                      StochasticTools::Calculator<InType, OutType> & calc);
+  virtual std::vector<OutType> compute(const InType &, const bool) = 0;
+  const std::string & name() const { return _name; }
 
 protected:
   // Compute Bootstrap estimates of a statistic
-  std::vector<Real>
-  computeBootstrapEstimates(const std::vector<Real> &, const Calculator &, const bool) const;
-
-  // Randomly shuffle a vector of data
-  std::vector<Real> shuffle(const std::vector<Real> &, MooseRandom &, const bool) const;
+  std::vector<OutType> computeBootstrapEstimates(const InType &, const bool);
 
   // Confidence levels to compute in range (0, 1)
   const std::vector<Real> _levels;
@@ -80,40 +72,122 @@ protected:
 
   // Random seed for creating bootstrap replicates
   const unsigned int _seed;
+
+  // The Calculator that computes the statistic of interest
+  StochasticTools::Calculator<InType, OutType> & _calc;
+
+private:
+  const std::string _name;
 };
 
 /*
  * Implement percentile method of Efron and Tibshirani (2003), Chapter 13.
  */
-class Percentile : public BootstrapCalculator
+template <typename InType, typename OutType>
+class Percentile : public BootstrapCalculator<InType, OutType>
 {
 public:
-  Percentile(const libMesh::ParallelObject & other,
-             const std::vector<Real> & levels,
-             unsigned int replicates,
-             unsigned int seed);
-
-  virtual std::vector<Real>
-  compute(const std::vector<Real> &, const Calculator &, const bool) const override;
+  using BootstrapCalculator<InType, OutType>::BootstrapCalculator;
+  virtual std::vector<OutType> compute(const InType &, const bool) override;
 };
 
 /*
  * Implement BCa method of Efron and Tibshirani (2003), Chapter 14.
  */
-class BiasCorrectedAccelerated : public BootstrapCalculator
+template <typename InType, typename OutType>
+class BiasCorrectedAccelerated : public BootstrapCalculator<InType, OutType>
 {
 public:
-  BiasCorrectedAccelerated(const libMesh::ParallelObject & other,
-                           const std::vector<Real> & levels,
-                           unsigned int replicates,
-                           unsigned int seed);
-
-  virtual std::vector<Real>
-  compute(const std::vector<Real> &, const Calculator &, const bool) const override;
+  using BootstrapCalculator<InType, OutType>::BootstrapCalculator;
+  virtual std::vector<OutType> compute(const InType &, const bool) override;
 
 private:
   // Compute the acceleration, see Efron and Tibshirani (2003), Ch. 14, Eq. 14.15, p 186.
-  Real acceleration(const std::vector<Real> &, const Calculator &, const bool) const;
+  OutType acceleration(const InType &, const bool);
 };
+
+/*
+ * Simple struct that makeBootstrapCalculator wraps around, this is so building calculators
+ * can be partially specialized.
+ */
+template <typename InType, typename OutType>
+struct BootstrapCalculatorBuilder
+{
+  static std::unique_ptr<BootstrapCalculator<InType, OutType>>
+  build(const MooseEnum &,
+        const libMesh::ParallelObject &,
+        const std::vector<Real> &,
+        unsigned int,
+        unsigned int,
+        StochasticTools::Calculator<InType, OutType> &);
+};
+
+template <typename InType, typename OutType>
+std::unique_ptr<BootstrapCalculator<InType, OutType>>
+makeBootstrapCalculator(const MooseEnum &,
+                        const libMesh::ParallelObject &,
+                        const std::vector<Real> &,
+                        unsigned int,
+                        unsigned int,
+                        StochasticTools::Calculator<InType, OutType> &);
+
+template <typename InType, typename OutType>
+BootstrapCalculator<InType, OutType>::BootstrapCalculator(
+    const libMesh::ParallelObject & other,
+    const std::string & name,
+    const std::vector<Real> & levels,
+    unsigned int replicates,
+    unsigned int seed,
+    StochasticTools::Calculator<InType, OutType> & calc)
+  : libMesh::ParallelObject(other),
+    _levels(levels),
+    _replicates(replicates),
+    _seed(seed),
+    _calc(calc),
+    _name(name)
+{
+  mooseAssert(*std::min_element(levels.begin(), levels.end()) > 0,
+              "The supplied levels must be greater than zero.");
+  mooseAssert(*std::max_element(levels.begin(), levels.end()) < 1,
+              "The supplied levels must be less than one");
+}
+
+template <typename InType, typename OutType>
+std::vector<OutType>
+BootstrapCalculator<InType, OutType>::computeBootstrapEstimates(const InType & data,
+                                                                const bool is_distributed)
+{
+  MooseRandom generator;
+  generator.seed(0, _seed);
+
+  // Compute replicate statistics
+  std::vector<OutType> values(_replicates);
+  auto calc_update = [this](const typename InType::value_type & val)
+  { _calc.updateCalculator(val); };
+  for (std::size_t i = 0; i < _replicates; ++i)
+  {
+    _calc.initializeCalculator();
+    MooseUtils::resampleWithFunctor(
+        data, calc_update, generator, 0, is_distributed ? &this->_communicator : nullptr);
+    _calc.finalizeCalculator(is_distributed);
+    values[i] = _calc.getValue();
+  }
+  inplaceSort(values);
+  return values;
+}
+
+// makeBootstrapCalculator /////////////////////////////////////////////////////////////////////////
+template <typename InType, typename OutType>
+std::unique_ptr<BootstrapCalculator<InType, OutType>>
+makeBootstrapCalculator(const MooseEnum & item,
+                        const libMesh::ParallelObject & other,
+                        const std::vector<Real> & levels,
+                        unsigned int replicates,
+                        unsigned int seed,
+                        StochasticTools::Calculator<InType, OutType> & calc)
+{
+  return BootstrapCalculatorBuilder<InType, OutType>::build(
+      item, other, levels, replicates, seed, calc);
+}
 
 } // namespace

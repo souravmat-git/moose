@@ -12,6 +12,7 @@
 #include "MooseObject.h"
 #include "BlockRestrictable.h"
 #include "OutputInterface.h"
+#include "SetupInterface.h"
 #include "MooseTypes.h"
 #include "MooseArray.h"
 
@@ -24,17 +25,15 @@ class DofMap;
 class Variable;
 }
 
-class MooseVariableBase;
-
-template <>
-InputParameters validParams<MooseVariableBase>();
-
 class Assembly;
 class SubProblem;
 class SystemBase;
 class MooseMesh;
 
-class MooseVariableBase : public MooseObject, public BlockRestrictable, public OutputInterface
+class MooseVariableBase : public MooseObject,
+                          public BlockRestrictable,
+                          public OutputInterface,
+                          public SetupInterface
 {
 public:
   static InputParameters validParams();
@@ -56,6 +55,11 @@ public:
    * Get the system this variable is part of.
    */
   SystemBase & sys() { return _sys; }
+
+  /**
+   * Get the system this variable is part of.
+   */
+  const SystemBase & sys() const { return _sys; }
 
   /**
    * Get the variable name
@@ -81,8 +85,8 @@ public:
   /**
    * Set the scaling factor for this variable
    */
-  void scalingFactor(Real factor) { _scaling_factor.assign(_count, factor); }
-  void scalingFactor(const std::vector<Real> & factor) { _scaling_factor = factor; }
+  void scalingFactor(Real factor);
+  void scalingFactor(const std::vector<Real> & factor);
 
   /**
    * Get the scaling factor for this variable
@@ -135,6 +139,20 @@ public:
    */
   virtual unsigned int numberOfDofs() const { return _dof_indices.size(); }
 
+  /**
+   * Whether or not this variable operates on an eigen kernel
+   */
+  bool eigen() const { return _is_eigen; }
+
+  /**
+   * Mark this variable as an eigen var or non-eigen var
+   */
+  void eigen(bool eigen) { _is_eigen = eigen; }
+
+  void initialSetup() override;
+
+  virtual void clearAllDofIndices() { _dof_indices.clear(); }
+
 protected:
   /// System this variable is part of
   SystemBase & _sys;
@@ -147,6 +165,9 @@ protected:
 
   /// variable number within MOOSE
   unsigned int _index;
+
+  /// Whether or not this variable operates on eigen kernels
+  bool _is_eigen;
 
   /// Variable type (see MooseTypes.h)
   Moose::VarKindType _var_kind;

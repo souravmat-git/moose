@@ -26,8 +26,6 @@
 
 registerMooseObject("MooseApp", SideSetsFromNormalsGenerator);
 
-defineLegacyParams(SideSetsFromNormalsGenerator);
-
 InputParameters
 SideSetsFromNormalsGenerator::validParams()
 {
@@ -37,9 +35,10 @@ SideSetsFromNormalsGenerator::validParams()
   params.addClassDescription(
       "Adds a new named sideset to the mesh for all faces matching the specified normal.");
   params.addRequiredParam<std::vector<BoundaryName>>("new_boundary",
-                                                     "The name of the boundary to create");
+                                                     "The names of the boundaries to create");
   params.addRequiredParam<std::vector<Point>>(
       "normals", "A list of normals for which to start painting sidesets");
+  params.addParam<Real>("tolerance", 1e-5, "Tolerance for comparing the face nornmal");
 
   return params;
 }
@@ -47,7 +46,10 @@ SideSetsFromNormalsGenerator::validParams()
 SideSetsFromNormalsGenerator::SideSetsFromNormalsGenerator(const InputParameters & parameters)
   : SideSetsGeneratorBase(parameters),
     _input(getMesh("input")),
-    _normals(getParam<std::vector<Point>>("normals"))
+    _normals(getParam<std::vector<Point>>("normals")),
+    _boundary_to_normal_map(
+        declareMeshProperty<std::map<BoundaryID, RealVectorValue>>("boundary_normals")),
+    _tolerance(getParam<Real>("tolerance"))
 {
   if (typeid(_input).name() == typeid(std::unique_ptr<DistributedMesh>).name())
     mooseError("GenerateAllSideSetsByNormals only works with ReplicatedMesh.");
@@ -61,7 +63,8 @@ SideSetsFromNormalsGenerator::SideSetsFromNormalsGenerator(const InputParameters
   // Make sure that the normals are normalized
   for (auto & normal : _normals)
   {
-    mooseAssert(normal.norm() >= 1e-5, "Normal is zero");
+    if (normal.norm() < 1e-5)
+      mooseError("Normal is zero");
     normal /= normal.norm();
   }
 }
@@ -91,7 +94,7 @@ SideSetsFromNormalsGenerator::generate()
 
       for (unsigned int i = 0; i < boundary_ids.size(); ++i)
       {
-        if (std::abs(1.0 - _normals[i] * normals[0]) < 1e-5)
+        if (std::abs(1.0 - _normals[i] * normals[0]) < _tolerance)
           flood(elem, _normals[i], boundary_ids[i], *mesh);
       }
     }
@@ -100,7 +103,10 @@ SideSetsFromNormalsGenerator::generate()
 
   BoundaryInfo & boundary_info = mesh->get_boundary_info();
   for (unsigned int i = 0; i < boundary_ids.size(); ++i)
+  {
     boundary_info.sideset_name(boundary_ids[i]) = _boundary_names[i];
+    _boundary_to_normal_map[boundary_ids[i]] = _normals[i];
+  }
 
   return dynamic_pointer_cast<MeshBase>(mesh);
 }

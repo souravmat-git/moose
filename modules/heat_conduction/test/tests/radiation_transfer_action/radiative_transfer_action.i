@@ -20,7 +20,7 @@
   [./inner_bottom]
     type = SideSetsBetweenSubdomainsGenerator
     input = cmg
-    master_block = 1
+    primary_block = 1
     paired_block = 5
     new_boundary = 'inner_bottom'
   [../]
@@ -28,7 +28,7 @@
   [./inner_left]
     type = SideSetsBetweenSubdomainsGenerator
     input = inner_bottom
-    master_block = 4
+    primary_block = 4
     paired_block = 5
     new_boundary = 'inner_left'
   [../]
@@ -36,7 +36,7 @@
   [./inner_right]
     type = SideSetsBetweenSubdomainsGenerator
     input = inner_left
-    master_block = 2
+    primary_block = 2
     paired_block = 5
     new_boundary = 'inner_right'
   [../]
@@ -44,15 +44,15 @@
   [./inner_top]
     type = SideSetsBetweenSubdomainsGenerator
     input = inner_right
-    master_block = 3
+    primary_block = 3
     paired_block = 5
     new_boundary = 'inner_top'
   [../]
 
   [./rename]
     type = RenameBlockGenerator
-    old_block_id = '1 2 3 4'
-    new_block_id = '0 0 0 0'
+    old_block = '1 2 3 4'
+    new_block = '0 0 0 0'
     input = inner_top
   [../]
 []
@@ -74,16 +74,16 @@
 
 [GrayDiffuseRadiation]
   [./cavity]
-    sidesets = '4 5 6 7'
+    boundary = '4 5 6 7'
     emissivity = '0.9 0.8 0.4 1'
     n_patches = '2 2 2 3'
     partitioners = 'centroid centroid centroid centroid'
     centroid_partitioner_directions = 'x y y x'
-    final_mesh_generator = rename
     temperature = temperature
-    adiabatic_sidesets = '7'
-    fixed_temperature_sidesets = '4'
+    adiabatic_boundary = '7'
+    fixed_temperature_boundary = '4'
     fixed_boundary_temperatures = '1200'
+    view_factor_calculator = analytical
   [../]
 []
 

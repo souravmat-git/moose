@@ -10,12 +10,7 @@
 #pragma once
 
 #include "MeshGenerator.h"
-
-// Forward declarations
-class AnnularMeshGenerator;
-
-template <>
-InputParameters validParams<AnnularMeshGenerator>();
+#include <vector>
 
 /**
  * Generates an annular mesh given all the parameters
@@ -30,9 +25,6 @@ public:
   std::unique_ptr<MeshBase> generate() override;
 
 protected:
-  /// Number of elements in radial direction
-  const unsigned _nr;
-
   /// Number of elements in angular direction
   const unsigned _nt;
 
@@ -41,6 +33,12 @@ protected:
 
   /// Maximum radius
   const Real _rmax;
+
+  /// Radial positions of intermediate rings of nodes (optional)
+  const std::vector<Real> _radial_positions;
+
+  /// Number of elements in radial direction
+  const unsigned _nr;
 
   /// Minimum angle in degrees
   const Real _dmin;

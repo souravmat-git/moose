@@ -49,6 +49,7 @@ MooseVariableData<OutputType>::MooseVariableData(const MooseVariableFE<OutputTyp
     _need_u_dot(false),
     _need_ad_u_dot(false),
     _need_u_dotdot(false),
+    _need_ad_u_dotdot(false),
     _need_u_dot_old(false),
     _need_u_dotdot_old(false),
     _need_du_dot_du(false),
@@ -68,6 +69,7 @@ MooseVariableData<OutputType>::MooseVariableData(const MooseVariableFE<OutputTyp
     _need_ad(false),
     _need_ad_u(false),
     _need_ad_grad_u(false),
+    _need_ad_grad_u_dot(false),
     _need_ad_second_u(false),
     _need_dof_values(false),
     _need_dof_values_old(false),
@@ -113,6 +115,9 @@ MooseVariableData<OutputType>::MooseVariableData(const MooseVariableFE<OutputTyp
 
   _need_vector_tag_u.resize(num_vector_tags);
   _vector_tag_u.resize(num_vector_tags);
+
+  _need_vector_tag_grad.resize(num_vector_tags);
+  _vector_tag_grad.resize(num_vector_tags);
 
   auto num_matrix_tags = _sys.subproblem().numMatrixTags();
 
@@ -190,6 +195,17 @@ MooseVariableData<OutputType>::MooseVariableData(const MooseVariableFE<OutputTyp
   _phi_face = &_phi_face_assembly_method(_assembly, _fe_type);
   _grad_phi = &_grad_phi_assembly_method(_assembly, _fe_type);
   _grad_phi_face = &_grad_phi_face_assembly_method(_assembly, _fe_type);
+}
+
+template <typename OutputType>
+unsigned int
+MooseVariableData<OutputType>::oldestSolutionStateRequested() const
+{
+  if (_need_u_older || _need_grad_older || _need_second_older || _need_dof_values_older)
+    return 2;
+  if (_need_u_old || _need_grad_old || _need_second_old || _need_dof_values_old)
+    return 1;
+  return 0;
 }
 
 template <typename OutputType>
@@ -499,8 +515,12 @@ MooseVariableData<OutputType>::computeValues()
   _grad_u.resize(nqp);
 
   for (auto tag : active_coupleable_vector_tags)
+  {
     if (_need_vector_tag_u[tag])
       _vector_tag_u[tag].resize(nqp);
+    if (_need_vector_tag_grad[tag])
+      _vector_tag_grad[tag].resize(nqp);
+  }
 
   for (auto tag : active_coupleable_matrix_tags)
     if (_need_matrix_tag_u[tag])
@@ -575,8 +595,12 @@ MooseVariableData<OutputType>::computeValues()
     _grad_u[i] = 0;
 
     for (auto tag : active_coupleable_vector_tags)
+    {
       if (_need_vector_tag_u[tag])
         _vector_tag_u[tag][i] = 0;
+      if (_need_vector_tag_grad[tag])
+        _vector_tag_grad[tag][i] = 0;
+    }
 
     for (auto tag : active_coupleable_matrix_tags)
       if (_need_matrix_tag_u[tag])
@@ -738,8 +762,15 @@ MooseVariableData<OutputType>::computeValues()
       }
 
       for (auto tag : active_coupleable_vector_tags)
-        if (_need_vector_tag_u[tag])
-          _vector_tag_u[tag][qp] += phi_local * _vector_tags_dof_u[tag][i];
+      {
+        if (_sys.hasVector(tag) && _sys.getVector(tag).closed())
+        {
+          if (_need_vector_tag_u[tag])
+            _vector_tag_u[tag][qp] += phi_local * _vector_tags_dof_u[tag][i];
+          if (_need_vector_tag_grad[tag])
+            _vector_tag_grad[tag][qp].add_scaled(dphi_qp, _vector_tags_dof_u[tag][i]);
+        }
+      }
 
       for (auto tag : active_coupleable_matrix_tags)
         if (_need_matrix_tag_u[tag])
@@ -804,8 +835,12 @@ MooseVariableData<RealEigenVector>::computeValues()
   _grad_u.resize(nqp);
 
   for (auto tag : active_coupleable_vector_tags)
+  {
     if (_need_vector_tag_u[tag])
       _vector_tag_u[tag].resize(nqp);
+    if (_need_vector_tag_grad[tag])
+      _vector_tag_grad[tag].resize(nqp);
+  }
 
   for (auto tag : active_coupleable_matrix_tags)
     if (_need_matrix_tag_u[tag])
@@ -880,8 +915,12 @@ MooseVariableData<RealEigenVector>::computeValues()
     _grad_u[i].setZero(_count, LIBMESH_DIM);
 
     for (auto tag : active_coupleable_vector_tags)
+    {
       if (_need_vector_tag_u[tag])
         _vector_tag_u[tag][i].setZero(_count);
+      if (_need_vector_tag_grad[tag])
+        _vector_tag_grad[tag][i].setZero(_count, LIBMESH_DIM);
+    }
 
     for (auto tag : active_coupleable_matrix_tags)
       if (_need_matrix_tag_u[tag])
@@ -1056,8 +1095,13 @@ MooseVariableData<RealEigenVector>::computeValues()
       }
 
       for (auto tag : active_coupleable_vector_tags)
+      {
         if (_need_vector_tag_u[tag])
           _vector_tag_u[tag][qp] += phi_local * _vector_tags_dof_u[tag][i];
+        if (_need_vector_tag_grad[tag])
+          for (unsigned int d = 0; d < LIBMESH_DIM; ++d)
+            _vector_tag_grad[tag][qp].col(d) += dphi_qp(d) * _vector_tags_dof_u[tag][i];
+      }
 
       for (auto tag : active_coupleable_matrix_tags)
         if (_need_matrix_tag_u[tag])
@@ -1280,6 +1324,63 @@ MooseVariableData<OutputType>::computeMonomialValues()
         _u_older[qp] = _u_older[qp];
     }
   }
+
+  auto && active_coupleable_vector_tags =
+      _sys.subproblem().getActiveFEVariableCoupleableVectorTags(_tid);
+  auto && active_coupleable_matrix_tags =
+      _sys.subproblem().getActiveFEVariableCoupleableMatrixTags(_tid);
+
+  for (auto tag : active_coupleable_vector_tags)
+  {
+    if (_need_vector_tag_u[tag] || _need_vector_tag_grad[tag] || _need_vector_tag_dof_u[tag])
+      if ((_sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_RESIDUAL &&
+           _sys.subproblem().safeAccessTaggedVectors()) ||
+          _sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_SOLUTION)
+        // tag is defined on problem but may not be used by a system
+        if (_sys.hasVector(tag) && _sys.getVector(tag).closed())
+        {
+          auto & vec = _sys.getVector(tag);
+          _vector_tags_dof_u[tag].resize(1);
+          _vector_tags_dof_u[tag][0] = vec(_dof_indices[0]);
+        }
+
+    if (_need_vector_tag_u[tag])
+    {
+      _vector_tag_u[tag].resize(nqp);
+      auto v = phi * _vector_tags_dof_u[tag][0];
+      for (unsigned int qp = 0; qp < nqp; ++qp)
+        _vector_tag_u[tag][qp] = v;
+    }
+    if (_need_vector_tag_grad[tag])
+      _vector_tag_grad[tag].resize(nqp);
+  }
+
+  if (_sys.subproblem().safeAccessTaggedMatrices())
+  {
+    auto & active_coupleable_matrix_tags =
+        _sys.subproblem().getActiveFEVariableCoupleableMatrixTags(_tid);
+    for (auto tag : active_coupleable_matrix_tags)
+    {
+      _matrix_tags_dof_u[tag].resize(1);
+      if (_need_matrix_tag_dof_u[tag] || _need_matrix_tag_u[tag])
+        if (_sys.hasMatrix(tag) && _sys.matrixTagActive(tag) && _sys.getMatrix(tag).closed())
+        {
+          auto & mat = _sys.getMatrix(tag);
+          {
+            Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
+            _matrix_tags_dof_u[tag][0] = mat(_dof_indices[0], _dof_indices[0]);
+          }
+        }
+    }
+  }
+  for (auto tag : active_coupleable_matrix_tags)
+    if (_need_matrix_tag_u[tag])
+    {
+      _matrix_tag_u[tag].resize(nqp);
+      auto v = phi * _matrix_tags_dof_u[tag][0];
+      for (unsigned int qp = 0; qp < nqp; ++qp)
+        _matrix_tag_u[tag][qp] = v;
+    }
 }
 
 template <>
@@ -1313,7 +1414,16 @@ MooseVariableData<OutputType>::computeAD(const unsigned int num_dofs, const unsi
     _ad_dofs_dot.resize(num_dofs);
     _ad_u_dot.resize(nqp);
   }
+  if (_need_ad_grad_u_dot)
+    _ad_grad_u_dot.resize(nqp);
 
+  if (_need_ad_u_dotdot)
+  {
+    _ad_dofs_dotdot.resize(num_dofs);
+    _ad_u_dotdot.resize(nqp);
+  }
+
+#ifndef MOOSE_GLOBAL_AD_INDEXING
   auto ad_offset = Moose::adOffset(
       _var_num, _sys.getMaxVarNDofsPerElem(), _element_type, _sys.system().n_vars());
   mooseAssert(_var.kind() == Moose::VarKindType::VAR_AUXILIARY || ad_offset || !_var_num,
@@ -1327,6 +1437,7 @@ MooseVariableData<OutputType>::computeAD(const unsigned int num_dofs, const unsi
                MOOSE_AD_MAX_DOFS_PER_ELEM,
                ". You can run `configure --with-derivative-size=<n>` to request a larger "
                "derivative container.");
+#endif
 #endif
 
   for (unsigned int qp = 0; qp < nqp; qp++)
@@ -1342,6 +1453,12 @@ MooseVariableData<OutputType>::computeAD(const unsigned int num_dofs, const unsi
 
     if (_need_ad_u_dot)
       _ad_u_dot[qp] = _ad_zero;
+
+    if (_need_ad_u_dotdot)
+      _ad_u_dotdot[qp] = _ad_zero;
+
+    if (_need_ad_grad_u_dot)
+      _ad_grad_u_dot[qp] = _ad_zero;
   }
 
   for (unsigned int i = 0; i < num_dofs; i++)
@@ -1349,13 +1466,20 @@ MooseVariableData<OutputType>::computeAD(const unsigned int num_dofs, const unsi
     _ad_dof_values[i] = (*_sys.currentSolution())(_dof_indices[i]);
 
     // NOTE!  You have to do this AFTER setting the value!
-    if (_var.kind() == Moose::VAR_NONLINEAR && _subproblem.currentlyComputingJacobian())
+    if (_var.kind() == Moose::VAR_NONLINEAR && ADReal::do_derivatives)
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+      Moose::derivInsert(_ad_dof_values[i].derivatives(), _dof_indices[i], 1.);
+#else
       Moose::derivInsert(_ad_dof_values[i].derivatives(), ad_offset + i, 1.);
+#endif
 
     if (_need_ad_u_dot && _time_integrator && _time_integrator->dt())
     {
       _ad_dofs_dot[i] = _ad_dof_values[i];
-      _time_integrator->computeADTimeDerivatives(_ad_dofs_dot[i], _dof_indices[i]);
+      _time_integrator->computeADTimeDerivatives(_ad_dofs_dot[i],
+                                                 _dof_indices[i],
+                                                 _need_ad_u_dotdot ? _ad_dofs_dotdot[i]
+                                                                   : _ad_real_dummy);
     }
   }
 
@@ -1384,13 +1508,36 @@ MooseVariableData<OutputType>::computeAD(const unsigned int num_dofs, const unsi
         _ad_second_u[qp] += _ad_dof_values[i] * (*_current_second_phi)[i][qp];
 
       if (_need_ad_u_dot && _time_integrator)
+      {
         _ad_u_dot[qp] += (*_current_phi)[i][qp] * _ad_dofs_dot[i];
+        if (_need_ad_u_dotdot)
+          _ad_u_dotdot[qp] += (*_current_phi)[i][qp] * _ad_dofs_dotdot[i];
+      }
+
+      if (_need_ad_grad_u_dot && _time_integrator)
+      {
+        // The latter check here is for handling the fact that we have not yet implemented
+        // calculation of ad_grad_phi for neighbor and neighbor-face, so if we are in that
+        // situation we need to default to using the non-ad grad_phi
+        if (_displaced && _current_ad_grad_phi)
+          _ad_grad_u_dot[qp] += _ad_dofs_dot[i] * (*_current_ad_grad_phi)[i][qp];
+        else
+          _ad_grad_u_dot[qp] += _ad_dofs_dot[i] * (*_current_grad_phi)[i][qp];
+      }
     }
   }
 
   if (_need_ad_u_dot && !_time_integrator)
     for (MooseIndex(nqp) qp = 0; qp < nqp; ++qp)
+    {
       _ad_u_dot[qp] = _u_dot[qp];
+      if (_need_ad_u_dotdot)
+        _ad_u_dotdot[qp] = _u_dotdot[qp];
+    }
+
+  if (_need_ad_grad_u_dot && !_time_integrator)
+    for (MooseIndex(nqp) qp = 0; qp < nqp; ++qp)
+      _ad_grad_u_dot[qp] = _grad_u_dot[qp];
 }
 
 template <>
@@ -1812,8 +1959,21 @@ template <typename OutputType>
 const typename MooseVariableData<OutputType>::DoFValue &
 MooseVariableData<OutputType>::vectorTagDofValue(TagID tag) const
 {
-  _need_vector_tag_dof_u[tag] = true;
-  return _vector_tags_dof_u[tag];
+  // we need to check special tags until we use tagging for all evaluations
+  // otherwise we will have redundant evaluations.
+  if (tag == _subproblem.getVectorTagID(Moose::SOLUTION_TAG))
+    return dofValues();
+  else if (_subproblem.vectorTagExists(Moose::OLD_SOLUTION_TAG) &&
+           tag == _subproblem.getVectorTagID(Moose::OLD_SOLUTION_TAG))
+    return dofValuesOld();
+  else if (_subproblem.vectorTagExists(Moose::OLDER_SOLUTION_TAG) &&
+           tag == _subproblem.getVectorTagID(Moose::OLDER_SOLUTION_TAG))
+    return dofValuesOlder();
+  else
+  {
+    _need_vector_tag_dof_u[tag] = true;
+    return _vector_tags_dof_u[tag];
+  }
 }
 
 template <typename OutputType>
@@ -2097,15 +2257,28 @@ MooseVariableData<OutputType>::nodalVectorTagValue(TagID tag) const
 {
   if (isNodal())
   {
-    _need_vector_tag_dof_u[tag] = true;
-
-    if (_sys.hasVector(tag) && tag < _vector_tags_dof_u.size())
-      return _vector_tags_dof_u[tag];
+    // we need to check special tags until we use tagging for all evaluations
+    // otherwise we will have redundant evaluations.
+    if (tag == _subproblem.getVectorTagID(Moose::SOLUTION_TAG))
+      return dofValues();
+    else if (_subproblem.vectorTagExists(Moose::OLD_SOLUTION_TAG) &&
+             tag == _subproblem.getVectorTagID(Moose::OLD_SOLUTION_TAG))
+      return dofValuesOld();
+    else if (_subproblem.vectorTagExists(Moose::OLDER_SOLUTION_TAG) &&
+             tag == _subproblem.getVectorTagID(Moose::OLD_SOLUTION_TAG))
+      return dofValuesOlder();
     else
-      mooseError("Tag is not associated with any vector or there is no any data for tag ",
-                 tag,
-                 " for nodal variable ",
-                 _var.name());
+    {
+      _need_vector_tag_dof_u[tag] = true;
+
+      if (_sys.hasVector(tag) && tag < _vector_tags_dof_u.size())
+        return _vector_tags_dof_u[tag];
+      else
+        mooseError("Tag is not associated with any vector or there is no any data for tag ",
+                   tag,
+                   " for nodal variable ",
+                   _var.name());
+    }
   }
   else
     mooseError("Nodal values can be requested only on nodal variables, variable '",
@@ -2133,6 +2306,77 @@ MooseVariableData<OutputType>::nodalMatrixTagValue(TagID tag) const
     mooseError("Nodal values can be requested only on nodal variables, variable '",
                _var.name(),
                "' is not nodal.");
+}
+
+template <typename OutputType>
+const typename MooseVariableData<OutputType>::FieldVariableValue &
+MooseVariableData<OutputType>::vectorTagValue(TagID tag) const
+{
+  // we need to check special tags until we use tagging for all evaluations
+  // otherwise we will have redundant evaluations.
+  if (tag == _subproblem.getVectorTagID(Moose::SOLUTION_TAG))
+    return sln(Moose::Current);
+  else if (_subproblem.vectorTagExists(Moose::OLD_SOLUTION_TAG) &&
+           tag == _subproblem.getVectorTagID(Moose::OLD_SOLUTION_TAG))
+    return sln(Moose::Old);
+  else if (_subproblem.vectorTagExists(Moose::OLDER_SOLUTION_TAG) &&
+           tag == _subproblem.getVectorTagID(Moose::OLD_SOLUTION_TAG))
+    return sln(Moose::Older);
+  else
+  {
+    _need_vector_tag_u[tag] = true;
+
+    if (_sys.hasVector(tag) && tag < _vector_tag_u.size())
+      return _vector_tag_u[tag];
+    else
+      mooseError("Tag is not associated with any vector or there is no any data for tag ",
+                 tag,
+                 " for variable ",
+                 _var.name());
+  }
+}
+
+template <typename OutputType>
+const typename MooseVariableData<OutputType>::FieldVariableGradient &
+MooseVariableData<OutputType>::vectorTagGradient(TagID tag) const
+{
+  // we need to check special tags until we use tagging for all evaluations
+  // otherwise we will have redundant evaluations.
+  if (tag == _subproblem.getVectorTagID(Moose::SOLUTION_TAG))
+    return gradSln(Moose::Current);
+  else if (_subproblem.vectorTagExists(Moose::OLD_SOLUTION_TAG) &&
+           tag == _subproblem.getVectorTagID(Moose::OLD_SOLUTION_TAG))
+    return gradSln(Moose::Old);
+  else if (_subproblem.vectorTagExists(Moose::OLDER_SOLUTION_TAG) &&
+           tag == _subproblem.getVectorTagID(Moose::OLD_SOLUTION_TAG))
+    return gradSln(Moose::Older);
+  else
+  {
+    _need_vector_tag_grad[tag] = true;
+
+    if (_sys.hasVector(tag) && tag < _vector_tag_grad.size())
+      return _vector_tag_grad[tag];
+    else
+      mooseError("Tag is not associated with any vector or there is no any data for tag ",
+                 tag,
+                 " for variable ",
+                 _var.name());
+  }
+}
+
+template <typename OutputType>
+const typename MooseVariableData<OutputType>::FieldVariableValue &
+MooseVariableData<OutputType>::matrixTagValue(TagID tag) const
+{
+  _need_matrix_tag_u[tag] = true;
+
+  if (_sys.hasMatrix(tag) && tag < _matrix_tag_u.size())
+    return _matrix_tag_u[tag];
+  else
+    mooseError("Tag is not associated with any matrix or there is no any data for tag ",
+               tag,
+               " for variable ",
+               _var.name());
 }
 
 template <typename OutputType>
@@ -2195,10 +2439,11 @@ MooseVariableData<OutputType>::fetchDoFValues()
   auto & active_coupleable_vector_tags =
       _sys.subproblem().getActiveFEVariableCoupleableVectorTags(_tid);
   for (auto tag : active_coupleable_vector_tags)
-    if (_need_vector_tag_u[tag] || _need_vector_tag_dof_u[tag])
+    if (_need_vector_tag_u[tag] || _need_vector_tag_grad[tag] || _need_vector_tag_dof_u[tag])
       if ((_sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_RESIDUAL &&
            _sys.subproblem().safeAccessTaggedVectors()) ||
           _sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_SOLUTION)
+        // tag is defined on problem but may not be used by a system
         if (_sys.hasVector(tag) && _sys.getVector(tag).closed())
         {
           auto & vec = _sys.getVector(tag);
@@ -2294,6 +2539,7 @@ MooseVariableData<RealEigenVector>::fetchDoFValues()
     if ((_sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_RESIDUAL &&
          _sys.subproblem().safeAccessTaggedVectors()) ||
         _sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_SOLUTION)
+      // tag is defined on problem but may not be used by a system
       if (_sys.hasVector(tag) && _sys.getVector(tag).closed())
         getArrayDoFValues(_sys.getVector(tag), n, _vector_tags_dof_u[tag]);
 
@@ -2339,13 +2585,19 @@ MooseVariableData<OutputType>::fetchADDoFValues()
   auto n = _dof_indices.size();
   libmesh_assert(n);
   _ad_dof_values.resize(n);
+#ifndef MOOSE_GLOBAL_AD_INDEXING
   auto ad_offset = _var_num * _sys.getMaxVarNDofsPerNode();
+#endif
 
   for (decltype(n) i = 0; i < n; ++i)
   {
     _ad_dof_values[i] = _dof_values[i];
-    if (_var.kind() == Moose::VAR_NONLINEAR && _subproblem.currentlyComputingJacobian())
+    if (_var.kind() == Moose::VAR_NONLINEAR && ADReal::do_derivatives)
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+      Moose::derivInsert(_ad_dof_values[i].derivatives(), _dof_indices[i], 1.);
+#else
       Moose::derivInsert(_ad_dof_values[i].derivatives(), ad_offset + i, 1.);
+#endif
     assignADNodalValue(_ad_dof_values[i], i);
   }
 }
@@ -2456,6 +2708,7 @@ MooseVariableData<RealVectorValue>::assignNodalValue()
 
   for (decltype(n) i = 0; i < n; ++i)
     _nodal_value(i) = _dof_values[i];
+  _nodal_value_array[0] = _nodal_value;
 
   if (is_transient)
   {
@@ -2535,10 +2788,10 @@ template <typename OutputType>
 void
 MooseVariableData<OutputType>::reinitNode()
 {
-  if (size_t n_dofs = _node->n_dofs(_sys.number(), _var_num))
+  if (std::size_t n_dofs = _node->n_dofs(_sys.number(), _var_num))
   {
     _dof_indices.resize(n_dofs);
-    for (size_t i = 0; i < n_dofs; ++i)
+    for (std::size_t i = 0; i < n_dofs; ++i)
       _dof_indices[i] = _node->dof_number(_sys.number(), _var_num, i);
     // For standard variables. _nodal_dof_index is retrieved by nodalDofIndex() which is used in
     // NodalBC for example

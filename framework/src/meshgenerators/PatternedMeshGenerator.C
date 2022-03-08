@@ -20,8 +20,6 @@
 
 registerMooseObject("MooseApp", PatternedMeshGenerator);
 
-defineLegacyParams(PatternedMeshGenerator);
-
 InputParameters
 PatternedMeshGenerator::validParams()
 {
@@ -57,6 +55,7 @@ PatternedMeshGenerator::validParams()
 PatternedMeshGenerator::PatternedMeshGenerator(const InputParameters & parameters)
   : MeshGenerator(parameters),
     _input_names(getParam<std::vector<MeshGeneratorName>>("inputs")),
+    _mesh_ptrs(getMeshes("inputs")),
     _pattern(getParam<std::vector<std::vector<unsigned int>>>("pattern")),
     _x_width(getParam<Real>("x_width")),
     _y_width(getParam<Real>("y_width")),
@@ -69,10 +68,6 @@ PatternedMeshGenerator::PatternedMeshGenerator(const InputParameters & parameter
                    "Index " + Moose::stringify(_pattern[i][j]) +
                        " is larger than the the maximum possible index, which is determined by the "
                        "number of MeshGenerators provided in inputs");
-
-  _mesh_ptrs.reserve(_input_names.size());
-  for (auto & input_name : _input_names)
-    _mesh_ptrs.push_back(&getMeshByName(input_name));
 }
 
 std::unique_ptr<MeshBase>
@@ -84,7 +79,16 @@ PatternedMeshGenerator::generate()
   // Read in all of the meshes
   for (MooseIndex(_input_names) i = 0; i < _input_names.size(); ++i)
   {
-    _meshes.push_back(dynamic_pointer_cast<ReplicatedMesh>(*_mesh_ptrs[i]));
+    std::unique_ptr<ReplicatedMesh> mesh = dynamic_pointer_cast<ReplicatedMesh>(*_mesh_ptrs[i]);
+    if (!mesh)
+      paramError("inputs",
+                 "The input mesh '",
+                 _input_names[i],
+                 "' is not a replicated mesh.\n\n",
+                 type(),
+                 " only works with inputs that are replicated.\n\n",
+                 "Try running without distributed mesh.");
+    _meshes.push_back(std::move(mesh));
   }
 
   // Data structure that holds each row
@@ -133,7 +137,6 @@ PatternedMeshGenerator::generate()
       // If this is the first cell of the row initialize the row mesh
       if (j == 0)
       {
-        //_row_meshes[i] = _mesh_ptrs[_pattern[i][j]]->clone();
         auto clone = _meshes[_pattern[i][j]]->clone();
         _row_meshes[i] = dynamic_pointer_cast<ReplicatedMesh>(clone);
 

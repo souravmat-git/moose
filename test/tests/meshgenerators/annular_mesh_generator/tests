@@ -10,6 +10,18 @@
     design = 'meshgenerators/AnnularMeshGenerator.md'
     issues = '#11640'
   [../]
+  [./annular_mesh_generator_negative_growth]
+    type = 'Exodiff'
+    input = 'annular_mesh_generator_negative_growth.i'
+    cli_args = '--mesh-only'
+    exodiff = 'annular_mesh_generator_negative_growth_in.e'
+    mesh_mode = 'REPLICATED'
+    recover = false
+    requirement = 'The system shall have the capability of generating a mesh based upon an annular geometry '
+                  'with a negative growth ratio.'
+    design = 'meshgenerators/AnnularMeshGenerator.md'
+    issues = '#16699'
+  [../]
   [./annular_mesh_generator_deprecated]
     type = 'Exodiff'
     input = 'annular_mesh_generator_deprecated.i'
@@ -18,8 +30,17 @@
     mesh_mode = 'REPLICATED'
     recover = false
     deprecated = true
-    design = 'meshgenerators/AnnularMeshGenerator.md'
-    issues = '#11640'
     no_error_deprecated = true
+  [../]
+  [./annular_mesh_generator_radial_positions]
+    type = 'Exodiff'
+    input = 'annular_mesh_generator_radial_positions.i'
+    cli_args = '--mesh-only'
+    exodiff = 'annular_mesh_generator_radial_positions_in.e'
+    mesh_mode = 'REPLICATED'
+    recover = false
+    requirement = 'The system shall generate an annular mesh with prescribed radial positions of the intermediate rings of nodes'
+    design = 'meshgenerators/AnnularMeshGenerator.md'
+    issues = '#18486'
   [../]
 []

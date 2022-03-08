@@ -12,8 +12,6 @@
 
 registerMooseObject("MooseApp", VectorOfPostprocessors);
 
-defineLegacyParams(VectorOfPostprocessors);
-
 InputParameters
 VectorOfPostprocessors::validParams()
 {
@@ -39,12 +37,7 @@ VectorOfPostprocessors::VectorOfPostprocessors(const InputParameters & parameter
       getParam<std::vector<PostprocessorName>>("postprocessors"));
   _pp_vec.resize(pps_names.size());
   for (const auto & pps_name : pps_names)
-  {
-    if (!hasPostprocessorByName(pps_name))
-      mooseError(
-          "In VectorOfPostprocessors, postprocessor with name: ", pps_name, " does not exist");
     _postprocessor_values.push_back(&getPostprocessorValueByName(pps_name));
-  }
 }
 
 void

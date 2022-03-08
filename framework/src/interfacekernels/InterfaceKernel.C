@@ -16,9 +16,6 @@
 
 #include "libmesh/quadrature.h"
 
-defineLegacyParams(InterfaceKernel);
-defineLegacyParams(VectorInterfaceKernel);
-
 template <typename T>
 InputParameters
 InterfaceKernelTempl<T>::validParams()
@@ -50,7 +47,7 @@ InterfaceKernelTempl<T>::InterfaceKernelTempl(const InputParameters & parameters
     _grad_phi(_assembly.gradPhiFace(_var)),
     _test(_var.phiFace()),
     _grad_test(_var.gradPhiFace()),
-    _neighbor_var(*getVarHelper<T>("neighbor_var", 0)),
+    _neighbor_var(*getVarHelper<MooseVariableFE<T>>("neighbor_var", 0)),
     _neighbor_value(_is_implicit ? _neighbor_var.slnNeighbor() : _neighbor_var.slnOldNeighbor()),
     _grad_neighbor_value(_neighbor_var.gradSlnNeighbor()),
     _phi_neighbor(_assembly.phiFaceNeighbor(_neighbor_var)),
@@ -85,9 +82,9 @@ InterfaceKernelTempl<T>::InterfaceKernelTempl(const InputParameters & parameters
             mooseError(
                 "Error in " + name() +
                 ". There is a mismatch between the fe_type of the save-in Auxiliary variable "
-                "and the fe_type of the the master side nonlinear "
+                "and the fe_type of the the primary side nonlinear "
                 "variable this interface kernel object is acting on.");
-          _master_save_in_residual_variables.push_back(var);
+          _primary_save_in_residual_variables.push_back(var);
         }
         else
         {
@@ -95,9 +92,9 @@ InterfaceKernelTempl<T>::InterfaceKernelTempl(const InputParameters & parameters
             mooseError(
                 "Error in " + name() +
                 ". There is a mismatch between the fe_type of the save-in Auxiliary variable "
-                "and the fe_type of the the slave side nonlinear "
+                "and the fe_type of the the secondary side nonlinear "
                 "variable this interface kernel object is acting on.");
-          _slave_save_in_residual_variables.push_back(var);
+          _secondary_save_in_residual_variables.push_back(var);
         }
 
         var->sys().addVariableToZeroOnResidual(_save_in_strings[i]);
@@ -106,8 +103,8 @@ InterfaceKernelTempl<T>::InterfaceKernelTempl(const InputParameters & parameters
     }
   }
 
-  _has_master_residuals_saved_in = _master_save_in_residual_variables.size() > 0;
-  _has_slave_residuals_saved_in = _slave_save_in_residual_variables.size() > 0;
+  _has_primary_residuals_saved_in = _primary_save_in_residual_variables.size() > 0;
+  _has_secondary_residuals_saved_in = _secondary_save_in_residual_variables.size() > 0;
 
   if (parameters.isParamSetByUser("diag_save_in"))
   {
@@ -129,9 +126,9 @@ InterfaceKernelTempl<T>::InterfaceKernelTempl(const InputParameters & parameters
             mooseError(
                 "Error in " + name() +
                 ". There is a mismatch between the fe_type of the save-in Auxiliary variable "
-                "and the fe_type of the the master side nonlinear "
+                "and the fe_type of the the primary side nonlinear "
                 "variable this interface kernel object is acting on.");
-          _master_save_in_jacobian_variables.push_back(var);
+          _primary_save_in_jacobian_variables.push_back(var);
         }
         else
         {
@@ -139,9 +136,9 @@ InterfaceKernelTempl<T>::InterfaceKernelTempl(const InputParameters & parameters
             mooseError(
                 "Error in " + name() +
                 ". There is a mismatch between the fe_type of the save-in Auxiliary variable "
-                "and the fe_type of the the slave side nonlinear "
+                "and the fe_type of the the secondary side nonlinear "
                 "variable this interface kernel object is acting on.");
-          _slave_save_in_jacobian_variables.push_back(var);
+          _secondary_save_in_jacobian_variables.push_back(var);
         }
 
         var->sys().addVariableToZeroOnJacobian(_diag_save_in_strings[i]);
@@ -150,8 +147,8 @@ InterfaceKernelTempl<T>::InterfaceKernelTempl(const InputParameters & parameters
     }
   }
 
-  _has_master_jacobians_saved_in = _master_save_in_jacobian_variables.size() > 0;
-  _has_slave_jacobians_saved_in = _slave_save_in_jacobian_variables.size() > 0;
+  _has_primary_jacobians_saved_in = _primary_save_in_jacobian_variables.size() > 0;
+  _has_secondary_jacobians_saved_in = _secondary_save_in_jacobian_variables.size() > 0;
 }
 
 template <typename T>
@@ -177,18 +174,18 @@ InterfaceKernelTempl<T>::computeElemNeighResidual(Moose::DGResidualType type)
 
   accumulateTaggedLocalResidual();
 
-  if (_has_master_residuals_saved_in && is_elem)
+  if (_has_primary_residuals_saved_in && is_elem)
   {
     Threads::spin_mutex::scoped_lock lock(_resid_vars_mutex);
-    for (const auto & var : _master_save_in_residual_variables)
+    for (const auto & var : _primary_save_in_residual_variables)
     {
       var->sys().solution().add_vector(_local_re, var->dofIndices());
     }
   }
-  else if (_has_slave_residuals_saved_in && !is_elem)
+  else if (_has_secondary_residuals_saved_in && !is_elem)
   {
     Threads::spin_mutex::scoped_lock lock(_resid_vars_mutex);
-    for (const auto & var : _slave_save_in_residual_variables)
+    for (const auto & var : _secondary_save_in_residual_variables)
       var->sys().solution().add_vector(_local_re, var->dofIndicesNeighbor());
   }
 }
@@ -258,7 +255,7 @@ InterfaceKernelTempl<T>::computeElemNeighJacobian(Moose::DGJacobianType type)
 
   accumulateTaggedLocalMatrix();
 
-  if (_has_master_jacobians_saved_in && type == Moose::ElementElement)
+  if (_has_primary_jacobians_saved_in && type == Moose::ElementElement)
   {
     auto rows = _local_ke.m();
     DenseVector<Number> diag(rows);
@@ -266,10 +263,10 @@ InterfaceKernelTempl<T>::computeElemNeighJacobian(Moose::DGJacobianType type)
       diag(i) = _local_ke(i, i);
 
     Threads::spin_mutex::scoped_lock lock(_jacoby_vars_mutex);
-    for (const auto & var : _master_save_in_jacobian_variables)
+    for (const auto & var : _primary_save_in_jacobian_variables)
       var->sys().solution().add_vector(diag, var->dofIndices());
   }
-  else if (_has_slave_jacobians_saved_in && type == Moose::NeighborNeighbor)
+  else if (_has_secondary_jacobians_saved_in && type == Moose::NeighborNeighbor)
   {
     auto rows = _local_ke.m();
     DenseVector<Number> diag(rows);
@@ -277,7 +274,7 @@ InterfaceKernelTempl<T>::computeElemNeighJacobian(Moose::DGJacobianType type)
       diag(i) = _local_ke(i, i);
 
     Threads::spin_mutex::scoped_lock lock(_jacoby_vars_mutex);
-    for (const auto & var : _slave_save_in_jacobian_variables)
+    for (const auto & var : _secondary_save_in_jacobian_variables)
       var->sys().solution().add_vector(diag, var->dofIndicesNeighbor());
   }
 }

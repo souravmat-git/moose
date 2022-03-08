@@ -120,28 +120,7 @@ public:
   /**
    * Whether we are computing an initial Jacobian for automatic variable scaling
    */
-  bool computingScalingJacobian() const { return _computing_scaling_jacobian; }
-
-  /**
-   * Setter for whether we're computing the scaling jacobian
-   */
-  void computingScalingJacobian(bool computing_scaling_jacobian)
-  {
-    _computing_scaling_jacobian = computing_scaling_jacobian;
-  }
-
-  /**
-   * Whether we are computing an initial Residual for automatic variable scaling
-   */
-  bool computingScalingResidual() const { return _computing_scaling_residual; }
-
-  /**
-   * Setter for whether we're computing the scaling residual
-   */
-  void computingScalingResidual(bool computing_scaling_residual)
-  {
-    _computing_scaling_residual = computing_scaling_residual;
-  }
+  bool computingScalingJacobian() const;
 
   /**
    * Getter for whether we are performing automatic scaling
@@ -188,15 +167,9 @@ public:
   virtual void initializeObjects(){};
 
   /**
-   * Method called during initialSetup to add extra system vector if they are required by
-   * the simulation
-   */
-  virtual void addExtraVectors();
-
-  /**
    * Update the system (doing libMesh magic)
    */
-  virtual void update();
+  virtual void update(bool update_libmesh_system = true);
 
   /**
    * Solve the system (using libMesh magic)
@@ -219,8 +192,13 @@ public:
   const NumericVector<Number> & solutionOld() const { return solutionState(1); }
   const NumericVector<Number> & solutionOlder() const { return solutionState(2); }
 
-  virtual const NumericVector<Number> * solutionPreviousNewton() const = 0;
-  virtual NumericVector<Number> * solutionPreviousNewton() = 0;
+  virtual const NumericVector<Number> * solutionPreviousNewton() const;
+  virtual NumericVector<Number> * solutionPreviousNewton();
+
+  /**
+   * Initializes the solution state.
+   */
+  void initSolutionState();
 
   /**
    * Get a state of the solution (0 = current, 1 = old, 2 = older, etc).
@@ -232,11 +210,18 @@ public:
 
   /**
    * Get a state of the solution (0 = current, 1 = old, 2 = older, etc).
-   *
-   * By default, up to state _default_solution_states is added. Any older states must be
-   * added using the non-const solutionState().
    */
   const NumericVector<Number> & solutionState(const unsigned int state) const;
+
+  /**
+   * Registers that the solution state \p state is needed.
+   */
+  void needSolutionState(const unsigned int state);
+
+  /**
+   * Whether or not the system has the solution state (0 = current, 1 = old, 2 = older, etc).
+   */
+  bool hasSolutionState(const unsigned int state) const { return _solution_states.size() > state; }
 
   virtual Number & duDotDu() { return _du_dot_du; }
   virtual Number & duDotDotDu() { return _du_dotdot_du; }
@@ -265,7 +250,10 @@ public:
   /**
    * Check if the tagged vector exists in the system.
    */
-  virtual bool hasVector(TagID tag_id) const;
+  virtual bool hasVector(TagID tag_id) const
+  {
+    return tag_id < _tagged_vectors.size() && _tagged_vectors[tag_id];
+  }
 
   /**
    * Ideally, we should not need this API.
@@ -273,42 +261,50 @@ public:
    * This API should go away once addCachedResidualDirectly is removed in the future
    * Return Tag ID for Time
    */
-  virtual TagID timeVectorTag();
-
-  /**
-   * Return the Matrix Tag ID for Time
-   */
-  virtual TagID timeMatrixTag();
+  virtual TagID timeVectorTag() const { mooseError("Not implemented yet"); }
 
   /**
    * Return the Matrix Tag ID for System
    */
-  virtual TagID systemMatrixTag();
+  virtual TagID systemMatrixTag() const { mooseError("Not implemented yet"); }
 
   /*
    * Return TagID for nontime
    */
-  virtual TagID nonTimeVectorTag();
+  virtual TagID nonTimeVectorTag() const { mooseError("Not implemented yet"); }
 
   /*
    * Return TagID for nontime
    */
-  virtual TagID residualVectorTag();
+  virtual TagID residualVectorTag() const { mooseError("Not implemented yet"); }
 
   /**
-   * Get a raw NumericVector
+   * Get the default vector tags associated with this system
    */
+  virtual std::set<TagID> defaultVectorTags() const
+  {
+    return {timeVectorTag(), nonTimeVectorTag(), residualVectorTag()};
+  }
+  /**
+   * Get the default matrix tags associted with this system
+   */
+  virtual std::set<TagID> defaultMatrixTags() const { return {systemMatrixTag()}; }
+
+  /**
+   * Get a raw NumericVector by name
+   */
+  ///@{
   virtual NumericVector<Number> & getVector(const std::string & name);
+  virtual const NumericVector<Number> & getVector(const std::string & name) const;
+  ///@}
 
   /**
-   * Get a raw NumericVector
+   * Get a raw NumericVector by tag
    */
+  ///@{
   virtual NumericVector<Number> & getVector(TagID tag);
-
-  /**
-   * Get a raw NumericVector
-   */
   virtual const NumericVector<Number> & getVector(TagID tag) const;
+  ///@}
 
   /**
    * Associate a vector for a given tag
@@ -316,19 +312,27 @@ public:
   virtual void associateVectorToTag(NumericVector<Number> & vec, TagID tag);
 
   /**
-   * Associate a vector for a given tag
+   * Disassociate a given vector from a given tag
    */
   virtual void disassociateVectorFromTag(NumericVector<Number> & vec, TagID tag);
 
   /**
-   * Disassociate all vectors, and then hasVector() will return false.
+   * Disassociate any vector that is associated with a given tag
    */
-  virtual void disassociateAllTaggedVectors();
+  virtual void disassociateVectorFromTag(TagID tag);
+
+  /**
+   * Disassociate the vectors associated with the default vector tags of this system
+   */
+  virtual void disassociateDefaultVectorTags();
 
   /**
    * Check if the tagged matrix exists in the system.
    */
-  virtual bool hasMatrix(TagID tag) const;
+  virtual bool hasMatrix(TagID tag) const
+  {
+    return tag < _tagged_matrices.size() && _tagged_matrices[tag];
+  }
 
   /**
    * Get a raw SparseMatrix
@@ -371,19 +375,30 @@ public:
   void closeTaggedMatrices(const std::set<TagID> & tags);
 
   /**
-   * associate a matirx to a tag
+   * flushes all matrices associated to tags. Flush assembles the matrix but doesn't shrink memory
+   * allocation
+   */
+  void flushTaggedMatrices(const std::set<TagID> & tags);
+
+  /**
+   * Associate a matrix to a tag
    */
   virtual void associateMatrixToTag(SparseMatrix<Number> & matrix, TagID tag);
 
   /**
-   * disassociate a matirx from a tag
+   * Disassociate a matrix from a tag
    */
   virtual void disassociateMatrixFromTag(SparseMatrix<Number> & matrix, TagID tag);
 
   /**
-   * Clear all tagged matrices
+   * Disassociate any matrix that is associated with a given tag
    */
-  virtual void disassociateAllTaggedMatrices();
+  virtual void disassociateMatrixFromTag(TagID tag);
+
+  /**
+   * Disassociate the matrices associated with the default matrix tags of this system
+   */
+  virtual void disassociateDefaultMatrixTags();
 
   /**
    * Returns a reference to a serialized version of the solution vector for this subproblem
@@ -446,7 +461,7 @@ public:
    * @param var_name variable name
    * @return reference the variable (class)
    */
-  MooseVariableFEBase & getVariable(THREAD_ID tid, const std::string & var_name);
+  MooseVariableFieldBase & getVariable(THREAD_ID tid, const std::string & var_name) const;
 
   /**
    * Gets a reference to a variable with specified number
@@ -455,7 +470,7 @@ public:
    * @param var_number libMesh variable number
    * @return reference the variable (class)
    */
-  MooseVariableFEBase & getVariable(THREAD_ID tid, unsigned int var_number);
+  MooseVariableFieldBase & getVariable(THREAD_ID tid, unsigned int var_number) const;
 
   /**
    * Gets a reference to a variable of with specified name
@@ -494,13 +509,20 @@ public:
   MooseVariableField<T> & getActualFieldVariable(THREAD_ID tid, unsigned int var_number);
 
   /**
+   * Return a finite volume variable
+   */
+  template <typename T>
+  MooseVariableFV<T> & getFVVariable(THREAD_ID tid, const std::string & var_name);
+
+  /**
    * Gets a reference to a scalar variable with specified number
    *
    * @param tid Thread id
    * @param var_name A string which is the name of the variable to get.
    * @return reference the variable (class)
    */
-  virtual MooseVariableScalar & getScalarVariable(THREAD_ID tid, const std::string & var_name);
+  virtual MooseVariableScalar & getScalarVariable(THREAD_ID tid,
+                                                  const std::string & var_name) const;
 
   /**
    * Gets a reference to a variable with specified number
@@ -509,7 +531,7 @@ public:
    * @param var_number libMesh variable number
    * @return reference the variable (class)
    */
-  virtual MooseVariableScalar & getScalarVariable(THREAD_ID tid, unsigned int var_number);
+  virtual MooseVariableScalar & getScalarVariable(THREAD_ID tid, unsigned int var_number) const;
 
   /**
    * Get the block where a variable of this system is defined
@@ -699,7 +721,7 @@ public:
                                  const std::string & source_name,
                                  const std::string & timestep);
 
-  const std::vector<MooseVariableFEBase *> & getVariables(THREAD_ID tid)
+  const std::vector<MooseVariableFieldBase *> & getVariables(THREAD_ID tid)
   {
     return _vars[tid].fieldVariables();
   }
@@ -715,9 +737,20 @@ public:
   }
 
   /**
+   * Get the block where a variable of this system is defined
+   *
+   * @param var_name The name of the variable
+   * @return the set of subdomain ids where the variable is active (defined)
+   */
+  const std::set<SubdomainID> & getSubdomainsForVar(const std::string & var_name) const
+  {
+    return getSubdomainsForVar(getVariable(0, var_name).number());
+  }
+
+  /**
    * Remove a vector from the system with the given name.
    */
-  virtual void removeVector(const std::string & name);
+  void removeVector(const std::string & name);
 
   /**
    * Adds a solution length vector to the system.
@@ -732,7 +765,7 @@ public:
    *                                            The ghosting pattern is the same as the solution
    * vector.
    */
-  virtual NumericVector<Number> &
+  NumericVector<Number> &
   addVector(const std::string & vector_name, const bool project, const ParallelType type);
 
   /**
@@ -751,41 +784,43 @@ public:
   NumericVector<Number> & addVector(TagID tag, const bool project, const ParallelType type);
 
   /**
+   * Close vector with the given tag
+   */
+  void closeTaggedVector(const TagID tag);
+  /**
    * Close all vectors for given tags
    */
-  virtual void closeTaggedVectors(const std::set<TagID> & tags);
+  void closeTaggedVectors(const std::set<TagID> & tags);
 
+  /**
+   * Zero vector with the given tag
+   */
+  void zeroTaggedVector(const TagID tag);
   /**
    * Zero all vectors for given tags
    */
-  virtual void zeroTaggedVectors(const std::set<TagID> & tags);
+  void zeroTaggedVectors(const std::set<TagID> & tags);
 
   /**
    * Remove a solution length vector from the system with the specified TagID
    *
    * @param tag_id  Tag ID
    */
-  virtual void removeVector(TagID tag_id);
+  void removeVector(TagID tag_id);
 
   /**
-   * Adds a jacobian sized vector
+   * Adds a matrix with a given tag
    *
    * @param tag_name The name of the tag
    */
-  virtual SparseMatrix<Number> & addMatrix(TagID /* tag */)
-  {
-    mooseError("Adding a matrix is not supported for this type of system!");
-  }
+  SparseMatrix<Number> & addMatrix(TagID tag);
 
   /**
-   * Removes a jacobian sized vector
+   * Removes a matrix with a given tag
    *
    * @param tag_name The name of the tag
    */
-  virtual void removeMatrix(TagID /* tag */)
-  {
-    mooseError("Removing a matrix is not supported for this type of system!");
-  }
+  void removeMatrix(TagID tag);
 
   virtual const std::string & name() const;
 
@@ -823,20 +858,41 @@ public:
   /// caches the dof indices of provided variables in MooseMesh's FaceInfo data structure
   void cacheVarIndicesByFace(const std::vector<VariableName> & vars);
 
+  /// Whether or not there are variables to be restarted from an Exodus mesh file
+  bool hasVarCopy() const { return _var_to_copy.size() > 0; }
+
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+  /**
+   * Add the scaling factor vector to the system
+   */
+  void addScalingVector();
+#endif
+
+  /**
+   * Whether or not the solution states have been initialized via initSolutionState()
+   *
+   * After the solution states have been initialized, additional solution
+   * states cannot be added.
+   */
+  bool solutionStatesInitialized() const { return _solution_states_initialized; }
+
+  /// Setup Functions
+  virtual void initialSetup();
+  virtual void timestepSetup();
+  virtual void subdomainSetup();
+  virtual void residualSetup();
+  virtual void jacobianSetup();
+
+  /**
+   * Clear all dof indices from moose variables
+   */
+  void clearAllDofIndices();
+
 protected:
   /**
-   * Internal getters for the states of the solution as owned by libMesh.
-   *
-   * For the first three states (0 = current, 1 = old, 2 = older), we point directly to the
-   * solutions in libMesh (which is why these virtuals are needed). This allows us to store a more
-   * generalized set of solution states in _solution_states that also enables the addition of older
-   * states if we need them.
+   * Internal getter for solution owned by libMesh.
    */
-  ///@{
   virtual NumericVector<Number> & solutionInternal() const = 0;
-  virtual NumericVector<Number> & solutionOldInternal() const = 0;
-  virtual NumericVector<Number> & solutionOlderInternal() const = 0;
-  ///@}
 
   SubProblem & _subproblem;
 
@@ -890,16 +946,10 @@ protected:
   std::shared_ptr<TimeIntegrator> _time_integrator;
 
   /// Map variable number to its pointer
-  std::vector<std::vector<MooseVariableFEBase *>> _numbered_vars;
+  std::vector<std::vector<MooseVariableFieldBase *>> _numbered_vars;
 
   /// Storage for MooseVariable objects
   MooseObjectWarehouseBase<MooseVariableBase> _variable_warehouse;
-
-  /// Flag used to indicate whether we are computing the scaling Jacobian
-  bool _computing_scaling_jacobian;
-
-  /// Flag used to indicate whether we are computing the scaling Residual
-  bool _computing_scaling_residual;
 
   /// Whether to automatically scale the variables
   bool _automatic_scaling;
@@ -907,10 +957,15 @@ protected:
   /// True if printing out additional information
   bool _verbose;
 
-  /// The number of default solution states to store
-  unsigned int _default_solution_states;
+  /// Whether or not the solution states have been initialized
+  bool _solution_states_initialized;
 
 private:
+  /**
+   * Gets the vector name used for an old (not current) solution state.
+   */
+  TagName oldSolutionStateVectorName(const unsigned int) const;
+
   /// The solution states (0 = current, 1 = old, 2 = older, etc)
   std::vector<NumericVector<Number> *> _solution_states;
   /// The saved solution states (0 = current, 1 = old, 2 = older, etc)

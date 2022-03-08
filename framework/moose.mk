@@ -2,6 +2,11 @@
 MOOSE_UNITY ?= true
 MOOSE_HEADER_SYMLINKS ?= true
 
+# this allows us to modify the linked names/rpaths safely later for install targets
+ifneq (,$(findstring darwin,$(libmesh_HOST)))
+	libmesh_LDFLAGS += -headerpad_max_install_names
+endif
+
 #
 # Verify Conda
 #
@@ -16,7 +21,6 @@ endif
 APPLICATION_DIR := $(FRAMEWORK_DIR)
 moose_SRC_DIRS := $(FRAMEWORK_DIR)/src
 moose_SRC_DIRS += $(FRAMEWORK_DIR)/contrib/mtwist
-moose_SRC_DIRS += $(FRAMEWORK_DIR)/contrib/jsoncpp
 moose_SRC_DIRS += $(FRAMEWORK_DIR)/contrib/pugixml
 
 #
@@ -34,17 +38,25 @@ pcre_deps      := $(patsubst %.cc, %.$(obj-suffix).d, $(pcre_srcfiles)) \
 #
 # hit (new getpot parser)
 #
-hit_DIR       := $(FRAMEWORK_DIR)/contrib/hit
-hit_srcfiles  := $(hit_DIR)/parse.cc $(hit_DIR)/lex.cc $(hit_DIR)/braceexpr.cc
+HIT_DIR ?= $(MOOSE_DIR)/framework/contrib/hit
+#$(info Using HIT from $(HIT_DIR))
+hit_CONTENT   := $(shell ls $(HIT_DIR) 2> /dev/null)
+ifeq ($(hit_CONTENT),)
+  $(error The HIT input file parser does not seem to be available. If set, make sure the HIT_DIR environment variable is set to the correct location of your HIT parser.)
+endif
+hit_srcfiles  := $(HIT_DIR)/parse.cc $(HIT_DIR)/lex.cc $(HIT_DIR)/braceexpr.cc
 hit_objects   := $(patsubst %.cc, %.$(obj-suffix), $(hit_srcfiles))
-hit_LIB       := $(hit_DIR)/libhit-$(METHOD).la
+hit_LIB       := $(HIT_DIR)/libhit-$(METHOD).la
 # dependency files
 hit_deps      := $(patsubst %.cc, %.$(obj-suffix).d, $(hit_srcfiles))
+# hit command line tool
+hit_CLI_srcfiles := $(HIT_DIR)/main.cc
+hit_CLI          := $(HIT_DIR)/hit
 
 #
 # hit python bindings
 #
-pyhit_srcfiles  := $(hit_DIR)/hit.cpp $(hit_DIR)/lex.cc $(hit_DIR)/parse.cc $(hit_DIR)/braceexpr.cc
+pyhit_srcfiles  := $(HIT_DIR)/hit.cpp $(HIT_DIR)/lex.cc $(HIT_DIR)/parse.cc $(HIT_DIR)/braceexpr.cc
 
 #
 # FParser JIT defines
@@ -68,27 +80,28 @@ endif
 UNAME10 := $(shell uname | cut -c-10)
 ifeq ($(UNAME10), MINGW64_NT)
 	libmesh_LDFLAGS    += -no-undefined
-	pyhit_LIB          := $(FRAMEWORK_DIR)/../python/pyhit/hit.pyd
+	pyhit_LIB          := $(HIT_DIR)/hit.pyd
 	pyhit_COMPILEFLAGS := $(shell $(pyconfig) --cflags --ldflags --libs)
 else
-	pyhit_LIB          := $(FRAMEWORK_DIR)/../python/pyhit/hit.so
+	pyhit_LIB          := $(HIT_DIR)/hit.so
 	pyhit_COMPILEFLAGS := -L$(shell $(pyconfig) --prefix)/lib $(shell $(pyconfig) --includes)
 endif
 
 
-hit $(pyhit_LIB): $(pyhit_srcfiles)
+hit $(pyhit_LIB) $(hit_CLI): $(pyhit_srcfiles) $(hit_CLI_srcfiles)
 	@echo "Building and linking "$@"..."
-	@bash -c '(cd "$(hit_DIR)" && $(libmesh_CXX) -std=c++11 -w -fPIC -lstdc++ -shared $^ $(pyhit_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(pyhit_LIB))'
+	@bash -c '(cd "$(HIT_DIR)" && $(libmesh_CXX) -std=c++17 -w -fPIC -lstdc++ -shared $^ $(pyhit_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(pyhit_LIB))'
+	@bash -c '(cd "$(HIT_DIR)" && $(MAKE))'
 
 #
 # gtest
 #
 gtest_DIR       := $(FRAMEWORK_DIR)/contrib/gtest
 gtest_srcfiles  := $(gtest_DIR)/gtest-all.cc
-gtest_objects   := $(patsubst %.cc, %.$(obj-suffix), $(gtest_srcfiles))
+gtest_objects   := $(patsubst %.cc, %.$(no-method-obj-suffix), $(gtest_srcfiles))
 gtest_LIB       := $(gtest_DIR)/libgtest.la
 # dependency files
-gtest_deps      := $(patsubst %.cc, %.$(obj-suffix).d, $(gtest_srcfiles))
+gtest_deps      := $(patsubst %.cc, %.$(no-method-obj-suffix).d, $(gtest_srcfiles))
 
 #
 # MooseConfigure
@@ -152,8 +165,8 @@ moose_INC_DIRS := $(shell find $(FRAMEWORK_DIR)/include -type d)
 endif
 
 moose_INC_DIRS += $(shell find $(FRAMEWORK_DIR)/contrib/*/include -type d)
-moose_INC_DIRS += "$(gtest_DIR)"
-moose_INC_DIRS += "$(hit_DIR)"
+moose_INC_DIRS += $(gtest_DIR)
+moose_INC_DIRS += $(HIT_DIR)
 moose_INCLUDE  := $(foreach i, $(moose_INC_DIRS), -I$(i))
 
 #libmesh_INCLUDE := $(moose_INCLUDE) $(libmesh_INCLUDE)
@@ -264,8 +277,13 @@ all: libmesh_submodule_status header_symlinks $(moose_revision_header) moose
 
 # revision header
 moose_GIT_DIR := $(shell cd "$(FRAMEWORK_DIR)" && which git &> /dev/null && git rev-parse --show-toplevel)
-# Use wildcard in case the files don't exist
-moose_HEADER_deps := $(wildcard $(moose_GIT_DIR)/.git/HEAD $(moose_GIT_DIR)/.git/index)
+moose_HEADER_deps := $(realpath $(moose_GIT_DIR)/.git/HEAD $(moose_GIT_DIR)/.git/index)
+ifeq (x$(moose_HEADER_deps),x)
+  # Files don't exist, this must be a submodule in which case these files are located in master repo's modules directory
+  # ".git" in this case is a file, not a folder that contains the real location of the ".git" folder
+  moose_GIT_DIR := $(realpath $(moose_GIT_DIR)/$(shell cut -d' ' -f 2 $(moose_GIT_DIR)/.git))
+  moose_HEADER_deps := $(realpath $(moose_GIT_DIR)/HEAD $(moose_GIT_DIR)/index)
+endif
 
 $(moose_revision_header): $(moose_HEADER_deps)
 	@echo "Checking if header needs updating: "$@"..."
@@ -292,25 +310,25 @@ moose: $(moose_LIB)
 $(pcre_LIB): $(pcre_objects)
 	@echo "Linking Library "$@"..."
 	@$(libmesh_LIBTOOL) --tag=CC $(LIBTOOLFLAGS) --mode=link --quiet \
-	  $(libmesh_CC) $(libmesh_CFLAGS) -o $@ $(pcre_objects) $(libmesh_LIBS) $(libmesh_LDFLAGS) $(EXTERNAL_FLAGS) -rpath $(pcre_DIR)
+	  $(libmesh_CC) $(libmesh_CFLAGS) -o $@ $(pcre_objects) $(libmesh_LDFLAGS) $(libmesh_LIBS) $(EXTERNAL_FLAGS) -rpath $(pcre_DIR)
 	@$(libmesh_LIBTOOL) --mode=install --quiet install -c $(pcre_LIB) $(pcre_DIR)
 
 $(gtest_LIB): $(gtest_objects)
 	@echo "Linking Library "$@"..."
 	@$(libmesh_LIBTOOL) --tag=CC $(LIBTOOLFLAGS) --mode=link --quiet \
-	  $(libmesh_CC) $(libmesh_CFLAGS) -o $@ $(gtest_objects) $(libmesh_LIBS) $(libmesh_LDFLAGS) $(EXTERNAL_FLAGS) -rpath $(gtest_DIR)
+	  $(libmesh_CC) -o $@ $(gtest_objects) $(EXTERNAL_FLAGS) -rpath $(gtest_DIR)
 	@$(libmesh_LIBTOOL) --mode=install --quiet install -c $(gtest_LIB) $(gtest_DIR)
 
 $(hit_LIB): $(hit_objects)
 	@echo "Linking Library "$@"..."
 	@$(libmesh_LIBTOOL) --tag=CC $(LIBTOOLFLAGS) --mode=link --quiet \
-	  $(libmesh_CXX) $(CXXFLAGS) $(libmesh_CXXFLAGS) -o $@ $(hit_objects) $(libmesh_LIBS) $(libmesh_LDFLAGS) $(EXTERNAL_FLAGS) -rpath $(hit_DIR)
-	@$(libmesh_LIBTOOL) --mode=install --quiet install -c $(hit_LIB) $(hit_DIR)
+	  $(libmesh_CXX) $(CXXFLAGS) $(libmesh_CXXFLAGS) -o $@ $(hit_objects) $(libmesh_LDFLAGS) $(libmesh_LIBS) $(EXTERNAL_FLAGS) -rpath $(HIT_DIR)
+	@$(libmesh_LIBTOOL) --mode=install --quiet install -c $(hit_LIB) $(HIT_DIR)
 
 $(moose_LIB): $(moose_objects) $(pcre_LIB) $(gtest_LIB) $(hit_LIB) $(pyhit_LIB)
 	@echo "Linking Library "$@"..."
 	@$(libmesh_LIBTOOL) --tag=CXX $(LIBTOOLFLAGS) --mode=link --quiet \
-	  $(libmesh_CXX) $(CXXFLAGS) $(libmesh_CXXFLAGS) -o $@ $(moose_objects) $(pcre_LIB) $(png_LIB) $(libmesh_LIBS) $(libmesh_LDFLAGS) $(EXTERNAL_FLAGS) -rpath $(FRAMEWORK_DIR)
+	  $(libmesh_CXX) $(CXXFLAGS) $(libmesh_CXXFLAGS) -o $@ $(moose_objects) $(pcre_LIB) $(png_LIB) $(libmesh_LDFLAGS) $(libmesh_LIBS) $(EXTERNAL_FLAGS) -rpath $(FRAMEWORK_DIR)
 	@$(libmesh_LIBTOOL) --mode=install --quiet install -c $(moose_LIB) $(FRAMEWORK_DIR)
 
 ifeq ($(MOOSE_HEADER_SYMLINKS),true)
@@ -330,7 +348,6 @@ sa: $(moose_analyzer)
 -include $(moose_deps)
 
 -include $(wildcard $(FRAMEWORK_DIR)/contrib/mtwist/src/*.d)
--include $(wildcard $(FRAMEWORK_DIR)/contrib/jsoncpp/src/*.d)
 -include $(wildcard $(FRAMEWORK_DIR)/contrib/pcre/src/*.d)
 -include $(wildcard $(FRAMEWORK_DIR)/contrib/gtest/*.d)
 -include $(wildcard $(FRAMEWORK_DIR)/contrib/hit/*.d)
@@ -356,37 +373,60 @@ exodiff: $(exodiff_APP)
 $(exodiff_APP): $(exodiff_objects)
 	@echo "Linking Executable "$@"..."
 	@$(libmesh_LIBTOOL) --tag=CXX $(LIBTOOLFLAGS) --mode=link --quiet \
-	  $(libmesh_CXX) $(libmesh_CPPFLAGS) $(CXXFLAGS) $(libmesh_CXXFLAGS) $(libmesh_INCLUDE) $(exodiff_objects) -o $@ $(libmesh_LIBS) $(libmesh_LDFLAGS) $(EXTERNAL_FLAGS)
+	  $(libmesh_CXX) $(libmesh_CPPFLAGS) $(CXXFLAGS) $(libmesh_CXXFLAGS) $(libmesh_INCLUDE) $(exodiff_objects) -o $@ $(libmesh_LDFLAGS) $(libmesh_LIBS) $(EXTERNAL_FLAGS)
 
 -include $(wildcard $(exodiff_DIR)/*.d)
 
-#
-# Install targets
-#
-lib_DIRS         := $(dir $(app_LIBS))
-install: install_libs install_bin
+####### install lib stuff ##############
+moose_include_dir = $(PREFIX)/include/moose
+share_dir = $(PREFIX)/share
+moose_share_dir = $(share_dir)/moose
+python_install_dir = $(moose_share_dir)/python
+bin_install_dir = $(PREFIX)/bin
 
-install_libs: all | install_make_dir
-	@(ret_val=0; \
-	for lib in $(app_LIBS); \
-	do \
-		echo Installing Library $${lib}...; \
-		${libmesh_LIBTOOL} --mode=install --warning=none --quiet install $${lib} ${PREFIX} || ret_val=1; \
-	done; \
-	exit $$ret_val;)
-	@$(libmesh_LIBTOOL) --mode=finish --quiet $(lib_DIRS)
+install: install_libs install_bin install_harness install_exodiff install_adreal_monolith install_hit
 
-install_bin: all | install_make_dir
-	@(ret_val=0; \
-	for exec in $(app_EXEC); \
-	do \
-		echo Installing Executable $${exec}...; \
-		${libmesh_LIBTOOL} --mode=install --warning=none --quiet install $${exec} ${PREFIX} || ret_val=1; \
-	done; \
-	exit $$ret_val;)
-install_make_dir:
-	@echo "Prefix Install Directory $(PREFIX)"
-	@$(shell mkdir -p $(PREFIX))
+install_adreal_monolith: ADRealMonolithic.h
+	@ mkdir -p $(moose_include_dir)
+	@cp -f $< $(moose_include_dir)/
+
+install_exodiff: all
+	@echo "Installing exodiff"
+	@cp $(MOOSE_DIR)/framework/contrib/exodiff/exodiff $(bin_install_dir)
+
+install_harness:
+	@echo "Installing test harness"
+	@rm -rf $(python_install_dir)
+	@mkdir -p $(python_install_dir)
+	@mkdir -p $(moose_share_dir)/bin
+	@mkdir -p $(moose_include_dir)
+	@mkdir -p $(bin_install_dir)
+	@cp -R $(MOOSE_DIR)/python/* $(python_install_dir)/
+	@cp -f $(MOOSE_DIR)/scripts/moose_test_runner $(bin_install_dir)/moose_test_runner
+	@cp -f $(MOOSE_DIR)/framework/contrib/exodiff/exodiff $(moose_share_dir)/bin/
+	@cp -f $(MOOSE_DIR)/framework/include/base/MooseConfig.h $(moose_include_dir)/
+	@cp -f $(HIT_DIR)/hit.so $(python_install_dir)/
+	@echo "libmesh_install_dir = '$(LIBMESH_DIR)'" > $(moose_share_dir)/moose_config.py
+
+install_hit: all
+	@echo "Installing HIT"
+	@cp $(MOOSE_DIR)/framework/contrib/hit/hit $(bin_install_dir)
+
+lib_install_suffix = lib/$(APPLICATION_NAME)
+lib_install_dir = $(PREFIX)/$(lib_install_suffix)
+
+ifneq (,$(findstring darwin,$(libmesh_HOST)))
+  patch_relink = install_name_tool -change $(2) @rpath/$(3) $(1)
+  patch_rpath = install_name_tool -add_rpath @executable_path/$(2) $(1)
+else
+  patch_relink = :
+  patch_rpath = patchelf --set-rpath '$$ORIGIN'/$(2):$$(patchelf --print-rpath $(1)) $(1)
+endif
+
+libname_framework = $(shell grep "dlname='.*'" $(MOOSE_DIR)/framework/libmoose-$(METHOD).la 2>/dev/null | sed -E "s/dlname='(.*)'/\1/g")
+libpath_framework = $(MOOSE_DIR)/framework/$(libname_framework)
+libname_pcre = $(shell grep "dlname='.*'" $(MOOSE_DIR)/framework/contrib/pcre/libpcre-$(METHOD).la 2>/dev/null | sed -E "s/dlname='(.*)'/\1/g")
+libpath_pcre = $(MOOSE_DIR)/framework/contrib/pcre/$(libname_pcre)
 
 #
 # Clean targets
@@ -419,7 +459,6 @@ clean:
 # .) moose (ignore a possible MOOSE submodule)
 # .) .git  (don't accidentally delete any of git's metadata)
 # Notes:
-# .) Be careful: running 'make -n clobber' will actually delete files!
 # .) 'make clobber' does not respect $(METHOD), it just deletes
 #    everything it can find!
 # .) Running 'make clobberall' is a good way to clean up outdated
@@ -434,7 +473,7 @@ cleanall: clean
 	@echo "Cleaning in:"
 	@for dir in $(app_DIRS); do \
           echo \ $$dir; \
-          make -C $$dir clean ; \
+          $(MAKE) -C $$dir clean ; \
         done
 
 # clobberall runs 'make clobber' in all dependent application directories
@@ -442,17 +481,21 @@ clobberall: clobber
 	@echo "Clobbering in:"
 	@for dir in $(app_DIRS); do \
           echo \ $$dir; \
-          make -C $$dir clobber ; \
+          $(MAKE) -C $$dir clobber ; \
         done
 
 # clang_complete builds a clang configuration file for various clang-based autocompletion plugins
 .clang_complete:
 	@echo "Building .clang_complete file"
 	@echo "-xc++" > .clang_complete
-	@echo "-std=c++11" >> .clang_complete
+	@echo "-std=c++17" >> .clang_complete
 	@for item in $(libmesh_CPPFLAGS) $(CXXFLAGS) $(libmesh_CXXFLAGS) $(app_INCLUDES) $(libmesh_INCLUDE); do \
           echo $$item >> .clang_complete;  \
         done
+
+ADRealMonolithic.h: $(MOOSE_DIR)/framework/include/utils/ADReal.h
+	@echo "Building monolithic ADReal header for JIT compilation"
+	@$(libmesh_CXX) -E $(libmesh_CPPFLAGS) $(CXXFLAGS) $(libmesh_CXXFLAGS) $(app_INCLUDES) $(libmesh_INCLUDE) -imacros cmath -x c++-header $< > $@
 
 compile_commands_all_srcfiles := $(moose_srcfiles) $(srcfiles)
 compile_commands.json:

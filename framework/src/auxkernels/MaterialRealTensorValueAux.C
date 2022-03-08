@@ -11,12 +11,12 @@
 
 registerMooseObject("MooseApp", MaterialRealTensorValueAux);
 
-defineLegacyParams(MaterialRealTensorValueAux);
-
 InputParameters
 MaterialRealTensorValueAux::validParams()
 {
   InputParameters params = MaterialAuxBase<>::validParams();
+  params.addClassDescription("Object for extracting a component of a rank two tensor material "
+                             "property to populate an auxiliary variable.");
   params.addParam<unsigned int>("row", 0, "The row component to consider for this kernel");
   params.addParam<unsigned int>("column", 0, "The column component to consider for this kernel");
   return params;

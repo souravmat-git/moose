@@ -12,12 +12,12 @@
 
 registerMooseAction("MooseApp", AddUserObjectAction, "add_user_object");
 
-defineLegacyParams(AddUserObjectAction);
-
 InputParameters
 AddUserObjectAction::validParams()
 {
-  return MooseObjectAction::validParams();
+  InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a UserObject object to the simulation.");
+  return params;
 }
 
 AddUserObjectAction::AddUserObjectAction(InputParameters params) : MooseObjectAction(params) {}

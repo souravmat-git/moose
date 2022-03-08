@@ -11,16 +11,10 @@
 
 #include "SideSetsGeneratorBase.h"
 
-// Forward declarations
-class AllSideSetsByNormalsGenerator;
-
-template <>
-InputParameters validParams<AllSideSetsByNormalsGenerator>();
-
 /**
  * This class will add sidesets to the entire mesh based on unique normals.
  * Note: This algorithm may not work well with meshes containing curved faces.
- * Several sidesets may be created in that case.  Use sensibly!
+ * Several sidesets may be created in that case. Use sensibly!
  */
 class AllSideSetsByNormalsGenerator : public SideSetsGeneratorBase
 {
@@ -40,6 +34,9 @@ protected:
    */
   std::set<boundary_id_type> _mesh_boundary_ids;
 
+  /// the input mesh to which the sidesets will be added
   std::unique_ptr<MeshBase> & _input;
-};
 
+  /// Mesh meta data for holding the map from boundary IDs to the normals of the corresponding bounrares
+  std::map<BoundaryID, RealVectorValue> & _boundary_to_normal_map;
+};

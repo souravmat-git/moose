@@ -14,12 +14,11 @@
 
 registerMooseObject("MooseApp", VerifyNodalUniqueID);
 
-defineLegacyParams(VerifyNodalUniqueID);
-
 InputParameters
 VerifyNodalUniqueID::validParams()
 {
   InputParameters params = NodalUserObject::validParams();
+  params.addClassDescription("Verifies that all node ids are unique.");
   return params;
 }
 
@@ -29,7 +28,7 @@ VerifyNodalUniqueID::VerifyNodalUniqueID(const InputParameters & parameters)
 }
 
 // This object can't test every possible scenario.  For instance, it can't detect recycled ids
-// It's only designed to make sure that all ids are unique in any given
+// It's only designed to make sure that all ids are unique in the mesh at any specified execution
 void
 VerifyNodalUniqueID::initialize()
 {

@@ -24,11 +24,6 @@
 
 // Forward Declarations
 class MooseMesh;
-template <typename T>
-class LineMaterialSamplerBase;
-
-template <>
-InputParameters validParams<LineMaterialSamplerBase<Real>>();
 
 /**
  * This is a base class for sampling material properties for the
@@ -172,6 +167,7 @@ LineMaterialSamplerBase<T>::execute()
     if (!hasBlocks(elem->subdomain_id()))
       continue;
 
+    _subproblem.setCurrentSubdomainID(elem, _tid);
     _subproblem.prepare(elem, _tid);
     _subproblem.reinitElem(elem, _tid);
 
@@ -205,4 +201,3 @@ LineMaterialSamplerBase<T>::finalize()
 {
   SamplerBase::finalize();
 }
-

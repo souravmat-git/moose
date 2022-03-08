@@ -8,18 +8,21 @@
 #* https://www.gnu.org/licenses/lgpl-2.1.html
 
 import collections
-
+import logging
+import moosetree
 from ..base import components, renderers
 from ..common import exceptions
-from ..tree import tokens, html, latex
+from ..tree import pages, tokens, html, latex
 from . import command, table, floats
+
+LOG = logging.getLogger(__name__)
 
 def make_extension(**kwargs):
     return AcronymExtension(**kwargs)
 
 AcronymItem = collections.namedtuple('AcronymItem', 'key name used')
 AcronymToken = tokens.newToken('AcronymToken', acronym='')
-AcronymListToken = tokens.newToken('AcronymListToken', heading=True)
+AcronymListToken = tokens.newToken('AcronymListToken', complete=False, location=None, heading=True)
 
 class AcronymExtension(command.CommandExtension):
     """
@@ -35,7 +38,7 @@ class AcronymExtension(command.CommandExtension):
     def __init__(self, *args, **kwargs):
         command.CommandExtension.__init__(self, *args, **kwargs)
         self.__acronyms = dict()
-        self.__used = set()
+        self.__used = set() # this is so that in-line definitions are rendered only once per page
 
         # Initialize the available acronyms
         for key, value in self.get('acronyms').items():
@@ -44,15 +47,28 @@ class AcronymExtension(command.CommandExtension):
             else:
                 self.__acronyms[key] = value
 
+    def initPage(self, page):
+        page['acronyms'] = dict()
+
     def preExecute(self):
         """
         Reinitialize the list of acronyms being used.
         """
         self.__used = set()
 
+    def postTokenize(self, page, ast):
+        """
+        Adds a list of valid acronyms to the page attributes.
+        """
+        func = lambda n: (n.name == 'AcronymToken')
+        for node in moosetree.iterate(ast.root, func):
+            acro = node.get('acronym')
+            if acro in self.__acronyms.keys() and acro not in page['acronyms'].keys():
+                page['acronyms'][acro] = self.__acronyms.get(acro)
+
     def getAcronym(self, key):
         """
-        Return an AcronymItem given the supplied key, None is returned if it is not found.
+        Return an AcronymItem given the supplied key. Raise error if it is not found.
         """
         acro = self.__acronyms.get(key, None)
         if acro is not None:
@@ -61,23 +77,19 @@ class AcronymExtension(command.CommandExtension):
                 self.__used.add(key)
             acro = AcronymItem(key=key, name=acro, used=used)
 
-        else:
-            msg = "The acronym '{}' was not found."
-            raise exceptions.MooseDocsException(msg, key)
-
         return acro
 
-    def getAcronyms(self, complete=False):
+    def getAcronyms(self, page, complete=False):
         """
         Return the used or complete set of acronyms.
         """
         if complete:
             return self.__acronyms
-        return {k:self.__acronyms[k] for k in self.__used}
+        else:
+            return page['acronyms']
 
     def extend(self, reader, renderer):
         self.requires(command, table, floats)
-        self.addCommand(reader, AcronymComponentOld())
         self.addCommand(reader, AcronymComponent())
         self.addCommand(reader, AcronymListComponent())
         renderer.add('AcronymToken', RenderAcronymToken())
@@ -86,19 +98,11 @@ class AcronymExtension(command.CommandExtension):
         if isinstance(renderer, renderers.LatexRenderer):
             renderer.addPackage('tabulary')
 
-class AcronymComponentOld(command.CommandComponent):
-    COMMAND = 'ac'
-    SUBCOMMAND = '*'
-
-    def createToken(self, parent, info, page):
-        AcronymToken(parent, acronym=info['subcommand'])
-        return parent
-
 class AcronymComponent(command.CommandComponent):
     COMMAND = 'ac'
     SUBCOMMAND = None
 
-    def createToken(self, parent, info, page):
+    def createToken(self, parent, info, page, settings):
         AcronymToken(parent, acronym=info['inline'])
         return parent
 
@@ -111,19 +115,25 @@ class AcronymListComponent(command.CommandComponent):
         settings = command.CommandComponent.defaultSettings()
         settings['complete'] = (False, "Show the complete list of acronyms regardless of use on " \
                                        "current page.")
+        settings['location'] = (None, "The markdown content directory to build the list from.")
         settings['heading'] = (True, "Display the headings row of the acronym table.")
         settings['prefix'] = ('Table', "Prefix to use when a caption and id are provided.")
         settings['caption'] = (None, "The caption to use for the acronym table.")
         return settings
 
-    def createToken(self, parent, info, page):
-        flt = floats.create_float(parent, self.extension, self.reader, page, self.settings,
-                                  **self.attributes)
+    def createToken(self, parent, info, page, settings):
+        if settings['location'] and settings['complete']:
+            msg = "The 'complete' setting must be 'False' (default) when using 'location'."
+            raise exceptions.MooseDocsException(msg)
+
+        flt = floats.create_float(parent, self.extension, self.reader, page, settings,
+                                  **self.attributes(settings))
         acro = AcronymListToken(flt,
-                                complete=self.settings['complete'],
-                                heading=self.settings['heading'])
+                                complete=settings['complete'],
+                                location=settings['location'],
+                                heading=settings['heading'])
         if flt is parent:
-            acro.attributes.update(**self.attributes)
+            acro.attributes.update(**self.attributes(settings))
 
         return parent
 
@@ -131,15 +141,22 @@ class RenderAcronymToken(components.RenderComponent):
 
     def _createSpan(self, parent, token, page):
         acro = self.extension.getAcronym(token['acronym'])
-        content = str(acro.key) if acro.used else '{} ({})'.format(acro.name, acro.key)
-        return html.Tag(parent, 'span', string=content), acro
+        if acro is None:
+            tag = html.Tag(parent, 'span', string=token['acronym'], class_='moose-error')
+            raise exceptions.MooseDocsException("The acronym '{}' was not found.", token['acronym'])
+
+        else:
+            content = str(acro.key) if acro.used else '{} ({})'.format(acro.name, acro.key)
+            tag = html.Tag(parent, 'span', string=content)
+
+        return tag, acro
 
     def createHTML(self, parent, token, page):
         self._createSpan(parent, token, page)
 
     def createMaterialize(self, parent, token, page):
         span, acro = self._createSpan(parent, token, page)
-        if acro.used:
+        if (acro is not None) and acro.used:
             span.addClass('tooltipped')
             span['data-tooltip'] = acro.name
             span['data-position'] = 'top'
@@ -154,12 +171,28 @@ class RenderAcronymListToken(components.RenderComponent):
 
     def createHTML(self, parent, token, page):
         rows = []
-        for key, value in self.extension.getAcronyms(True).items():
-            rows.append([key, value])
+        if token['location'] is None:
+            for key, value in self.extension.getAcronyms(page, token['complete']).items():
+                rows.append([key, value])
 
-        heading = ['Acronym', 'Description'] if token['heading'] else None
-        tbl = table.builder(rows, heading)
-        self.renderer.render(parent, tbl, page)
+        elif not token['complete']:
+            listed = [] # keeps track of which acronyms have already been listed
+            func = lambda p: p.local.startswith(token['location']) and isinstance(p, pages.Source)
+            for node in self.translator.findPages(func):
+                for key, value in self.extension.getAcronyms(node, False).items():
+                    if key not in listed:
+                        rows.append([key, value])
+                        listed.append(key)
+
+        else:
+            msg = "The 'complete' setting must be 'False' (default) when using 'location'."
+            raise exceptions.MooseDocsException(msg)
+
+        if rows:
+            heading = ['Acronym', 'Description'] if token['heading'] else None
+            rows.sort() # alphabetize the acronym list
+            tbl = table.builder(rows, heading)
+            self.renderer.render(parent, tbl, page)
 
     def createLatex(self, parent, token, page):
 
@@ -167,5 +200,19 @@ class RenderAcronymListToken(components.RenderComponent):
                                 args=[latex.Brace(None, string='\\linewidth', escape=False),
                                       latex.Brace(None, string='LL')])
 
-        for key, value in self.extension.getAcronyms(True).items():
-            latex.String(env, content='{}&{}\\\\'.format(key, value), escape=False)
+        if token['location'] is None:
+            for key, value in self.extension.getAcronyms(page, token['complete']).items():
+                latex.String(env, content='{}&{}\\\\'.format(key, value), escape=False)
+
+        elif not token['complete']:
+            listed = [] # keeps track of which acronyms have already been listed
+            func = lambda p: p.local.startswith(token['location']) and isinstance(p, pages.Source)
+            for node in self.translator.findPages(func):
+                for key, value in self.extension.getAcronyms(node, False).items():
+                    if key not in listed:
+                        latex.String(env, content='{}&{}\\\\'.format(key, value), escape=False)
+                        listed.append(key)
+
+        else:
+            msg = "Warning: The 'complete' setting is invalid when using 'location'."
+            latex.String(parent, content=msg)

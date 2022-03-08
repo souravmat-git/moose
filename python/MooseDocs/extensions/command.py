@@ -41,16 +41,22 @@ class CommandExtension(Extension):
         else:
             subcommands = command.SUBCOMMAND
 
+        # Retrieve the 'uid' key from the translator to use as the dictionary key for the current
+        # pool of extension commands. If the key doesn't exist yet, then create it.
+        uid = self.translator.uid
+        if uid not in CommandExtension.EXTENSION_COMMANDS:
+            CommandExtension.EXTENSION_COMMANDS[uid] = dict()
+
         # Add the command and error if it exists
         for cmd in commands:
             for sub in subcommands:
                 pair = (cmd, sub)
-                if pair in CommandExtension.EXTENSION_COMMANDS:
+                if pair in CommandExtension.EXTENSION_COMMANDS[uid]:
                     msg = "A CommandComponent object exists with the command '{}' and " \
                           "subcommand '{}'."
                     raise common.exceptions.MooseDocsException(msg, pair[0], pair[1])
 
-                CommandExtension.EXTENSION_COMMANDS[pair] = command
+                CommandExtension.EXTENSION_COMMANDS[uid][pair] = command
 
     def extend(self, reader, renderer):
         self.requires(core)
@@ -80,27 +86,29 @@ class CommandBase(components.ReaderComponent):
     def __init__(self, *args, **kwargs):
         components.ReaderComponent.__init__(self, *args, **kwargs)
 
-    def createToken(self, parent, info, page):
-
+    def createToken(self, parent, info, page, _):
         cmd = (info['command'], info['subcommand'])
         settings = info['settings']
 
         # Handle filename and None subcommand
-        match = self.FILENAME_RE.search(info['subcommand']) if info['subcommand'] else None
-        if match:
-            cmd = (info['command'], match.group('ext'))
-        elif info['subcommand'] and info['subcommand'].startswith('http'):
-            cmd = (info['command'], None)
-        elif info['subcommand'] and '=' in info['subcommand']:
-            settings = info['subcommand'] + ' ' + settings
-            cmd = (info['command'], None)
+        if info['subcommand']:
+            match = self.FILENAME_RE.search(info['subcommand'])
+            if match:
+                cmd = (info['command'], match.group('ext'))
+            elif info['subcommand'].endswith('/tests'):
+                cmd = (info['command'], 'hit') # consider 'tests' as input files for hit formatting
+            elif info['subcommand'].startswith('http'):
+                cmd = (info['command'], None)
+            elif '=' in info['subcommand']:
+                settings = info['subcommand'] + ' ' + settings
+                cmd = (info['command'], None)
 
-        # Locate the command object to call
+        # Locate the command object to call from pool built by current translator object
         try:
-            obj = CommandExtension.EXTENSION_COMMANDS[cmd]
+            obj = CommandExtension.EXTENSION_COMMANDS[page.translator.uid][cmd]
         except KeyError:
             try:
-                obj = CommandExtension.EXTENSION_COMMANDS[(cmd[0], '*')]
+                obj = CommandExtension.EXTENSION_COMMANDS[page.translator.uid][(cmd[0], '*')]
             except KeyError:
                 msg = "The following command combination is unknown: '{} {}'."
                 raise common.exceptions.MooseDocsException(msg.format(*cmd))
@@ -114,12 +122,12 @@ class CommandBase(components.ReaderComponent):
         # Build the token
         if obj.PARSE_SETTINGS:
             settings, _ = common.parse_settings(obj.defaultSettings(), settings)
-            obj.setSettings(settings)
-        token = obj.createToken(parent, info, page)
+        token = obj.createToken(parent, info, page, settings)
         return token
 
     def setTranslator(self, translator):
-        for comp in CommandExtension.EXTENSION_COMMANDS.values():
+        """Sets the translator object to use for extension components corresponding to commands."""
+        for comp in CommandExtension.EXTENSION_COMMANDS[translator.uid].values():
             comp.setTranslator(translator)
 
 class BlockInlineCommand(CommandBase):
@@ -153,7 +161,7 @@ class InlineCommand(CommandBase):
 
     RE = re.compile(r'\['                        # opening bracket "["
                     r'!(?P<command>\w+)'         # the primary command
-                    r'(?:!(?P<subcommand>\w+))?' # optional subcommand
+                    r'(?:!(?P<subcommand>\S+))?' # optional subcommand
                     r' *(?P<settings>\w+=.*?)?'  # optional settings
                     r'\]'                        # closing bracket "]"
                     r'(?:\((?P<inline>.*?)\))?', # optional inline content

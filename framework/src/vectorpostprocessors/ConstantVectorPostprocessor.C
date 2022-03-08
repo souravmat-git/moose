@@ -11,12 +11,12 @@
 
 registerMooseObject("MooseApp", ConstantVectorPostprocessor);
 
-defineLegacyParams(ConstantVectorPostprocessor);
-
 InputParameters
 ConstantVectorPostprocessor::validParams()
 {
   InputParameters params = GeneralVectorPostprocessor::validParams();
+  params.addClassDescription(
+      "Populate constant VectorPostprocessorValue directly from input file.");
   params.addParam<std::vector<std::string>>("vector_names",
                                             "Names of the column vectors in this object");
   params.addRequiredParam<std::vector<std::vector<Real>>>(

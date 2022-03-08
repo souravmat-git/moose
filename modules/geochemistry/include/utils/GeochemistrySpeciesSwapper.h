@@ -28,6 +28,11 @@ public:
    */
   GeochemistrySpeciesSwapper(unsigned basis_size, Real stoi_tol);
 
+  bool operator==(const GeochemistrySpeciesSwapper & rhs) const
+  {
+    return (_stoi_tol == rhs._stoi_tol) && (_swap_matrix.m() == rhs._swap_matrix.m());
+  };
+
   /**
    * Check that replacing the named basis species with the named equilibrium species is valid.  In
    * performing this check, the "swap" matrix is inverted, so the check is somewhat expensive.
@@ -130,6 +135,30 @@ public:
                    unsigned basis_index_to_replace,
                    unsigned eqm_index_to_insert);
 
+  /**
+   * For the the given basis index, find the equilibrium index that it should be swapped with
+   * @param basis_ind index of basis species in mgd that we'd like to swap out of the basis
+   * @param mgd the model's geochemical databgase
+   * @param eqm_molality the molality of all the equilibrium species
+   * @param minerals_allowed if false, best_eqm_species will not correspond to a mineral.  Since
+   * equilibrium minerals have molality=0 it is very unlikely that best_eqm_species will correspond
+   * to a mineral, even if this flag is true.
+   * @param gases_allowed if false, best_eqm_species will not correspond to a gas.  Since
+   * equilibrium gases have molality=0 it is very unlikely that best_eqm_species will correspond to
+   * a gas, even if this flag is true.
+   * @param sorption_allowed if false, best_eqm_species will not be involved in sorption
+   * @param[out] best_eqm_species the index of the equilibrium species that should be swapped with
+   * basis_ind
+   * @return true if a valid swap was found.  if false, then best_eqm_species will be garbage
+   */
+  bool findBestEqmSwap(unsigned basis_ind,
+                       const ModelGeochemicalDatabase & mgd,
+                       const std::vector<Real> & eqm_molality,
+                       bool minerals_allowed,
+                       bool gas_allowed,
+                       bool sorption_allowed,
+                       unsigned & best_eqm_species) const;
+
 private:
   /**
    * Construct the swap matrix, and its inverse, that describes the swap between the indexed basis
@@ -175,6 +204,13 @@ private:
 
   /// swap matrix
   DenseMatrix<Real> _swap_matrix;
+
+  /**
+   * Before _swap_matrix.svd (a non-const method) is called, we copy _true_swap_matrix =
+   * _swap_matrix. It is necessary to record _swap_matrix in this fashion so that
+   * mgd.swap_to_original_basis can be modified using it
+   */
+  DenseMatrix<Real> _true_swap_matrix;
 
   /// inverse of swap matrix
   DenseMatrix<Real> _inv_swap_matrix;

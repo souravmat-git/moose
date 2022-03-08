@@ -14,13 +14,12 @@
 
 registerMooseObject("MooseApp", SolutionFunction);
 
-defineLegacyParams(SolutionFunction);
-
 InputParameters
 SolutionFunction::validParams()
 {
   // Get the Function input parameters
   InputParameters params = Function::validParams();
+  params.addClassDescription("Function for reading a solution from file.");
 
   // Add required parameters
   params.addRequiredParam<UserObjectName>("solution",

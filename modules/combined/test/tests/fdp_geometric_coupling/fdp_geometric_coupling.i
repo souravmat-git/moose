@@ -1,5 +1,5 @@
 [Mesh]
-  file = twoBlocksContactDiceSlave2OffsetGap.e
+  file = twoBlocksContactDiceSecondary2OffsetGap.e
 []
 
 [GlobalParams]
@@ -42,6 +42,7 @@
     strain = FINITE
     eigenstrain_names = 'thermal_expansion1'
     decomposition_method = EigenSolution
+    temperature = temp
   [../]
   [./block2]
     block = 2
@@ -50,6 +51,7 @@
     strain = FINITE
     eigenstrain_names = 'thermal_expansion2'
     decomposition_method = EigenSolution
+    temperature = temp
   [../]
 []
 
@@ -92,8 +94,8 @@
 
 [Contact]
   [./dummy_name]
-    master = 2
-    slave = 3
+    primary = 2
+    secondary = 3
     penalty = 1e8
   [../]
 []
@@ -141,9 +143,6 @@
     type = Density
     block = '1 2'
     density = 1.0
-    disp_x = disp_x
-    disp_y = disp_y
-    disp_z = disp_z
   [../]
 []
 

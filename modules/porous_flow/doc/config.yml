@@ -12,16 +12,13 @@ Extensions:
     MooseDocs.extensions.navigation:
         name: MOOSE PorousFlow Module
         repo: https://github.com/idaholab/moose
-        home: /modules/porous_flow
+        home: /modules/porous_flow/index.md
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/modules/porous_flow
-        hide:
-            framework: !include framework/doc/hidden.yml
-            porous_flow: !include modules/porous_flow/doc/hidden.yml
-            tensor_mechanics: !include modules/tensor_mechanics/doc/hidden.yml
-            fluid_properties: !include modules/fluid_properties/doc/hidden.yml
-            chemical_reactions: !include modules/chemical_reactions/doc/hidden.yml
-        remove: !include framework/doc/remove.yml
+        remove:
+            framework: !include framework/doc/remove.yml
+        unregister:
+            framework: !include framework/doc/unregister.yml
         includes:
             - framework/include
             - modules/porous_flow/include

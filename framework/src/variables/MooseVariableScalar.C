@@ -21,8 +21,6 @@
 
 registerMooseObject("MooseApp", MooseVariableScalar);
 
-defineLegacyParams(MooseVariableScalar);
-
 InputParameters
 MooseVariableScalar::validParams()
 {
@@ -40,8 +38,11 @@ MooseVariableScalar::MooseVariableScalar(const InputParameters & parameters)
     _need_u_dotdot_old(false),
     _need_du_dot_du(false),
     _need_du_dotdot_du(false),
-    _need_dual(false),
-    _need_dual_u(false)
+    _need_u_old(false),
+    _need_u_older(false),
+    _need_ad(false),
+    _need_ad_u(false),
+    _need_ad_u_dot(false)
 {
   auto num_vector_tags = _sys.subproblem().numVectorTags();
 
@@ -85,33 +86,37 @@ MooseVariableScalar::reinit(bool reinit_for_derivative_reordering /* = false*/)
   {
     // We've already calculated everything in an earlier reinit. All we have to do is re-sort the
     // derivative vector for AD calculations
-    if (_need_dual)
+    if (_need_ad)
       computeAD(/*nodal_ordering=*/true);
     return;
   }
 
-  const NumericVector<Real> & current_solution = *_sys.currentSolution();
-  const NumericVector<Real> & solution_old = _sys.solutionOld();
-  const NumericVector<Real> & solution_older = _sys.solutionOlder();
-  const NumericVector<Real> * u_dot = _sys.solutionUDot();
-  const NumericVector<Real> * u_dotdot = _sys.solutionUDotDot();
-  const NumericVector<Real> * u_dot_old = _sys.solutionUDotOld();
-  const NumericVector<Real> * u_dotdot_old = _sys.solutionUDotDotOld();
-  const Real & du_dot_du = _sys.duDotDu();
-  const Real & du_dotdot_du = _sys.duDotDotDu();
-  auto safe_access_tagged_vectors = _sys.subproblem().safeAccessTaggedVectors();
-  auto safe_access_tagged_matrices = _sys.subproblem().safeAccessTaggedMatrices();
+  // We want to make sure that we're not allocating data with any of the
+  // accessors that follow, but _sys is non-const
+  const SystemBase & sys = _sys;
+
+  const NumericVector<Real> & current_solution = *sys.currentSolution();
+  const NumericVector<Real> * u_dot = sys.solutionUDot();
+  const NumericVector<Real> * u_dotdot = sys.solutionUDotDot();
+  const NumericVector<Real> * u_dot_old = sys.solutionUDotOld();
+  const NumericVector<Real> * u_dotdot_old = sys.solutionUDotDotOld();
+  const Real & du_dot_du = sys.duDotDu();
+  const Real & du_dotdot_du = sys.duDotDotDu();
+  auto safe_access_tagged_vectors = sys.subproblem().safeAccessTaggedVectors();
+  auto safe_access_tagged_matrices = sys.subproblem().safeAccessTaggedMatrices();
   auto & active_coupleable_matrix_tags =
-      _sys.subproblem().getActiveScalarVariableCoupleableMatrixTags(_tid);
+      sys.subproblem().getActiveScalarVariableCoupleableMatrixTags(_tid);
   auto & active_coupleable_vector_tags =
-      _sys.subproblem().getActiveScalarVariableCoupleableVectorTags(_tid);
+      sys.subproblem().getActiveScalarVariableCoupleableVectorTags(_tid);
 
   _dof_map.SCALAR_dof_indices(_dof_indices, _var_num);
 
   auto n = _dof_indices.size();
   _u.resize(n);
-  _u_old.resize(n);
-  _u_older.resize(n);
+  if (_need_u_old)
+    _u_old.resize(n);
+  if (_need_u_older)
+    _u_older.resize(n);
 
   for (auto & _tag_u : _vector_tag_u)
     _tag_u.resize(n);
@@ -153,24 +158,26 @@ MooseVariableScalar::reinit(bool reinit_for_derivative_reordering /* = false*/)
   if (_dof_map.all_semilocal_indices(_dof_indices))
   {
     current_solution.get(_dof_indices, &_u[0]);
-    solution_old.get(_dof_indices, &_u_old[0]);
-    solution_older.get(_dof_indices, &_u_older[0]);
+    if (_need_u_old)
+      sys.solutionOld().get(_dof_indices, &_u_old[0]);
+    if (_need_u_older)
+      sys.solutionOlder().get(_dof_indices, &_u_older[0]);
 
     for (auto tag : active_coupleable_vector_tags)
-      if ((_sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_RESIDUAL &&
+      if ((sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_RESIDUAL &&
            safe_access_tagged_vectors) ||
-          _sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_SOLUTION)
-        if (_sys.hasVector(tag) && _need_vector_tag_u[tag])
-          _sys.getVector(tag).get(_dof_indices, &_vector_tag_u[tag][0]);
+          sys.subproblem().vectorTagType(tag) == Moose::VECTOR_TAG_SOLUTION)
+        if (sys.hasVector(tag) && _need_vector_tag_u[tag])
+          sys.getVector(tag).get(_dof_indices, &_vector_tag_u[tag][0]);
 
     if (safe_access_tagged_matrices)
     {
       for (auto tag : active_coupleable_matrix_tags)
-        if (_sys.hasMatrix(tag) && _sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
+        if (sys.hasMatrix(tag) && sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
           for (std::size_t i = 0; i != n; ++i)
           {
             Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
-            _matrix_tag_u[tag][i] = _sys.getMatrix(tag)(_dof_indices[i], _dof_indices[i]);
+            _matrix_tag_u[tag][i] = sys.getMatrix(tag)(_dof_indices[i], _dof_indices[i]);
           }
     }
 
@@ -197,23 +204,25 @@ MooseVariableScalar::reinit(bool reinit_for_derivative_reordering /* = false*/)
         libmesh_assert_less(i, _u.size());
 
         current_solution.get(one_dof_index, &_u[i]);
-        solution_old.get(one_dof_index, &_u_old[i]);
-        solution_older.get(one_dof_index, &_u_older[i]);
+        if (_need_u_old)
+          sys.solutionOld().get(one_dof_index, &_u_old[i]);
+        if (_need_u_older)
+          sys.solutionOlder().get(one_dof_index, &_u_older[i]);
 
         if (safe_access_tagged_vectors)
         {
           for (auto tag : active_coupleable_vector_tags)
-            if (_sys.hasVector(tag) && _need_vector_tag_u[tag])
-              _sys.getVector(tag).get(one_dof_index, &_vector_tag_u[tag][i]);
+            if (sys.hasVector(tag) && _need_vector_tag_u[tag])
+              sys.getVector(tag).get(one_dof_index, &_vector_tag_u[tag][i]);
         }
 
         if (safe_access_tagged_matrices)
         {
           for (auto tag : active_coupleable_matrix_tags)
-            if (_sys.hasMatrix(tag) && _sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
+            if (sys.hasMatrix(tag) && sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
             {
               Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
-              _matrix_tag_u[tag][i] = _sys.getMatrix(tag)(dof_index, dof_index);
+              _matrix_tag_u[tag][i] = sys.getMatrix(tag)(dof_index, dof_index);
             }
         }
 
@@ -236,15 +245,17 @@ MooseVariableScalar::reinit(bool reinit_for_derivative_reordering /* = false*/)
         // variables immediately via a thrown exception, if our
         // libstdc++ compiler flags allow for that.
         _u.resize(i);
-        _u_old.resize(i);
-        _u_older.resize(i);
+        if (_need_u_old)
+          _u_old.resize(i);
+        if (_need_u_older)
+          _u_older.resize(i);
 
         for (auto tag : active_coupleable_vector_tags)
-          if (_sys.hasVector(tag) && _need_vector_tag_u[tag])
+          if (sys.hasVector(tag) && _need_vector_tag_u[tag])
             _vector_tag_u[tag].resize(i);
 
         for (auto tag : active_coupleable_matrix_tags)
-          if (_sys.hasMatrix(tag) && _sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
+          if (sys.hasMatrix(tag) && sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
             _matrix_tag_u[tag].resize(i);
 
         if (_need_u_dot)
@@ -263,15 +274,17 @@ MooseVariableScalar::reinit(bool reinit_for_derivative_reordering /* = false*/)
         // propagate NaN values rather than invalid values, so that
         // users won't trust the result.
         _u[i] = std::numeric_limits<Real>::quiet_NaN();
-        _u_old[i] = std::numeric_limits<Real>::quiet_NaN();
-        _u_older[i] = std::numeric_limits<Real>::quiet_NaN();
+        if (_need_u_old)
+          _u_old[i] = std::numeric_limits<Real>::quiet_NaN();
+        if (_need_u_older)
+          _u_older[i] = std::numeric_limits<Real>::quiet_NaN();
 
         for (auto tag : active_coupleable_vector_tags)
-          if (_sys.hasVector(tag) && _need_vector_tag_u[tag])
+          if (sys.hasVector(tag) && _need_vector_tag_u[tag])
             _vector_tag_u[tag][i] = std::numeric_limits<Real>::quiet_NaN();
 
         for (auto tag : active_coupleable_matrix_tags)
-          if (_sys.hasMatrix(tag) && _sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
+          if (sys.hasMatrix(tag) && sys.getMatrix(tag).closed() && _need_matrix_tag_u[tag])
             _matrix_tag_u[tag][i] = std::numeric_limits<Real>::quiet_NaN();
 
         if (_need_u_dot)
@@ -291,24 +304,48 @@ MooseVariableScalar::reinit(bool reinit_for_derivative_reordering /* = false*/)
   }
 
   // Automatic differentiation
-  if (_need_dual)
+  if (_need_ad)
     computeAD(/*nodal_ordering=*/false);
 }
 
 void
-MooseVariableScalar::computeAD(bool nodal_ordering)
+MooseVariableScalar::computeAD(bool
+#ifndef MOOSE_GLOBAL_AD_INDEXING
+                                   nodal_ordering)
 {
   auto ad_offset =
       _var_num * (nodal_ordering ? _sys.getMaxVarNDofsPerNode() : _sys.getMaxVarNDofsPerElem());
+#else
+)
+{
+#endif
   auto n_dofs = _dof_indices.size();
 
-  if (_need_dual_u)
+  if (_need_ad_u)
   {
-    _dual_u.resize(n_dofs);
+    _ad_u.resize(n_dofs);
     for (MooseIndex(n_dofs) i = 0; i < n_dofs; ++i)
     {
-      _dual_u[i] = _u[i];
-      Moose::derivInsert(_dual_u[i].derivatives(), ad_offset + i, 1.);
+      _ad_u[i] = _u[i];
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+      Moose::derivInsert(_ad_u[i].derivatives(), _dof_indices[i], 1.);
+#else
+      Moose::derivInsert(_ad_u[i].derivatives(), ad_offset + i, 1.);
+#endif
+    }
+  }
+
+  if (_need_ad_u_dot)
+  {
+    _ad_u_dot.resize(n_dofs);
+    for (MooseIndex(n_dofs) i = 0; i < n_dofs; ++i)
+    {
+      _ad_u_dot[i] = _u_dot[i];
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+      Moose::derivInsert(_ad_u_dot[i].derivatives(), _dof_indices[i], _du_dot_du[i]);
+#else
+      Moose::derivInsert(_ad_u_dot[i].derivatives(), ad_offset + i, _du_dot_du[i]);
+#endif
     }
   }
 }
@@ -360,6 +397,126 @@ MooseVariableScalar::insert(NumericVector<Number> & soln)
 const ADVariableValue &
 MooseVariableScalar::adSln() const
 {
-  _need_dual = _need_dual_u = true;
-  return _dual_u;
+  _need_ad = _need_ad_u = true;
+  return _ad_u;
+}
+
+const VariableValue &
+MooseVariableScalar::slnOld() const
+{
+  _need_u_old = true;
+  return _u_old;
+}
+
+const VariableValue &
+MooseVariableScalar::slnOlder() const
+{
+  _need_u_older = true;
+  return _u_older;
+}
+
+const VariableValue &
+MooseVariableScalar::vectorTagSln(TagID tag) const
+{
+  _need_vector_tag_u[tag] = true;
+  return _vector_tag_u[tag];
+}
+
+const VariableValue &
+MooseVariableScalar::matrixTagSln(TagID tag) const
+{
+  _need_matrix_tag_u[tag] = true;
+  return _matrix_tag_u[tag];
+}
+
+const ADVariableValue &
+MooseVariableScalar::adUDot() const
+{
+  if (_sys.solutionUDot())
+  {
+    _need_ad = _need_ad_u_dot = _need_u_dot = true;
+    return _ad_u_dot;
+  }
+  else
+    mooseError("MooseVariableScalar: Time derivative of solution (`u_dot`) is not stored. Please "
+               "set uDotRequested() to true in FEProblemBase before requesting `u_dot`.");
+}
+
+const VariableValue &
+MooseVariableScalar::uDot() const
+{
+  if (_sys.solutionUDot())
+  {
+    _need_u_dot = true;
+    return _u_dot;
+  }
+  else
+    mooseError("MooseVariableScalar: Time derivative of solution (`u_dot`) is not stored. Please "
+               "set uDotRequested() to true in FEProblemBase before requesting `u_dot`.");
+}
+
+const VariableValue &
+MooseVariableScalar::uDotDot() const
+{
+  if (_sys.solutionUDotDot())
+  {
+    _need_u_dotdot = true;
+    return _u_dotdot;
+  }
+  else
+    mooseError("MooseVariableScalar: Second time derivative of solution (`u_dotdot`) is not "
+               "stored. Please set uDotDotRequested() to true in FEProblemBase before requesting "
+               "`u_dotdot`.");
+}
+
+const VariableValue &
+MooseVariableScalar::uDotOld() const
+{
+  if (_sys.solutionUDotOld())
+  {
+    _need_u_dot_old = true;
+    return _u_dot_old;
+  }
+  else
+    mooseError("MooseVariableScalar: Old time derivative of solution (`u_dot_old`) is not "
+               "stored. Please set uDotOldRequested() to true in FEProblemBase before requesting "
+               "`u_dot_old`.");
+}
+
+const VariableValue &
+MooseVariableScalar::uDotDotOld() const
+{
+  if (_sys.solutionUDotDotOld())
+  {
+    _need_u_dotdot_old = true;
+    return _u_dotdot_old;
+  }
+  else
+    mooseError("MooseVariableScalar: Old second time derivative of solution (`u_dotdot_old`) is "
+               "not stored. Please set uDotDotOldRequested() to true in FEProblemBase before "
+               "requesting `u_dotdot_old`.");
+}
+
+const VariableValue &
+MooseVariableScalar::duDotDu() const
+{
+  _need_du_dot_du = true;
+  return _du_dot_du;
+}
+
+const VariableValue &
+MooseVariableScalar::duDotDotDu() const
+{
+  _need_du_dotdot_du = true;
+  return _du_dotdot_du;
+}
+
+unsigned int
+MooseVariableScalar::oldestSolutionStateRequested() const
+{
+  if (_need_u_older)
+    return 2;
+  if (_need_u_old)
+    return 1;
+  return 0;
 }

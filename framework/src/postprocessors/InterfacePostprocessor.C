@@ -21,25 +21,27 @@ InterfacePostprocessor::validParams()
 }
 
 InterfacePostprocessor::InterfacePostprocessor(const InputParameters & parameters)
-  : InterfaceUserObject(parameters), Postprocessor(parameters), _interface_master_area(0.)
+  : InterfaceUserObject(parameters), Postprocessor(this), _interface_primary_area(0.)
 {
 }
 
 void
 InterfacePostprocessor::initialize()
 {
-  _interface_master_area = 0;
+  InterfaceUserObject::initialize();
+  _interface_primary_area = 0;
 }
 
 void
 InterfacePostprocessor::execute()
 {
-  _interface_master_area += _current_side_volume;
+  InterfaceUserObject::execute();
+  _interface_primary_area += _current_side_volume;
 }
 
 void
 InterfacePostprocessor::threadJoin(const UserObject & y)
 {
   const InterfacePostprocessor & pps = static_cast<const InterfacePostprocessor &>(y);
-  _interface_master_area += pps._interface_master_area;
+  _interface_primary_area += pps._interface_primary_area;
 }

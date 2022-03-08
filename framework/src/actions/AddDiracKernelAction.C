@@ -12,12 +12,11 @@
 
 registerMooseAction("MooseApp", AddDiracKernelAction, "add_dirac_kernel");
 
-defineLegacyParams(AddDiracKernelAction);
-
 InputParameters
 AddDiracKernelAction::validParams()
 {
   InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a DiracKernel object to the simulation.");
   return params;
 }
 

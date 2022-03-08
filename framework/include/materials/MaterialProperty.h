@@ -13,15 +13,20 @@
 
 #include "MooseADWrapper.h"
 #include "MooseArray.h"
+#include "MooseTypes.h"
 #include "DataIO.h"
+#include "MooseError.h"
 
 #include "libmesh/libmesh_common.h"
 #include "libmesh/tensor_value.h"
 #include "libmesh/vector_value.h"
+#include "libmesh/int_range.h"
 
 #include "metaphysicl/raw_type.h"
 
 class PropertyValue;
+class Material;
+class MaterialPropertyInterface;
 
 /**
  * Scalar Init helper routine so that specialization isn't needed for basic scalar MaterialProperty
@@ -58,17 +63,6 @@ public:
   virtual void swap(PropertyValue * rhs) = 0;
 
   virtual bool isAD() = 0;
-
-  /**
-   * Creates a regular material property, copying any existing qp values from this
-   */
-  virtual PropertyValue * makeRegularProperty() = 0;
-
-  /**
-   * Creates an AD material property, copying any existing qp *values* from this. Derivative
-   * information is zeroed
-   */
-  virtual PropertyValue * makeADProperty() = 0;
 
   /**
    * Copy the value of a Property from one specific to a specific qp in this Property.
@@ -120,9 +114,6 @@ public:
 
   bool isAD() override { return is_ad; }
 
-  PropertyValue * makeRegularProperty() override;
-  PropertyValue * makeADProperty() override;
-
   /**
    * @returns a read-only reference to the parameter value.
    */
@@ -156,11 +147,6 @@ public:
   const MooseADWrapper<T, is_ad> & operator[](const unsigned int i) const { return _value[i]; }
 
   /**
-   *
-   */
-  virtual void swap(PropertyValue * rhs) override;
-
-  /**
    * Copy the value of a Property from one specific to a specific qp in this Property.
    *
    * @param to_qp The quadrature point in _this_ Property that you want to copy to.
@@ -180,6 +166,23 @@ public:
    */
   virtual void load(std::istream & stream) override;
 
+  void setName(const MaterialPropertyName & name_in)
+  {
+    mooseAssert(
+        _name.empty() || _name == name_in,
+        "We're trying to apply a new name to a material property. I don't think that makes sense.");
+    _name = name_in;
+  }
+
+  const MaterialPropertyName & name() const
+  {
+    if (_name.empty())
+      mooseError("Retrieving a material property name before it's set.");
+    return _name;
+  }
+
+  void swap(PropertyValue * rhs) override;
+
 private:
   /// private copy constructor to avoid shallow copying of material properties
   MaterialPropertyBase(const MaterialPropertyBase<T, is_ad> & /*src*/)
@@ -192,6 +195,9 @@ private:
   {
     mooseError("Material properties must be assigned to references (missing '&')");
   }
+
+  /// the name of this material property
+  MaterialPropertyName _name;
 
 protected:
   /// Stored parameter value.
@@ -223,50 +229,17 @@ rawValueEqualityHelper(std::vector<T1> & out, const std::vector<T2> & in)
 {
   out.resize(in.size());
   for (MooseIndex(in) i = 0; i < in.size(); ++i)
-    out[i] = MetaPhysicL::raw_value(in[i]);
+    rawValueEqualityHelper(out[i], in[i]);
 }
 
-template <typename T1, typename T2>
+template <typename T1, typename T2, std::size_t N>
 void
-rawValueEqualityHelper(std::vector<std::vector<T1>> & out, const std::vector<std::vector<T2>> & in)
+rawValueEqualityHelper(std::array<T1, N> & out, const std::array<T2, N> & in)
 {
-  out.resize(in.size());
   for (MooseIndex(in) i = 0; i < in.size(); ++i)
-  {
-    out[i].resize(in[i].size());
-    for (MooseIndex(in[i].size()) j = 0; j < in[i].size(); ++j)
-      out[i][j] = MetaPhysicL::raw_value(in[i][j]);
-  }
+    rawValueEqualityHelper(out[i], in[i]);
 }
 }
-}
-
-template <typename T, bool is_ad>
-PropertyValue *
-MaterialPropertyBase<T, is_ad>::makeRegularProperty()
-{
-  auto * new_prop = new MaterialProperty<T>;
-
-  new_prop->resize(this->size());
-
-  for (MooseIndex(_value) i = 0; i < _value.size(); ++i)
-    moose::internal::rawValueEqualityHelper((*new_prop)[i], _value[i]);
-
-  return new_prop;
-}
-
-template <typename T, bool is_ad>
-PropertyValue *
-MaterialPropertyBase<T, is_ad>::makeADProperty()
-{
-  auto * new_prop = new ADMaterialProperty<T>;
-
-  new_prop->resize(this->size());
-
-  for (MooseIndex(_value) i = 0; i < _value.size(); ++i)
-    moose::internal::rawValueEqualityHelper((*new_prop)[i], _value[i]);
-
-  return new_prop;
 }
 
 template <typename T, bool is_ad>
@@ -281,14 +254,6 @@ inline void
 MaterialPropertyBase<T, is_ad>::resize(int n)
 {
   _value.template resize</*value_initalize=*/true>(n);
-}
-
-template <typename T, bool is_ad>
-inline void
-MaterialPropertyBase<T, is_ad>::swap(PropertyValue * rhs)
-{
-  mooseAssert(rhs != NULL, "Assigning NULL?");
-  _value.swap(cast_ptr<MaterialPropertyBase<T, is_ad> *>(rhs)->_value);
 }
 
 template <typename T, bool is_ad>
@@ -322,6 +287,40 @@ MaterialPropertyBase<T, is_ad>::load(std::istream & stream)
 {
   for (unsigned int i = 0; i < size(); i++)
     loadHelper(stream, _value[i], NULL);
+}
+
+template <typename T, bool is_ad>
+inline void
+MaterialPropertyBase<T, is_ad>::swap(PropertyValue * rhs)
+{
+  mooseAssert(rhs, "Assigning nullptr?");
+
+  // If we're the same
+  if (rhs->isAD() == is_ad)
+  {
+    this->_value.swap(cast_ptr<MaterialPropertyBase<T, is_ad> *>(rhs)->_value);
+    return;
+  }
+
+  // We may call this function when doing swap between MaterialData material properties (you can
+  // think of these as the current element properties) and MaterialPropertyStorage material
+  // properties (these are the stateful material properties that we store for *every* element). We
+  // never store ADMaterialProperty in stateful storage (e.g. MaterialPropertyStorage) for memory
+  // resource reasons; instead we keep a regular MaterialProperty version of it. Hence we do have a
+  // need to exchange data between the AD and regular copies which we implement below. The below
+  // is obviously not a swap, for which you cannot identify a giver and receiver. Instead the below
+  // has a clear giver and receiver. The giver is the object passed in as the rhs. The receiver is
+  // *this* object. This directionality, although not conceptually appropriate given the method
+  // name, *is* appropriate to how this method is used in practice. See shallowCopyData and
+  // shallowCopyDataBack in MaterialPropertyStorage.C
+
+  auto * different_type_prop = dynamic_cast<MaterialPropertyBase<T, !is_ad> *>(rhs);
+  mooseAssert(different_type_prop,
+              "Wrong material property type T in MaterialPropertyBase<T, is_ad>::swap");
+
+  this->resize(different_type_prop->size());
+  for (const auto qp : make_range(this->size()))
+    moose::internal::rawValueEqualityHelper(this->_value[qp], (*different_type_prop)[qp]);
 }
 
 template <typename T>
@@ -433,11 +432,13 @@ dataLoad(std::istream & stream, MaterialProperties & v, void * context)
 }
 
 // Scalar Init Helper Function
-template <typename T>
+template <template <typename> class DerivedMaterialProperty, typename T>
 PropertyValue *
-_init_helper(int size, T * /*prop*/)
+_init_helper(int size, DerivedMaterialProperty<T> * /*prop*/)
 {
-  T * copy = new T;
+  // This function is used to initialize stateful material properties. We *never* want to create a
+  // stateful AD material property because it is too memory intensive
+  MaterialProperty<T> * copy = new MaterialProperty<T>;
   copy->resize(size);
   return copy;
 }
@@ -456,3 +457,71 @@ struct GenericMaterialPropertyStruct<T, true>
 
 template <typename T, bool is_ad>
 using GenericMaterialProperty = typename GenericMaterialPropertyStruct<T, is_ad>::type;
+
+/**
+ * Base class to facilitate storage using unique pointers
+ */
+class GenericOptionalMaterialPropertyBase
+{
+public:
+  virtual ~GenericOptionalMaterialPropertyBase() {}
+};
+
+template <class M, typename T, bool is_ad>
+class OptionalMaterialPropertyProxy;
+
+/**
+ * Wrapper around a material property pointer. Copying this wrapper is disabled
+ * to enforce capture via reference. Used by the optional material property
+ * API, which requires late binding updates of the stored pointer.
+ */
+template <typename T, bool is_ad>
+class GenericOptionalMaterialProperty : public GenericOptionalMaterialPropertyBase
+{
+  typedef GenericMaterialProperty<T, is_ad> P;
+
+public:
+  GenericOptionalMaterialProperty(const P * pointer) : _pointer(pointer) {}
+
+  /// no copy construction is permitted
+  GenericOptionalMaterialProperty(const GenericOptionalMaterialProperty<T, is_ad> &) = delete;
+  /// no copy assignment is permitted
+  GenericOptionalMaterialProperty &
+  operator=(const GenericOptionalMaterialProperty<T, is_ad> &) = delete;
+
+  /// pass through operator[] to provide a similar API as MaterialProperty
+  const MooseADWrapper<T, is_ad> & operator[](const unsigned int i) const
+  {
+    // check if the optional property is valid in debug mode
+    mooseAssert(
+        _pointer,
+        "Attempting to access an optional material property that was not provided by any material "
+        "class. Make sure to check optional material properties before using them.");
+    return (*_pointer)[i];
+  }
+
+  /// pass through size calls
+  unsigned int size() const { return (*_pointer).size(); }
+
+  /// implicit cast to bool to check the if the material property exists
+  operator bool() const { return _pointer; }
+
+  /// get a pointer to the underlying property (only do this in initialSetup or later)
+  const P * get() const { return _pointer; }
+
+private:
+  /// the default constructor is only called from the friend class
+  GenericOptionalMaterialProperty() : _pointer(nullptr) {}
+
+  /// setting the pointer is only permitted through the optional material proxy system
+  void set(const P * pointer) { _pointer = pointer; }
+  const P * _pointer;
+
+  friend class OptionalMaterialPropertyProxy<Material, T, is_ad>;
+  friend class OptionalMaterialPropertyProxy<MaterialPropertyInterface, T, is_ad>;
+};
+
+template <typename T>
+using OptionalMaterialProperty = GenericOptionalMaterialProperty<T, false>;
+template <typename T>
+using OptionalADMaterialProperty = GenericOptionalMaterialProperty<T, true>;

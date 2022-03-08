@@ -1,0 +1,77 @@
+//* This file is part of the MOOSE framework
+//* https://www.mooseframework.org
+//*
+//* All rights reserved, see COPYRIGHT for full restrictions
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+//*
+//* Licensed under LGPL 2.1, please see LICENSE for details
+//* https://www.gnu.org/licenses/lgpl-2.1.html
+
+#include "PINSFVEnergyDiffusion.h"
+#include "INSFVEnergyVariable.h"
+#include "NS.h"
+
+registerMooseObject("NavierStokesApp", PINSFVEnergyDiffusion);
+
+InputParameters
+PINSFVEnergyDiffusion::validParams()
+{
+  auto params = FVFluxKernel::validParams();
+  params.addClassDescription("Diffusion term in the porous media incompressible Navier-Stokes "
+                             "fluid energy equations :  $-div(eps * k * grad(T))$");
+  params.addRequiredParam<MooseFunctorName>(NS::porosity, "Porosity");
+  params.addRequiredParam<MooseFunctorName>(NS::k, "Thermal conductivity");
+  params.addParam<bool>(
+      "effective_diffusivity",
+      false,
+      "Whether the diffusivity should be multiplied by porosity, or whether the provided "
+      "diffusivity is an effective diffusivity taking porosity effects into account");
+
+  params.set<unsigned short>("ghost_layers") = 2;
+  return params;
+}
+
+PINSFVEnergyDiffusion::PINSFVEnergyDiffusion(const InputParameters & params)
+  : FVFluxKernel(params),
+    _k(getFunctor<ADReal>(NS::k)),
+    _eps(getFunctor<ADReal>(NS::porosity)),
+    _porosity_factored_in(getParam<bool>("effective_diffusivity"))
+{
+#ifndef MOOSE_GLOBAL_AD_INDEXING
+  mooseError("PINSFV is not supported by local AD indexing. In order to use PINSFV, please run "
+             "the configure script in the root MOOSE directory with the configure option "
+             "'--with-ad-indexing-type=global'");
+#endif
+  if (!dynamic_cast<INSFVEnergyVariable *>(&_var))
+    mooseError("PINSFVEnergyDiffusion may only be used with a fluid temperature variable, "
+               "of variable type INSFVEnergyVariable.");
+}
+
+ADReal
+PINSFVEnergyDiffusion::computeQpResidual()
+{
+  // Interpolate thermal conductivity times porosity on the face
+  ADReal k_eps_face;
+  const auto face_elem = elemFromFace();
+  const auto face_neighbor = neighborFromFace();
+
+  if (!_porosity_factored_in)
+    Moose::FV::interpolate(Moose::FV::InterpMethod::Average,
+                           k_eps_face,
+                           _k(face_elem) * _eps(face_elem),
+                           _k(face_neighbor) * _eps(face_neighbor),
+                           *_face_info,
+                           true);
+  else
+    Moose::FV::interpolate(Moose::FV::InterpMethod::Average,
+                           k_eps_face,
+                           _k(face_elem),
+                           _k(face_neighbor),
+                           *_face_info,
+                           true);
+
+  // Compute the temperature gradient dotted with the surface normal
+  auto dTdn = gradUDotNormal();
+
+  return -k_eps_face * dTdn;
+}

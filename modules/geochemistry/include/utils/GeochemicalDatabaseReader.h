@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "json/json.h"
+#include "nlohmann/json.h"
 #include "MooseTypes.h"
 
 /**
@@ -192,10 +192,8 @@ struct GeochemistryElements
 
 /**
  * Data structure for neutral species activity coefficients.
- * Members are:
- * * adh: Debye-Huckel a parameter
- * * bdh: Debye-Huckel b parameter
- * * bdot: Debye-Huckel bdot parameter
+ * Members are a, b, c and d, which are temperature dependent coefficients in the Debye-Huckel
+ * activity model.
  */
 struct GeochemistryNeutralSpeciesActivity
 {
@@ -222,13 +220,28 @@ public:
    * equilibrium reaction expressed in terms of O2(g), and O2(g) exists as a gas in the database
    * file, and O2(g)'s equilibrium reaction is O2(g)=O2(eq), and O2(aq) exists as a basis species in
    * the database file, then reexpress the free electron's equilibrium reaction in terms of O2(aq)
+   * @param use_piecewise_interpolation If true then set the "logk model" to "piecewise-linear"
+   * regardless of the value found in the filename.  This is designed to make testing easy (because
+   * logK and Debye-Huckel parameters will be exactly as set in the filename instead of from a 4-th
+   * order least-squares fit) but should rarely be used for real geochemical simulations
    */
-  GeochemicalDatabaseReader(const FileName filename, const bool reexpress_free_electron = true);
+  GeochemicalDatabaseReader(const FileName filename,
+                            const bool reexpress_free_electron = true,
+                            const bool use_piecewise_interpolation = false,
+                            const bool remove_all_extrapolated_secondary_species = false);
 
   /**
    * Parse the thermodynamic database
+   * @param filename Name of thermodynamic database file
    */
-  void read(FileName filename);
+  void read(const FileName filename);
+
+  /**
+   * Validate the thermodynamic database
+   * @param filename Name of thermodynamic database file
+   * @param db JSON database read from filename
+   */
+  void validate(const FileName filename, const nlohmann::json & db);
 
   /**
    * Sometimes the free electron's equilibrium reaction is defined in terms of O2(g) which is not a
@@ -239,19 +252,19 @@ public:
 
   /**
    * Get the activity model type
-   * @retrun activity model
+   * @return activity model
    */
   std::string getActivityModel() const;
 
   /**
    * Get the fugacity model type
-   * @retrun fugacity model
+   * @return fugacity model
    */
   std::string getFugacityModel() const;
 
   /**
    * Get the equilibrium constant model type
-   * @retrun equilibrium constant model
+   * @return equilibrium constant model
    */
   std::string getLogKModel() const;
 
@@ -277,7 +290,7 @@ public:
    * Get the temperature points that the equilibrium constant is defined at.
    * @return vector of temperature points (C)
    */
-  std::vector<Real> getTemperatures();
+  const std::vector<Real> & getTemperatures() const;
 
   /**
    * Get the pressure points that the equilibrium constant is defined at.
@@ -289,7 +302,7 @@ public:
    * Get the Debye-Huckel activity coefficients
    * @return vectors of adh, bdh and bdot
    */
-  GeochemistryDebyeHuckel getDebyeHuckel();
+  const GeochemistryDebyeHuckel & getDebyeHuckel() const;
 
   /**
    * Get the basis (primary) species information
@@ -357,7 +370,8 @@ public:
    * Get the neutral species activity coefficients
    * @return neutral species activity coefficients
    */
-  std::map<std::string, GeochemistryNeutralSpeciesActivity> getNeutralSpeciesActivity();
+  const std::map<std::string, GeochemistryNeutralSpeciesActivity> &
+  getNeutralSpeciesActivity() const;
 
   /**
    * Generates a formatted vector of strings representing all aqueous equilibrium
@@ -426,6 +440,9 @@ public:
   /// returns True iff name is the name of a sorbing mineral
   bool isSorbingMineral(const std::string & name) const;
 
+  /// Returns a list of all the names of the "mineral species" in the database
+  std::vector<std::string> mineralSpeciesNames() const;
+
   /// Returns a list of all the names of the "secondary species" and "free electron" in the database
   std::vector<std::string> secondarySpeciesNames() const;
 
@@ -437,19 +454,34 @@ public:
 
 protected:
   /**
-   * Generates a formatted vector of strings representing all reactions
-   * @param names list of reaction species
-   * @param basis species list of basis species for each reaction species
-   * @return formatted reaction equations
+   * After parsing the database file, remove any secondary species that have extrapolated
+   * equilibrium constants.  This is called in the constructor if the
+   * remove_all_extrapolated_secondary_species flag is true
    */
-  std::vector<std::string>
-  printReactions(std::vector<std::string> names,
-                 std::vector<std::map<std::string, Real>> basis_species) const;
+  void removeExtrapolatedSecondarySpecies();
+
+  /**
+   * Copy the temperature points (if any) found in the database into _temperature_points.  This
+   * method is called in the constructor
+   */
+  void setTemperatures();
+
+  /**
+   * Copy the Debye-Huckel parameters (if any) found in the database into _debye_huckel.  This
+   * method is called in the constructor
+   */
+  void setDebyeHuckel();
+
+  /**
+   * Copy the Debye-Huckel parameters for computing neutral species activity (if any) found in the
+   * databasebase into _neutral_species_activity.  This method is cdalled in the constructor
+   */
+  void setNeutralSpeciesActivity();
 
   /// Database filename
   const FileName _filename;
   /// JSON data
-  moosecontrib::Json::Value _root;
+  nlohmann::json _root;
   /// List of basis (primary) species names read from database
   std::vector<std::string> _bs_names;
   /// List of secondary equilibrium species to read from database
@@ -480,4 +512,18 @@ protected:
   GeochemistryDebyeHuckel _debye_huckel;
   /// Neutral species activity coefficients
   std::map<std::string, GeochemistryNeutralSpeciesActivity> _neutral_species_activity;
+  // Helper for converting json node to Real from string
+  static Real getReal(const nlohmann::json & node);
+
+private:
+  /**
+   * Generates a formatted vector of strings representing all reactions
+   * @param names list of reaction species
+   * @param basis species list of basis species for each reaction species (this vector must be of
+   * same size as names)
+   * @return formatted reaction equations
+   */
+  std::vector<std::string>
+  printReactions(const std::vector<std::string> & names,
+                 const std::vector<std::map<std::string, Real>> & basis_species) const;
 };

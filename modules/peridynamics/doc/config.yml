@@ -10,15 +10,13 @@ Extensions:
     MooseDocs.extensions.navigation:
         name: MOOSE Peridynamics Module
         repo: https://github.com/idaholab/moose
-        home: /modules/peridynamics
+        home: /modules/peridynamics/index.md
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/modules/peridynamics
-        hide:
-            framework: !include framework/doc/hidden.yml
-            peridynamics: !include modules/peridynamics/doc/hidden.yml
-            tensor_mechanics: !include modules/tensor_mechanics/doc/hidden.yml
         remove:
             framework: !include framework/doc/remove.yml
+        unregister:
+            framework: !include framework/doc/unregister.yml
         includes:
             - framework/include
             - modules/peridynamics/include

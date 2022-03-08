@@ -19,9 +19,16 @@
 
 #include "libmesh/mesh_base.h"
 
+InputParameters
+ElementIDInterface::validParams()
+{
+  return emptyInputParameters();
+}
+
 ElementIDInterface::ElementIDInterface(const MooseObject * moose_object)
   : _obj_parameters(moose_object->parameters()),
-    _mesh(moose_object->getMooseApp().actionWarehouse().mesh())
+    _id_mesh(moose_object->getMooseApp().actionWarehouse().mesh()),
+    _ei_name(moose_object->name())
 {
 }
 
@@ -33,15 +40,30 @@ ElementIDInterface::getElementIDIndex(const std::string & id_parameter_name,
   if (comp >= p.size())
     mooseError(id_parameter_name, " does not have enough integer names");
 
-  if (!_mesh.get())
+  return getElementIDIndexByName(p[comp]);
+}
+
+unsigned int
+ElementIDInterface::getElementIDIndexByName(const std::string & id_name) const
+{
+  if (!_id_mesh.get())
     mooseError("Mesh is not available for getting element integers");
 
-  auto & mesh_base = _mesh->getMesh();
+  auto & mesh_base = _id_mesh->getMesh();
 
-  if (!mesh_base.has_elem_integer(p[comp]))
-    mooseError("Mesh does not have an element integer names as ", p[comp]);
+  if (id_name == "subdomain_id")
+  {
+    if (mesh_base.has_elem_integer(id_name))
+      mooseError("MOOSE does not allow 'subdomain_id' element integer in a mesh. 'subdomain_id' is "
+                 "reserved for element subdomain ID");
+    return mesh_base.n_elem_integers();
+  }
 
-  auto id = mesh_base.get_elem_integer_index(p[comp]);
+  if (!mesh_base.has_elem_integer(id_name))
+    mooseError(
+        "Mesh does not have an element integer names as ", id_name, " but required by ", _ei_name);
+
+  auto id = mesh_base.get_elem_integer_index(id_name);
 
   return id;
 }
@@ -58,4 +80,47 @@ ElementIDInterface::getElementID(const std::string & id_parameter_name, unsigned
   auto & assembly = _subproblem.assembly(tid);
 
   return assembly.extraElemID(id);
+}
+
+const dof_id_type &
+ElementIDInterface::getElementIDNeighbor(const std::string & id_parameter_name,
+                                         unsigned int comp) const
+{
+  auto id = getElementIDIndex(id_parameter_name, comp);
+
+  auto & _subproblem = *_obj_parameters.getCheckedPointerParam<SubProblem *>("_subproblem");
+
+  auto tid = _obj_parameters.get<THREAD_ID>("_tid");
+
+  auto & assembly = _subproblem.assembly(tid);
+
+  return assembly.extraElemIDNeighbor(id);
+}
+
+const dof_id_type &
+ElementIDInterface::getElementIDByName(const std::string & id_name) const
+{
+  auto id = getElementIDIndexByName(id_name);
+
+  auto & _subproblem = *_obj_parameters.getCheckedPointerParam<SubProblem *>("_subproblem");
+
+  auto tid = _obj_parameters.get<THREAD_ID>("_tid");
+
+  auto & assembly = _subproblem.assembly(tid);
+
+  return assembly.extraElemID(id);
+}
+
+const dof_id_type &
+ElementIDInterface::getElementIDNeighborByName(const std::string & id_name) const
+{
+  auto id = getElementIDIndexByName(id_name);
+
+  auto & _subproblem = *_obj_parameters.getCheckedPointerParam<SubProblem *>("_subproblem");
+
+  auto tid = _obj_parameters.get<THREAD_ID>("_tid");
+
+  auto & assembly = _subproblem.assembly(tid);
+
+  return assembly.extraElemIDNeighbor(id);
 }

@@ -1,7 +1,7 @@
 starting_point = 2e-1
 
-# We offset slightly so we avoid the case where the bottom of the slave block and the top of the
-# master block are perfectly vertically aligned which can cause the backtracking line search some
+# We offset slightly so we avoid the case where the bottom of the secondary block and the top of the
+# primary block are perfectly vertically aligned which can cause the backtracking line search some
 # issues for a coarse mesh (basic line search handles that fine)
 offset = 1e-2
 
@@ -22,12 +22,12 @@ offset = 1e-2
   [./delete_3]
     type = BlockDeletionGenerator
     input = original_file_mesh
-    block_id = 3
+    block = 3
   [../]
   [./revised_file_mesh]
     type = BlockDeletionGenerator
     input = delete_3
-    block_id = 4
+    block = 4
   [../]
 []
 
@@ -44,12 +44,13 @@ offset = 1e-2
 
 [Contact]
   [frictional]
-    mesh = revised_file_mesh
-    master = 20
-    slave = 10
+    primary = 20
+    secondary = 10
     formulation = mortar
     model = coulomb
     friction_coefficient = 0.1
+    mortar_approach = legacy
+    c_normal = 1e0
   []
 []
 
@@ -141,7 +142,7 @@ offset = 1e-2
   [contact]
     type = ContactDOFSetSize
     variable = frictional_normal_lm
-    subdomain = frictional_slave_subdomain
+    subdomain = frictional_secondary_subdomain
     execute_on = 'nonlinear timestep_end'
   []
 []

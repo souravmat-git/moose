@@ -23,54 +23,54 @@
   [./all]
     strain = FINITE
     add_variables = true
-    use_automatic_differentiation = true
+    generate_output = vonmises_stress
   [../]
 []
 
 [BCs]
   [./symmy]
-    type = ADDirichletBC
+    type = DirichletBC
     variable = disp_y
     boundary = bottom
     value = 0
   [../]
   [./symmx]
-    type = ADDirichletBC
+    type = DirichletBC
     variable = disp_x
     boundary = left
     value = 0
   [../]
   [./pressure_x]
-    type = ADPressure
+    type = Pressure
     variable = disp_x
-    component = 0
     boundary = right
-    constant = 3.1675e5
+    function = t
+    factor = 3.1675e5
   [../]
   [./pressure_y]
-    type = ADPressure
+    type = Pressure
     variable = disp_y
-    component = 1
     boundary = top
-    constant = 6.336e5
+    function = t
+    factor = 6.336e5
   [../]
 []
 
 [Materials]
   [./elasticity_tensor]
-    type = ADComputeIsotropicElasticityTensor
+    type = ComputeIsotropicElasticityTensor
     youngs_modulus = 3.30e11
     poissons_ratio = 0.3
   [../]
   [./stress]
-    type = ADComputeMultipleInelasticStress
+    type = ComputeMultipleInelasticStress
     inelastic_models = rom_stress_prediction
   [../]
   [./rom_stress_prediction]
     type = SS316HLAROMANCEStressUpdateTest
     temperature = temperature
-    initial_mobile_dislocation_density = 6.0e12
-    initial_immobile_dislocation_density = 4.4e11
+    initial_cell_dislocation_density = 6.0e12
+    initial_wall_dislocation_density = 4.4e11
     outputs = all
   [../]
 []
@@ -85,6 +85,7 @@
   compute_scaling_once = false
 
   num_steps = 5
+  dt = 2
 []
 
 [Postprocessors]
@@ -96,13 +97,17 @@
     type = ElementAverageValue
     variable = temperature
   [../]
-  [./mobile_dislocations]
+  [./cell_dislocations]
     type = ElementAverageValue
-    variable = mobile_dislocations
+    variable = cell_dislocations
   [../]
-  [./immobile_disloactions]
+  [./wall_disloactions]
     type = ElementAverageValue
-    variable = immobile_dislocations
+    variable = wall_dislocations
+  [../]
+  [./vonmises_stress]
+    type = ElementAverageValue
+    variable = vonmises_stress
   [../]
 []
 

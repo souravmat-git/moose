@@ -27,7 +27,7 @@ The [SobolSampler.md] object requires two input samplers to form the sample and 
 Thus, the `Samplers` block contains three sample objects. The first two are used by the third,
 the "sobol" sampler, which is the Sampler used by the other objects in the simulation.
 
-!listing examples/sobol/master.i block=Samplers
+!listing examples/sobol/main.i block=Samplers
 
 The sobol method implemented here requires $n(2k+2)$ model evaluations, where $k$ is the number
 of uncertain parameters (4) and $n$ is the number of replicates (10,000). Therefore, for this example
@@ -36,70 +36,99 @@ of uncertain parameters (4) and $n$ is the number of replicates (10,000). Theref
 ### Sobol Statistics
 
 The values of the first-order, second-order, and total-effect are computed by the
-[SobolStatistics.md] object. This object is a VectorPostprocessor, as such it is added to the
-`VectorPostprocessors` block. The output of the object includes all the indices for each of
+[SobolReporter.md] object. This object is a Reporter, as such it is added to the
+`Reporters` block. The output of the object includes all the indices for each of
 the vectors supplied.
+
+!listing examples/sobol/main.i block=Reporters
 
 ## Results
 
-If CSV output is enabled, the [SobolStatistics.md] object will write a file that contains
+If [JSONOutput.md] output is enabled, the [SobolReporter.md] object will write a file that contains
 columns of data. Each column comprises of the computed indices for the quantities of
-interest. For example, [#sobol_out] is the complete output from the [SobolStatistics.md] object
+interest. For example, [sobol_out] is and example output from the [SobolReporter.md] object
 for this example problem.
 
-!listing caption=Computed Sobol indices for the example heat conduction problem. id=sobol_out
-results_results:T_avg,results_results:q_left
-0.76299909295746,0.75702944587209
-0.2082919277966,0.21460975494102
-0.0027766033319889,0.0011025190137148
-0.00046341758946101,7.9704886906161e-06
-0.78907420429966,0.78609475770525
-0.23746323877556,0.24915733113826
-0.0026977118411734,0.0043825163810549
-0.0018918988236903,0.0042137986067606
-0.014088916836785,0.019175125735034
--0.0070190563079849,-0.0068080492999654
--0.0090633778449805,-0.0080820910718631
-3.9352099404089e-05,0.00012556131080121
-0.00062608629194155,0.00016114699247996
-0.00015344139391293,-5.0234930366023e-06
+!listing examples/sobol/gold/main_out.json language=json
+         caption=Computed Sobol indices for the example heat conduction problem.
+         id=sobol_out
 
-This problem examines four uncertain parameters, thus the first four rows contain the first-order
-indices of each of the uncertain parameters as ordered in the input file ($\gamma$, $q_0$, $T_0$, and
-$s$). The next four rows contain the total-effect indices. The final rows contain the second-order
-indices, see [SobolStatistics.md] for further information regarding the output.
+For each set of indices (`FIRST_ORDER`, `SECOND_ORDER`, and `TOTAL`) contains a pair entries:
+the first is the values computed and the second corresponds to the 5% and 95% confidence intervals.
+This problem examines four uncertain parameters, so each element of the set of indices corresponds
+to the parameter indicated in the input file ($\gamma$, $q_0$, $T_0$, and $s$). See [SobolReporter.md]
+for further information regarding the output.
 
 For the problem at hand, the first-order and second-order indices for the two quantities of interest
-are presented in [#S_T_avg] and [#S_q_left]. The diagonal entries are the first-order incides and
+are presented in [S_T_avg] and [S_q_left]. The diagonal entries are the first-order incides and
 the off-diagonal terms are the second-order indices. For example for $T_{avg}$ the first order-index
 for $\gamma$ is $S_1 = 0.763$ and the second-order index $S_{1,2} = 0.014$ for $\gamma$ interacting
 with $q_0$. The negative values are essentially zero, if more replicates were executed these
 numbers would become closer to zero.
 
+```
+python ../../python/visualize_sobol.py main_out.json  --markdown-table \
+--values results_results:T_avg:value --stat second_order \
+--param-names '$\gamma$' '$q_0$' '$T_0$' '$s$' \
+--number-format .3g
+```
+
 !table id=S_T_avg caption=First-order and second-order Sobol indices for $T_{avg}$.
-| $S_{i,j}$ | 1 ($\gamma$) | 2 ($q_0$) | 3 ($T_0$) | 4 ($s$) |
-| -         | -            | -         | -         | -       |
-| 1         | 0.763        | -         | -         | -       |
-| 2         | 0.014        | 0.208     | -         | -       |
-| 3         | -0.007       | 0         | 0.003     | -       |
-| 4         | -0.009       | 0.001     | 0         | 0       |
+| $S_{i,j}$ (5.0%, 95.0%) CI   | $\gamma$                | $q_0$                      | $T_0$                     | $s$                  |
+|:-----------------------------|:------------------------|:---------------------------|:--------------------------|:---------------------|
+| $\gamma$                     | 0.69 (0.626, 0.77)      | -                          | -                         | -                    |
+| $q_0$                        | 0.00108 (-0.122, 0.122) | 0.00737 (0.00598, 0.00892) | -                         | -                    |
+| $T_0$                        | 0.0114 (-0.126, 0.148)  | 0.00412 (-0.003, 0.0111)   | 0.0902 (0.0807, 0.102)    | -                    |
+| $s$                          | 0.00538 (-0.153, 0.16)  | 0.0039 (-0.0101, 0.018)    | 0.00353 (-0.0207, 0.0283) | 0.201 (0.181, 0.225) |
+
+```
+python ../../python/visualize_sobol.py main_out.json  --markdown-table \
+--values results_results:q_left:value --stat second_order \
+--param-names '$\gamma$' '$q_0$' '$T_0$' '$s$' \
+--number-format .3g
+```
 
 !table id=S_q_left caption=First-order and second-order Sobol indices for $q_{left}$.
-| $S_{i,j}$ | 1 ($\gamma$) | 2 ($q_0$) | 3 ($T_0$) | 4 ($s$) |
-| -         | -            | -         | -         | -       |
-| 1         | 0.757        | -         | -         | -       |
-| 2         | 0.019        | 0.215     | -         | -       |
-| 3         | -0.007       | 0         | 0.001     | -       |
-| 4         | -0.008       | 0         | 0         | 0       |
+| $S_{i,j}$ (5.0%, 95.0%) CI   | $\gamma$                | $q_0$                         | $T_0$                         | $s$                        |
+|:-----------------------------|:------------------------|:------------------------------|:------------------------------|:---------------------------|
+| $\gamma$                     | 0.815 (0.765, 0.874)    | -                             | -                             | -                          |
+| $q_0$                        | 0.00787 (-0.094, 0.108) | 0.0267 (0.0245, 0.0292)       | -                             | -                          |
+| $T_0$                        | 0.0188 (-0.0959, 0.132) | -0.000773 (-0.00685, 0.00532) | 0.135 (0.126, 0.145)          | -                          |
+| $s$                          | 0.011 (-0.0887, 0.109)  | 0.000268 (-0.0021, 0.00265)   | -0.000539 (-0.00844, 0.00736) | 0.00423 (0.00312, 0.00538) |
 
 The data in these two tables clearly indicates that a majority of the variance of both quantities of
-interest are due to the variance of $\gamma$ ($S_1$) and $q_0$ ($S_2$). Additionally, a small
-contribution of the variance is from a second-order interaction, $S_{1,2}$, between $\gamma$ and
-$q_0$. The importance of $\gamma$ and $q_0$ if further evident by the total-effect indices, as shown in
-[#total-effect].
+interest are due to the variance of $\gamma$, $s$ also affects $T_{avg}$ and $T_0$ affects $q_{left}$.
+Additionally, a small contribution of the variance is from a second-order interaction, $S_{1,2}$, between $\gamma$ and
+$T_0$. The importance of $\gamma$, $T_0$, and $s$ is further evident by the total-effect indices, as shown in
+[total-effect].
+
+```
+python ../../python/visualize_sobol.py main_out.json --markdown-table --stat total \
+--names '{"results_results:T_avg:value":"$T_{avg}$", "results_results:q_left:value":"$q_{left}$"}' \
+--param-names '$\gamma$' '$q_0$' '$T_0$' '$s$' \
+--number-format .3g
+```
 
 !table id=total-effect caption=Total-effect Sobol indices for $T_{avg}$ and $q_{left}$.
-| $S_T$      | 1 ($\gamma$) | 2 ($q_0$) | 3 ($T_0$) | 4 ($s$) |
-| -        | -            | -         | -         | -       |
-| $T_{avg}$  | 0.789        | 0.237     | 0.003     | 0.002   |
-| $q_{left}$ | 0.786        | 0.249     | 0.004     | 0.004   |
+| $S_T$ (5.0%, 95.0%) CI   | $\gamma$             | $q_0$                    | $T_0$                 | $s$                      |
+|:-------------------------|:---------------------|:-------------------------|:----------------------|:-------------------------|
+| $T_{avg}$                | 0.707 (0.673, 0.736) | 0.0217 (-0.0861, 0.111)  | 0.115 (0.016, 0.196)  | 0.208 (0.12, 0.28)       |
+| $q_{left}$               | 0.837 (0.825, 0.848) | 0.0415 (-0.0242, 0.0999) | 0.157 (0.0988, 0.209) | 0.0137 (-0.0537, 0.0743) |
+
+To help visualize the sensitivities, `visualize_sobol.py` can also represent it as a bar pot or heat map:
+
+```
+python ../../python/visualize_sobol.py main_out.json --bar-plot --log-scale --stat total \
+--names '{"results_results:T_avg:value":"$T_{avg}$", "results_results:q_left:value":"$q_{left}$"}' \
+--param-names '$\gamma$' '$q_0$' '$T_0$' '$s$'
+```
+
+!media stochastic_tools/sobol/sobol_bar.png
+
+```
+python ../../python/visualize_sobol.py main_out.json --heatmap --log-scale --stat second_order \
+--names '{"results_results:T_avg:value":"$T_{avg}$", "results_results:q_left:value":"$q_{left}$"}' \
+--param-names '$\gamma$' '$q_0$' '$T_0$' '$s$'
+```
+
+!media stochastic_tools/sobol/sobol_heatmap.png

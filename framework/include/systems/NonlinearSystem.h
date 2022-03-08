@@ -29,8 +29,6 @@ public:
   NonlinearSystem(FEProblemBase & problem, const std::string & name);
   virtual ~NonlinearSystem();
 
-  virtual SparseMatrix<Number> & addMatrix(TagID tag) override;
-
   virtual void solve() override;
 
   void init() override;
@@ -46,7 +44,7 @@ public:
    */
   virtual unsigned int getCurrentNonlinearIterationNumber() override
   {
-    return _transient_sys.get_current_nonlinear_iteration_number();
+    return _nl_implicit_sys.get_current_nonlinear_iteration_number();
   }
 
   virtual void setupFiniteDifferencedPreconditioner() override;
@@ -57,39 +55,28 @@ public:
    */
   virtual bool converged() override;
 
-  virtual NumericVector<Number> & RHS() override { return *_transient_sys.rhs; }
+  virtual NumericVector<Number> & RHS() override { return *_nl_implicit_sys.rhs; }
 
   virtual NonlinearSolver<Number> * nonlinearSolver() override
   {
-    return _transient_sys.nonlinear_solver.get();
+    return _nl_implicit_sys.nonlinear_solver.get();
   }
 
-  virtual TransientNonlinearImplicitSystem & sys() { return _transient_sys; }
+  virtual SNES getSNES() override;
 
-  void computeScaling() override;
+  virtual NonlinearImplicitSystem & sys() { return _nl_implicit_sys; }
 
   virtual void attachPreconditioner(Preconditioner<Number> * preconditioner) override;
 
 protected:
-  NumericVector<Number> & solutionOldInternal() const override
-  {
-    return *_transient_sys.old_local_solution;
-  }
-  NumericVector<Number> & solutionOlderInternal() const override
-  {
-    return *_transient_sys.older_local_solution;
-  }
+  void computeScalingJacobian() override;
+  void computeScalingResidual() override;
 
-  TransientNonlinearImplicitSystem & _transient_sys;
+  NonlinearImplicitSystem & _nl_implicit_sys;
   ComputeResidualFunctor _nl_residual_functor;
   ComputeFDResidualFunctor _fd_residual_functor;
 
 private:
-  /**
-   * Setup group scaling containers
-   */
-  void setupScalingGrouping();
-
   /**
    * Form preconditioning matrix via a standard finite difference method
    * column-by-column. This method computes both diagonal and off-diagonal
@@ -110,13 +97,4 @@ private:
   void setupColoringFiniteDifferencedPreconditioner();
 
   bool _use_coloring_finite_difference;
-
-  /// Whether we've initialized the automatic scaling data structures
-  bool _auto_scaling_initd;
-
-  /// A map from variable index to group variable index and it's associated (inverse) scaling factor
-  std::unordered_map<unsigned int, unsigned int> _var_to_group_var;
-
-  /// The number of scaling groups
-  std::size_t _num_scaling_groups;
 };

@@ -11,11 +11,6 @@
 
 #include "Action.h"
 
-class GlobalParamsAction;
-
-template <>
-InputParameters validParams<GlobalParamsAction>();
-
 class GlobalParamsAction : public Action
 {
 public:
@@ -31,6 +26,12 @@ public:
    * application.
    */
   void remove(const std::string & name);
+
+  template <typename T>
+  T & setParam(const std::string & name)
+  {
+    return parameters().set<T>(name);
+  }
 
   template <typename T>
   inline T & setScalarParam(const std::string & name)

@@ -25,6 +25,10 @@
 #include "ShapeUserObject.h"
 #include "ShapeSideUserObject.h"
 #include "ShapeElementUserObject.h"
+#include "Reporter.h"
+#include "SystemBase.h"
+
+#include <algorithm>
 
 std::ostream &
 operator<<(std::ostream & os, Interfaces & iface)
@@ -54,6 +58,8 @@ operator<<(std::ostream & os, Interfaces & iface)
     os << "|VectorPostprocessor";
   if (static_cast<bool>(iface & Interfaces::InterfaceUserObject))
     os << "|InterfaceUserObject";
+  if (static_cast<bool>(iface & Interfaces::Reporter))
+    os << "|Reporter";
   os << ")";
   return os;
 }
@@ -178,6 +184,9 @@ AttribSubdomains::isMatch(const Attribute & other) const
   auto cond = a->_vals[0];
   if (cond == Moose::ANY_BLOCK_ID)
     return true;
+  else if (cond == Moose::INVALID_BLOCK_ID)
+    return false;
+
   for (auto id : _vals)
   {
     if (id == cond || id == Moose::ANY_BLOCK_ID)
@@ -264,6 +273,28 @@ AttribThread::isEqual(const Attribute & other) const
 }
 
 void
+AttribSysNum::initFrom(const MooseObject * obj)
+{
+  auto * sys = obj->getParam<SystemBase *>("_sys");
+
+  if (sys)
+    _val = sys->number();
+}
+
+bool
+AttribSysNum::isMatch(const Attribute & other) const
+{
+  auto a = dynamic_cast<const AttribSysNum *>(&other);
+  return a && (a->_val == _val);
+}
+
+bool
+AttribSysNum::isEqual(const Attribute & other) const
+{
+  return isMatch(other);
+}
+
+void
 AttribPreIC::initFrom(const MooseObject * /*obj*/)
 {
 }
@@ -280,38 +311,60 @@ AttribPreIC::isEqual(const Attribute & other) const
   return isMatch(other);
 }
 
-void
-AttribPreAux::initFrom(const MooseObject * /*obj*/)
-{
-}
 bool
 AttribPreAux::isMatch(const Attribute & other) const
 {
-  auto a = dynamic_cast<const AttribPreAux *>(&other);
-  return a && (a->_val == _val);
+  const auto a = dynamic_cast<const AttribPreAux *>(&other);
+
+  bool is_match = false;
+
+  if (a && !_vals.empty() && !a->_vals.empty())
+  {
+    is_match = std::includes(_vals.begin(), _vals.end(), a->_vals.begin(), a->_vals.end()) ||
+               std::includes(a->_vals.begin(), a->_vals.end(), _vals.begin(), _vals.end());
+  }
+
+  return is_match;
 }
 
 bool
 AttribPreAux::isEqual(const Attribute & other) const
 {
-  return isMatch(other);
+  const auto a = dynamic_cast<const AttribPreAux *>(&other);
+  return a && a->_vals == _vals;
 }
 
 void
-AttribPostAux::initFrom(const MooseObject * /*obj*/)
+AttribPreAux::initFrom(const MooseObject * /*obj*/)
 {
 }
+
 bool
 AttribPostAux::isMatch(const Attribute & other) const
 {
-  auto a = dynamic_cast<const AttribPostAux *>(&other);
-  return a && (a->_val == _val);
+  const auto a = dynamic_cast<const AttribPostAux *>(&other);
+
+  bool is_match = false;
+
+  if (a && !_vals.empty() && !a->_vals.empty())
+  {
+    is_match = std::includes(_vals.begin(), _vals.end(), a->_vals.begin(), a->_vals.end()) ||
+               std::includes(a->_vals.begin(), a->_vals.end(), _vals.begin(), _vals.end());
+  }
+
+  return is_match;
 }
 
 bool
 AttribPostAux::isEqual(const Attribute & other) const
 {
-  return isMatch(other);
+  const auto a = dynamic_cast<const AttribPostAux *>(&other);
+  return a && a->_vals == _vals;
+}
+
+void
+AttribPostAux::initFrom(const MooseObject * /*obj*/)
+{
 }
 
 void
@@ -340,6 +393,7 @@ AttribSystem::initFrom(const MooseObject * obj)
                "'registerSystemAttributeName' method in the validParams function.");
   _val = obj->getParam<std::string>("_moose_warehouse_system_name");
 }
+
 bool
 AttribSystem::isMatch(const Attribute & other) const
 {
@@ -349,6 +403,26 @@ AttribSystem::isMatch(const Attribute & other) const
 
 bool
 AttribSystem::isEqual(const Attribute & other) const
+{
+  return isMatch(other);
+}
+
+void
+AttribResidualObject::initFrom(const MooseObject * obj)
+{
+  _val = obj->getParam<bool>("_residual_object");
+  _initd = true;
+}
+
+bool
+AttribResidualObject::isMatch(const Attribute & other) const
+{
+  auto a = dynamic_cast<const AttribResidualObject *>(&other);
+  return _initd && a && a->_initd && (a->_val == _val);
+}
+
+bool
+AttribResidualObject::isEqual(const Attribute & other) const
 {
   return isMatch(other);
 }
@@ -364,7 +438,7 @@ bool
 AttribVar::isMatch(const Attribute & other) const
 {
   auto a = dynamic_cast<const AttribVar *>(&other);
-  return a && (a->_val == _val);
+  return a && (_val != -1) && (a->_val == _val);
 }
 
 bool
@@ -390,6 +464,9 @@ AttribInterfaces::initFrom(const MooseObject * obj)
   _val |= (unsigned int)Interfaces::ShapeSideUserObject       * (dynamic_cast<const ShapeSideUserObject *>(obj) != nullptr);
   _val |= (unsigned int)Interfaces::Postprocessor             * (dynamic_cast<const Postprocessor *>(obj) != nullptr);
   _val |= (unsigned int)Interfaces::VectorPostprocessor       * (dynamic_cast<const VectorPostprocessor *>(obj) != nullptr);
+  _val |= (unsigned int)Interfaces::BlockRestrictable         * (dynamic_cast<const BlockRestrictable *>(obj) != nullptr);
+  _val |= (unsigned int)Interfaces::BoundaryRestrictable      * (dynamic_cast<const BoundaryRestrictable *>(obj) != nullptr);
+  _val |= (unsigned int)Interfaces::Reporter                  * (dynamic_cast<const Reporter *>(obj) != nullptr);
   // clang-format on
 }
 

@@ -22,16 +22,11 @@
   using MooseObject::paramError
 
 class MooseApp;
-class MooseObject;
-
-template <>
-InputParameters validParams<MooseObject>();
-
 // needed to avoid #include cycle with MooseApp and MooseObject
 [[noreturn]] void callMooseErrorRaw(std::string & msg, MooseApp * app);
 
 /**
- * Generates a canonical paramError prefix for param-related error/warning/info messages.
+ * Get canonical paramError prefix for param-related error/warning/info messages.
  *
  * Use this for building custom messages when the default paramError isn't
  * quite what you need.
@@ -64,9 +59,14 @@ public:
   /**
    * Get the name of the object
    * @return The name of the object
-   * TODO:MooseVariableToMooseObject (see #10601)
    */
   virtual const std::string & name() const { return _name; }
+
+  /**
+   * Get the object's combined type and name; useful in error handling.
+   * @return The type and name of this object in the form '<type()> "<name()>"'.
+   */
+  std::string typeAndName() const;
 
   /**
    * Get the parameters of the object
@@ -83,14 +83,21 @@ public:
   const T & getParam(const std::string & name) const;
 
   /**
+   * Retrieve two parameters and provide pair of parameters for the object
+   * @param param1 The name of first parameter
+   * @param param2 The name of second parameter
+   * @return Vector of pairs of first and second parameters
+   */
+  template <typename T1, typename T2>
+  std::vector<std::pair<T1, T2>> getParam(const std::string & param1,
+                                          const std::string & param2) const;
+
+  /**
    * Verifies that the requested parameter exists and is not NULL and returns it to the caller.
    * The template parameter must be a pointer or an error will be thrown.
    */
   template <typename T>
-  T getCheckedPointerParam(const std::string & name, const std::string & error_string = "") const
-  {
-    return parameters().getCheckedPointerParam<T>(name, error_string);
-  }
+  T getCheckedPointerParam(const std::string & name, const std::string & error_string = "") const;
 
   /**
    * Test if the supplied parameter is valid
@@ -136,8 +143,23 @@ public:
   template <typename... Args>
   void paramInfo(const std::string & param, Args... args) const;
 
+  /**
+   * Emits an error prefixed with object name and type.
+   */
   template <typename... Args>
   [[noreturn]] void mooseError(Args &&... args) const
+  {
+    std::ostringstream oss;
+    moose::internal::mooseStreamAll(oss, errorPrefix("error"), std::forward<Args>(args)...);
+    std::string msg = oss.str();
+    callMooseErrorRaw(msg, &_app);
+  }
+
+  /**
+   * Emits an error without the prefixing included in mooseError().
+   */
+  template <typename... Args>
+  [[noreturn]] void mooseErrorNonPrefixed(Args &&... args) const
   {
     std::ostringstream oss;
     moose::internal::mooseStreamAll(oss, std::forward<Args>(args)...);
@@ -145,8 +167,21 @@ public:
     callMooseErrorRaw(msg, &_app);
   }
 
+  /**
+   * Emits a warning prefixed with object name and type.
+   */
   template <typename... Args>
   void mooseWarning(Args &&... args) const
+  {
+    moose::internal::mooseWarningStream(
+        _console, errorPrefix("warning"), std::forward<Args>(args)...);
+  }
+
+  /**
+   * Emits a warning without the prefixing included in mooseWarning().
+   */
+  template <typename... Args>
+  void mooseWarningNonPrefixed(Args &&... args) const
   {
     moose::internal::mooseWarningStream(_console, std::forward<Args>(args)...);
   }
@@ -162,6 +197,13 @@ public:
   {
     moose::internal::mooseInfoStream(_console, std::forward<Args>(args)...);
   }
+
+  /**
+   * A descriptive prefix for errors for this object:
+   *
+   * The following <error_type> occurred in the object "<name>", of type "<type>".
+   */
+  std::string errorPrefix(const std::string & error_type) const;
 
 protected:
   /// Parameters of this object, references the InputParameters stored in the InputParametersWarehouse
@@ -183,22 +225,28 @@ private:
   template <typename... Args>
   std::string paramErrorMsg(const std::string & param, Args... args) const
   {
-    auto prefix = paramErrorPrefix(_pars, param);
+    auto param_prefix = paramErrorPrefix(_pars, param);
+
+    // With no input location information, append object info (name + type)
+    const std::string object_prefix =
+        _pars.inputLocation(param).empty() ? errorPrefix("parameter error") : "";
+
     std::ostringstream oss;
     moose::internal::mooseStreamAll(oss, std::forward<Args>(args)...);
     std::string msg = oss.str();
 
-    // Wrap error message to a separate line from prefix if it is about to
-    // blow past 100 chars.  But only wrap if the prefix is long enough (12
-    // chars) for the wrap to buy us much extra length.
-    if ((prefix.size() > 12 && msg.size() + prefix.size() > 99) ||
+    // Wrap error message to a separate line from param_prefix if it is about to
+    // blow past 100 chars.  But only wrap if the param_prefix is long enough (12
+    // chars) for the wrap to buy us much extra length. We don't check object_prefix
+    // here because it will go before the parameter error
+    if ((param_prefix.size() > 12 && msg.size() + param_prefix.size() > 99) ||
         msg.find("\n") != std::string::npos)
     {
-      if (prefix.size() > 0 && prefix[prefix.size() - 1] != ':')
-        prefix += ":";
-      return prefix + "\n    " + MooseUtils::replaceAll(msg, "\n", "\n    ");
+      if (param_prefix.size() > 0 && param_prefix[param_prefix.size() - 1] != ':')
+        param_prefix += ":";
+      return object_prefix + param_prefix + "\n    " + MooseUtils::replaceAll(msg, "\n", "\n    ");
     }
-    return prefix + " " + msg;
+    return object_prefix + param_prefix + " " + msg;
   }
 };
 
@@ -214,7 +262,8 @@ template <typename... Args>
 MooseObject::paramError(const std::string & param, Args... args) const
 {
   Moose::show_trace = false;
-  mooseError(paramErrorMsg(param, std::forward<Args>(args)...));
+  std::string msg = paramErrorMsg(param, std::forward<Args>(args)...);
+  callMooseErrorRaw(msg, &_app);
   Moose::show_trace = true;
 }
 
@@ -230,4 +279,19 @@ void
 MooseObject::paramInfo(const std::string & param, Args... args) const
 {
   mooseInfo(paramErrorMsg(param, std::forward<Args>(args)...));
+}
+
+template <typename T1, typename T2>
+std::vector<std::pair<T1, T2>>
+MooseObject::getParam(const std::string & param1, const std::string & param2) const
+{
+  return _pars.get<T1, T2>(param1, param2);
+}
+
+template <typename T>
+T
+MooseObject::getCheckedPointerParam(const std::string & name,
+                                    const std::string & error_string) const
+{
+  return parameters().getCheckedPointerParam<T>(name, error_string);
 }

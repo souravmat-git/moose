@@ -13,8 +13,6 @@
 #include "MooseVariable.h"
 #include "Assembly.h"
 
-defineLegacyParams(MortarConstraint);
-
 InputParameters
 MortarConstraint::validParams()
 {
@@ -25,10 +23,10 @@ MortarConstraint::MortarConstraint(const InputParameters & parameters)
   : MortarConstraintBase(parameters),
     _lambda_dummy(),
     _lambda(_var ? _var->slnLower() : _lambda_dummy),
-    _u_slave(_slave_var.sln()),
-    _u_master(_master_var.slnNeighbor()),
-    _grad_u_slave(_slave_var.gradSln()),
-    _grad_u_master(_master_var.gradSlnNeighbor()),
+    _u_secondary(_secondary_var.sln()),
+    _u_primary(_primary_var.slnNeighbor()),
+    _grad_u_secondary(_secondary_var.gradSln()),
+    _grad_u_primary(_primary_var.gradSlnNeighbor()),
     _phi(nullptr),
     _grad_phi(nullptr)
 {
@@ -40,14 +38,14 @@ MortarConstraint::computeResidual(Moose::MortarType mortar_type)
   unsigned int test_space_size = 0;
   switch (mortar_type)
   {
-    case Moose::MortarType::Slave:
-      prepareVectorTag(_assembly, _slave_var.number());
-      test_space_size = _test_slave.size();
+    case Moose::MortarType::Secondary:
+      prepareVectorTag(_assembly, _secondary_var.number());
+      test_space_size = _test_secondary.size();
       break;
 
-    case Moose::MortarType::Master:
-      prepareVectorTagNeighbor(_assembly, _master_var.number());
-      test_space_size = _test_master.size();
+    case Moose::MortarType::Primary:
+      prepareVectorTagNeighbor(_assembly, _primary_var.number());
+      test_space_size = _test_primary.size();
       break;
 
     case Moose::MortarType::Lower:
@@ -74,19 +72,20 @@ MortarConstraint::computeJacobian(Moose::MortarType mortar_type)
 
   switch (mortar_type)
   {
-    case MType::Slave:
-      test_space_size = _slave_var.dofIndices().size();
-      jacobian_types = {{JType::SlaveSlave, JType::SlaveMaster, JType::SlaveLower}};
+    case MType::Secondary:
+      test_space_size = _secondary_var.dofIndices().size();
+      jacobian_types = {
+          {JType::SecondarySecondary, JType::SecondaryPrimary, JType::SecondaryLower}};
       break;
 
-    case MType::Master:
-      test_space_size = _master_var.dofIndicesNeighbor().size();
-      jacobian_types = {{JType::MasterSlave, JType::MasterMaster, JType::MasterLower}};
+    case MType::Primary:
+      test_space_size = _primary_var.dofIndicesNeighbor().size();
+      jacobian_types = {{JType::PrimarySecondary, JType::PrimaryPrimary, JType::PrimaryLower}};
       break;
 
     case MType::Lower:
       test_space_size = _var ? _var->dofIndicesLower().size() : 0;
-      jacobian_types = {{JType::LowerSlave, JType::LowerMaster, JType::LowerLower}};
+      jacobian_types = {{JType::LowerSecondary, JType::LowerPrimary, JType::LowerLower}};
       break;
   }
 
@@ -101,13 +100,13 @@ MortarConstraint::computeJacobian(Moose::MortarType mortar_type)
 
     switch (mortar_type)
     {
-      case MType::Slave:
-        if (ivar != _slave_var.number())
+      case MType::Secondary:
+        if (ivar != _secondary_var.number())
           continue;
         break;
 
-      case MType::Master:
-        if (ivar != _master_var.number())
+      case MType::Primary:
+        if (ivar != _primary_var.number())
           continue;
         break;
 
@@ -141,14 +140,12 @@ MortarConstraint::computeJacobian(Moose::MortarType mortar_type)
 
     for (MooseIndex(3) type_index = 0; type_index < 3; ++type_index)
     {
-      // If we don't have a master element, then we shouldn't be considering derivatives with
-      // respect to master dofs. More practically speaking, the local K matrix will be improperly
-      // sized whenever we don't have a master element because we won't be calling
-      // FEProblemBase::reinitNeighborFaceRef from withing ComputeMortarFunctor::operator()
-      if (type_index == 1 && !_has_master)
+      const auto jacobian_type = jacobian_types[type_index];
+      // There's no actual coupling between secondary and primary dofs
+      if ((jacobian_type == JType::SecondaryPrimary) || (jacobian_type == JType::PrimarySecondary))
         continue;
 
-      prepareMatrixTagLower(_assembly, ivar, jvar, jacobian_types[type_index]);
+      prepareMatrixTagLower(_assembly, ivar, jvar, jacobian_type);
 
       /// Set the proper phis
       if (jvariable.isVector())
@@ -166,7 +163,7 @@ MortarConstraint::computeJacobian(Moose::MortarType mortar_type)
         for (_j = 0; _j < shape_space_sizes[type_index]; _j++)
           for (_qp = 0; _qp < _qrule_msm->n_points(); _qp++)
             _local_ke(_i, _j) +=
-                _JxW_msm[_qp] * _coord[_qp] * computeQpJacobian(jacobian_types[type_index], jvar);
+                _JxW_msm[_qp] * _coord[_qp] * computeQpJacobian(jacobian_type, jvar);
       accumulateTaggedLocalMatrix();
     }
   }

@@ -11,12 +11,6 @@
 
 #include "ArrayTimeKernel.h"
 
-// Forward Declaration
-class ArrayTimeDerivative;
-
-template <>
-InputParameters validParams<ArrayTimeDerivative>();
-
 class ArrayTimeDerivative : public ArrayTimeKernel
 {
 public:
@@ -25,9 +19,9 @@ public:
   ArrayTimeDerivative(const InputParameters & parameters);
 
 protected:
-  virtual RealEigenVector computeQpResidual() override;
+  virtual void computeQpResidual(RealEigenVector & residual) override;
   virtual RealEigenVector computeQpJacobian() override;
-  virtual RealEigenMatrix computeQpOffDiagJacobian(MooseVariableFEBase & jvar) override;
+  virtual RealEigenMatrix computeQpOffDiagJacobian(const MooseVariableFEBase & jvar) override;
 
   /// scalar time derivative coefficient
   const MaterialProperty<Real> * const _coeff;

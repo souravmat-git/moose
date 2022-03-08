@@ -18,7 +18,7 @@
 
 #include <numeric>
 
-registerMooseObject("StochasticToolsApp", Statistics);
+registerADMooseObjectDeprecated("StochasticToolsApp", Statistics, "07/01/2021 12:00");
 
 InputParameters
 Statistics::validParams()
@@ -67,9 +67,9 @@ Statistics::Statistics(const InputParameters & parameters)
     _ci_method(getParam<MooseEnum>("ci_method")),
     _ci_levels(_ci_method.isValid() ? computeLevels(getParam<std::vector<Real>>("ci_levels"))
                                     : std::vector<Real>()),
-    _stat_type_vector(declareVector("stat_type")),
-    _perf_initial_setup(registerTimedSection("initialSetup", 2)),
-    _perf_execute(registerTimedSection("execute", 1))
+    _replicates(getParam<unsigned int>("ci_replicates")),
+    _seed(getParam<unsigned int>("ci_seed")),
+    _stat_type_vector(declareVector("stat_type"))
 {
   for (const auto & item : _compute_stats)
   {
@@ -77,33 +77,26 @@ Statistics::Statistics(const InputParameters & parameters)
     for (const auto & level : _ci_levels)
       _stat_type_vector.push_back(item.id() + level);
   }
-
-  if (_ci_method.isValid())
-  {
-    unsigned int replicates = getParam<unsigned int>("ci_replicates");
-    unsigned int seed = getParam<unsigned int>("ci_seed");
-    _ci_calculator =
-        StochasticTools::makeBootstrapCalculator(_ci_method, *this, _ci_levels, replicates, seed);
-  }
 }
 
 void
 Statistics::initialSetup()
 {
-  TIME_SECTION(_perf_initial_setup);
+  TIME_SECTION("initialSetup", 3, "Setting Up Statistics");
 
   const auto & vpp_names = getParam<std::vector<VectorPostprocessorName>>("vectorpostprocessors");
   for (const auto & vpp_name : vpp_names)
   {
-    const std::vector<std::pair<std::string, VectorPostprocessorData::VectorPostprocessorState>> &
-        vpp_vectors = _fe_problem.getVectorPostprocessorVectors(vpp_name);
-    for (const auto & the_pair : vpp_vectors)
+    const VectorPostprocessor & vpp_object =
+        _fe_problem.getVectorPostprocessorObjectByName(vpp_name);
+    const std::set<std::string> & vpp_vectors = vpp_object.getVectorNames();
+    for (const auto & vec_name : vpp_vectors)
     {
       // Store VectorPostprocessor name and vector name from which stats will be computed
-      _compute_from_names.emplace_back(vpp_name, the_pair.first, the_pair.second.is_distributed);
+      _compute_from_names.emplace_back(vpp_name, vec_name, vpp_object.isDistributed());
 
       // Create the vector where the statistics will be stored
-      std::string name = vpp_name + "_" + the_pair.first;
+      std::string name = vpp_name + "_" + vec_name;
       _stat_vectors.push_back(&declareVector(name));
     }
   }
@@ -112,7 +105,7 @@ Statistics::initialSetup()
 void
 Statistics::execute()
 {
-  TIME_SECTION(_perf_execute);
+  TIME_SECTION("execute", 3, "Executing Statistics");
 
   for (std::size_t i = 0; i < _compute_from_names.size(); ++i)
   {
@@ -120,19 +113,21 @@ Statistics::execute()
     const std::string & vec_name = std::get<1>(_compute_from_names[i]);
     const bool is_distributed = std::get<2>(_compute_from_names[i]);
     const VectorPostprocessorValue & data =
-        _fe_problem.getVectorPostprocessorValue(vpp_name, vec_name, true);
+        getVectorPostprocessorValueByName(vpp_name, vec_name, true);
 
     if (is_distributed || processor_id() == 0)
     {
       for (const auto & item : _compute_stats)
       {
-        std::unique_ptr<const StochasticTools::Calculator> calc_ptr =
+        std::unique_ptr<StochasticTools::Calculator<std::vector<Real>, Real>> calc_ptr =
             StochasticTools::makeCalculator(item, *this);
         _stat_vectors[i]->emplace_back(calc_ptr->compute(data, is_distributed));
 
-        if (_ci_calculator)
+        if (_ci_method.isValid())
         {
-          std::vector<Real> ci = _ci_calculator->compute(data, *calc_ptr, is_distributed);
+          auto ci_calc_ptr = StochasticTools::makeBootstrapCalculator<std::vector<Real>, Real>(
+              _ci_method, *this, _ci_levels, _replicates, _seed, *calc_ptr);
+          std::vector<Real> ci = ci_calc_ptr->compute(data, is_distributed);
           _stat_vectors[i]->insert(_stat_vectors[i]->end(), ci.begin(), ci.end());
         }
       }

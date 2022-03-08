@@ -14,12 +14,6 @@
 #include "NeighborCoupleable.h"
 #include "TwoMaterialPropertyInterface.h"
 
-// forward declarations
-class InterfaceMaterial;
-
-template <>
-InputParameters validParams<InterfaceMaterial>();
-
 /**
  * Interface materials compute MaterialProperties.
  */
@@ -53,6 +47,8 @@ public:
   template <typename T>
   const MaterialProperty<T> & getMaterialProperty(const std::string & name);
   template <typename T>
+  const ADMaterialProperty<T> & getADMaterialProperty(const std::string & name);
+  template <typename T>
   const MaterialProperty<T> & getMaterialPropertyOld(const std::string & name);
   template <typename T>
   const MaterialProperty<T> & getMaterialPropertyOlder(const std::string & name);
@@ -64,6 +60,8 @@ public:
    */
   template <typename T>
   const MaterialProperty<T> & getMaterialPropertyByName(const std::string & prop_name);
+  template <typename T>
+  const ADMaterialProperty<T> & getADMaterialPropertyByName(const std::string & prop_name);
   template <typename T>
   const MaterialProperty<T> & getMaterialPropertyOldByName(const std::string & prop_name);
   template <typename T>
@@ -125,7 +123,7 @@ template <typename T>
 const MaterialProperty<T> &
 InterfaceMaterial::getMaterialProperty(const std::string & name)
 {
-  // Check if the supplied parameter is a valid imput parameter key
+  // Check if the supplied parameter is a valid input parameter key
   std::string prop_name = deducePropertyName(name);
 
   // Check if it's just a constant.
@@ -137,10 +135,25 @@ InterfaceMaterial::getMaterialProperty(const std::string & name)
 }
 
 template <typename T>
+const ADMaterialProperty<T> &
+InterfaceMaterial::getADMaterialProperty(const std::string & name)
+{
+  // Check if the supplied parameter is a valid input parameter key
+  std::string prop_name = deducePropertyName(name);
+
+  // Check if it's just a constant.
+  const ADMaterialProperty<T> * default_property = defaultADMaterialProperty<T>(prop_name);
+  if (default_property)
+    return *default_property;
+
+  return getADMaterialPropertyByName<T>(prop_name);
+}
+
+template <typename T>
 const MaterialProperty<T> &
 InterfaceMaterial::getMaterialPropertyOld(const std::string & name)
 {
-  // Check if the supplied parameter is a valid imput parameter key
+  // Check if the supplied parameter is a valid input parameter key
   std::string prop_name = deducePropertyName(name);
 
   // Check if it's just a constant.
@@ -155,7 +168,7 @@ template <typename T>
 const MaterialProperty<T> &
 InterfaceMaterial::getMaterialPropertyOlder(const std::string & name)
 {
-  // Check if the supplied parameter is a valid imput parameter key
+  // Check if the supplied parameter is a valid input parameter key
   std::string prop_name = deducePropertyName(name);
 
   // Check if it's just a constant.
@@ -176,6 +189,18 @@ InterfaceMaterial::getMaterialPropertyByName(const std::string & prop_name)
   _requested_props.insert(prop_name);
   registerPropName(prop_name, true, MaterialBase::CURRENT);
   return TwoMaterialPropertyInterface::getMaterialPropertyByName<T>(prop_name);
+}
+
+template <typename T>
+const ADMaterialProperty<T> &
+InterfaceMaterial::getADMaterialPropertyByName(const std::string & prop_name)
+{
+  MaterialBase::checkExecutionStage();
+  // The property may not exist yet, so declare it (declare/getADMaterialProperty are referencing
+  // the same memory)
+  _requested_props.insert(prop_name);
+  registerPropName(prop_name, true, MaterialBase::CURRENT);
+  return TwoMaterialPropertyInterface::getADMaterialPropertyByName<T>(prop_name);
 }
 
 template <typename T>
@@ -200,7 +225,7 @@ template <typename T>
 const MaterialProperty<T> &
 InterfaceMaterial::getNeighborMaterialProperty(const std::string & name)
 {
-  // Check if the supplied parameter is a valid imput parameter key
+  // Check if the supplied parameter is a valid input parameter key
   std::string prop_name = deducePropertyName(name);
 
   // Check if it's just a constant.
@@ -227,7 +252,7 @@ template <typename T>
 const MaterialProperty<T> &
 InterfaceMaterial::getNeighborMaterialPropertyOld(const std::string & name)
 {
-  // Check if the supplied parameter is a valid imput parameter key
+  // Check if the supplied parameter is a valid input parameter key
   std::string prop_name = deducePropertyName(name);
 
   // Check if it's just a constant.
@@ -242,7 +267,7 @@ template <typename T>
 const MaterialProperty<T> &
 InterfaceMaterial::getNeighborMaterialPropertyOlder(const std::string & name)
 {
-  // Check if the supplied parameter is a valid imput parameter key
+  // Check if the supplied parameter is a valid input parameter key
   std::string prop_name = deducePropertyName(name);
 
   // Check if it's just a constant.

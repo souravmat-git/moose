@@ -11,14 +11,12 @@
 
 registerMooseObject("MooseApp", TagVectorAux);
 
-defineLegacyParams(TagVectorAux);
-
 InputParameters
 TagVectorAux::validParams()
 {
   InputParameters params = AuxKernel::validParams();
 
-  params.addParam<std::string>("vector_tag", "TagName", "Tag Name this Aux works on");
+  params.addRequiredParam<TagName>("vector_tag", "Tag Name this Aux works on");
   params.addRequiredCoupledVar("v",
                                "The coupled variable whose components are coupled to AuxVariable");
   params.set<ExecFlagEnum>("execute_on", true) = {EXEC_TIMESTEP_END};
@@ -28,13 +26,16 @@ TagVectorAux::validParams()
 }
 
 TagVectorAux::TagVectorAux(const InputParameters & parameters)
-  : AuxKernel(parameters),
-    _tag_id(_subproblem.getVectorTagID(getParam<std::string>("vector_tag"))),
-    _v(coupledVectorTagValue("v", _tag_id))
+  : AuxKernel(parameters), _v(coupledVectorTagValue("v", "vector_tag"))
 {
   auto & execute_on = getParam<ExecFlagEnum>("execute_on");
   if (execute_on.size() != 1 || !execute_on.contains(EXEC_TIMESTEP_END))
     mooseError("execute_on for TagVectorAux must be set to EXEC_TIMESTEP_END");
+
+  if (getVar("v", 0)->feType() != _var.feType())
+    paramError("variable",
+               "The AuxVariable this AuxKernel is acting on has to have the same order and family "
+               "as the variable 'v'");
 }
 
 Real

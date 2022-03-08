@@ -14,22 +14,18 @@
 #include "Material.h"
 #include "ConsoleUtils.h"
 #include "MooseMesh.h"
+#include "MooseObjectName.h"
 
 #include "libmesh/transient_system.h"
 
 registerMooseObject("MooseApp", MaterialPropertyDebugOutput);
-
-defineLegacyParams(MaterialPropertyDebugOutput);
 
 InputParameters
 MaterialPropertyDebugOutput::validParams()
 {
   InputParameters params = Output::validParams();
   params.addClassDescription("Debug output object for displaying material property information.");
-
-  // This object only outputs data once, in the constructor, so disable fine control
-  params.suppressParameter<ExecFlagEnum>("execute_on");
-
+  params.set<ExecFlagEnum>("execute_on") = EXEC_INITIAL;
   return params;
 }
 
@@ -42,6 +38,16 @@ MaterialPropertyDebugOutput::MaterialPropertyDebugOutput(const InputParameters &
 void
 MaterialPropertyDebugOutput::output(const ExecFlagType & /*type*/)
 {
+  // Write out objects that consume properties
+  std::stringstream consumed;
+  for (const auto & pair : _problem_ptr->getConsumedPropertyMap())
+  {
+    consumed << "      Object: " << pair.first << "\n";
+    consumed << "  Properties: " << MooseUtils::join(pair.second, ", ") << "\n\n";
+  }
+
+  _console << "\n\nConsumed Material Properties:\n";
+  _console << std::setw(ConsoleUtils::console_field_width) << consumed.str() << std::endl;
 }
 
 void
@@ -72,8 +78,8 @@ MaterialPropertyDebugOutput::printMaterialMap() const
     const auto & objects = warehouse[Moose::FACE_MATERIAL_DATA].getBlockObjects();
     for (const auto & it : objects)
     {
-      active_block << "    Subdomain: " << mesh.getSubdomainName(it.first) << " (" << it.first
-                   << ")\n";
+      active_face << "    Subdomain: " << mesh.getSubdomainName(it.first) << " (" << it.first
+                  << ")\n";
       printMaterialProperties(active_face, it.second);
     }
   }
@@ -83,8 +89,8 @@ MaterialPropertyDebugOutput::printMaterialMap() const
     const auto & objects = warehouse[Moose::NEIGHBOR_MATERIAL_DATA].getBlockObjects();
     for (const auto & it : objects)
     {
-      active_block << "    Subdomain: " << mesh.getSubdomainName(it.first) << " (" << it.first
-                   << ")\n";
+      active_neighbor << "    Subdomain: " << mesh.getSubdomainName(it.first) << " (" << it.first
+                      << ")\n";
       printMaterialProperties(active_neighbor, it.second);
     }
   }
@@ -111,7 +117,7 @@ MaterialPropertyDebugOutput::printMaterialMap() const
   _console << std::setw(ConsoleUtils::console_field_width) << active_neighbor.str() << '\n';
 
   _console << std::setw(ConsoleUtils::console_field_width) << "Active Boundary Materials:\n";
-  _console << std::setw(ConsoleUtils::console_field_width) << active_boundary.str() << '\n';
+  _console << std::setw(ConsoleUtils::console_field_width) << active_boundary.str() << std::endl;
 }
 
 void
@@ -141,4 +147,6 @@ MaterialPropertyDebugOutput::printMaterialProperties(
     }
     output << '\n';
   }
+
+  output << std::flush;
 }

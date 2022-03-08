@@ -1,7 +1,12 @@
 # Tests for application of out-of-plane pressure in generalized plane strain.
 
 [Mesh]
-  file = square.e
+  [./square]
+    type = GeneratedMeshGenerator
+    dim = 2
+    nx = 2
+    ny = 2
+  [../]
   displacements = 'disp_x disp_y'
 []
 
@@ -77,8 +82,8 @@
         use_displaced_mesh = true
         displacements = 'disp_x disp_y'
         scalar_out_of_plane_strain = scalar_strain_zz
-        out_of_plane_pressure = traction_function
-        factor = 1e5
+        out_of_plane_pressure_function = traction_function
+        pressure_factor = 1e5
       [../]
     [../]
   [../]
@@ -163,13 +168,13 @@
 [BCs]
   [./leftx]
     type = DirichletBC
-    boundary = 4
+    boundary = 3
     variable = disp_x
     value = 0.0
   [../]
   [./bottomy]
     type = DirichletBC
-    boundary = 1
+    boundary = 0
     variable = disp_y
     value = 0.0
   [../]
@@ -188,6 +193,13 @@
   [../]
   [./stress]
     type = ComputeLinearElasticStress
+  [../]
+  # This material is not used for anything in the base verison of this test,
+  # but is used in a variant of the test with cli_args
+  [./traction_material]
+    type = GenericFunctionMaterial
+    prop_names = traction_material
+    prop_values = traction_function
   [../]
 []
 

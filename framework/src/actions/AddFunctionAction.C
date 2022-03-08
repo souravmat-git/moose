@@ -12,12 +12,12 @@
 
 registerMooseAction("MooseApp", AddFunctionAction, "add_function");
 
-defineLegacyParams(AddFunctionAction);
-
 InputParameters
 AddFunctionAction::validParams()
 {
-  return MooseObjectAction::validParams();
+  InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a Function object to the simulation.");
+  return params;
 }
 
 AddFunctionAction::AddFunctionAction(InputParameters params) : MooseObjectAction(params) {}

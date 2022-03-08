@@ -11,13 +11,12 @@
 
 registerMooseObject("MooseApp", VacuumBC);
 
-defineLegacyParams(VacuumBC);
-
 InputParameters
 VacuumBC::validParams()
 {
   InputParameters params = IntegratedBC::validParams();
-  params.addParam<Real>("alpha", 1, "No idea.");
+  params.addClassDescription("Vacuum boundary condition for diffusion.");
+  params.addParam<Real>("alpha", 1, "Diffusion coefficient.");
   return params;
 }
 

@@ -20,12 +20,12 @@ registerMooseAction("MooseApp", AddNodalNormalsAction, "add_postprocessor");
 
 registerMooseAction("MooseApp", AddNodalNormalsAction, "add_user_object");
 
-defineLegacyParams(AddNodalNormalsAction);
-
 InputParameters
 AddNodalNormalsAction::validParams()
 {
   InputParameters params = Action::validParams();
+  params.addClassDescription("Creates Auxiliary variables and objects for computing the outward "
+                             "facing normal from a node.");
 
   // Initialize the 'boundary' input option to default to any boundary
   std::vector<BoundaryName> everywhere(1, "ANY_BOUNDARY_ID");

@@ -6,14 +6,14 @@
     # block 1: left
     # block 2: right
   []
-  [./master]
+  [./primary]
     input = file
     type = LowerDBlockFromSidesetGenerator
     sidesets = '2'
     new_block_id = '20'
   [../]
-  [./slave]
-    input = master
+  [./secondary]
+    input = primary
     type = LowerDBlockFromSidesetGenerator
     sidesets = '1'
     new_block_id = '10'
@@ -62,8 +62,8 @@
   [../]
   [./lambda]
     block = '10'
-    family = LAGRANGE
-    order = FIRST
+    family = MONOMIAL
+    order = CONSTANT
   [../]
 []
 
@@ -97,14 +97,15 @@
 [Constraints]
   [./mortar]
     type = GapHeatConductanceAuxKernel
-    master_boundary = 2
-    slave_boundary = 1
-    master_subdomain = 20
-    slave_subdomain = 10
+    primary_boundary = 2
+    secondary_boundary = 1
+    primary_subdomain = 20
+    secondary_subdomain = 10
     variable = lambda
-    slave_variable = T
+    secondary_variable = T
     use_displaced_mesh = true
     auxkernel_variable = 'aux_var'
+    correct_edge_dropping = true
   [../]
 []
 

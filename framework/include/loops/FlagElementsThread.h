@@ -23,12 +23,17 @@ public:
   FlagElementsThread(FEProblemBase & fe_problem,
                      std::vector<Number> & serialized_solution,
                      unsigned int max_h_level,
-                     const std::string & marker_name);
+                     const std::string & marker_name,
+                     bool is_serialized_solution);
 
   // Splitting Constructor
   FlagElementsThread(FlagElementsThread & x, Threads::split split);
 
   virtual void onElement(const Elem * elem) override;
+
+  // Must override this in order to avoid calling the base class method which reads the refinement
+  // flags, causing read-write data races
+  bool shouldComputeInternalSide(const Elem &, const Elem &) const override { return false; }
 
   void join(const FlagElementsThread & /*y*/);
 
@@ -42,5 +47,5 @@ protected:
   unsigned int _field_var_number;
   std::vector<Number> & _serialized_solution;
   unsigned int _max_h_level;
+  bool _is_serialized_solution;
 };
-

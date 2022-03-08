@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
 
 function exitIfExitCode() {
-    if [ $1 -ne 0 ]; then
+    # When --with-packages-download-dir=path is used, PETSc will print out how to
+    # download external packages. A system code 10 is used in this case. We should
+    # not consider it as error.
+    if [ $1 -eq 10 ]; then
+        exit 0
+    elif [ $1 -ne 0 ]; then
         printf "There was an error. Exiting...\n"
         exit 1
     fi
 }
 
+PFX_STR=''
 # Set go_fast flag if "--fast" is found in command line args.
 for i in "$@"
 do
@@ -23,6 +37,11 @@ do
     skip_sub_update=1;
   else # Remove the skip submodule update argument before passing to PETSc configure
     set -- "$@" "$i"
+  fi
+
+  # If users specify "--prefix", we need to make install
+  if [[ "$i" == "--prefix="* ]]; then
+    PFX_STR=$i
   fi
 done
 
@@ -74,11 +93,15 @@ if [[ -z "$go_fast" && -z "$skip_sub_update" && $? == 0 && "x$git_dir" == "x" ]]
 fi
 
 # Set installation prefix if given
-PFX_STR=''
 if [ ! -z "$PETSC_PREFIX" ]; then
   PFX_STR="--prefix=$PETSC_PREFIX"
 fi
 
+# Use --with-make-np if MOOSE_JOBS is given
+MAKE_NP_STR=""
+if [ ! -z "$MOOSE_JOBS" ]; then
+  MAKE_NP_STR="--with-make-np=$MOOSE_JOBS"
+fi
 
 cd $SCRIPT_DIR/../petsc
 
@@ -86,31 +109,16 @@ cd $SCRIPT_DIR/../petsc
 if [ -z "$go_fast" ]; then
   rm -rf $SCRIPT_DIR/../petsc/$PETSC_ARCH
 
-  ./configure $(echo $PFX_STR) \
-      --download-hypre=1 \
-      --with-debugging=no \
-      --with-shared-libraries=1 \
-      --download-fblaslapack=1 \
-      --download-metis=1 \
-      --download-ptscotch=1 \
-      --download-parmetis=1 \
-      --download-superlu_dist=1 \
-      --download-mumps=1 \
-      --download-scalapack=1 \
-      --download-slepc=1 \
-      --with-mpi=1 \
-      --with-cxx-dialect=C++11 \
-      --with-fortran-bindings=0 \
-      --with-sowing=0 \
-      $*
+  source $SCRIPT_DIR/configure_petsc.sh
+  configure_petsc "$PFX_STR" "$MAKE_NP_STR" $*
 
   exitIfExitCode $?
 fi
 
-make all -j ${MOOSE_JOBS:-1}
+make all
 exitIfExitCode $?
 
-if [ ! -z "$PETSC_PREFIX" ]; then
+if [ ! -z "$PFX_STR" ]; then
   make install
   exitIfExitCode $?
 fi

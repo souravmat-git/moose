@@ -24,7 +24,6 @@ INSADBoussinesqBodyForce::validParams()
                                         "alpha",
                                         "The name of the thermal expansion coefficient"
                                         "this is of the form rho = rho*(1-alpha (T-T_ref))");
-  params.addParam<MaterialPropertyName>("rho_name", "rho", "The name of the density");
   params.addParam<MaterialPropertyName>(
       "ref_temp", "temp_ref", "The name of the reference temperature");
   return params;
@@ -35,15 +34,27 @@ INSADBoussinesqBodyForce::INSADBoussinesqBodyForce(const InputParameters & param
     _boussinesq_strong_residual(
         getADMaterialProperty<RealVectorValue>("boussinesq_strong_residual"))
 {
+  if (coupledComponents("temperature") != 1)
+    paramError("temperature", "Only one variable should be used for 'temperature'");
+
   // Bypass the UserObjectInterface method because it requires a UserObjectName param which we
   // don't need
   auto & obj_tracker = const_cast<INSADObjectTracker &>(
       _fe_problem.getUserObject<INSADObjectTracker>("ins_ad_object_tracker"));
-  obj_tracker.setHasBoussinesq(true);
-  obj_tracker.setAlpha(&getADMaterialProperty<Real>("alpha_name"));
-  obj_tracker.setTRef(&getMaterialProperty<Real>("ref_temp"));
-  obj_tracker.setT(&adCoupledValue("temperature"));
-  obj_tracker.setGravityVector(getParam<RealVectorValue>("gravity"));
+  for (const auto block_id : blockIDs())
+  {
+    obj_tracker.set("has_boussinesq", true, block_id);
+
+    // We actually want to perform the material property requests during object construction in
+    // order to ensure that material property dependency is recorded correctly (I don't think this
+    // should actually matter for non-Material MaterialPropertyInterface classes, but might as well
+    // be consistent)
+    obj_tracker.set("alpha", getADMaterialProperty<Real>("alpha_name").name(), block_id);
+    obj_tracker.set("ref_temp", getMaterialProperty<Real>("ref_temp").name(), block_id);
+
+    obj_tracker.set("temperature", getVar("temperature", 0)->name(), block_id);
+    obj_tracker.set("gravity", getParam<RealVectorValue>("gravity"), block_id);
+  }
 }
 
 ADRealVectorValue

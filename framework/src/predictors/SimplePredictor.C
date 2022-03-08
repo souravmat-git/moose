@@ -12,13 +12,12 @@
 
 registerMooseObject("MooseApp", SimplePredictor);
 
-defineLegacyParams(SimplePredictor);
-
 InputParameters
 SimplePredictor::validParams()
 {
   InputParameters params = Predictor::validParams();
-
+  params.addClassDescription(
+      "Algorithm that will predict the next solution based on previous solutions.");
   return params;
 }
 

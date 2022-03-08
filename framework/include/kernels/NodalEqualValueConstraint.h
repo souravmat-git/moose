@@ -11,11 +11,6 @@
 
 #include "NodalScalarKernel.h"
 
-class NodalEqualValueConstraint;
-
-template <>
-InputParameters validParams<NodalEqualValueConstraint>();
-
 /**
  * Constraint to enforce equal values (in 1D)
  *
@@ -35,7 +30,6 @@ public:
   virtual void computeJacobian() override;
 
 protected:
-  std::vector<unsigned int> _val_number;
-  std::vector<const VariableValue *> _value;
+  const std::vector<unsigned int> _val_number;
+  const std::vector<const VariableValue *> _value;
 };
-

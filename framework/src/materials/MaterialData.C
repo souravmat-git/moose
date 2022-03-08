@@ -53,6 +53,12 @@ MaterialData::nQPoints()
 void
 MaterialData::copy(const Elem & elem_to, const Elem & elem_from, unsigned int side)
 {
+  _storage.copy(*this, &elem_to, &elem_from, side, _n_qpoints);
+}
+
+void
+MaterialData::copy(const Elem * elem_to, const Elem * elem_from, unsigned int side)
+{
   _storage.copy(*this, elem_to, elem_from, side, _n_qpoints);
 }
 
@@ -64,21 +70,6 @@ MaterialData::swap(const Elem & elem, unsigned int side /* = 0*/)
 
   _storage.swap(*this, elem, side);
   _swapped = true;
-}
-
-void
-MaterialData::reinit(const std::vector<std::shared_ptr<MaterialBase>> & mats, bool execute_stateful)
-{
-  for (const auto & mat : mats)
-  {
-    // Mortar objects may use ordinary material properties but stateful properties conceptually
-    // don't make sense (at least not without doing expensive projections potentially at every
-    // linear iteration)
-    if (!execute_stateful && mat->hasStatefulProperties())
-      continue;
-
-    mat->computeProperties();
-  }
 }
 
 void

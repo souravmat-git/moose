@@ -1,1 +1,11 @@
-!template load file=stubs/moose_object.md.template name=UserForcingFunction syntax=/Kernels/UserForcingFunction
+# UserForcingFunction
+
+!syntax description /Kernels/UserForcingFunction
+
+This kernel has been deprecated. Please use [BodyForce.md].
+
+!syntax parameters /Kernels/UserForcingFunction
+
+!syntax inputs /Kernels/UserForcingFunction
+
+!syntax children /Kernels/UserForcingFunction

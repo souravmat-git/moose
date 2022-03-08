@@ -16,7 +16,6 @@
 #include "MooseMesh.h"
 #include "NonlinearSystemBase.h"
 #include "UpdateErrorVectorsThread.h"
-#include "TimedPrint.h"
 
 // libMesh
 #include "libmesh/equation_systems.h"
@@ -25,6 +24,7 @@
 #include "libmesh/fourth_error_estimators.h"
 #include "libmesh/parallel.h"
 #include "libmesh/error_vector.h"
+#include "libmesh/distributed_mesh.h"
 
 #ifdef LIBMESH_ENABLE_AMR
 
@@ -47,11 +47,7 @@ Adaptivity::Adaptivity(FEProblemBase & subproblem)
     _cycles_per_step(1),
     _use_new_system(false),
     _max_h_level(0),
-    _recompute_markers_during_cycles(false),
-    _adapt_mesh_timer(registerTimedSection("adaptMesh", 3)),
-    _uniform_refine_timer(registerTimedSection("uniformRefine", 2)),
-    _uniform_refine_with_projection(registerTimedSection("uniformRefineWithProjection", 2)),
-    _update_error_vectors(registerTimedSection("updateErrorVectors", 5))
+    _recompute_markers_during_cycles(false)
 {
 }
 
@@ -65,8 +61,8 @@ Adaptivity::init(unsigned int steps, unsigned int initial_steps)
   // does not exist at that point.
   _displaced_problem = _subproblem.getDisplacedProblem();
 
-  _mesh_refinement = libmesh_make_unique<MeshRefinement>(_mesh);
-  _error = libmesh_make_unique<ErrorVector>();
+  _mesh_refinement = std::make_unique<MeshRefinement>(_mesh);
+  _error = std::make_unique<ErrorVector>();
 
   EquationSystems & es = _subproblem.es();
   es.parameters.set<bool>("adaptivity") = true;
@@ -85,7 +81,7 @@ Adaptivity::init(unsigned int steps, unsigned int initial_steps)
     displaced_es.parameters.set<bool>("adaptivity") = true;
 
     if (!_displaced_mesh_refinement)
-      _displaced_mesh_refinement = libmesh_make_unique<MeshRefinement>(_displaced_problem->mesh());
+      _displaced_mesh_refinement = std::make_unique<MeshRefinement>(_displaced_problem->mesh());
 
     // The periodic boundaries pointer allows the MeshRefinement
     // object to determine elements which are "topological" neighbors,
@@ -106,11 +102,11 @@ void
 Adaptivity::setErrorEstimator(const MooseEnum & error_estimator_name)
 {
   if (error_estimator_name == "KellyErrorEstimator")
-    _error_estimator = libmesh_make_unique<KellyErrorEstimator>();
+    _error_estimator = std::make_unique<KellyErrorEstimator>();
   else if (error_estimator_name == "LaplacianErrorEstimator")
-    _error_estimator = libmesh_make_unique<LaplacianErrorEstimator>();
+    _error_estimator = std::make_unique<LaplacianErrorEstimator>();
   else if (error_estimator_name == "PatchRecoveryErrorEstimator")
-    _error_estimator = libmesh_make_unique<PatchRecoveryErrorEstimator>();
+    _error_estimator = std::make_unique<PatchRecoveryErrorEstimator>();
   else
     mooseError(std::string("Unknown error_estimator selection: ") +
                std::string(error_estimator_name));
@@ -126,13 +122,16 @@ Adaptivity::setErrorNorm(SystemNorm & sys_norm)
 bool
 Adaptivity::adaptMesh(std::string marker_name /*=std::string()*/)
 {
-  TIME_SECTION(_adapt_mesh_timer);
+  TIME_SECTION("adaptMesh", 3, "Adapting Mesh");
 
   // If the marker name is supplied, use it. Otherwise, use the one in _marker_variable_name
   if (marker_name.empty())
     marker_name = _marker_variable_name;
 
   bool mesh_changed = false;
+
+  // If mesh adaptivity is carried out in a distributed (scalable) way
+  bool distributed_adaptivity = false;
 
   if (_use_new_system)
   {
@@ -141,14 +140,55 @@ Adaptivity::adaptMesh(std::string marker_name /*=std::string()*/)
       _mesh_refinement->clean_refinement_flags();
 
       std::vector<Number> serialized_solution;
-      _subproblem.getAuxiliarySystem().solution().close();
-      _subproblem.getAuxiliarySystem().solution().localize(serialized_solution);
 
-      FlagElementsThread fet(_subproblem, serialized_solution, _max_h_level, marker_name);
-      ConstElemRange all_elems(_subproblem.mesh().getMesh().active_elements_begin(),
-                               _subproblem.mesh().getMesh().active_elements_end(),
-                               1);
-      Threads::parallel_reduce(all_elems, fet);
+      auto distributed_mesh = dynamic_cast<DistributedMesh *>(&_subproblem.mesh().getMesh());
+
+      // Element range
+      std::unique_ptr<ConstElemRange> all_elems;
+      // If the mesh is distributed and we do not do "gather to zero" or "allgather".
+      // Then it is safe to not serialize solution.
+      // Some output idiom (Exodus) will do "gather to zero". That being said,
+      // if you have exodus output on, mesh adaptivty is not scalable.
+      if (distributed_mesh && !distributed_mesh->is_serial_on_zero())
+      {
+        // We update here to make sure local solution is up-to-date
+        _subproblem.getAuxiliarySystem().update();
+        distributed_adaptivity = true;
+
+        // We can not assume that geometric and algebraic ghosting functors cover
+        // the same set of elements/nodes. That being said, in general,
+        // we would expect G(e) > A(e). Here G(e) is the set of elements reserved
+        // by the geometric ghosting functors, and A(e) corresponds to
+        // the one covered by the algebraic ghosting functors.
+        // Therefore, we have to work only on local elements instead of
+        // ghosted + local elements. The ghosted solution might not be enough
+        // for ghosted+local elements. But it is always sufficient for local elements.
+        // After we set markers for all local elements, we will do a global
+        // communication to sync markers for ghosted elements from their owners.
+        all_elems = std::make_unique<ConstElemRange>(
+            _subproblem.mesh().getMesh().active_local_elements_begin(),
+            _subproblem.mesh().getMesh().active_local_elements_end());
+      }
+      else // This is not scalable but it might be useful for small-size problems
+      {
+        _subproblem.getAuxiliarySystem().solution().close();
+        _subproblem.getAuxiliarySystem().solution().localize(serialized_solution);
+        distributed_adaptivity = false;
+
+        // For a replicated mesh or a serialized distributed mesh, the solution
+        // is serialized to everyone. Then we update markers for all active elements.
+        // In this case, we can avoid a global communication to update mesh.
+        // I do not know if it is a good idea, but it the old code behavior.
+        // We might not care about much since a replicated mesh
+        // or a serialized distributed mesh is not scalable anyway.
+        all_elems =
+            std::make_unique<ConstElemRange>(_subproblem.mesh().getMesh().active_elements_begin(),
+                                             _subproblem.mesh().getMesh().active_elements_end());
+      }
+
+      FlagElementsThread fet(
+          _subproblem, serialized_solution, _max_h_level, marker_name, !distributed_adaptivity);
+      Threads::parallel_reduce(*all_elems, fet);
       _subproblem.getAuxiliarySystem().solution().close();
     }
   }
@@ -175,11 +215,20 @@ Adaptivity::adaptMesh(std::string marker_name /*=std::string()*/)
   if (_displaced_problem)
     _displaced_problem->undisplaceMesh();
 
+  // If markers are added to only local elements,
+  // we sync them here.
+  if (distributed_adaptivity)
+    _mesh_refinement->make_flags_parallel_consistent();
+
   // Perform refinement and coarsening
   mesh_changed = _mesh_refinement->refine_and_coarsen_elements();
 
   if (_displaced_problem && mesh_changed)
   {
+    // If markers are added to only local elements,
+    // we sync them here.
+    if (distributed_adaptivity)
+      _displaced_mesh_refinement->make_flags_parallel_consistent();
 #ifndef NDEBUG
     bool displaced_mesh_changed =
 #endif
@@ -193,6 +242,7 @@ Adaptivity::adaptMesh(std::string marker_name /*=std::string()*/)
   {
     _console << "\nMesh Changed:\n";
     _mesh.printInfo();
+    _console << std::flush;
   }
 
   return mesh_changed;
@@ -214,15 +264,27 @@ Adaptivity::uniformRefine(MooseMesh * mesh, unsigned int level /*=libMesh::inval
   MeshRefinement mesh_refinement(*mesh);
   if (level == libMesh::invalid_uint)
     level = mesh->uniformRefineLevel();
+
+  // Skip deletion and repartition will make uniform refinements will run more
+  // efficiently, but at the same time, there might be extra ghosting elements.
+  // The number of layers of additional ghosting elements depends on the number
+  // of uniform refinement levels. This should happen only when you have a "fine enough"
+  // coarse mesh and want to refine the mesh by a few levels. Otherwise, it might
+  // introduce an unbalanced workload and too large ghosting domain.
+  if (mesh->skipDeletionRepartitionAfterRefine())
+  {
+    mesh->getMesh().skip_partitioning(true);
+    mesh->getMesh().allow_remote_element_removal(false);
+    mesh->needsRemoteElemDeletion(false);
+  }
+
   mesh_refinement.uniformly_refine(level);
 }
 
 void
 Adaptivity::uniformRefineWithProjection()
 {
-  TIME_SECTION(_uniform_refine_with_projection);
-
-  CONSOLE_TIMED_PRINT("Uniformly refining mesh and reprojecting");
+  TIME_SECTION("uniformRefineWithProjection", 2, "Uniformly Refining and Reprojecting");
 
   // NOTE: we are using a separate object here, since adaptivity may not be on, but we need to be
   // able to do refinements
@@ -285,14 +347,14 @@ Adaptivity::getErrorVector(const std::string & indicator_field)
 {
   // Insert or retrieve error vector
   auto insert_pair = moose_try_emplace(
-      _indicator_field_to_error_vector, indicator_field, libmesh_make_unique<ErrorVector>());
+      _indicator_field_to_error_vector, indicator_field, std::make_unique<ErrorVector>());
   return *insert_pair.first->second;
 }
 
 void
 Adaptivity::updateErrorVectors()
 {
-  TIME_SECTION(_update_error_vectors);
+  TIME_SECTION("updateErrorVectors", 5, "Updating Error Vectors");
 
   // Resize all of the ErrorVectors in case the mesh has changed
   for (const auto & it : _indicator_field_to_error_vector)

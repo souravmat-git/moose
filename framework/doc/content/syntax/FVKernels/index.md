@@ -1,5 +1,7 @@
 # FVKernels System
 
+For an overview of MOOSE FV please see [/fv_design.md].
+
 For the finite volume method (FVM), `FVKernels` are the base class for `FVFluxKernel`, `FVElementalKernel`. These specialized objects satisfy the following tasks:
 
 * `FVFluxKernel` represents numerical fluxes evaluate on the element faces.
@@ -38,7 +40,7 @@ the diffusion term is represented by the kernel named `diff`.
 !listing test/tests/fvkernels/fv_simple_diffusion/transient.i
          block=FVKernels
          id=first_fv_kernel_example
-         caption=Example of the FVKernels block in a [MOOSE] input file.
+         caption=Example of the FVKernels block in a MOOSE input file.
 
 The `FVTimeKernel` in the example derives from `FVElementalKernel` so it's a
 volumetric contribution to the residual, while the `FVDiffusion` kernel is an
@@ -60,8 +62,8 @@ Burgers' equation. The Burgers' equation for speed `v` is given by:
 
 !listing test/tests/fvkernels/fv_burgers/fv_burgers.i
          block=FVKernels
-         id=first_fv_kernel_example
-         caption=Example of the FVKernels block in a [MOOSE] input file for solving one-dimensional Burgers' equation.
+         id=second_fv_kernel_example
+         caption=Example of the FVKernels block in a MOOSE input file for solving one-dimensional Burgers' equation.
 
 Note that the `FVBurgers1D` kernel only works for one-dimensional problems. In
 this example, the exact same time derivative kernels as for the diffusion

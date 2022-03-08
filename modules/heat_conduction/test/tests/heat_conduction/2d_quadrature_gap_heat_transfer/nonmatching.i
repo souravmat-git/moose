@@ -31,11 +31,11 @@
 
 [ThermalContact]
   [./left_to_right]
-    emissivity_master = 0
-    emissivity_slave = 0
-    slave = leftright
+    emissivity_primary = 0
+    emissivity_secondary = 0
+    secondary = leftright
     quadrature = true
-    master = rightleft
+    primary = rightleft
     variable = temp
     type = GapHeatTransfer
   [../]
@@ -58,13 +58,13 @@
 
 [Postprocessors]
   [./left]
-    type = SideFluxIntegral
+    type = SideDiffusiveFluxIntegral
     variable = temp
     boundary = leftright
     diffusivity = thermal_conductivity
   [../]
   [./right]
-    type = SideFluxIntegral
+    type = SideDiffusiveFluxIntegral
     variable = temp
     boundary = rightleft
     diffusivity = thermal_conductivity

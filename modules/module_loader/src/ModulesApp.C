@@ -22,8 +22,14 @@
 #ifdef FLUID_PROPERTIES_ENABLED
 #include "FluidPropertiesApp.h"
 #endif
+#ifdef FSI_ENABLED
+#include "FsiApp.h"
+#endif
 #ifdef FUNCTIONAL_EXPANSION_TOOLS_ENABLED
 #include "FunctionalExpansionToolsApp.h"
+#endif
+#ifdef GEOCHEMISTRY_ENABLED
+#include "GeochemistryApp.h"
 #endif
 #ifdef HEAT_CONDUCTION_ENABLED
 #include "HeatConductionApp.h"
@@ -46,20 +52,26 @@
 #ifdef POROUS_FLOW_ENABLED
 #include "PorousFlowApp.h"
 #endif
+#ifdef RAY_TRACING_ENABLED
+#include "RayTracingApp.h"
+#endif
 #ifdef RDG_ENABLED
 #include "RdgApp.h"
 #endif
+#ifdef REACTOR_ENABLED
+#include "ReactorApp.h"
+#endif
 #ifdef RICHARDS_ENABLED
 #include "RichardsApp.h"
-#endif
-#ifdef SOLID_MECHANICS_ENABLED
-#include "SolidMechanicsApp.h"
 #endif
 #ifdef STOCHASTIC_TOOLS_ENABLED
 #include "StochasticToolsApp.h"
 #endif
 #ifdef TENSOR_MECHANICS_ENABLED
 #include "TensorMechanicsApp.h"
+#endif
+#ifdef THERMAL_HYDRAULICS_ENABLED
+#include "ThermalHydraulicsApp.h"
 #endif
 #ifdef XFEM_ENABLED
 #include "XFEMApp.h"
@@ -82,11 +94,10 @@ clearUnusedWarnings(Syntax & /*syntax*/, ActionFactory & /*action_factory*/)
 }
 ///@}
 
-template <>
 InputParameters
-validParams<ModulesApp>()
+ModulesApp::validParams()
 {
-  InputParameters params = validParams<MooseApp>();
+  InputParameters params = MooseApp::validParams();
   return params;
 }
 
@@ -151,16 +162,20 @@ ModulesApp::registerObjects(Factory & factory)
   PorousFlowApp::registerObjects(factory);
 #endif
 
+#ifdef RAY_TRACING_ENABLED
+  RayTracingApp::registerObjects(factory);
+#endif
+
 #ifdef RDG_ENABLED
   RdgApp::registerObjects(factory);
 #endif
 
-#ifdef RICHARDS_ENABLED
-  RichardsApp::registerObjects(factory);
+#ifdef REACTOR_ENABLED
+  ReactorApp::registerObjects(factory);
 #endif
 
-#ifdef SOLID_MECHANICS_ENABLED
-  SolidMechanicsApp::registerObjects(factory);
+#ifdef RICHARDS_ENABLED
+  RichardsApp::registerObjects(factory);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
@@ -169,6 +184,10 @@ ModulesApp::registerObjects(Factory & factory)
 
 #ifdef TENSOR_MECHANICS_ENABLED
   TensorMechanicsApp::registerObjects(factory);
+#endif
+
+#ifdef THERMAL_HYDRAULICS_ENABLED
+  ThermalHydraulicsApp::registerObjects(factory);
 #endif
 
 #ifdef XFEM_ENABLED
@@ -226,16 +245,20 @@ ModulesApp::associateSyntax(Syntax & syntax, ActionFactory & action_factory)
   PorousFlowApp::associateSyntax(syntax, action_factory);
 #endif
 
+#ifdef RAY_TRACING_ENABLED
+  RayTracingApp::associateSyntax(syntax, action_factory);
+#endif
+
 #ifdef RDG_ENABLED
   RdgApp::associateSyntax(syntax, action_factory);
 #endif
 
-#ifdef RICHARDS_ENABLED
-  RichardsApp::associateSyntax(syntax, action_factory);
+#ifdef REACTOR_ENABLED
+  ReactorApp::associateSyntax(syntax, action_factory);
 #endif
 
-#ifdef SOLID_MECHANICS_ENABLED
-  SolidMechanicsApp::associateSyntax(syntax, action_factory);
+#ifdef RICHARDS_ENABLED
+  RichardsApp::associateSyntax(syntax, action_factory);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
@@ -244,6 +267,10 @@ ModulesApp::associateSyntax(Syntax & syntax, ActionFactory & action_factory)
 
 #ifdef TENSOR_MECHANICS_ENABLED
   TensorMechanicsApp::associateSyntax(syntax, action_factory);
+#endif
+
+#ifdef THERMAL_HYDRAULICS_ENABLED
+  ThermalHydraulicsApp::associateSyntax(syntax, action_factory);
 #endif
 
 #ifdef XFEM_ENABLED
@@ -297,16 +324,20 @@ ModulesApp::registerExecFlags(Factory & factory)
   PorousFlowApp::registerExecFlags(factory);
 #endif
 
+#ifdef RAY_TRACING_ENABLED
+  RayTracingApp::registerExecFlags(factory);
+#endif
+
 #ifdef RDG_ENABLED
   RdgApp::registerExecFlags(factory);
 #endif
 
-#ifdef RICHARDS_ENABLED
-  RichardsApp::registerExecFlags(factory);
+#ifdef REACTOR_ENABLED
+  ReactorApp::registerExecFlags(factory);
 #endif
 
-#ifdef SOLID_MECHANICS_ENABLED
-  SolidMechanicsApp::registerExecFlags(factory);
+#ifdef RICHARDS_ENABLED
+  RichardsApp::registerExecFlags(factory);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
@@ -315,6 +346,10 @@ ModulesApp::registerExecFlags(Factory & factory)
 
 #ifdef TENSOR_MECHANICS_ENABLED
   TensorMechanicsApp::registerExecFlags(factory);
+#endif
+
+#ifdef THERMAL_HYDRAULICS_ENABLED
+  ThermalHydraulicsApp::registerExecFlags(factory);
 #endif
 
 #ifdef XFEM_ENABLED
@@ -337,6 +372,14 @@ ModulesApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
 
 #ifdef FLUID_PROPERTIES_ENABLED
   FluidPropertiesApp::registerAll(f, af, s);
+#endif
+
+#ifdef FSI_ENABLED
+  FsiApp::registerAll(f, af, s);
+#endif
+
+#ifdef GEOCHEMISTRY_ENABLED
+  GeochemistryApp::registerAll(f, af, s);
 #endif
 
 #ifdef HEAT_CONDUCTION_ENABLED
@@ -367,16 +410,20 @@ ModulesApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
   PorousFlowApp::registerAll(f, af, s);
 #endif
 
+#ifdef RAY_TRACING_ENABLED
+  RayTracingApp::registerAll(f, af, s);
+#endif
+
 #ifdef RDG_ENABLED
   RdgApp::registerAll(f, af, s);
 #endif
 
-#ifdef RICHARDS_ENABLED
-  RichardsApp::registerAll(f, af, s);
+#ifdef REACTOR_ENABLED
+  ReactorApp::registerAll(f, af, s);
 #endif
 
-#ifdef SOLID_MECHANICS_ENABLED
-  SolidMechanicsApp::registerAll(f, af, s);
+#ifdef RICHARDS_ENABLED
+  RichardsApp::registerAll(f, af, s);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
@@ -385,6 +432,10 @@ ModulesApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
 
 #ifdef TENSOR_MECHANICS_ENABLED
   TensorMechanicsApp::registerAll(f, af, s);
+#endif
+
+#ifdef THERMAL_HYDRAULICS_ENABLED
+  ThermalHydraulicsApp::registerAll(f, af, s);
 #endif
 
 #ifdef XFEM_ENABLED

@@ -12,12 +12,6 @@
 // MOOSE includes
 #include "ElementUserObject.h"
 
-// Forward Declarations
-class DiscreteElementUserObject;
-
-template <>
-InputParameters validParams<DiscreteElementUserObject>();
-
 class DiscreteElementUserObject : public ElementUserObject
 {
 public:
@@ -32,5 +26,6 @@ public:
   virtual void finalize() override final;
   virtual void threadJoin(const UserObject &) override final;
   /// @}
-};
 
+  bool needThreadedCopy() const override final { return true; }
+};

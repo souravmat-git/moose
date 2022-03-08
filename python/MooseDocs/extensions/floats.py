@@ -9,21 +9,23 @@
 
 import uuid
 import collections
+import re
+import logging
 import moosetree
 import MooseDocs
-from ..common import exceptions
+from ..common import exceptions, report_error
 from ..base import components, MarkdownReader, LatexRenderer, Extension
 from ..tree import tokens, html, latex
-from . import core
+from . import core, command, heading
+
+LOG = logging.getLogger(__name__)
 
 def make_extension(**kwargs):
     return FloatExtension(**kwargs)
 
 Float = tokens.newToken('Float', img=False, bottom=False, command='figure')
 FloatCaption = tokens.newToken('FloatCaption', key='', prefix='', number='?')
-ModalLink = tokens.newToken('ModalLink', bookmark=True, bottom=False, close=True)
-ModalLinkTitle = tokens.newToken('ModalLinkTitle')
-ModalLinkContent = tokens.newToken('ModalLinkContent')
+FloatReference = tokens.newToken('FloatReference', label=None, filename=None)
 
 def create_float(parent, extension, reader, page, settings, bottom=False, img=False,
                  token_type=Float, **kwargs):
@@ -77,54 +79,26 @@ def _add_caption(parent, extension, reader, page, settings):
         reader.tokenize(caption, cap, page, MarkdownReader.INLINE)
     return caption, prefix
 
-def create_modal(parent, title=None, content=None, **kwargs):
-    """
-    Create the necessary Modal tokens for creating modal windows with materialize.
-    """
-    modal = ModalLink(parent.root, **kwargs)
-    if isinstance(title, str):
-        ModalLinkTitle(modal, string=title)
-    elif isinstance(title, tokens.Token):
-        title.parent = ModalLinkTitle(modal)
-
-    if isinstance(content, str):
-        ModalLinkContent(modal, string=content)
-    elif isinstance(content, tokens.Token):
-        content.parent = ModalLinkContent(modal)
-
-    return parent
-
-def create_modal_link(parent, title=None, content=None, string=None, **kwargs):
-    """
-    Create the necessary tokens to create a link to a modal window with materialize.
-    """
-    kwargs.setdefault('bookmark', str(uuid.uuid4()))
-    link = core.Link(parent,
-                     url='#{}'.format(kwargs['bookmark']),
-                     class_='modal-trigger',
-                     string=string)
-    create_modal(parent, title, content, **kwargs)
-    return link
-
-class FloatExtension(Extension):
+class FloatExtension(command.CommandExtension):
     """
     Provides ability to add caption float elements (e.g., figures, table, etc.). This is only a
     base extension. It does not provide tables for example, just the tools to make floats
     in a uniform manner.
     """
     def extend(self, reader, renderer):
+        self.requires(core)
+        self.addCommand(reader, FloatReferenceCommand())
         renderer.add('Float', RenderFloat())
         renderer.add('FloatCaption', RenderFloatCaption())
-        renderer.add('ModalLink', RenderModalLink())
-        renderer.add('ModalLinkTitle', RenderModalLinkTitle())
-        renderer.add('ModalLinkContent', RenderModalLinkContent())
+        renderer.add('FloatReference', RenderFloatReference())
 
         if isinstance(renderer, LatexRenderer):
             renderer.addPackage('caption', labelsep='period')
 
     def postTokenize(self, page, ast):
         """Set float number for each counter."""
-        counts = page.get('counts', collections.defaultdict(int))
+        counts = collections.defaultdict(int)
+        floats = dict()
         for node in moosetree.iterate(ast, lambda n: n.name == 'FloatCaption'):
             prefix = node.get('prefix', None)
             if prefix is not None:
@@ -132,6 +106,7 @@ class FloatExtension(Extension):
                 node['number'] = counts[prefix]
             key = node.get('key')
             if key:
+                floats[key] = node.copy()
                 shortcut = core.Shortcut(ast.root, key=key, link='#{}'.format(key))
 
                 # TODO: This is a bit of a hack to get Figure~\ref{} etc. working in general
@@ -141,6 +116,30 @@ class FloatExtension(Extension):
                     tokens.String(shortcut, content='{} {}'.format(prefix.title(), node['number']))
 
         page['counts'] = counts
+        page['floats'] = floats
+
+class FloatReferenceCommand(command.CommandComponent):
+    COMMAND = 'ref'
+    SUBCOMMAND = None
+    LABEL_RE = re.compile(r'((?P<filename>.*?\.md)#)?(?P<label>.+)', flags=re.UNICODE)
+
+    @staticmethod
+    def defaultSettings():
+        settings = command.CommandComponent.defaultSettings()
+        return settings
+
+    def createToken(self, parent, info, page, settings):
+        inline = 'inline' in info
+        if not inline:
+            raise common.exceptions.MooseDocsException("The float reference command is an inline level command.")
+
+        content = info['inline']
+        match = self.LABEL_RE.search(content)
+        if match is None:
+            raise common.exceptions.MooseDocsException("Invalid label format.")
+
+        FloatReference(parent, label=match.group('label'), filename=match.group('filename'))
+        return parent
 
 class RenderFloat(components.RenderComponent):
     def createHTML(self, parent, token, page):
@@ -194,7 +193,7 @@ class RenderFloatCaption(components.RenderComponent):
             heading = html.Tag(caption, 'span', class_="moose-caption-heading")
             html.String(heading, content="{} {}: ".format(prefix, token['number']))
 
-        return html.Tag(caption, 'span', class_="moose-caption-text")
+        return html.Tag(caption, 'span', class_="moose-caption-text", id_=token['key'])
 
     def createLatex(self, parent, token, page):
         caption = latex.Command(parent, 'caption')
@@ -202,44 +201,55 @@ class RenderFloatCaption(components.RenderComponent):
             latex.Command(caption, 'label', string=token['key'], escape=True)
         return caption
 
-class RenderModalLink(core.RenderLink):
+class RenderFloatReference(core.RenderShortcutLink):
+    def createHTML(self, parent, token, page):
+        a = html.Tag(parent, 'a', class_='moose-float-reference')
+
+        float_page = page
+        if token['filename']:
+            float_page = self.translator.findPage(token['filename'], throw_on_zero=False)
+            if float_page is None:
+                a['class'] = 'moose-error'
+                html.String(a, content='{}#{}'.format(token['filename'], key))
+                msg = "Could not find  page {}".format(token['filename'])
+                raise exceptions.MooseDocsException(msg)
+                return None
+
+            head = heading.find_heading(float_page)
+            if head is not None:
+                tok = tokens.Token(None)
+                head.copyToToken(tok)
+                self.renderer.render(a, tok, page)
+                html.String(a, content=', ')
+            else:
+                html.String(a, content=token['filename'] + ', ')
+
+        key = token['label']
+        float_node = float_page['floats'].get(key, None)
+        if float_node is None:
+            a['class'] = 'moose-error'
+            html.String(a, content='{}#{}'.format(float_page.local, key))
+            msg = "Could not find float with key {} on page {}".format(key, float_page.local)
+            raise exceptions.MooseDocsException(msg)
+            return None
+        elif float_page is not page:
+            url = float_page.relativeDestination(page)
+            a['href']='{}#{}'.format(url, key)
+        else:
+            a['href']='#{}'.format(key)
+
+        prefix = float_node.get('prefix', None)
+        prefix = '' if prefix is None else prefix.title()
+        html.String(a, content='{} {}'.format(prefix, float_node['number']))
 
     def createLatex(self, parent, token, page):
-        return None
-
-    def createHTML(self, parent, token, page):
-        return None
-
-    def createMaterialize(self, parent, token, page):
-
-        cls = "modal bottom-sheet" if token['bottom'] else "modal"
-        modal = html.Tag(parent, 'div', class_=cls, id_=token['bookmark'])
-        modal.addClass('moose-modal')
-        modal_content = html.Tag(modal, 'div', class_="modal-content")
-
-        if token['close']:
-            footer = html.Tag(modal, 'div', class_='modal-footer')
-            html.Tag(footer, 'a', class_='modal-close btn-flat', string='Close')
-        return modal_content
-
-class RenderModalLinkTitle(components.RenderComponent):
-
-    def createHTML(self, parent, token, page):
-        return None
-
-    def createMaterialize(self, parent, token, page):
-        return html.Tag(parent, 'h4')
-
-    def createLatex(self, parent, token, page):
-        return None
-
-class RenderModalLinkContent(components.RenderComponent):
-
-    def createHTML(self, parent, token, page):
-        return None
-
-    def createMaterialize(self, parent, token, page):
+        float_page = page
+        if token['filename']:
+            float_page = self.translator.findPage(token['filename'], throw_on_zero=False)
+        key = token['label']
+        float_node = float_page['floats'].get(key, None)
+        prefix = float_node.get('prefix', None)
+        prefix = '' if prefix is None else prefix.title()
+        latex.String(parent, content=prefix + '~', escape=False)
+        latex.Command(parent, 'ref', string=token['label'])
         return parent
-
-    def createLatex(self, parent, token, page):
-        return None

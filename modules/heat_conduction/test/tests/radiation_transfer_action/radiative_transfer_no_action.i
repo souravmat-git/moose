@@ -20,7 +20,7 @@
   [./inner_bottom]
     type = SideSetsBetweenSubdomainsGenerator
     input = cmg
-    master_block = 1
+    primary_block = 1
     paired_block = 5
     new_boundary = 'inner_bottom'
   [../]
@@ -28,7 +28,7 @@
   [./inner_left]
     type = SideSetsBetweenSubdomainsGenerator
     input = inner_bottom
-    master_block = 4
+    primary_block = 4
     paired_block = 5
     new_boundary = 'inner_left'
   [../]
@@ -36,7 +36,7 @@
   [./inner_right]
     type = SideSetsBetweenSubdomainsGenerator
     input = inner_left
-    master_block = 2
+    primary_block = 2
     paired_block = 5
     new_boundary = 'inner_right'
   [../]
@@ -44,21 +44,21 @@
   [./inner_top]
     type = SideSetsBetweenSubdomainsGenerator
     input = inner_right
-    master_block = 3
+    primary_block = 3
     paired_block = 5
     new_boundary = 'inner_top'
   [../]
 
   [./rename]
     type = RenameBlockGenerator
-    old_block_id = '1 2 3 4'
-    new_block_id = '0 0 0 0'
+    old_block = '1 2 3 4'
+    new_block = '0 0 0 0'
     input = inner_top
   [../]
 
   [./split_inner_bottom]
     type = PatchSidesetGenerator
-    sideset = 4
+    boundary = 4
     n_patches = 2
     partitioner = centroid
     centroid_partitioner_direction = x
@@ -67,7 +67,7 @@
 
   [./split_inner_left]
     type = PatchSidesetGenerator
-    sideset = 5
+    boundary = 5
     n_patches = 2
     partitioner = centroid
     centroid_partitioner_direction = y
@@ -76,7 +76,7 @@
 
   [./split_inner_right]
     type = PatchSidesetGenerator
-    sideset = 6
+    boundary = 6
     n_patches = 2
     partitioner = centroid
     centroid_partitioner_direction = y
@@ -85,7 +85,7 @@
 
   [./split_inner_top]
     type = PatchSidesetGenerator
-    sideset = 7
+    boundary = 7
     n_patches = 3
     partitioner = centroid
     centroid_partitioner_direction = x
@@ -157,10 +157,8 @@
     type = GrayLambertNeumannBC
     variable = temperature
     surface_radiation_object_name = gray_lambert
-    boundary = 'inner_bottom_0 inner_bottom_1
-                inner_left_0 inner_left_1
-                inner_right_0 inner_right_1
-                inner_top_0 inner_top_1 inner_top_2'
+    boundary = 'inner_left_0 inner_left_1
+                inner_right_0 inner_right_1'
   [../]
 []
 

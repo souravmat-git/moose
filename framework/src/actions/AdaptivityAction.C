@@ -28,12 +28,12 @@ registerMooseAction("MooseApp", AdaptivityAction, "setup_adaptivity");
 registerMooseAction("MooseApp", AdaptivityAction, "add_geometric_rm");
 registerMooseAction("MooseApp", AdaptivityAction, "add_algebraic_rm");
 
-defineLegacyParams(AdaptivityAction);
-
 InputParameters
 AdaptivityAction::validParams()
 {
   InputParameters params = Action::validParams();
+  params.addClassDescription(
+      "Add libMesh based adaptation schemes via the Executioner/Adaptivity input syntax.");
   MooseEnum estimators("KellyErrorEstimator LaplacianErrorEstimator PatchRecoveryErrorEstimator",
                        "KellyErrorEstimator");
 

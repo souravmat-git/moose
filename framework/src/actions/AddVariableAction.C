@@ -29,12 +29,11 @@
 
 registerMooseAction("MooseApp", AddVariableAction, "add_variable");
 
-defineLegacyParams(AddVariableAction);
-
 InputParameters
 AddVariableAction::validParams()
 {
   auto params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a non-linear variable to the simulation.");
 
   // The user may specify a type in the Variables block, but if they don't we'll just use all the
   // parameters available from MooseVariableBase
@@ -52,6 +51,8 @@ AddVariableAction::validParams()
                              "allowed)");
   params.addParam<std::vector<Real>>("scaling",
                                      "Specifies a scaling factor to apply to this variable");
+  params.addParam<std::vector<Real>>("initial_condition",
+                                     "Specifies the initial condition for this variable");
   return params;
 }
 
@@ -67,7 +68,8 @@ MooseEnum
 AddVariableAction::getNonlinearVariableFamilies()
 {
   return MooseEnum("LAGRANGE MONOMIAL HERMITE SCALAR HIERARCHIC CLOUGH XYZ SZABAB BERNSTEIN "
-                   "L2_LAGRANGE L2_HIERARCHIC NEDELEC_ONE LAGRANGE_VEC MONOMIAL_VEC",
+                   "L2_LAGRANGE L2_HIERARCHIC NEDELEC_ONE LAGRANGE_VEC MONOMIAL_VEC "
+                   "RATIONAL_BERNSTEIN SIDE_HIERARCHIC",
                    "LAGRANGE");
 }
 
@@ -128,8 +130,10 @@ AddVariableAction::init()
   _moose_object_pars.applySpecificParameters(_pars, {"order", "family", "scaling"});
 
   // Determine the MooseVariable type
-  bool is_fv = _moose_object_pars.get<bool>("fv");
-  _type = determineType(_fe_type, _components, is_fv);
+  const auto is_fv = _moose_object_pars.get<bool>("fv");
+  const auto is_array = _components > 1 || _moose_object_pars.get<bool>("array");
+  if (_type == "MooseVariableBase")
+    _type = variableType(_fe_type, is_fv, is_array);
   if (is_fv)
     _problem->needFV();
 
@@ -149,7 +153,7 @@ AddVariableAction::act()
   addVariable(var_name);
 
   // Set the initial condition
-  if (_moose_object_pars.isParamValid("initial_condition"))
+  if (_pars.isParamValid("initial_condition"))
     createInitialConditionAction();
 }
 
@@ -159,7 +163,7 @@ AddVariableAction::createInitialConditionAction()
   // Variable name
   std::string var_name = name();
 
-  auto value = _moose_object_pars.get<std::vector<Real>>("initial_condition");
+  auto value = _pars.get<std::vector<Real>>("initial_condition");
 
   // Create the object name
   std::string long_name("");
@@ -220,10 +224,18 @@ AddVariableAction::createInitialConditionAction()
 std::string
 AddVariableAction::determineType(const FEType & fe_type, unsigned int components, bool is_fv)
 {
+  mooseDeprecated("AddVariableAction::determineType() is deprecated. Use "
+                  "AddVariableAction::variableType() instead.");
+  return variableType(fe_type, is_fv, components > 1);
+}
+
+std::string
+AddVariableAction::variableType(const FEType & fe_type, const bool is_fv, const bool is_array)
+{
   if (is_fv)
     return "MooseVariableFVReal";
 
-  if (components > 1)
+  if (is_array)
   {
     if (fe_type.family == LAGRANGE_VEC || fe_type.family == NEDELEC_ONE ||
         fe_type.family == MONOMIAL_VEC)
@@ -256,8 +268,12 @@ AddVariableAction::addVariable(const std::string & var_name)
 
   if (_moose_object_pars.get<bool>("eigen"))
   {
-    MooseEigenSystem & esys(static_cast<MooseEigenSystem &>(_problem->getNonlinearSystemBase()));
-    esys.markEigenVariable(var_name);
+    // MooseEigenSystem will be eventually removed. NonlinearEigenSystem will be used intead.
+    // It is legal for NonlinearEigenSystem to specify a variable as eigen in input file,
+    // but we do not need to do anything here.
+    MooseEigenSystem * esys = dynamic_cast<MooseEigenSystem *>(&_problem->getNonlinearSystemBase());
+    if (esys)
+      esys->markEigenVariable(var_name);
   }
 }
 

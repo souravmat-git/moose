@@ -10,11 +10,12 @@
 #pragma once
 
 #include "DiracKernel.h"
+#include "ReporterInterface.h"
 
 /**
  * Approximates a borehole by a sequence of Dirac Points
  */
-class PorousFlowLineGeometry : public DiracKernel
+class PorousFlowLineGeometry : public DiracKernel, public ReporterInterface
 {
 public:
   /**
@@ -63,6 +64,24 @@ protected:
   /// Add Dirac Points to the line sink
   virtual void addPoints() override;
 
+  /// regenerate points in each cell if using line_base
+  virtual void meshChanged() override;
+
   /// Reads a space-separated line of floats from ifs and puts in myvec
   bool parseNextLineReals(std::ifstream & ifs, std::vector<Real> & myvec);
+
+  ///@{
+  /// reporter input alternative (to the point file and line_base data)
+  const std::vector<Real> * const _x_coord;
+  const std::vector<Real> * const _y_coord;
+  const std::vector<Real> * const _z_coord;
+  const std::vector<Real> * const _weight;
+  const bool _usingReporter;
+  ///@}
+private:
+  void calcLineLengths();
+  void regenPoints();
+
+  /// alternative (to the point file data) line weight and start point.
+  std::vector<Real> _line_base;
 };

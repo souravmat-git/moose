@@ -28,7 +28,6 @@ StochasticResults::validParams()
   InputParameters params = GeneralVectorPostprocessor::validParams();
   params.addClassDescription(
       "Storage container for stochastic simulation results coming from a Postprocessor.");
-  params += SamplerInterface::validParams();
 
   params.addDeprecatedParam<std::vector<SamplerName>>(
       "samplers",
@@ -41,7 +40,7 @@ StochasticResults::validParams()
 }
 
 StochasticResults::StochasticResults(const InputParameters & parameters)
-  : GeneralVectorPostprocessor(parameters), SamplerInterface(this)
+  : GeneralVectorPostprocessor(parameters)
 {
 }
 
@@ -74,10 +73,10 @@ void
 StochasticResults::setCurrentLocalVectorPostprocessorValue(
     const std::string & vector_name, const VectorPostprocessorValue && current)
 {
-  auto data_ptr = std::find_if(
-      _sample_vectors.begin(), _sample_vectors.end(), [&vector_name](StochasticResultsData & data) {
-        return data.name == vector_name;
-      });
+  auto data_ptr = std::find_if(_sample_vectors.begin(),
+                               _sample_vectors.end(),
+                               [&vector_name](StochasticResultsData & data)
+                               { return data.name == vector_name; });
 
   mooseAssert(data_ptr != _sample_vectors.end(),
               "Unable to locate a vector with the supplied name of '" << vector_name << "'.");

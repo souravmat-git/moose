@@ -85,7 +85,7 @@ There are a total of ten QoIs for the model, which involve temperature and displ
 
 ## Results
 
-In this exercise, we will use the [statistics](Statistics.md) and [Sobol sensitivity](PolynomialChaosSobolStatistics.md) capabilities available in the stochastic tools module. The goal of this exercise is to understand how the uncertainty in the parameters affects the the resulting QoIs. This is done through sampling the model at different perturbations of the parameters and performing statistical calculations on resulting QoI values. Two methods are used to perform this analysis. First is using the sampler system to perturb the uncertain properties and retrieve the QoIs which will undergo the analysis. The second is training a [polynomial chaos surrogate](PolynomialChaos.md) and using that reduced order model to sample and perform the analysis. The idea is that many evaluations of the model are necessary to compute accurate statistical quantities and surrogate modeling speeds up this computation by requiring much fewer full model evaluations for training and is significantly faster to evaluate once trained.
+In this exercise, we will use the [statistics](Statistics.md) and [Sobol sensitivity](PolynomialChaosReporter.md) capabilities available in the stochastic tools module. The goal of this exercise is to understand how the uncertainty in the parameters affects the the resulting QoIs. This is done through sampling the model at different perturbations of the parameters and performing statistical calculations on resulting QoI values. Two methods are used to perform this analysis. First is using the sampler system to perturb the uncertain properties and retrieve the QoIs which will undergo the analysis. The second is training a [polynomial chaos surrogate](PolynomialChaos.md) and using that reduced order model to sample and perform the analysis. The idea is that many evaluations of the model are necessary to compute accurate statistical quantities and surrogate modeling speeds up this computation by requiring much fewer full model evaluations for training and is significantly faster to evaluate once trained.
 
 Using [latin hypercube sampling](LatinHypercubeSampler.md), the thermomechanics model was run with a total of 100,000 samples, the input file is shown by [list:lhs]. A order four polynomial chaos surrogate was training using a Smolyak sparse quadrature for a total of 7,344 runs of the full model. The training input is shown by [list:train] and the evaluation input is shown by [list:eval]. [tab:rt] shows the run-time for sampling the full order model and training and evaluating the surrogate. We see here that cumulative time for training and evaluating the surrogate is much smaller than just sampling the full order model, this is because building the surrogate required far fewer evaluations of the full model and evaluating the surrogate is much faster than evaluating the full model.
 
@@ -109,16 +109,16 @@ Using [latin hypercube sampling](LatinHypercubeSampler.md), the thermomechanics 
 !table caption=Statistics Results id=tab:stat
 | QoI | $\mu$ | 95% CI | $\sigma$ | 95% CI | PC -- $\mu$ | PC -- $\sigma$ |
 | :- | - | - | - | - | - | - |
-| $T_{1,c}$        | 609.95    | (609.85, \\ 610.04)       | 18.23     | (18.19, \\ 18.28)         | 609.97    | 18.23 |
-| $T_{2,c}$        | 586.84    | (586.75, \\ 586.93)       | 16.63     | (16.59, \\ 16.67)         | 586.85    | 16.64 |
-| $T_{1,e}$        | 506.31    | (506.25, \\ 506.38)       | 12.04     | (12.01, \\ 12.06)         | 506.31    | 12.05 |
-| $T_{2,e}$        | 507.92    | (507.86, \\ 507.99)       | 12.11     | (12.08, \\ 12.14)         | 507.92    | 12.12 |
-| $\delta_{x,1,c}$ | 4.034E-04 | (4.030E-04, \\ 4.039E-04) | 8.626E-05 | (8.599E-05, \\ 8.653E-05) | 4.032E-04 | 8.625E-05 |
-| $\delta_{x,2,c}$ | 4.999E-04 | (4.993E-04, \\ 5.004E-04) | 1.080E-04 | (1.077E-04, \\ 1.084E-04) | 4.996E-04 | 1.081E-04 |
-| $\delta_{x,1,e}$ | 4.223E-04 | (4.217E-04, \\ 4.230E-04) | 1.254E-04 | (1.251E-04, \\ 1.257E-04) | 4.220E-04 | 1.256E-04 |
-| $\delta_{x,2,e}$ | 4.797E-04 | (4.790E-04, \\ 4.804E-04) | 1.352E-04 | (1.349E-04, \\ 1.356E-04) | 4.794E-04 | 1.354E-04 |
-| $\delta_{z,1}$   | 6.143E-04 | (6.135E-04, \\ 6.150E-04) | 1.467E-04 | (1.463E-04, \\ 1.471E-04) | 6.139E-04 | 1.469E-04 |
-| $\delta_{z,2}$   | 4.997E-04 | (4.992E-04, \\ 5.003E-04) | 1.071E-04 | (1.067E-04, \\ 1.074E-04) | 4.995E-04 | 1.071E-04 |
+| $T_{1,c}$        | 609.97    | (609.87, \\ 610.06)       | 18.22     | (18.18, \\ 18.27)         | 609.97    | 18.23 |
+| $T_{2,c}$        | 586.85    | (586.77, \\ 586.94)       | 16.64     | (16.60, \\ 16.68)         | 586.85    | 16.64 |
+| $T_{1,e}$        | 506.31    | (506.25, \\ 506.37)       | 12.05     | (12.03, \\ 12.08)         | 506.31    | 12.05 |
+| $T_{2,e}$        | 507.92    | (507.85, \\ 507.98)       | 12.13     | (12.10, \\ 12.15)         | 507.92    | 12.12 |
+| $\delta_{x,1,c}$ | 4.032E-04 | (4.028E-04, \\ 4.037E-04) | 8.608E-05 | (8.581E-05, \\ 8.636E-05) | 4.032E-04 | 8.625E-05 |
+| $\delta_{x,2,c}$ | 4.996E-04 | (4.990E-04, \\ 5.001E-04) | 1.078E-04 | (1.075E-04, \\ 1.082E-04) | 4.996E-04 | 1.081E-04 |
+| $\delta_{x,1,e}$ | 4.220E-04 | (4.213E-04, \\ 4.226E-04) | 1.255E-04 | (1.252E-04, \\ 1.258E-04) | 4.220E-04 | 1.256E-04 |
+| $\delta_{x,2,e}$ | 4.793E-04 | (4.786E-04, \\ 4.800E-04) | 1.352E-04 | (1.349E-04, \\ 1.356E-04) | 4.794E-04 | 1.354E-04 |
+| $\delta_{z,1}$   | 6.139E-04 | (6.131E-04, \\ 6.146E-04) | 1.466E-04 | (1.462E-04, \\ 1.470E-04) | 6.139E-04 | 1.469E-04 |
+| $\delta_{z,2}$   | 4.995E-04 | (4.989E-04, \\ 5.000E-04) | 1.067E-04 | (1.065E-04, \\ 1.072E-04) | 4.995E-04 | 1.071E-04 |
 
 !row!
 

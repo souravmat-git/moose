@@ -29,6 +29,22 @@ Such example is shown here:
 
 Note that the parameter ```mass_flux``` is positive for a source and negative for a sink.
 
+
+### Injecting fluid at specified temperature
+
+When injecting a fluid at specified temperature (also computed as a postprocessor), users can add another Dirac
+kernel [`PorousFlowPointEnthalpySourceFromPostprocessor`](/PorousFlowPointEnthalpySourceFromPostprocessor.md).
+(Alternately, users can also fix the temperature of an injected fluid using a Dirichlet BC, but this adds/subtracts
+heat energy to entire nodal volumes of porous material and fluid, so may lead to unacceptable errors
+from the additional heat energies added/removed.)
+
+Such example is shown here:
+
+!listing modules/porous_flow/test/tests/dirackernels/hfrompps.i block=DiracKernels
+
+!listing modules/porous_flow/test/tests/dirackernels/hfrompps.i block=Postprocessors
+
+
 ## PorousFlow polyline sinks in general
 
 Two types of polyline sinks are implemented in PorousFlow: the
@@ -56,8 +72,9 @@ enumerated below. The convention followed is:
 - A sink has $s>0$.  This removes fluid or heat from the simulation domain;
 - A source has $s<0$.  This adds fluid or heat to the simulation domain.
 
-The input parameters for each PorousFlow polyline sink involve a plain text file whose lines are
-space-separated quantities:
+There are two separate input formats for the PorousFlow polyline sink. The first requires the location for each point along the line length to be specified. The second is relevant for straight lines only, and requires a starting location, direction and length.
+
+The first input format can be defined by either a plain text file or a reporter. In the plain text file, each point is specified by a line containing the following space-separated quantities:
 \begin{equation}
 \label{eq:bh_plaintext_format}
 {\mathtt{w_{i}\ x_{i}\ y_{i}\ z_{i}}}
@@ -65,6 +82,32 @@ space-separated quantities:
 
 The weighting terms, $w_{i}$, are for user convenience, but for the Peaceman borehole case they are
 the borehole radius at point $x_{i}$.
+
+The reporter format for point data supplies the same coordinate and weighting data using the following syntax:
+
+!listing modules/porous_flow/test/tests/dirackernels/pls02reporter.i start=weight_reporter end=piecewise-linear
+
+where the polyline coordinates and weighting are defined in the following [ConstantReporter](/ConstantReporter.md):
+
+!listing modules/porous_flow/test/tests/dirackernels/pls02reporter.i block=Reporters
+
+Reporter input provides an easy way to control polyline sink point locations from a [Sampler](Samplers/index.md) multi-app.  
+It is an error to supply both plaint text file and reporter input for the point data.
+
+Rather than manually specifying each point via the separate points file or reporter, the second input format allows the 
+line to be specified using the combination of the following parameters:
+
+- `line_base = '[w] [x] [y] [z]'`: the base/start point for the line
+- `line_direction = '[dx] [dy] [dz]'`: line direction (does not need to be unit-length)
+- `line_length = [length]`: exactly what you expect - the line length.
+
+It is an error to specify both a point (plain text file or reporter) parameter, and the
+line base parameter.  When specifying the line this way, one point will be
+generated along the line for each element the line passes through.  These
+points are automatically updated when the mesh changes due to adaptivity,
+displacement, etc.  When using this mode of line-specification, the line end
+points must NOT ever lie on any mesh face or node during the entire simulation
+duration.
 
 The basic sink may be multiplied by any or all of the following quantities
 
@@ -87,7 +130,15 @@ includes, the same sink multiplied by fluid enthalpy should be applied
 to the temperature variable.
 
 !alert warning
-When using the PorousFlow Dirac Kernels in conjunction with [`PorousFlowPorosity`](porosity.md) that depends on volumetric strain (`mechanical = true`) you should set `strain_at_nearest_qp = true` in your GlobalParams block.  This ensures the nodal Porosity Material uses the volumetric strain at the Dirac quadpoint(s).  Otherwise, a nodal Porosity Material evaluated at node $i$ in an element will attempt to use the $i^{th}$ member of volumetric strain, but volumetric strain will only be of size equal to the number of Dirac points in the element.
+When creating the points for the line sink, it is important to ensure that
+every element the line passes through contains at least one (and ideally only
+one) point.  When doing this, it is also important to keep in mind that Mesh
+displacement and adaptivity can affect the location and number of elements
+during the simulation.
+
+
+!alert warning
+When using the PorousFlow Dirac Kernels in conjunction with [`PorousFlowPorosity`](/porous_flow/porosity.md) that depends on volumetric strain (`mechanical = true`) you should set `strain_at_nearest_qp = true` in your GlobalParams block.  This ensures the nodal Porosity Material uses the volumetric strain at the Dirac quadpoint(s).  Otherwise, a nodal Porosity Material evaluated at node $i$ in an element will attempt to use the $i^{th}$ member of volumetric strain, but volumetric strain will only be of size equal to the number of Dirac points in the element.
 
 ## Polyline sinks as functions of porepressure and/or temperature
 
@@ -111,9 +162,9 @@ For instance:
 
 The `PorousFlowPolylineSink` is always accompanied by a [`PorousFlowSumQuantity`](PorousFlowSumQuantity.md) UserObject and often by a [`PorousFlowPlotQuantity`](PorousFlowPlotQuantity.md) Postprocessor
 
-!listing modules/porous_flow/test/tests/dirackernels/pls02.i start=[UserObjects] end=[./dictator]
+!listing modules/porous_flow/test/tests/dirackernels/pls02.i start=[pls_total_outflow_mass] end=[dictator]
 
-!listing modules/porous_flow/test/tests/dirackernels/pls02.i start=[Postprocessors] end=[./fluid_mass0]
+!listing modules/porous_flow/test/tests/dirackernels/pls02.i start=[pls_report] end=[fluid_mass0]
 
 These types of sinks are useful in describing groundwater-surface water interactions via streams and
 swamps.  Often a riverbed conductance, measured in kg.Pa$^{-1}$.s$^{-1}$ is defined, which is
@@ -251,7 +302,7 @@ introducing wellbores dependent on the geometry.  The user may specify this quan
 
 In the following examples, a vertical borehole is placed through the centre of a single element, and fluid flow to the borehole as a function of porepressure is measured.  The borehole geometry is
 
-!listing modules/porous_flow/test/tests/dirackernels/bh02.i
+!listing modules/porous_flow/test/tests/dirackernels/bh02.bh
 
 meaning that the borehole radius is 0.1m and it is 1m long.
 
@@ -320,9 +371,9 @@ yields the correct result for an initially unsaturated medium ([bh05_flow.fig] a
 
 Each of these record the total fluid flux (kg) injected by or produced by the borehole in a [`PorousFlowSumQuantity`](PorousFlowSumQuantity.md) UserObject and outputs this result using a [`PorousFlowPlotQuantity`](PorousFlowPlotQuantity.md) Postprocessor:
 
-!listing modules/porous_flow/test/tests/dirackernels/bh02.i start=[UserObjects] end=[./dictator]
+!listing modules/porous_flow/test/tests/dirackernels/bh02.i start=[borehole_total_outflow_mass] end=[dictator]
 
-!listing modules/porous_flow/test/tests/dirackernels/bh02.i start=[Postprocessors] end=[./fluid_mass0]
+!listing modules/porous_flow/test/tests/dirackernels/bh02.i start=[bh_report] end=[fluid_mass0]
 
 
 ### Reproducing the steady-state 2D analytical solution
@@ -409,7 +460,7 @@ The fluid properties are defined as:
 
 The fluid injection and production is implemented in a way that is now familiar:
 
-!listing modules/porous_flow/test/tests/dirackernels/injection_production.i start=[./fluid_injection] end=[./remove_heat_at_production_well]
+!listing modules/porous_flow/test/tests/dirackernels/injection_production.i start=[fluid_injection] end=[remove_heat_at_production_well]
 
 The injection temperature is set via:
 
@@ -419,7 +470,7 @@ Alternatively, the heat energy of the injected fluid could be worked out and inj
 
 The production of fluid means that heat energy must be removed at exactly the rate associated with the fluid-mass removal.  This is implemented by using an identical `PorousFlowPeacemanBorehole` to the fluid production situation *but* associating it with the temperature variable and with `use_enthalpy = true`:
 
-!listing modules/porous_flow/test/tests/dirackernels/injection_production.i start=[./remove_heat_at_production_well] end=[]
+!listing modules/porous_flow/test/tests/dirackernels/injection_production.i start=[remove_heat_at_production_well] end=[]
 
 Here the heat energy per timestep is saved into a [`PorousFlowSumQuantity`](PorousFlowSumQuantity.md) UserObject which may be extracted using a [`PorousFlowPlotQuantity`](PorousFlowPlotQuantity.md) Postprocessor, which would be an important quantity in a geothermal application:
 

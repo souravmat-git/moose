@@ -16,16 +16,11 @@ offset = 0.01
     nx = 1
     ny = 1
     elem_type = QUAD4
-  [../]
-  [./left_block_sidesets]
-    type = RenameBoundaryGenerator
-    input = left_block
-    old_boundary_id = '0 1 2 3'
-    new_boundary_name = 'lb_bottom lb_right lb_top lb_left'
+    boundary_name_prefix = lb
   [../]
   [./left_block_id]
     type = SubdomainIDGenerator
-    input = left_block_sidesets
+    input = left_block
     subdomain_id = 1
   [../]
 
@@ -39,6 +34,8 @@ offset = 0.01
     nx = 1
     ny = 1
     elem_type = QUAD4
+    boundary_name_prefix = rb
+    boundary_id_offset = 10
   [../]
   [./right_block_id]
     type = SubdomainIDGenerator
@@ -53,17 +50,8 @@ offset = 0.01
   [./block_rename]
     type = RenameBlockGenerator
     input = combined
-    old_block_id = '1 2'
-    new_block_name = 'left_block right_block'
-  [../]
-  [./right_block_sidesets]
-    type = SideSetsFromPointsGenerator
-    input = block_rename
-    points = '0.5  -0.6  0
-              1.0   0    0
-              0.5  0.6   0
-              0     0    0'
-    new_boundary = 'rb_bottom rb_right rb_top rb_left'
+    old_block = '1 2'
+    new_block = 'left_block right_block'
   [../]
 []
 
@@ -140,12 +128,8 @@ offset = 0.01
 
 [Contact]
   [./leftright]
-    disp_x = disp_x
-    disp_y = disp_y
-
-    mesh = right_block_sidesets
-    slave = lb_right
-    master = rb_left
+    secondary = lb_right
+    primary = rb_left
 
     model = frictionless
     formulation = mortar

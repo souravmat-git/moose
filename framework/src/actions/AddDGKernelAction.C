@@ -13,12 +13,12 @@
 
 registerMooseAction("MooseApp", AddDGKernelAction, "add_dg_kernel");
 
-defineLegacyParams(AddDGKernelAction);
-
 InputParameters
 AddDGKernelAction::validParams()
 {
-  return MooseObjectAction::validParams();
+  InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a DGKernel object to the simulation.");
+  return params;
 }
 
 AddDGKernelAction::AddDGKernelAction(InputParameters params) : MooseObjectAction(params) {}

@@ -1,46 +1,74 @@
 {% set build = 0 %}
-{% set version = "2020.04.13" %}
-
-{% set sha256 = "3a12dc808c116f6593f7c95519ed2410b3e61bde9c3b426a58c07c7f6a6dd4c2" %}
+{% set version = "2022.01.25" %}
 
 package:
   name: moose-tools
   version: {{ version }}
 
 source:
-  url: https://mooseframework.org/source_packages/moose-python-deps.tar.gz
-  sha256: {{ sha256 }}
+  path: ../tools
 
 build:
   number: {{ build }}
-  skip: true                 # [win]
 
 requirements:
   build:
-    - python {{ python }}
-    - vtk {{ vtk }}
+    - {{ moose_python }}
+    - {{ pin_compatible('setuptools', lower_bound='58', upper_bound='60') }}
+
   run:
+    - {{ moose_cc }}
+    - {{ moose_cxx }}
+    - {{ moose_fortran }}
+    - {{ moose_impl }}           # [linux]
+    - {{ moose_impl_xx }}        # [linux]
+    - {{ moose_libgcc }}         # [linux]
+    - {{ moose_libstd }}         # [linux]
+    - {{ moose_libcxx }}         # [osx]
+    - {{ moose_libclang }}       # [osx]
+    - {{ moose_openmp }}         # [osx]
+    - {{ moose_llvm_tools }}     # [osx]
+    - {{ moose_ld64 }}           # [osx]
+    - {{ moose_vtk }}
+    - {{ moose_numpy }}
+    - {{ moose_pyqt }}           # [not arm64]
+    - {{ moose_matplotlib }}
+    - {{ moose_pandas }}
+    - {{ moose_livereload }}
+    - {{ moose_yaml }}
+    - {{ moose_pyyaml }}
+    - {{ moose_beautifulsoup4 }}
+    - {{ moose_pybtex }}
+    - {{ moose_mock }}
+    - {{ moose_lxml }}
+    - {{ moose_scikit_image }}
+    - {{ moose_pylatexenc }}
+    - {{ moose_jinja2 }}
+    - {{ moose_mako }}
+    - {{ moose_sympy }}
+    - {{ moose_deepdiff }}
+    - {{ pin_compatible('setuptools', lower_bound='58', upper_bound='60') }}
+    - clang-tools
+    - python
+
+test:
+  imports:
     - numpy
-    - pyqt
+    - PyQt5                      # [not arm64]
     - matplotlib
     - pandas
     - livereload
     - yaml
-    - pyyaml
-    - beautifulsoup4
+    - bs4
     - pybtex
     - mock
     - lxml
-    - scikit-image
-    - vtk {{ vtk }}
+    - skimage
+    - sympy
+    - vtk
     - pylatexenc
     - jinja2
-    - mako
-    - python {{ python }}
-
-test:
-  commands:
-    - test -f $PREFIX/share/moose-tools
+    - deepdiff
 
 about:
   home: https://mooseframework.org/

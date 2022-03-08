@@ -9,6 +9,12 @@
     requirement = "TestHarness shall report a non-failing status after a predetermined time of no activity"
     issues = '#9280'
   [../]
+  [./longest_jobs]
+    type = PythonUnitTest
+    input = test_LongestJobs.py
+    requirement = "TestHarness shall support the output of the longest running jobs"
+    issues = '#16752'
+  [../]
   [./csvdiffs]
     type = PythonUnitTest
     input = test_CSVDiffs.py
@@ -21,11 +27,23 @@
     requirement = "TestHarness shall report a failure when encountering differential result"
     issues = '#8373'
   [../]
+  [./jsondiff]
+    type = PythonUnitTest
+    input = test_JSONDiff.py
+    requirement = "TestHarness shall report a failure when encountering differential result in a JSON file"
+    issues = '#11323'
+    required_python_packages = deepdiff
+  [../]
   [./diff_gold]
     type = PythonUnitTest
     input = test_DiffGold.py
-    requirement = "TestHarness shall report a failure when encountering differential result"
+    requirement = "TestHarness shall report a failure when encountering differential result with a custom gold directory."
     issues = '#10647'
+  [../]
+  [./min_ad_size]
+    type = PythonUnitTest
+    input = test_MinADSize.py
+    requirement = "TestHarness shall restrict tests based on the available dual number derivative vector size"
   [../]
   [./cyclic]
     type = PythonUnitTest
@@ -219,5 +237,11 @@
     input = test_UnknownParam.py
     requirement = "The system shall produces a descriptive error with the file and line number when a test specification parameter is unknown."
     issues = '#14803'
+  []
+  [do_last]
+    type = PythonUnitTest
+    input = test_DoLast.py
+    requirement = "TestHarnes shall perform a test after all other tests have passed if specified to do so"
+    issues = '#15230'
   []
 []

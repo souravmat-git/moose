@@ -19,10 +19,10 @@
 namespace MathUtils
 {
 
-Real poly1Log(Real x, Real tol, int deriv);
-Real poly2Log(Real x, Real tol, int deriv);
-Real poly3Log(Real x, Real tol, int order);
-Real poly4Log(Real x, Real tol, int order);
+Real poly1Log(Real x, Real tol, unsigned int derivative_order);
+Real poly2Log(Real x, Real tol, unsigned int derivative_order);
+Real poly3Log(Real x, Real tol, unsigned int derivative_order);
+Real poly4Log(Real x, Real tol, unsigned int derivative_order);
 Real taylorLog(Real x);
 
 template <typename T>
@@ -77,6 +77,29 @@ heavyside(T x)
 
 template <typename T>
 T
+regularizedHeavyside(T x, Real smoothing_length)
+{
+  if (x <= -smoothing_length)
+    return 0.0;
+  else if (x < smoothing_length)
+    return 0.5 * (1 + std::sin(libMesh::pi * x / 2 / smoothing_length));
+  else
+    return 1.0;
+}
+
+template <typename T>
+T
+regularizedHeavysideDerivative(T x, Real smoothing_length)
+{
+  if (x < smoothing_length && x > -smoothing_length)
+    return 0.25 * libMesh::pi / smoothing_length *
+           (std::cos(libMesh::pi * x / 2 / smoothing_length));
+  else
+    return 0.0;
+}
+
+template <typename T>
+T
 positivePart(T x)
 {
   return x > 0.0 ? x : 0.0;
@@ -121,7 +144,7 @@ template <
     typename std::enable_if<std::is_same<typename W<T>::index_type, unsigned int>::value &&
                                 std::is_same<typename W2<T2>::index_type, unsigned int>::value,
                             int>::type = 0>
-typename CompareTypes<T, T2>::supertype
+typename libMesh::CompareTypes<T, T2>::supertype
 dotProduct(const W<T> & a, const W2<T2> & b)
 {
   return a * b;
@@ -138,32 +161,95 @@ template <typename T,
                                       std::is_same<typename W2<T2>::index_type,
                                                    std::tuple<unsigned int, unsigned int>>::value,
                                   int>::type = 0>
-typename CompareTypes<T, T2>::supertype
+typename libMesh::CompareTypes<T, T2>::supertype
 dotProduct(const W<T> & a, const W2<T2> & b)
 {
   return a.contract(b);
 }
 
-template <typename T>
-T
-poly(std::vector<Real> c, const T x, const bool derivative = false)
+/**
+ * Evaluate a polynomial with the coefficients c at x. Note that the Polynomial
+ * form is
+ *   c[0]*x^s + c[1]*x^(s-1) + c[2]*x^(s-2) + ... + c[s-2]*x^2 + c[s-1]*x + c[s]
+ * where s = c.size()-1 , which is counter intuitive!
+ *
+ * This function will be DEPRECATED soon (10/22/2020)
+ *
+ * The coefficient container type can be any container that provides an index
+ * operator [] and a .size() method (e.g. std::vector, std::array). The return
+ * type is the supertype of the container value type and the argument x.
+ * The supertype is the type that can represent both number types.
+ */
+template <typename C,
+          typename T,
+          typename R = typename libMesh::CompareTypes<typename C::value_type, T>::supertype>
+R
+poly(const C & c, const T x, const bool derivative = false)
 {
-  const unsigned int size = c.size();
+  const auto size = c.size();
   if (size == 0)
     return 0.0;
 
-  T value = c[0];
+  R value = c[0];
   if (derivative)
   {
     value *= size - 1;
-    for (unsigned int i = 1; i < size - 1; i++)
+    for (std::size_t i = 1; i < size - 1; ++i)
       value = value * x + c[i] * (size - i - 1);
   }
   else
   {
-    for (unsigned int i = 1; i < size; i++)
+    for (std::size_t i = 1; i < size; ++i)
       value = value * x + c[i];
   }
+
+  return value;
+}
+
+/**
+ * Evaluate a polynomial with the coefficients c at x. Note that the Polynomial
+ * form is
+ *   c[0] + c[1] * x + c[2] * x^2 + ...
+ * The coefficient container type can be any container that provides an index
+ * operator [] and a .size() method (e.g. std::vector, std::array). The return
+ * type is the supertype of the container value type and the argument x.
+ * The supertype is the type that can represent both number types.
+ */
+template <typename C,
+          typename T,
+          typename R = typename libMesh::CompareTypes<typename C::value_type, T>::supertype>
+R
+polynomial(const C & c, const T x)
+{
+  auto size = c.size();
+  if (size == 0)
+    return 0.0;
+
+  size--;
+  R value = c[size];
+  for (std::size_t i = 1; i <= size; ++i)
+    value = value * x + c[size - i];
+
+  return value;
+}
+
+/**
+ * Returns the derivative of polynomial(c, x) with respect to x
+ */
+template <typename C,
+          typename T,
+          typename R = typename libMesh::CompareTypes<typename C::value_type, T>::supertype>
+R
+polynomialDerivative(const C & c, const T x)
+{
+  auto size = c.size();
+  if (size <= 1)
+    return 0.0;
+
+  size--;
+  R value = c[size] * size;
+  for (std::size_t i = 1; i < size; ++i)
+    value = value * x + c[size - i] * (size - i);
 
   return value;
 }
@@ -230,4 +316,26 @@ mooseSetToZero(std::vector<Real> & vec)
     v = 0.;
 }
 
+/**
+ * generate a complete multi index table for given dimension and order
+ * i.e. given dim = 2, order = 2, generated table will have the following content
+ * 0 0
+ * 1 0
+ * 0 1
+ * 2 0
+ * 1 1
+ * 0 2
+ * The first number in each entry represents the order of the first variable, i.e. x;
+ * The second number in each entry represents the order of the second variable, i.e. y.
+ * Multiplication is implied between numbers in each entry, i.e. 1 1 represents x^1 * y^1
+ *
+ * @param dim dimension of the multi-index, here dim = mesh dimension
+ * @param order generate the multi-index up to certain order
+ * @return a data structure holding entries representing the complete multi index
+ */
+std::vector<std::vector<unsigned int>> multiIndex(unsigned int dim, unsigned int order);
+
 } // namespace MathUtils
+
+/// A helper function for MathUtils::multiIndex
+std::vector<std::vector<unsigned int>> multiIndexHelper(unsigned int N, unsigned int K);

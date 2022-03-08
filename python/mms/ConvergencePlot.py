@@ -23,7 +23,7 @@ class ConvergencePlot(object):
 
     Key, value Options:
         xlabel[str]: The label for the x-axis
-      ylabel[str]: The label for the y-axis
+        ylabel[str]: The label for the y-axis
     """
     Line = collections.namedtuple('Line', 'x y label')
 
@@ -46,21 +46,57 @@ class ConvergencePlot(object):
         # Apply grid marks
         plt.grid(True, which='both', color=[0.8]*3)
 
-    def plot(self, df, label=None, **kwargs):
+        self.label_to_slope = {}
+        self.label_to_intercept = {}
+
+    def plot(self, df, label=None, title=None, num_fitted_points=None, slope_precision=3, **kwargs):
+        num_y_columns = len(df.columns) - 1
+
+        if label:
+            if num_y_columns > 1:
+                if not isinstance(label, list):
+                    raise TypeError("For multiple y-data label must be a list")
+
+
+            if isinstance(label, list) and num_y_columns != len(label):
+                raise IOError("The length of the label and the number of y columns must be the same")
+
+            if not isinstance(label, list):
+                label = [label]
 
         x = df[df.columns[0]]
-        y = df[df.columns[1]]
+        lines = []
 
-        if label is None:
-            label = 'line-{}'.format(len(self._axes.lines))
+        for i in range(1,len(df.columns)):
+            y = df[df.columns[i]]
 
-        slope = self._fit(x, y)
-        label = '{}: {:.3f}'.format(label, slope)
+            if label is None:
+                this_label = 'line-{}'.format(len(lines))
+            else:
+                this_label = label[i-1]
 
-        line, = self._axes.plot(x, y, label=label, **kwargs)
+            if num_fitted_points is not None:
+                coeffs = self._fit(x[-num_fitted_points:], y[-num_fitted_points:])
+            else:
+                coeffs = self._fit(x, y)
+
+            slope = coeffs[0]
+            intercept = coeffs[1]
+            self.label_to_slope.update({this_label:slope})
+            self.label_to_intercept.update({this_label:intercept})
+
+            this_label = '{}: {:.{precision}f}'.format(this_label, slope, precision=slope_precision)
+
+            lines.append(self._axes.plot(x, y, label=this_label, **kwargs)[0])
+
+        if title:
+            self._axes.set_title(title)
 
         self._axes.legend()
-        return line
+        return lines
+
+    def set_title(self, title):
+        self._axes.set_title(title)
 
     def _fit(self, x, y):
         """
@@ -73,7 +109,7 @@ class ConvergencePlot(object):
 
         # Perform fit
         coefficients = np.polyfit(np.log10(x), np.log10(y), 1)
-        return coefficients[0]
+        return coefficients
 
     def save(self, filename):
         """

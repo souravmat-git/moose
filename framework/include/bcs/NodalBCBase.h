@@ -13,9 +13,6 @@
 #include "RandomInterface.h"
 #include "CoupleableMooseVariableDependencyIntermediateInterface.h"
 
-// Forward declarations
-class NodalBCBase;
-
 // libMesh forward declarations
 namespace libMesh
 {
@@ -23,14 +20,10 @@ template <typename T>
 class NumericVector;
 }
 
-template <>
-InputParameters validParams<NodalBCBase>();
-
 /**
  * Base class for deriving any boundary condition that works at nodes
  */
 class NodalBCBase : public BoundaryCondition,
-                    public RandomInterface,
                     public CoupleableMooseVariableDependencyIntermediateInterface
 {
 public:
@@ -38,14 +31,10 @@ public:
 
   NodalBCBase(const InputParameters & parameters);
 
-  virtual void computeResidual() = 0;
-  virtual void computeJacobian() = 0;
-  virtual void computeOffDiagJacobian(unsigned int jvar) = 0;
-
   /**
-   * Compute the off-diagonal contributions from scalar variables
+   * Whether to verify that this object is acting on a nodal variable
    */
-  virtual void computeOffDiagJacobianScalar(unsigned int /*jvar*/) {}
+  virtual bool checkNodalVar() const { return true; }
 
 protected:
   /// The aux variables to save the residual contributions to

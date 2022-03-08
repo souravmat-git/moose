@@ -72,7 +72,7 @@
 [Kernels]
   [./DynamicTensorMechanics]
     displacements = 'disp_x disp_y disp_z'
-    alpha = 0.11
+    hht_alpha = 0.11
   [../]
   [./inertia_x]
     type = InertialForce
@@ -175,9 +175,7 @@
     [./Side1]
       boundary = bottom
       function = pressure
-      disp_x = disp_x
-      disp_y = disp_y
-      disp_z = disp_z
+      displacements = 'disp_x disp_y disp_z'
       factor = 1
       alpha = 0.11
     [../]
@@ -236,17 +234,17 @@
     type = TimestepSize
   [../]
   [./disp]
-    type = NodalMaxValue
+    type = NodalExtremeValue
     variable = disp_y
     boundary = bottom
   [../]
   [./vel]
-    type = NodalMaxValue
+    type = NodalExtremeValue
     variable = vel_y
     boundary = bottom
   [../]
   [./accel]
-    type = NodalMaxValue
+    type = NodalExtremeValue
     variable = accel_y
     boundary = bottom
   [../]

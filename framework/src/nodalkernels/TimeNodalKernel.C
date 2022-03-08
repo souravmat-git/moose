@@ -14,8 +14,6 @@
 #include "MooseVariableFE.h"
 #include "SystemBase.h"
 
-defineLegacyParams(TimeNodalKernel);
-
 InputParameters
 TimeNodalKernel::validParams()
 {
@@ -41,7 +39,7 @@ TimeNodalKernel::computeResidual()
     _qp = 0;
     Real res = computeQpResidual();
     res *= _var.scalingFactor();
-    _assembly.cacheResidualContribution(dof_idx, res, _vector_tags);
+    _assembly.cacheResidual(dof_idx, res, _vector_tags);
 
     if (_has_save_in)
     {

@@ -11,12 +11,9 @@
 
 #include "MeshGenerator.h"
 
-// Forward declarations
-class ExtraNodesetGenerator;
-
-template <>
-InputParameters validParams<ExtraNodesetGenerator>();
-
+/*
+ * Mesh generator to create a new node set and a new boundary with the nodes the user provides
+ */
 class ExtraNodesetGenerator : public MeshGenerator
 {
 public:
@@ -27,5 +24,6 @@ public:
   std::unique_ptr<MeshBase> generate() override;
 
 protected:
+  /// mesh to modify
   std::unique_ptr<MeshBase> & _input;
 };

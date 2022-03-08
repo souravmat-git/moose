@@ -9,9 +9,7 @@
 
 #pragma once
 
-#include "libmesh/libmesh.h" // Real, LIBMESH_HAVE_PETSC
-
-#ifdef LIBMESH_HAVE_PETSC
+#include "libmesh/libmesh.h"
 
 // MOOSE includes
 #include "MultiMooseEnum.h"
@@ -41,11 +39,8 @@ class PetscOptions
 public:
   PetscOptions() : flags("", "", true) {}
 
-  /// Keys for PETSc key-value pairs
-  std::vector<std::string> inames;
-
-  /// Values for PETSc key-value pairs
-  std::vector<std::string> values;
+  /// PETSc key-value pairs
+  std::vector<std::pair<std::string, std::string>> pairs;
 
   /// Single value PETSc options (flags)
   MultiMooseEnum flags;
@@ -134,6 +129,16 @@ void setSinglePetscOption(const std::string & name, const std::string & value = 
 void addPetscOptionsFromCommandline();
 
 /**
+ * Setup which side we want to apply preconditioner
+ */
+void petscSetDefaultPCSide(FEProblemBase & problem, KSP ksp);
+
+/**
+ * Set norm type
+ */
+void petscSetDefaultKSPNormType(FEProblemBase & problem, KSP ksp);
+
+/**
  * This method takes an adjacency matrix, and a desired number of colors and applies
  * a graph coloring algorithm to produce a coloring. The coloring is returned as a vector
  * of unsigned integers indicating which color or group each vextex in the adjacency matrix
@@ -145,12 +150,16 @@ void colorAdjacencyMatrix(PetscScalar * adjacency_matrix,
                           std::vector<unsigned int> & vertex_colors,
                           const char * coloring_algorithm);
 
-#if PETSC_VERSION_LESS_THAN(3, 4, 0)
-#define SNESGETLINESEARCH SNESGetSNESLineSearch
-#else
-#define SNESGETLINESEARCH SNESGetLineSearch
-#endif
-}
-}
+/**
+ * disable printing of the nonlinear convergence reason
+ */
+void disableNonlinearConvergedReason(FEProblemBase & fe_problem);
 
-#endif // LIBMESH_HAVE_PETSC
+/**
+ * disable printing of the linear convergence reason
+ */
+void disableLinearConvergedReason(FEProblemBase & fe_problem);
+
+#define SNESGETLINESEARCH SNESGetLineSearch
+}
+}

@@ -20,8 +20,6 @@
 #include "libmesh/fe_base.h"
 #include "libmesh/elem.h"
 
-defineLegacyParams(SideSetsGeneratorBase);
-
 InputParameters
 SideSetsGeneratorBase::validParams()
 {
@@ -62,8 +60,19 @@ SideSetsGeneratorBase::setup(MeshBase & mesh)
   FEType fe_type(Utility::string_to_enum<Order>("CONSTANT"),
                  Utility::string_to_enum<FEFamily>("MONOMIAL"));
   _fe_face = FEBase::build(dim, fe_type);
-  _qface = libmesh_make_unique<QGauss>(dim - 1, FIRST);
+  _qface = std::make_unique<QGauss>(dim - 1, FIRST);
   _fe_face->attach_quadrature_rule(_qface.get());
+
+  // We will want to Change the below code when we have more fine-grained control over advertising
+  // what we need need and how we satisfy those needs. For now we know we need to have neighbors per
+  // #15823...and we do have an explicit `find_neighbors` call...but we don't have a
+  // `neighbors_found` API and it seems off to do:
+  //
+  // if (!mesh.is_prepared())
+  //   mesh.find_neighbors()
+
+  if (!mesh.is_prepared())
+    mesh.prepare_for_use();
 }
 
 void

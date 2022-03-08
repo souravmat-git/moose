@@ -13,11 +13,6 @@
 
 #include "MooseVariableScalar.h"
 
-class ArrayDGKernel;
-
-template <>
-InputParameters validParams<ArrayDGKernel>();
-
 /**
  * The DGKernel class is responsible for calculating the residuals for various
  * physics on internal sides (edges/faces).
@@ -39,7 +34,12 @@ public:
   /**
    * The variable that this kernel operates on.
    */
-  virtual MooseVariableFEBase & variable() override { return _var; }
+  virtual const MooseVariableFEBase & variable() const override { return _var; }
+
+  /**
+   * Override this function to consider couplings of components of the array variable
+   */
+  virtual void computeOffDiagJacobian(unsigned int jvar) override;
 
   /**
    * Computes the residual for this element or the neighbor
@@ -52,45 +52,29 @@ public:
   virtual void computeElemNeighJacobian(Moose::DGJacobianType type) override;
 
   /**
-   * Computes d-residual / d-jvar...
-   */
-  virtual void computeOffDiagJacobian(unsigned int jvar) override;
-
-  /**
    * Computes the element-element off-diagonal Jacobian
    */
   virtual void computeOffDiagElemNeighJacobian(Moose::DGJacobianType type,
-                                               unsigned int jvar) override;
+                                               const MooseVariableFEBase & jvar) override;
 
 protected:
   /**
    * This is the virtual that derived classes should override for computing the residual on
-   * neighboring element.
+   * neighboring element. Residual to be filled in \p residual.
    */
-  virtual RealEigenVector computeQpResidual(Moose::DGResidualType type) = 0;
+  virtual void computeQpResidual(Moose::DGResidualType type, RealEigenVector & residual) = 0;
 
   /**
    * This is the virtual that derived classes should override for computing the Jacobian on
    * neighboring element.
    */
-  virtual RealEigenVector computeQpJacobian(Moose::DGJacobianType type) = 0;
+  virtual RealEigenVector computeQpJacobian(Moose::DGJacobianType);
 
   /**
    * This is the virtual that derived classes should override for computing the off-diag Jacobian.
    */
   virtual RealEigenMatrix computeQpOffDiagJacobian(Moose::DGJacobianType type,
-                                                   MooseVariableFEBase & jvar)
-  {
-    if (jvar.number() == _var.number())
-    {
-      RealEigenVector v = computeQpJacobian(type);
-      RealEigenMatrix t = RealEigenMatrix::Zero(_var.count(), _var.count());
-      t.diagonal() = v;
-      return t;
-    }
-    else
-      return RealEigenMatrix::Zero(_var.count(), jvar.count());
-  }
+                                                   const MooseVariableFEBase & jvar);
 
   /**
    * Put necessary evaluations depending on qp but independent on test functions here
@@ -106,7 +90,7 @@ protected:
    * Put necessary evaluations depending on qp but independent on test and shape functions here for
    * off-diagonal Jacobian assembly
    */
-  virtual void initQpOffDiagJacobian(Moose::DGJacobianType, MooseVariableFEBase &) {}
+  virtual void initQpOffDiagJacobian(Moose::DGJacobianType, const MooseVariableFEBase &) {}
 
   /// Variable this kernel operates on
   ArrayMooseVariable & _var;
@@ -142,4 +126,8 @@ protected:
   const std::vector<Eigen::Map<RealDIMValue>> & _array_normals;
   /// Number of components of the array variable
   const unsigned int _count;
+
+private:
+  /// Work vector for residual computation
+  RealEigenVector _work_vector;
 };

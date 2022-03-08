@@ -12,12 +12,6 @@
 // MOOSE includes
 #include "TableOutput.h"
 
-// Forward declarations
-class CSV;
-
-template <>
-InputParameters validParams<CSV>();
-
 /**
  * Based class for adding basic filename support to output base class
  *
@@ -70,6 +64,11 @@ protected:
    * Sets the write flag and calls TableOutput::outputVectorPostprocessors()
    */
   virtual void outputVectorPostprocessors() override;
+
+  /**
+   * Sets the write flag and calls TableOutput::outputVectorPostprocessors()
+   */
+  virtual void outputReporters() override;
 
   /**
    * Generates a filename pattern for Vectorpostprocessors

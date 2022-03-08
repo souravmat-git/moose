@@ -13,12 +13,6 @@
 #include "FunctionParserUtils.h"
 #include "libmesh/point.h"
 
-// Forward declarations
-class ParsedGenerateSideset;
-
-template <>
-InputParameters validParams<ParsedGenerateSideset>();
-
 /**
  * MeshGenerator for defining a Sideset by a parsed expression and
  * optionally by looking at the subdomain a side's element belongs to
@@ -34,6 +28,7 @@ public:
   std::unique_ptr<MeshBase> generate() override;
 
 protected:
+  /// mesh to add the sidesets to
   std::unique_ptr<MeshBase> & _input;
 
   /// function expression
@@ -45,11 +40,17 @@ protected:
   /// whether to check subdomain ids when adding sides or not
   bool _check_subdomains;
 
+  /// whether to check neighbor subdomain ids when adding sides or not
+  bool _check_neighbor_subdomains;
+
   /// whether to check normals when adding sides or not
   bool _check_normal;
 
   /// A list of included subdomain ids that the side has to be part of
   std::vector<subdomain_id_type> _included_ids;
+
+  /// A list of included neighbor subdomain ids
+  std::vector<subdomain_id_type> _included_neighbor_ids;
 
   /// A normal vector that (if provided) is compared against side's normals
   Point _normal;

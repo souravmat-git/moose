@@ -8,7 +8,7 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #pragma once
-
+#include "Shuffle.h"
 #include "DenseMatrix.h"
 #include "MooseObject.h"
 #include "MooseRandom.h"
@@ -16,9 +16,7 @@
 #include "DistributionInterface.h"
 #include "PerfGraphInterface.h"
 #include "SamplerInterface.h"
-
-template <>
-InputParameters validParams<Sampler>();
+#include "MultiApp.h"
 
 /**
  * This is the base class for Samplers as used within the Stochastic Tools module.
@@ -47,14 +45,14 @@ class Sampler : public MooseObject,
                 public SamplerInterface
 {
 public:
+  enum class SampleMode
+  {
+    GLOBAL = 0,
+    LOCAL = 1
+  };
+
   static InputParameters validParams();
-
   Sampler(const InputParameters & parameters);
-
-  // DEPRECATED, DO NOT USE
-  virtual std::vector<DenseMatrix<Real>> sample();
-  std::vector<DenseMatrix<Real>> getSamples();
-  double rand(unsigned int index = 0);
 
   // The public members define the API that is exposed to application developers that are using
   // Sampler objects to perform calculations, so be very careful when adding items here since
@@ -111,7 +109,32 @@ public:
   dof_id_type getLocalRowEnd() const;
   ///@}
 
+  /**
+   * Reference to rank configuration defining the partitioning of the sampler matrix
+   * This is primarily used by MultiApps to ensure consistent partitioning
+   */
+  const LocalRankConfig & getRankConfig(bool batch_mode) const
+  {
+    return batch_mode ? _rank_config.second : _rank_config.first;
+  }
+
 protected:
+  /**
+   * Enum describing the type of parallel communication to perform.
+   *
+   * Some routines require specific communication methods that not all processors
+   * see, these IDs will determine how that routine is performed:
+   *  - NONE routine is not distrubuted and things all can happen locally
+   *  - LOCAL routine is distributed on all processors
+   *  - SEMI_LOCAL routine is distributed only on processors that own rows
+   */
+  enum CommMethod
+  {
+    NONE = 0,
+    LOCAL = 1,
+    SEMI_LOCAL = 2
+  };
+
   // The following methods are the basic methods that should be utilized my most application
   // developers that are creating a custom Sampler.
 
@@ -152,14 +175,13 @@ protected:
    */
   uint32_t getRandl(unsigned int index, uint32_t lower, uint32_t upper);
 
-  // TODO: Restore this pure virtual after application are updated to new interface
   /**
    * Base class must override this method to supply the sample distribution data.
    * @param row_index The row index of sample value to compute.
    * @param col_index The column index of sample value to compute.
    * @return The value for the given row and column.
    */
-  virtual Real computeSample(dof_id_type row_index, dof_id_type col_index);
+  virtual Real computeSample(dof_id_type row_index, dof_id_type col_index) = 0;
 
   ///@{
   /**
@@ -168,8 +190,8 @@ protected:
    * These methods should not be called directly, each is automatically called by the public
    * getGlobalSamples() or getLocalSamples() methods.
    */
-  virtual void sampleSetUp(){};
-  virtual void sampleTearDown(){};
+  virtual void sampleSetUp(const SampleMode /*mode*/) {}
+  virtual void sampleTearDown(const SampleMode /*mode*/) {}
   ///@}
 
   // The following methods are advanced methods that should not be needed by application developers,
@@ -204,18 +226,68 @@ protected:
    * TODO: This should be updated if the If the random number generator is updated to type that
    * supports native advancing.
    */
-  virtual void advanceGenerators(dof_id_type count);
+  virtual void advanceGenerators(const dof_id_type count);
+  virtual void advanceGenerator(const unsigned int seed_index, const dof_id_type count);
+  void setAutoAdvanceGenerators(const bool state);
+
+  /**
+   * Helper for shuffling a vector of data in-place; the default assumes data is distributed
+   *
+   * NOTE: This will advance the generator by the size of the supplied vector.
+   */
+  template <typename T>
+  void shuffle(std::vector<T> & data,
+               const std::size_t seed_index = 0,
+               const CommMethod method = CommMethod::LOCAL);
+
+  //@{
+  /**
+   * Callbacks for before and after execute.
+   *
+   * These were added to support of dynamic sampler sizes. Recall that execute is simply to advance
+   * the state of the generator such that the next sample will be unique. These methods allow
+   * operations before and after the call to generator advancement.
+   */
+  virtual void executeSetUp() {}
+  virtual void executeTearDown() {}
+  ///@}
+
+  //@{
+  /**
+   * Here we save/restore generator states
+   */
+  void saveGeneratorState() { _generator.saveState(); }
+  void restoreGeneratorState() { _generator.restoreState(); }
+  //@}
+
+  /**
+   * This is where the sampler partitioning is defined. It is NOT recommended to
+   * override this function unless you know EXACTLY what you are doing
+   */
+  virtual LocalRankConfig constructRankConfig(bool batch_mode) const;
+
+  /// The minimum number of processors that are associated with a set of rows
+  const dof_id_type _min_procs_per_row;
+  /// The maximum number of processors that are associated with a set of rows
+  const dof_id_type _max_procs_per_row;
+
+  /// Communicator that was split based on samples that have rows
+  libMesh::Parallel::Communicator _local_comm;
 
 private:
+  ///@{
   /**
-   * Function called by MOOSE to setup the Sampler for use. The primary purpose is to partition
-   * the DenseMatrix rows for parallel distribution. A separate method is required so that the
+   * Functions called by MOOSE to setup the Sampler for use. The primary purpose is to partition
+   * the DenseMatrix rows for parallel distribution. A separate methods are required so that the
    * set methods can be called within the constructors of child objects, see
-   * FEProblemBase::addSampler method.
+   * FEProblemBase::addSampler method. The reinit was added to support re-partitioning to allow
+   * for dynamic changes in sampler size.
    *
    * This init() method is called by FEProblemBase::addSampler; it should not be called elsewhere.
    */
-  void init();
+  void init();   // sets up MooseRandom
+  void reinit(); // partitions sampler output
+  ///@}
   friend void FEProblemBase::addSampler(const std::string & type,
                                         const std::string & name,
                                         InputParameters & parameters);
@@ -229,6 +301,16 @@ private:
    */
   void execute();
   friend void FEProblemBase::objectExecuteHelper<Sampler>(const std::vector<Sampler *> & objects);
+
+  /**
+   * Helper function for reinit() errors.
+   **/
+  void checkReinitStatus() const;
+
+  /**
+   * Advance method for internal use that considers the auto advance flag.
+   */
+  void advanceGeneratorsInternal(const dof_id_type count);
 
   /// Random number generator, don't give users access. Control it via the interface from this class.
   MooseRandom _generator;
@@ -260,6 +342,9 @@ private:
   /// Flag to indicate if the init method for this class was called
   bool _initialized;
 
+  /// Flag to indicate if the reinit method should be called during execute
+  bool _needs_reinit;
+
   /// Flag for initial execute to allow the first set of random numbers to be always be the same
   bool _has_executed;
 
@@ -272,14 +357,22 @@ private:
   /// Max number of entries for matrix returned by getNextLocalRow
   const dof_id_type _limit_get_next_local_row;
 
-  ///@{
-  /// PrefGraph timers
-  const PerfID _perf_get_global_samples;
-  const PerfID _perf_get_local_samples;
-  const PerfID _perf_get_next_local_row;
-  const PerfID _perf_sample_row;
-  const PerfID _perf_local_sample_matrix;
-  const PerfID _perf_sample_matrix;
-  const PerfID _perf_advance_generator;
-  ///@}
+  /// The partitioning of the sampler matrix, built in reinit()
+  /// first is for normal mode and send is for batch mode
+  std::pair<LocalRankConfig, LocalRankConfig> _rank_config;
+
+  /// Flag for disabling automatic generator advancing
+  bool _auto_advance_generators;
 };
+
+template <typename T>
+void
+Sampler::shuffle(std::vector<T> & data, const std::size_t seed_index, const CommMethod method)
+{
+  if (method == CommMethod::NONE)
+    MooseUtils::shuffle<T>(data, _generator, seed_index, nullptr);
+  else if (method == CommMethod::LOCAL)
+    MooseUtils::shuffle<T>(data, _generator, seed_index, &_communicator);
+  else if (method == CommMethod::SEMI_LOCAL)
+    MooseUtils::shuffle<T>(data, _generator, seed_index, &_local_comm);
+}

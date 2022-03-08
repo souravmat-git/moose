@@ -7,28 +7,23 @@
 #* Licensed under LGPL 2.1, please see LICENSE for details
 #* https://www.gnu.org/licenses/lgpl-2.1.html
 
-import os
 import re
 import logging
-import moosetree
-import mooseutils
 
 import MooseDocs
 from .. import common
-from ..common import exceptions
 from ..base import components, Extension
-from ..tree import tokens, latex
-from . import core, floats, heading
+from ..tree import tokens, latex, html
+from . import core, floats, heading, modal
 
 def make_extension(**kwargs):
     return AutoLinkExtension(**kwargs)
 
-PAGE_LINK_RE = re.compile(r'(?P<filename>.*?\.md)?(?P<bookmark>#.*)?', flags=re.UNICODE)
+PAGE_LINK_RE = re.compile(r'(?P<filename>^(?!http).*?\.md)?(?P<bookmark>#.*)?', flags=re.UNICODE)
 LOG = logging.getLogger(__name__)
 
-SourceLink = tokens.newToken('SourceLink')
-LocalLink = tokens.newToken('LocalLink', bookmark='')
-AutoLink = tokens.newToken('AutoLink', page='', bookmark='', optional=False, warning=False,
+LocalLink = tokens.newToken('LocalLink', bookmark=None)
+AutoLink = tokens.newToken('AutoLink', page='', bookmark=None, alternative=None, optional=False,
                            exact=False)
 
 class AutoLinkExtension(Extension):
@@ -46,48 +41,29 @@ class AutoLinkExtension(Extension):
     def extend(self, reader, renderer):
         """Replace default core link components on reader and provide auto link rendering."""
 
-        self.requires(core, floats, heading)
+        self.requires(core, heading, modal)
 
         reader.addInline(PageLinkComponent(), location='=LinkInline')
         reader.addInline(PageShortcutLinkComponent(), location='=ShortcutLinkInline')
 
         renderer.add('LocalLink', RenderLocalLink())
         renderer.add('AutoLink', RenderAutoLink())
-        renderer.add('SourceLink', RenderSourceLink())
 
-def createTokenHelper(key, parent, info, page, use_key_in_modal=False, optional=False, exact=False):
+def createTokenHelper(key, parent, info, page, settings):
     match = PAGE_LINK_RE.search(info[key])
-    bookmark = match.group('bookmark')[1:] if match.group('bookmark') else ''
+    bookmark = match.group('bookmark')[1:] if match.group('bookmark') else None
     filename = match.group('filename')
 
     # The link is local (i.e., [#foo]), the heading will be gathered on render because it
     # could be after the current position.
-    if (filename is None) and (bookmark != '' or (match.group('bookmark') == '#')):
+    if (filename is None) and (bookmark is not None):
         return LocalLink(parent, bookmark=bookmark)
-
-    elif filename is not None:
-        return AutoLink(parent, page=filename, bookmark=bookmark, optional=optional, exact=exact)
-
-    else:
-        source = common.project_find(info[key])
-        if len(source) > 1:
-            options = mooseutils.levenshteinDistance(info[key], source, number=8)
-            msg = "Multiple files match the supplied filename {}, did you mean:\n".format(info[key])
-            for opt in options:
-                msg += "    {}\n".format(opt)
-            raise exceptions.MooseDocsException(msg)
-
-        elif len(source) == 1:
-            src_link = SourceLink(parent)
-            src = str(source[0])
-            content = common.fix_moose_header(common.read(os.path.join(MooseDocs.ROOT_DIR, src)))
-            code = core.Code(None, language=common.get_language(src), content=content)
-            local = src.replace(MooseDocs.ROOT_DIR, '')
-            link = floats.create_modal_link(src_link, content=code, title=local)
-            if use_key_in_modal:
-                tokens.String(link, content=os.path.basename(info[key]))
-            return link
-
+    elif (filename is not None):
+        return AutoLink(parent, page=filename, bookmark=bookmark, optional=settings['optional'],
+                        exact=settings['exact'], alternative=settings['alternative'])
+    elif common.project_find(info[key]):
+        return modal.ModalSourceLink(parent, src=common.check_filenames(info[key]),
+                                     language=settings['language'])
     return None
 
 class PageShortcutLinkComponent(core.ShortcutLinkInline):
@@ -99,18 +75,15 @@ class PageShortcutLinkComponent(core.ShortcutLinkInline):
     @staticmethod
     def defaultSettings():
         settings = core.ShortcutLinkInline.defaultSettings()
-        settings['optional'] = (False, "Toggle the link as optional when file doesn't exist.")
-        settings['exact'] = (False, "Enable/disable exact match for markdown file.")
+        settings['alternative'] = (None, "An alternative link to use when the file doesn't exist.")
+        settings['optional'] = (False, "Toggle the link as optional when the file doesn't exist.")
+        settings['exact'] = (False, "Enable/disable exact match for the markdown file.")
+        settings['language'] = (None, "The language used for source file syntax highlighting.")
         return settings
 
-    def createToken(self, parent, info, page):
-        token = createTokenHelper('key', parent, info, page,
-                                  use_key_in_modal=True,
-                                  optional=self.settings['optional'],
-                                  exact=self.settings['exact'])
-        if token is None:
-            return core.ShortcutLinkInline.createToken(self, parent, info, page)
-        return token
+    def createToken(self, parent, info, page, settings):
+        token = createTokenHelper('key', parent, info, page, settings)
+        return token or core.ShortcutLinkInline.createToken(self, parent, info, page, settings)
 
 class PageLinkComponent(core.LinkInline):
     """
@@ -121,16 +94,15 @@ class PageLinkComponent(core.LinkInline):
     @staticmethod
     def defaultSettings():
         settings = core.LinkInline.defaultSettings()
-        settings['optional'] = (False, "Toggle the link as optional when file doesn't exist.")
-        settings['exact'] = (False, "Enable/disable exact match for markdown file.")
+        settings['alternative'] = (None, "An alternative link to use when the file doesn't exist.")
+        settings['optional'] = (False, "Toggle the link as optional when the file doesn't exist.")
+        settings['exact'] = (False, "Enable/disable exact match for the markdown file.")
+        settings['language'] = (None, "The language used for source file syntax highlighting.")
         return settings
 
-    def createToken(self, parent, info, page):
-        token = createTokenHelper('url', parent, info, page, optional=self.settings['optional'],
-                                  exact=self.settings['exact'])
-        if token is None:
-            return core.LinkInline.createToken(self, parent, info, page)
-        return token
+    def createToken(self, parent, info, page, settings):
+        token = createTokenHelper('url', parent, info, page, settings)
+        return token or core.LinkInline.createToken(self, parent, info, page, settings)
 
 class RenderLinkBase(components.RenderComponent):
 
@@ -155,6 +127,10 @@ class RenderLinkBase(components.RenderComponent):
             else:
                 link['class'] = 'moose-error'
                 tokens.String(link, content=url)
+                msg = "Unable to locate local heading with URL '{}'".format(url)
+                LOG.error(common.report_error(msg, page.source,
+                                              token.info.line if token.info else None,
+                                              token.info[0] if token.info else token.text()))
         else:
             token.copyToToken(link)
 
@@ -201,7 +177,7 @@ class RenderLinkBase(components.RenderComponent):
         tok = tokens.Token(None)
         token.copyToToken(tok)
         if len(tok) == 0: # Use filename if no children exist
-            tokens.String(tok, content=page.local)
+            tokens.String(tok, content=token['page'])
         self.renderer.render(parent, tok, page)
 
 class RenderLocalLink(RenderLinkBase):
@@ -219,26 +195,51 @@ class RenderAutoLink(RenderLinkBase):
     Create link to another page and extract the heading for the text, if no children provided.
     """
     def createHTML(self, parent, token, page):
-        desired = self.translator.findPage(token['page'],
-                                           throw_on_zero=not token['optional'],
-                                           exact=token['exact'],
-                                           warn_on_zero=token['warning'])
+        alternative = token['alternative']
+        optional = token['optional']
+        exact = token['exact']
+        try:
+            desired = self.translator.findPage(token['page'], exact=exact,
+                                               throw_on_zero=not optional and alternative is None)
+        except MooseDocs.common.exceptions.MooseDocsException:
+            html.String(parent, content=token['page'], class_='moose_error')
+            raise
+
+        # If no page was found, create a new copy of the token and render the alernative hyperlink
+        if (desired is None) and (alternative is not None):
+            token = token.copy(info=True)
+            match = PAGE_LINK_RE.search(alternative)
+            token['bookmark'] = match.group('bookmark')[1:] if match.group('bookmark') else None
+            token['page'] = match.group('filename')
+
+            # Determine what to do with the alternative token. If no filename was provided, it could
+            # be a local link or a URL, otherwise, we'll search for the 'filename#bookmark' href.
+            if token['page'] is None:
+                if token['bookmark'] is not None:
+                    return RenderLocalLink.createHTML(self, parent, token, page)
+                elif len(token):
+                    token['url'] = alternative
+                    return core.RenderLink.createHTML(self, parent, token, page)
+                else:
+                    msg = "URLs cannot be used as an alternative for automatic shortcut links. " \
+                          "Please use the '[text](link alternative=foo)' syntax instead."
+                    LOG.error(common.report_error(msg, page.source,
+                                                  token.info.line if token.info else None,
+                                                  token.info[0] if token.info else token.text()))
+                    return None
+            desired = self.translator.findPage(token['page'], exact=exact, throw_on_zero=not optional)
+
         return self.createHTMLHelper(parent, token, page, desired)
 
     def createLatex(self, parent, token, page):
-        desired = self.translator.findPage(token['page'],
-                                           throw_on_zero=not token['optional'],
-                                           warn_on_zero=token['warning'],
-                                           exact=token['exact'])
+        throw = not token['optional'] and token['alternative'] is None
+        desired = self.translator.findPage(token['page'], exact=token['exact'], throw_on_zero=throw)
+
+        # The 'alternative' token is not supported here as it doesn't seem appropriate [crswong888]
+        if desired is None and token['alternative'] is not None:
+            msg = "Warning: The 'alternative' setting for automatic links has no effect on LaTeX " \
+                  "renderers." + ("\n" + token.info[0] if token.info else "")
+            latex.String(parent, content=msg)
+            return None
+
         return self.createLatexHelper(parent, token, page, desired)
-
-class RenderSourceLink(components.RenderComponent):
-
-    def createHTML(self, parent, token, page):
-        return parent
-
-    def createLatex(self, parent, token, page):
-        root = tokens.Token(None)
-        token(0).copyToToken(root)
-        self.renderer.render(parent, root, page)
-        return None

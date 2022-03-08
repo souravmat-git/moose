@@ -37,6 +37,9 @@ struct OutputData
 
   /// A list of the outputs to write
   std::set<std::string> output;
+
+  /// Clear existing sets for re-initialization
+  void reset();
 };
 
 /**
@@ -166,8 +169,12 @@ public:
    */
   void setHasShowList(bool value) { _has_show_list = value; }
 
+  /**
+   * Clear existing lists for re-initialization
+   */
+  void reset();
+
 private:
   // True when the input file contains a show/hide list
   bool _has_show_list;
 };
-

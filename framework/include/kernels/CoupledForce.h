@@ -11,12 +11,6 @@
 
 #include "Kernel.h"
 
-// Forward Declaration
-class CoupledForce;
-
-template <>
-InputParameters validParams<CoupledForce>();
-
 /**
  * Simple class to demonstrate off diagonal Jacobian contributions.
  */
@@ -39,4 +33,3 @@ private:
   const VariableValue & _v;
   Real _coef;
 };
-

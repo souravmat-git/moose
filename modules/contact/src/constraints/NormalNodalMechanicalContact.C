@@ -37,13 +37,13 @@ NormalNodalMechanicalContact::NormalNodalMechanicalContact(const InputParameters
     _epsilon(std::numeric_limits<Real>::epsilon()),
     _component(getParam<MooseEnum>("component"))
 {
-  _overwrite_slave_residual = false;
+  _overwrite_secondary_residual = false;
 }
 
 Real
-NormalNodalMechanicalContact::computeQpSlaveValue()
+NormalNodalMechanicalContact::computeQpSecondaryValue()
 {
-  return _u_slave[_qp];
+  return _u_secondary[_qp];
 }
 
 void
@@ -52,26 +52,27 @@ NormalNodalMechanicalContact::computeJacobian()
 }
 
 void
-NormalNodalMechanicalContact::computeOffDiagJacobian(unsigned jvar)
+NormalNodalMechanicalContact::computeOffDiagJacobian(const unsigned int jvar_num)
 {
   // Our residual only strongly depends on the lagrange multiplier (the normal vector does indeed
   // depend on displacements but it's complicated and shouldn't be too strong of a dependence)
-  if (jvar != _lambda_id)
+  if (jvar_num != _lambda_id)
     return;
 
-  MooseVariableFEBase & var = _sys.getVariable(0, jvar);
+  const auto & jvar = getVariable(jvar_num);
+
   _connected_dof_indices.clear();
-  _connected_dof_indices.push_back(var.nodalDofIndex());
+  _connected_dof_indices.push_back(jvar.nodalDofIndex());
 
   _qp = 0;
 
   _Kee.resize(1, 1);
-  _Kee(0, 0) = computeQpOffDiagJacobian(Moose::SlaveSlave, jvar);
+  _Kee(0, 0) = computeQpOffDiagJacobian(Moose::SecondarySecondary, jvar_num);
 
-  _Kne.resize(_test_master.size(), 1);
+  _Kne.resize(_test_primary.size(), 1);
 
-  for (_i = 0; _i < _test_master.size(); ++_i)
-    _Kne(_i, 0) = computeQpOffDiagJacobian(Moose::MasterSlave, jvar);
+  for (_i = 0; _i < _test_primary.size(); ++_i)
+    _Kne(_i, 0) = computeQpOffDiagJacobian(Moose::PrimarySecondary, jvar_num);
 }
 
 Real
@@ -86,13 +87,13 @@ NormalNodalMechanicalContact::computeQpResidual(Moose::ConstraintType type)
     {
       switch (type)
       {
-        case Moose::ConstraintType::Slave:
-          // This normal appears to point in the opposite direction of the slave surface so we need
-          // a negative sign
+        case Moose::ConstraintType::Secondary:
+          // This normal appears to point in the opposite direction of the secondary surface so we
+          // need a negative sign
           return _lambda * -pinfo->_normal(_component);
 
-        case Moose::ConstraintType::Master:
-          return _test_master[_i][_qp] * _lambda * pinfo->_normal(_component);
+        case Moose::ConstraintType::Primary:
+          return _test_primary[_i][_qp] * _lambda * pinfo->_normal(_component);
 
         default:
           return 0;
@@ -109,7 +110,7 @@ Real NormalNodalMechanicalContact::computeQpJacobian(Moose::ConstraintJacobianTy
 
 Real
 NormalNodalMechanicalContact::computeQpOffDiagJacobian(Moose::ConstraintJacobianType type,
-                                                       unsigned jvar)
+                                                       unsigned int jvar)
 {
   std::map<dof_id_type, PenetrationInfo *>::iterator found =
       _penetration_locator._penetration_info.find(_current_node->id());
@@ -123,10 +124,10 @@ NormalNodalMechanicalContact::computeQpOffDiagJacobian(Moose::ConstraintJacobian
     {
       switch (type)
       {
-        case Moose::SlaveSlave:
+        case Moose::SecondarySecondary:
           return -pinfo->_normal(_component);
-        case Moose::MasterSlave:
-          return _test_master[_i][_qp] * pinfo->_normal(_component);
+        case Moose::PrimarySecondary:
+          return _test_primary[_i][_qp] * pinfo->_normal(_component);
         default:
           return 0;
       }

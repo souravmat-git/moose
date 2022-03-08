@@ -15,19 +15,48 @@
 #include "Assembly.h"
 #include "MooseVariableData.h"
 
+template <>
+InputParameters
+MooseVariableFE<Real>::validParams()
+{
+  auto params = MooseVariableField<Real>::validParams();
+  params.addClassDescription(
+      "Represents standard field variables, e.g. Lagrange, Hermite, or non-constant Monomials");
+  return params;
+}
+
+template <>
+InputParameters
+MooseVariableFE<RealVectorValue>::validParams()
+{
+  auto params = MooseVariableField<RealVectorValue>::validParams();
+  params.addClassDescription("Represents vector field variables, e.g. Vector Lagrange or Nedelec");
+  return params;
+}
+
+template <>
+InputParameters
+MooseVariableFE<RealEigenVector>::validParams()
+{
+  auto params = MooseVariableField<RealEigenVector>::validParams();
+  params.addClassDescription(
+      "Used for grouping standard field variables with the same finite element family and order");
+  return params;
+}
+
 template <typename OutputType>
 MooseVariableFE<OutputType>::MooseVariableFE(const InputParameters & parameters)
   : MooseVariableField<OutputType>(parameters)
 {
-  _element_data = libmesh_make_unique<MooseVariableData<OutputType>>(*this,
-                                                                     _sys,
-                                                                     _tid,
-                                                                     Moose::ElementType::Element,
-                                                                     this->_assembly.qRule(),
-                                                                     this->_assembly.qRuleFace(),
-                                                                     this->_assembly.node(),
-                                                                     this->_assembly.elem());
-  _neighbor_data = libmesh_make_unique<MooseVariableData<OutputType>>(
+  _element_data = std::make_unique<MooseVariableData<OutputType>>(*this,
+                                                                  _sys,
+                                                                  _tid,
+                                                                  Moose::ElementType::Element,
+                                                                  this->_assembly.qRule(),
+                                                                  this->_assembly.qRuleFace(),
+                                                                  this->_assembly.node(),
+                                                                  this->_assembly.elem());
+  _neighbor_data = std::make_unique<MooseVariableData<OutputType>>(
       *this,
       _sys,
       _tid,
@@ -36,15 +65,28 @@ MooseVariableFE<OutputType>::MooseVariableFE(const InputParameters & parameters)
       this->_assembly.qRuleNeighbor(),
       this->_assembly.nodeNeighbor(),
       this->_assembly.neighbor());
-  _lower_data = libmesh_make_unique<MooseVariableData<OutputType>>(
-      *this,
-      _sys,
-      _tid,
-      Moose::ElementType::Lower,
-      this->_assembly.qRuleFace(),
-      this->_assembly.qRuleFace(), // Place holder
-      this->_assembly.node(),      // Place holder
-      this->_assembly.lowerDElem());
+  _lower_data =
+      std::make_unique<MooseVariableData<OutputType>>(*this,
+                                                      _sys,
+                                                      _tid,
+                                                      Moose::ElementType::Lower,
+                                                      this->_assembly.qRuleFace(),
+                                                      this->_assembly.qRuleFace(), // Place holder
+                                                      this->_assembly.node(),      // Place holder
+                                                      this->_assembly.lowerDElem());
+}
+
+template <typename OutputType>
+std::string
+MooseVariableFE<OutputType>::componentName(const unsigned int comp) const
+{
+  if (comp >= _count)
+    mooseError("Component index must be less than the number of components of variable ",
+               _var_name);
+  if (std::is_same<OutputType, RealEigenVector>::value)
+    return this->_subproblem.arrayVariableComponent(_var_name, comp);
+  else
+    return _var_name;
 }
 
 template <typename OutputType>
@@ -157,21 +199,21 @@ MooseVariableFE<OutputType>::getDofIndices(const Elem * elem,
 
 template <typename OutputType>
 typename MooseVariableFE<OutputType>::OutputData
-MooseVariableFE<OutputType>::getNodalValue(const Node & node)
+MooseVariableFE<OutputType>::getNodalValue(const Node & node) const
 {
   return _element_data->getNodalValue(node, Moose::Current);
 }
 
 template <typename OutputType>
 typename MooseVariableFE<OutputType>::OutputData
-MooseVariableFE<OutputType>::getNodalValueOld(const Node & node)
+MooseVariableFE<OutputType>::getNodalValueOld(const Node & node) const
 {
   return _element_data->getNodalValue(node, Moose::Old);
 }
 
 template <typename OutputType>
 typename MooseVariableFE<OutputType>::OutputData
-MooseVariableFE<OutputType>::getNodalValueOlder(const Node & node)
+MooseVariableFE<OutputType>::getNodalValueOlder(const Node & node) const
 {
   return _element_data->getNodalValue(node, Moose::Older);
 }
@@ -787,6 +829,26 @@ bool
 MooseVariableFE<OutputType>::isNodalNeighborDefined() const
 {
   return _neighbor_data->isNodalDefined();
+}
+
+template <typename OutputType>
+unsigned int
+MooseVariableFE<OutputType>::oldestSolutionStateRequested() const
+{
+  unsigned int state = 0;
+  state = std::max(state, _element_data->oldestSolutionStateRequested());
+  state = std::max(state, _neighbor_data->oldestSolutionStateRequested());
+  state = std::max(state, _lower_data->oldestSolutionStateRequested());
+  return state;
+}
+
+template <typename OutputType>
+void
+MooseVariableFE<OutputType>::clearAllDofIndices()
+{
+  _element_data->clearDofIndices();
+  _neighbor_data->clearDofIndices();
+  _lower_data->clearDofIndices();
 }
 
 template class MooseVariableFE<Real>;

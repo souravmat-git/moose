@@ -12,12 +12,6 @@
 #include "MeshGenerator.h"
 #include "FunctionParserUtils.h"
 
-// Forward declarations
-class ParsedSubdomainMeshGenerator;
-
-template <>
-InputParameters validParams<ParsedSubdomainMeshGenerator>();
-
 /**
  * MeshGenerator for defining a Subdomain inside or outside of combinatorial geometry
  */
@@ -31,6 +25,7 @@ public:
   std::unique_ptr<MeshBase> generate() override;
 
 protected:
+  /// mesh to add the subdomain to
   std::unique_ptr<MeshBase> & _input;
 
   /// function expression

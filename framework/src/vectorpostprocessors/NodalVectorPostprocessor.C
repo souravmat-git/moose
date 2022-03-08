@@ -12,8 +12,6 @@
 #include "SubProblem.h"
 #include "MooseTypes.h"
 
-defineLegacyParams(NodalVectorPostprocessor);
-
 InputParameters
 NodalVectorPostprocessor::validParams()
 {
@@ -23,6 +21,6 @@ NodalVectorPostprocessor::validParams()
 }
 
 NodalVectorPostprocessor::NodalVectorPostprocessor(const InputParameters & parameters)
-  : NodalUserObject(parameters), VectorPostprocessor(parameters)
+  : NodalUserObject(parameters), VectorPostprocessor(this)
 {
 }

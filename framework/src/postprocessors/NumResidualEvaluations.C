@@ -15,12 +15,11 @@
 
 registerMooseObject("MooseApp", NumResidualEvaluations);
 
-defineLegacyParams(NumResidualEvaluations);
-
 InputParameters
 NumResidualEvaluations::validParams()
 {
   InputParameters params = GeneralPostprocessor::validParams();
+  params.addClassDescription("Returns the total number of residual evaluations performed.");
   return params;
 }
 

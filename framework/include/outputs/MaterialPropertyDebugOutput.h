@@ -12,12 +12,8 @@
 // MOOSE includes
 #include "Output.h"
 
-// Forward declerations
-class MaterialPropertyDebugOutput;
 class MaterialBase;
-
-template <>
-InputParameters validParams<MaterialPropertyDebugOutput>();
+class MooseObjectName;
 
 /**
  * A class for producing various debug related outputs
@@ -28,11 +24,6 @@ class MaterialPropertyDebugOutput : public Output
 {
 public:
   static InputParameters validParams();
-
-  /**
-   * Class constructor
-   * @param parameters Object input parameters
-   */
   MaterialPropertyDebugOutput(const InputParameters & parameters);
 
 protected:
@@ -55,4 +46,3 @@ protected:
   void printMaterialProperties(std::stringstream & output,
                                const std::vector<std::shared_ptr<MaterialBase>> & materials) const;
 };
-

@@ -6,13 +6,21 @@ Content:
             - media/framework/under-construction.gif
             - media/framework/github-logo.png
             - media/framework/github-mark.png
-            - large_media/level_set/vortex_out.gif
+            - large_media/level_set/vortex_out.mp4
             - bib/*
             - contrib/**
             - css/*
             - js/*
     test:
         root_dir: python/MooseDocs/test/content
+        content:
+            - "**"
+            - ~/extensions/external.md
+    external:
+        root_dir: python/MooseDocs/test/content
+        external: True
+        content:
+            - extensions/external.md
 
 Renderer:
     type: MooseDocs.base.MaterializeRenderer
@@ -22,6 +30,7 @@ Extensions:
     disable_defaults: True
     MooseDocs.extensions.config: default
     MooseDocs.extensions.core: default
+    MooseDocs.extensions.special: default
     MooseDocs.extensions.floats: default
     MooseDocs.extensions.style: default
     MooseDocs.extensions.command: default
@@ -40,11 +49,23 @@ Extensions:
     MooseDocs.extensions.bibtex: default
     MooseDocs.extensions.materialicon: default
     MooseDocs.extensions.layout: default
-    MooseDocs.extensions.content: disable
+    MooseDocs.extensions.content: default
     MooseDocs.extensions.graph: default
     MooseDocs.extensions.heading: default
+    MooseDocs.extensions.shortcut: default
     MooseDocs.extensions.gallery: default
     MooseDocs.extensions.pdf: default
+    MooseDocs.extensions.pysyntax: default
+    MooseDocs.extensions.modal:
+        hide_source: True
+        exceptions:
+            - '*.C'
+            - '*.h'
+            - '*.yml'
+            - '*.i'
+            - '*tests'
+    MooseDocs.extensions.datetime: default
+    MooseDocs.extensions.gitutils: default
     MooseDocs.extensions.template:
         active: True
     MooseDocs.extensions.sqa:
@@ -61,6 +82,7 @@ Extensions:
                     - python/MooseDocs/test
                 specs:
                     - demo
+
     MooseDocs.extensions.civet:
         active: False
         test_results_cache: '/tmp/civet/jobs'
@@ -73,7 +95,7 @@ Extensions:
         active: True
         name: MOOSEDocs
         repo: https://github.com/idaholab/moose
-        home: https://www.mooseframework.org
+        home: /index.md
         search: False
         menu:
             Direct: core.md
@@ -86,6 +108,7 @@ Extensions:
         acronyms:
             INL: Idaho National Laboratory
             MTU: Michigan Technological University
+            UNH: University of New Hampshire
     MooseDocs.extensions.common:
         active: True
         shortcuts:
@@ -93,13 +116,14 @@ Extensions:
             libMesh: https://libmesh.github.io/
     MooseDocs.extensions.appsyntax:
         active: True
-
         executable: ${MOOSE_DIR}/test
-        hide: !include framework/doc/hidden.yml
         remove: !include framework/doc/remove.yml
         includes:
             - framework/include
             - test/include
+    MooseDocs.extensions.ifelse:
+        active: True
+    MooseDocs.extensions.algorithm: default
 
 Translator:
     type: MooseDocs.base.Translator

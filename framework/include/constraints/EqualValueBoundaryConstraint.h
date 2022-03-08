@@ -11,11 +11,6 @@
 
 #include "NodalConstraint.h"
 
-class EqualValueBoundaryConstraint;
-
-template <>
-InputParameters validParams<EqualValueBoundaryConstraint>();
-
 class EqualValueBoundaryConstraint : public NodalConstraint
 {
 public:
@@ -35,7 +30,7 @@ protected:
   void updateConstrainedNodes();
 
   /**
-   * Computes the residual for the current slave node
+   * Computes the residual for the current secondary node
    */
   virtual Real computeQpResidual(Moose::ConstraintType type) override;
 
@@ -44,13 +39,12 @@ protected:
    */
   virtual Real computeQpJacobian(Moose::ConstraintJacobianType type) override;
 
-  // Holds the master node id
-  unsigned int _master_node_id;
-  // Holds the list of slave node ids
-  std::vector<unsigned int> _slave_node_ids;
-  // Holds the slave node set or side set
-  BoundaryName _slave_node_set_id;
+  // Holds the primary node id
+  unsigned int _primary_node_id;
+  // Holds the list of secondary node ids
+  std::vector<unsigned int> _secondary_node_ids;
+  // Holds the secondary node set or side set
+  BoundaryName _secondary_node_set_id;
   // Penalty if constraint is not satisfied
   Real _penalty;
 };
-

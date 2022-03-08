@@ -15,11 +15,10 @@
  */
 registerMooseObject("ExampleApp", ImplicitODEx);
 
-template <>
 InputParameters
-validParams<ImplicitODEx>()
+ImplicitODEx::validParams()
 {
-  InputParameters params = validParams<ODEKernel>();
+  InputParameters params = ODEKernel::validParams();
   params.addCoupledVar("y", "variable Y coupled into this kernel");
   return params;
 }
@@ -48,7 +47,7 @@ ImplicitODEx::computeQpJacobian()
 }
 
 Real
-ImplicitODEx::computeQpOffDiagJacobian(unsigned int jvar)
+ImplicitODEx::computeQpOffDiagJacobianScalar(unsigned int jvar)
 {
   if (jvar == _y_var)
     return -2.; // dF/dy

@@ -16,11 +16,16 @@ ParsedAux::validParams()
 {
   InputParameters params = AuxKernel::validParams();
   params += FunctionParserUtils<false>::validParams();
-  params.addClassDescription("Parsed function AuxKernel.");
+  params.addClassDescription(
+      "Sets a field variable value to the evaluation of a parsed expression.");
 
   params.addRequiredCustomTypeParam<std::string>(
       "function", "FunctionExpression", "function expression");
   params.addCoupledVar("args", "coupled variables");
+  params.addParam<bool>(
+      "use_xyzt",
+      false,
+      "Make coordinate (x,y,z) and time (t) variables available in the function expression.");
   params.addParam<std::vector<std::string>>(
       "constant_names", "Vector of constants used in the parsed function (use this for kB etc.)");
   params.addParam<std::vector<std::string>>(
@@ -35,20 +40,26 @@ ParsedAux::ParsedAux(const InputParameters & parameters)
     FunctionParserUtils(parameters),
     _function(getParam<std::string>("function")),
     _nargs(coupledComponents("args")),
-    _args(_nargs)
+    _args(coupledValues("args")),
+    _use_xyzt(getParam<bool>("use_xyzt"))
 {
   // build variables argument
   std::string variables;
-  for (unsigned int i = 0; i < _nargs; ++i)
-  {
-    variables += (i == 0 ? "" : ",") + getVar("args", i)->name();
-    _args[i] = &coupledValue("args", i);
-  }
+
+  // coupled field variables
+  for (std::size_t i = 0; i < _nargs; ++i)
+    variables += (i == 0 ? "" : ",") + getFieldVar("args", i)->name();
+
+  // "system" variables
+  const std::vector<std::string> xyzt = {"x", "y", "z", "t"};
+  if (_use_xyzt)
+    for (auto & v : xyzt)
+      variables += (variables.empty() ? "" : ",") + v;
 
   // base function object
   _func_F = std::make_shared<SymFunction>();
 
-  // set FParser interneal feature flags
+  // set FParser internal feature flags
   setParserFeatureFlags(_func_F);
 
   // add the constant expressions
@@ -69,15 +80,22 @@ ParsedAux::ParsedAux(const InputParameters & parameters)
   if (_enable_jit)
     _func_F->JITCompile();
 
-  // reserve storage for parameter passing bufefr
-  _func_params.resize(_nargs);
+  // reserve storage for parameter passing buffer
+  _func_params.resize(_nargs + (_use_xyzt ? 4 : 0));
 }
 
 Real
 ParsedAux::computeValue()
 {
-  for (unsigned int j = 0; j < _nargs; ++j)
+  for (std::size_t j = 0; j < _nargs; ++j)
     _func_params[j] = (*_args[j])[_qp];
+
+  if (_use_xyzt)
+  {
+    for (std::size_t j = 0; j < LIBMESH_DIM; ++j)
+      _func_params[_nargs + j] = isNodal() ? (*_current_node)(j) : _q_point[_qp](j);
+    _func_params[_nargs + 3] = _t;
+  }
 
   return evaluate(_func_F);
 }

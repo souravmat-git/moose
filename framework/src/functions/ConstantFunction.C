@@ -11,12 +11,12 @@
 
 registerMooseObject("MooseApp", ConstantFunction);
 
-defineLegacyParams(ConstantFunction);
-
 InputParameters
 ConstantFunction::validParams()
 {
   InputParameters params = Function::validParams();
+  params.addClassDescription(
+      "A function that returns a constant value as defined by an input parameter.");
   params.addParam<Real>("value", 0.0, "The constant value");
   params.declareControllable("value");
   return params;
@@ -31,4 +31,22 @@ Real
 ConstantFunction::value(Real, const Point &) const
 {
   return _value;
+}
+
+ADReal
+ConstantFunction::value(const ADReal &, const ADPoint &) const
+{
+  return _value;
+}
+
+Real
+ConstantFunction::timeDerivative(Real /*t*/, const Point & /*p*/) const
+{
+  return 0;
+}
+
+RealVectorValue
+ConstantFunction::gradient(Real /*t*/, const Point & /*p*/) const
+{
+  return RealVectorValue(0);
 }

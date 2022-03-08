@@ -32,6 +32,8 @@ template <class T>
 class DerivativeMaterialInterface : public T, public DerivativeMaterialPropertyNameInterface
 {
 public:
+  typedef DerivativeMaterialPropertyNameInterface::SymbolName SymbolName;
+
   DerivativeMaterialInterface(const InputParameters & parameters);
 
   /**
@@ -59,14 +61,18 @@ public:
 
   template <typename U, bool is_ad = false>
   GenericMaterialProperty<U, is_ad> & declarePropertyDerivative(const std::string & base,
-                                                                const VariableName & c1,
-                                                                const VariableName & c2 = "",
-                                                                const VariableName & c3 = "");
+                                                                const std::vector<SymbolName> & c);
+
+  template <typename U, bool is_ad = false>
+  GenericMaterialProperty<U, is_ad> & declarePropertyDerivative(const std::string & base,
+                                                                const SymbolName & c1,
+                                                                const SymbolName & c2 = "",
+                                                                const SymbolName & c3 = "");
   ///@}
 
   ///@{
   /**
-   * Methods for retreiving derivative material properties
+   * Methods for retrieving derivative material properties
    * @tparam U The material property type
    * @param base The name of the property to take the derivative of
    * @param c The variable(s) to take the derivatives with respect to
@@ -77,21 +83,25 @@ public:
 
   template <typename U, bool is_ad = false>
   const GenericMaterialProperty<U, is_ad> &
+  getMaterialPropertyDerivative(const std::string & base, const std::vector<SymbolName> & c);
+
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
   getMaterialPropertyDerivative(const std::string & base,
-                                const VariableName & c1,
-                                const VariableName & c2 = "",
-                                const VariableName & c3 = "");
+                                const SymbolName & c1,
+                                const SymbolName & c2 = "",
+                                const SymbolName & c3 = "");
   ///@}
 
   /**
-   *@{ Convenience methods fro retrieving derivative material properties based
+   *@{ Convenience methods for retrieving derivative material properties based
    *   on a mix of variable names `c` and indices `v` into the
    *   _coupled_standard_moose_vars vector.
    */
   template <typename U, bool is_ad = false>
   const GenericMaterialProperty<U, is_ad> &
   getMaterialPropertyDerivative(const std::string & base,
-                                const VariableName & c1,
+                                const SymbolName & c1,
                                 unsigned int v2,
                                 unsigned int v3 = libMesh::invalid_uint);
 
@@ -105,7 +115,7 @@ public:
 
   ///@{
   /**
-   * Methods for retreiving derivative material properties
+   * Methods for retrieving derivative material properties
    * @tparam U The material property type
    * @param base The name of the property to take the derivative of
    * @param c The variable(s) to take the derivatives with respect to
@@ -114,12 +124,18 @@ public:
   const GenericMaterialProperty<U, is_ad> &
   getMaterialPropertyDerivativeByName(const MaterialPropertyName & base,
                                       const std::vector<VariableName> & c);
+
   template <typename U, bool is_ad = false>
   const GenericMaterialProperty<U, is_ad> &
   getMaterialPropertyDerivativeByName(const MaterialPropertyName & base,
-                                      const VariableName & c1,
-                                      const VariableName & c2 = "",
-                                      const VariableName & c3 = "");
+                                      const std::vector<SymbolName> & c);
+
+  template <typename U, bool is_ad = false>
+  const GenericMaterialProperty<U, is_ad> &
+  getMaterialPropertyDerivativeByName(const MaterialPropertyName & base,
+                                      const SymbolName & c1,
+                                      const SymbolName & c2 = "",
+                                      const SymbolName & c3 = "");
   ///@}
 
   ///@{
@@ -127,18 +143,18 @@ public:
    * check if derivatives of the passed in material property exist w.r.t a variable
    * that is _not_ coupled in to the current object
    */
-  template <typename U>
+  template <typename U, bool is_ad = false>
   void validateCoupling(const MaterialPropertyName & base,
                         const std::vector<VariableName> & c,
                         bool validate_aux = true);
 
-  template <typename U>
+  template <typename U, bool is_ad = false>
   void validateCoupling(const MaterialPropertyName & base,
                         const VariableName & c1 = "",
                         const VariableName & c2 = "",
                         const VariableName & c3 = "");
 
-  template <typename U>
+  template <typename U, bool is_ad = false>
   void validateNonlinearCoupling(const MaterialPropertyName & base,
                                  const VariableName & c1 = "",
                                  const VariableName & c2 = "",
@@ -164,7 +180,7 @@ private:
   buildVariableVector(const VariableName & c1, const VariableName & c2, const VariableName & c3);
 
   /// helper method to compile list of missing coupled variables for a given system
-  template <typename U>
+  template <typename U, bool is_ad = false>
   void validateCouplingHelper(const MaterialPropertyName & base,
                               const std::vector<VariableName> & c,
                               const System & system,
@@ -190,9 +206,9 @@ template <typename U, bool is_ad>
 bool
 DerivativeMaterialInterface<Material>::haveMaterialProperty(const std::string & prop_name)
 {
-  return (
-      (this->boundaryRestricted() && this->template hasBoundaryMaterialProperty<U>(prop_name)) ||
-      (this->template hasBlockMaterialProperty<U>(prop_name)));
+  return ((this->boundaryRestricted() &&
+           this->template hasBoundaryMaterialProperty<U, is_ad>(prop_name)) ||
+          (this->template hasBlockMaterialProperty<U, is_ad>(prop_name)));
 }
 
 template <class T>
@@ -204,9 +220,9 @@ DerivativeMaterialInterface<T>::haveMaterialProperty(const std::string & prop_na
   BlockRestrictable * blk = dynamic_cast<BlockRestrictable *>(this);
   BoundaryRestrictable * bnd = dynamic_cast<BoundaryRestrictable *>(this);
   return ((bnd && bnd->boundaryRestricted() &&
-           bnd->template hasBoundaryMaterialProperty<U>(prop_name)) ||
-          (blk && blk->template hasBlockMaterialProperty<U>(prop_name)) ||
-          (this->template hasMaterialProperty<U>(prop_name)));
+           bnd->template hasBoundaryMaterialProperty<U, is_ad>(prop_name)) ||
+          (blk && blk->template hasBlockMaterialProperty<U, is_ad>(prop_name)) ||
+          (this->template hasGenericMaterialProperty<U, is_ad>(prop_name)));
 }
 
 template <class T>
@@ -224,7 +240,7 @@ DerivativeMaterialInterface<T>::getDefaultMaterialProperty(const std::string & n
     return *default_property;
 
   // if found return the requested property
-  return getDefaultMaterialPropertyByName<U, is_ad>(prop_name);
+  return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(prop_name);
 }
 
 template <class T>
@@ -232,11 +248,8 @@ template <typename U, bool is_ad>
 const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getDefaultMaterialPropertyByName(const std::string & prop_name)
 {
-  // if found return the requested property
-  if (haveMaterialProperty<U>(prop_name))
-    return this->template getGenericMaterialPropertyByName<U, is_ad>(prop_name);
-
-  return this->template getGenericZeroMaterialProperty<U, is_ad>(prop_name);
+  // TODO: deprecate this
+  return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(prop_name);
 }
 
 template <class T>
@@ -245,6 +258,16 @@ GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::declarePropertyDerivative(const std::string & base,
                                                           const std::vector<VariableName> & c)
 {
+  std::vector<SymbolName> symbol_vector(c.begin(), c.end());
+  return declarePropertyDerivative(base, symbol_vector);
+}
+
+template <class T>
+template <typename U, bool is_ad>
+GenericMaterialProperty<U, is_ad> &
+DerivativeMaterialInterface<T>::declarePropertyDerivative(const std::string & base,
+                                                          const std::vector<SymbolName> & c)
+{
   return this->template declareGenericProperty<U, is_ad>(derivativePropertyName(base, c));
 }
 
@@ -252,9 +275,9 @@ template <class T>
 template <typename U, bool is_ad>
 GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::declarePropertyDerivative(const std::string & base,
-                                                          const VariableName & c1,
-                                                          const VariableName & c2,
-                                                          const VariableName & c3)
+                                                          const SymbolName & c1,
+                                                          const SymbolName & c2,
+                                                          const SymbolName & c3)
 {
   if (c3 != "")
     return this->template declareGenericProperty<U, is_ad>(
@@ -271,26 +294,15 @@ const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
                                                               const std::vector<VariableName> & c)
 {
-  // get the base property name
-  std::string prop_name = this->deducePropertyName(base);
-
-  /**
-   * Check if base is a default property and shortcut to returning zero, as
-   * derivatives of constants are zero.
-   */
-  if (this->template defaultGenericMaterialProperty<U, is_ad>(prop_name))
-    return this->template getGenericZeroMaterialProperty<U, is_ad>(prop_name + "_zeroderivative");
-
-  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyName(prop_name, c));
+  std::vector<SymbolName> symbol_vector(c.begin(), c.end());
+  return getMaterialPropertyDerivative(base, symbol_vector);
 }
 
 template <class T>
 template <typename U, bool is_ad>
 const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
-                                                              const VariableName & c1,
-                                                              const VariableName & c2,
-                                                              const VariableName & c3)
+                                                              const std::vector<SymbolName> & c)
 {
   // get the base property name
   std::string prop_name = this->deducePropertyName(base);
@@ -300,22 +312,45 @@ DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string 
    * derivatives of constants are zero.
    */
   if (this->template defaultGenericMaterialProperty<U, is_ad>(prop_name))
-    return this->template getZeroMaterialProperty<U>(prop_name + "_zeroderivative");
+    return this->template getGenericZeroMaterialProperty<U, is_ad>();
 
-  if (c3 != "")
-    return getDefaultMaterialPropertyByName<U, is_ad>(
-        derivativePropertyNameThird(prop_name, c1, c2, c3));
-  if (c2 != "")
-    return getDefaultMaterialPropertyByName<U, is_ad>(
-        derivativePropertyNameSecond(prop_name, c1, c2));
-  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyNameFirst(prop_name, c1));
+  return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
+      derivativePropertyName(prop_name, c));
 }
 
 template <class T>
 template <typename U, bool is_ad>
 const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
-                                                              const VariableName & c1,
+                                                              const SymbolName & c1,
+                                                              const SymbolName & c2,
+                                                              const SymbolName & c3)
+{
+  // get the base property name
+  std::string prop_name = this->deducePropertyName(base);
+
+  /**
+   * Check if base is a default property and shortcut to returning zero, as
+   * derivatives of constants are zero.
+   */
+  if (this->template defaultGenericMaterialProperty<U, is_ad>(prop_name))
+    return this->template getGenericZeroMaterialProperty<U, is_ad>();
+
+  if (c3 != "")
+    return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
+        derivativePropertyNameThird(prop_name, c1, c2, c3));
+  if (c2 != "")
+    return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
+        derivativePropertyNameSecond(prop_name, c1, c2));
+  return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
+      derivativePropertyNameFirst(prop_name, c1));
+}
+
+template <class T>
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
+DerivativeMaterialInterface<T>::getMaterialPropertyDerivative(const std::string & base,
+                                                              const SymbolName & c1,
                                                               unsigned int v2,
                                                               unsigned int v3)
 {
@@ -347,7 +382,18 @@ const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivativeByName(
     const MaterialPropertyName & base, const std::vector<VariableName> & c)
 {
-  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyName(base, c));
+  std::vector<SymbolName> symbol_vector(c.begin(), c.end());
+  return getMaterialPropertyDerivativeByName(base, symbol_vector);
+}
+
+template <class T>
+template <typename U, bool is_ad>
+const GenericMaterialProperty<U, is_ad> &
+DerivativeMaterialInterface<T>::getMaterialPropertyDerivativeByName(
+    const MaterialPropertyName & base, const std::vector<SymbolName> & c)
+{
+  return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
+      derivativePropertyName(base, c));
 }
 
 template <class T>
@@ -355,20 +401,22 @@ template <typename U, bool is_ad>
 const GenericMaterialProperty<U, is_ad> &
 DerivativeMaterialInterface<T>::getMaterialPropertyDerivativeByName(
     const MaterialPropertyName & base,
-    const VariableName & c1,
-    const VariableName & c2,
-    const VariableName & c3)
+    const SymbolName & c1,
+    const SymbolName & c2,
+    const SymbolName & c3)
 {
   if (c3 != "")
-    return getDefaultMaterialPropertyByName<U, is_ad>(
+    return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
         derivativePropertyNameThird(base, c1, c2, c3));
   if (c2 != "")
-    return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyNameSecond(base, c1, c2));
-  return getDefaultMaterialPropertyByName<U, is_ad>(derivativePropertyNameFirst(base, c1));
+    return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
+        derivativePropertyNameSecond(base, c1, c2));
+  return this->template getGenericZeroMaterialPropertyByName<U, is_ad>(
+      derivativePropertyNameFirst(base, c1));
 }
 
 template <class T>
-template <typename U>
+template <typename U, bool is_ad>
 void
 DerivativeMaterialInterface<T>::validateCouplingHelper(const MaterialPropertyName & base,
                                                        const std::vector<VariableName> & c,
@@ -383,12 +431,12 @@ DerivativeMaterialInterface<T>::validateCouplingHelper(const MaterialPropertyNam
     const VariableGroup & vg = system.variable_group(i);
     for (unsigned int j = 0; j < vg.n_variables(); ++j)
     {
-      std::vector<VariableName> cj(c);
-      VariableName jname = vg.name(j);
+      std::vector<SymbolName> cj(c.begin(), c.end());
+      SymbolName jname = vg.name(j);
       cj.push_back(jname);
 
       // if the derivative exists make sure the variable is coupled
-      if (haveMaterialProperty<U>(derivativePropertyName(base, cj)))
+      if (haveMaterialProperty<U, is_ad>(derivativePropertyName(base, cj)))
       {
         // kernels and BCs to not have the variable they are acting on in coupled_moose_vars
         bool is_missing = isNotObjectVariable(jname);
@@ -408,7 +456,7 @@ DerivativeMaterialInterface<T>::validateCouplingHelper(const MaterialPropertyNam
 }
 
 template <class T>
-template <typename U>
+template <typename U, bool is_ad>
 void
 DerivativeMaterialInterface<T>::validateCoupling(const MaterialPropertyName & base,
                                                  const std::vector<VariableName> & c,
@@ -420,10 +468,11 @@ DerivativeMaterialInterface<T>::validateCoupling(const MaterialPropertyName & ba
   std::vector<VariableName> missing;
 
   // iterate over all variables in the both the non-linear and auxiliary system (optional)
-  validateCouplingHelper<U>(
+  validateCouplingHelper<U, is_ad>(
       prop_name, c, _dmi_fe_problem.getNonlinearSystemBase().system(), missing);
   if (validate_aux)
-    validateCouplingHelper<U>(prop_name, c, _dmi_fe_problem.getAuxiliarySystem().system(), missing);
+    validateCouplingHelper<U, is_ad>(
+        prop_name, c, _dmi_fe_problem.getAuxiliarySystem().system(), missing);
 
   if (missing.size() > 0)
   {
@@ -461,25 +510,25 @@ DerivativeMaterialInterface<T>::buildVariableVector(const VariableName & c1,
 }
 
 template <class T>
-template <typename U>
+template <typename U, bool is_ad>
 void
 DerivativeMaterialInterface<T>::validateCoupling(const MaterialPropertyName & base,
                                                  const VariableName & c1,
                                                  const VariableName & c2,
                                                  const VariableName & c3)
 {
-  validateCoupling<U>(base, buildVariableVector(c1, c2, c3), true);
+  validateCoupling<U, is_ad>(base, buildVariableVector(c1, c2, c3), true);
 }
 
 template <class T>
-template <typename U>
+template <typename U, bool is_ad>
 void
 DerivativeMaterialInterface<T>::validateNonlinearCoupling(const MaterialPropertyName & base,
                                                           const VariableName & c1,
                                                           const VariableName & c2,
                                                           const VariableName & c3)
 {
-  validateCoupling<U>(base, buildVariableVector(c1, c2, c3), false);
+  validateCoupling<U, is_ad>(base, buildVariableVector(c1, c2, c3), false);
 }
 
 template <class T>
@@ -492,7 +541,7 @@ DerivativeMaterialInterface<T>::validateDerivativeMaterialPropertyBase(const std
 
   // check if the material property does not exist on the blocks of the current object,
   // and check if it is not a plain number in the input file
-  if (!haveMaterialProperty<U>(prop_name) &&
+  if (!haveMaterialProperty<U, is_ad>(prop_name) &&
       this->template defaultGenericMaterialProperty<U, is_ad>(prop_name) == 0)
     mooseWarning("The material property '",
                  prop_name,

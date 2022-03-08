@@ -24,12 +24,11 @@ registerMooseAction("MooseApp", CopyNodalVarsAction, "copy_nodal_vars");
 
 registerMooseAction("MooseApp", CopyNodalVarsAction, "copy_nodal_aux_vars");
 
-defineLegacyParams(CopyNodalVarsAction);
-
 InputParameters
 CopyNodalVarsAction::validParams()
 {
   InputParameters params = Action::validParams();
+  params.addClassDescription("Copies variable information from a file.");
   params.addParam<std::string>(
       "initial_from_file_timestep",
       "LATEST",
@@ -56,7 +55,7 @@ CopyNodalVarsAction::act()
     SystemBase * system;
 
     if (_current_task == "check_copy_nodal_vars")
-      _app.setFileRestart() = true;
+      _app.setExodusFileRestart(true);
     else
     {
       // Is this a NonlinearSystem variable or an AuxiliarySystem variable?

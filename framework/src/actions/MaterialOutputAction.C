@@ -34,6 +34,10 @@ std::vector<std::string> MaterialOutputAction::materialOutputHelper<RealVectorVa
     const std::string & material_name, const MaterialBase & material, bool get_names_only);
 
 template <>
+std::vector<std::string> MaterialOutputAction::materialOutputHelper<ADRealVectorValue>(
+    const std::string & material_name, const MaterialBase & material, bool get_names_only);
+
+template <>
 std::vector<std::string> MaterialOutputAction::materialOutputHelper<RealTensorValue>(
     const std::string & material_name, const MaterialBase & material, bool get_names_only);
 
@@ -52,8 +56,6 @@ std::vector<std::string> MaterialOutputAction::materialOutputHelper<RankFourTens
 registerMooseAction("MooseApp", MaterialOutputAction, "add_output_aux_variables");
 
 registerMooseAction("MooseApp", MaterialOutputAction, "add_aux_kernel");
-
-defineLegacyParams(MaterialOutputAction);
 
 InputParameters
 MaterialOutputAction::validParams()
@@ -120,6 +122,7 @@ MaterialOutputAction::act()
 
   // Loop through each material object
   std::set<std::string> material_names;
+  std::set<std::string> unsupported_names;
   for (const auto & mat : material_ptrs)
   {
     // Extract the names of the output objects to which the material properties will be exported
@@ -151,7 +154,6 @@ MaterialOutputAction::act()
       // list
       // or if the list is empty (all properties)
       const std::set<std::string> names = mat->getSuppliedItems();
-      std::vector<std::string> curr_material_names;
       for (const auto & name : names)
       {
         // Add the material property for output
@@ -159,56 +161,14 @@ MaterialOutputAction::act()
             std::find(output_properties.begin(), output_properties.end(), name) !=
                 output_properties.end())
         {
-          if (hasProperty<Real>(name))
-          {
-            curr_material_names = materialOutputHelper<Real>(name, *mat, get_names_only);
-            material_names.insert(curr_material_names.begin(), curr_material_names.end());
-          }
-
-          else if (hasADProperty<Real>(name))
-          {
-            curr_material_names = materialOutputHelper<ADReal>(name, *mat, get_names_only);
-            material_names.insert(curr_material_names.begin(), curr_material_names.end());
-          }
-
-          else if (hasProperty<RealVectorValue>(name))
-          {
-            curr_material_names = materialOutputHelper<RealVectorValue>(name, *mat, get_names_only);
-            material_names.insert(curr_material_names.begin(), curr_material_names.end());
-          }
-
-          else if (hasProperty<RealTensorValue>(name))
-          {
-            curr_material_names = materialOutputHelper<RealTensorValue>(name, *mat, get_names_only);
-            material_names.insert(curr_material_names.begin(), curr_material_names.end());
-          }
-
-          else if (hasProperty<RankTwoTensor>(name))
-          {
-            curr_material_names = materialOutputHelper<RankTwoTensor>(name, *mat, get_names_only);
-            material_names.insert(curr_material_names.begin(), curr_material_names.end());
-          }
-
-          else if (hasADProperty<RankTwoTensor>(name))
-          {
-            curr_material_names = materialOutputHelper<ADRankTwoTensor>(name, *mat, get_names_only);
-            material_names.insert(curr_material_names.begin(), curr_material_names.end());
-          }
-
-          else if (hasProperty<RankFourTensor>(name))
-          {
-            curr_material_names = materialOutputHelper<RankFourTensor>(name, *mat, get_names_only);
-            material_names.insert(curr_material_names.begin(), curr_material_names.end());
-          }
-
-          else
-            mooseWarning("The type for material property '",
-                         name,
-                         "' is not supported for automatic output.");
+          auto curr_material_names = materialOutput(name, *mat, get_names_only);
+          if (curr_material_names.size() == 0)
+            unsupported_names.insert(name);
+          material_names.insert(curr_material_names.begin(), curr_material_names.end());
         }
 
-        // If the material object as limited outputs, store the variables associated with the output
-        // objects
+        // If the material object has limited outputs, store the variables associated with the
+        // output objects
         if (!outputs.empty())
           for (const auto & output_name : outputs)
             _material_variable_names_map[output_name].insert(_material_variable_names.begin(),
@@ -216,17 +176,43 @@ MaterialOutputAction::act()
       }
     }
   }
+  if (unsupported_names.size() > 0 && get_names_only)
+  {
+    std::ostringstream oss;
+    for (const auto & name : unsupported_names)
+      oss << "\n  " << name;
+    mooseWarning("The types for total ",
+                 unsupported_names.size(),
+                 " material properties:",
+                 oss.str(),
+                 "\nare not supported for automatic output by ",
+                 type(),
+                 ".");
+  }
 
   if (_current_task == "add_output_aux_variables")
   {
     auto params = _factory.getValidParams("MooseVariableConstMonomial");
-    // currently only elemental variables are support for material property output
+    // currently only elemental variables are supported for material property output
     params.set<MooseEnum>("order") = "CONSTANT";
     params.set<MooseEnum>("family") = "MONOMIAL";
 
     // Create the AuxVariables
+    std::ostringstream oss;
     for (const auto & var_name : material_names)
+    {
+      oss << "\n  " << var_name;
+      if (_problem->hasVariable(var_name))
+        mooseError("The material property output " + var_name +
+                   " has the same name as an existing variable, either use the material"
+                   " declare_suffix parameter to disambiguate or the output_properties parameter"
+                   " to restrict the material properties to output");
       _problem->addAuxVariable("MooseVariableConstMonomial", var_name, params);
+    }
+    if (material_names.size() > 0)
+      _console << COLOR_CYAN << "The following total " << material_names.size()
+               << " aux variables:" << oss.str() << "\nare added for automatic output by " << type()
+               << "." << COLOR_DEFAULT << std::endl;
   }
   else
   {
@@ -245,6 +231,39 @@ MaterialOutputAction::act()
       _output_warehouse.addInterfaceHideVariables(it.first, hide);
     }
   }
+}
+
+std::vector<std::string>
+MaterialOutputAction::materialOutput(const std::string & property_name,
+                                     const MaterialBase & material,
+                                     bool get_names_only)
+{
+  std::vector<std::string> names;
+  if (hasProperty<Real>(property_name))
+    names = materialOutputHelper<Real>(property_name, material, get_names_only);
+
+  else if (hasADProperty<Real>(property_name))
+    names = materialOutputHelper<ADReal>(property_name, material, get_names_only);
+
+  else if (hasProperty<RealVectorValue>(property_name))
+    names = materialOutputHelper<RealVectorValue>(property_name, material, get_names_only);
+
+  else if (hasADProperty<RealVectorValue>(property_name))
+    names = materialOutputHelper<ADRealVectorValue>(property_name, material, get_names_only);
+
+  else if (hasProperty<RealTensorValue>(property_name))
+    names = materialOutputHelper<RealTensorValue>(property_name, material, get_names_only);
+
+  else if (hasProperty<RankTwoTensor>(property_name))
+    names = materialOutputHelper<RankTwoTensor>(property_name, material, get_names_only);
+
+  else if (hasADProperty<RankTwoTensor>(property_name))
+    names = materialOutputHelper<ADRankTwoTensor>(property_name, material, get_names_only);
+
+  else if (hasProperty<RankFourTensor>(property_name))
+    names = materialOutputHelper<RankFourTensor>(property_name, material, get_names_only);
+
+  return names;
 }
 
 InputParameters
@@ -325,6 +344,31 @@ MaterialOutputAction::materialOutputHelper<RealVectorValue>(const std::string & 
       auto params = getParams("MaterialRealVectorValueAux", property_name, oss.str(), material);
       params.set<unsigned int>("component") = i;
       _problem->addAuxKernel("MaterialRealVectorValueAux", material.name() + oss.str(), params);
+    }
+  }
+
+  return names;
+}
+
+template <>
+std::vector<std::string>
+MaterialOutputAction::materialOutputHelper<ADRealVectorValue>(const std::string & property_name,
+                                                              const MaterialBase & material,
+                                                              bool get_names_only)
+{
+  std::array<char, 3> suffix = {{'x', 'y', 'z'}};
+  std::vector<std::string> names(3);
+  for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+  {
+    std::ostringstream oss;
+    oss << property_name << "_" << suffix[i];
+    names[i] = oss.str();
+
+    if (!get_names_only)
+    {
+      auto params = getParams("ADMaterialRealVectorValueAux", property_name, oss.str(), material);
+      params.set<unsigned int>("component") = i;
+      _problem->addAuxKernel("ADMaterialRealVectorValueAux", material.name() + oss.str(), params);
     }
   }
 

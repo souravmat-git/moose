@@ -13,12 +13,6 @@
 #include "FileRangeBuilder.h"
 #include "libmesh/replicated_mesh.h"
 
-// Forward declarations
-class ImageMeshGenerator;
-
-template <>
-InputParameters validParams<ImageMeshGenerator>();
-
 /**
  * A 2D GeneratedMesh where xmin, xmax, etc. are determined from an input image file.
  */
@@ -35,13 +29,12 @@ protected:
   /**
    * generate() calls this helper function to build 2D ImageMeshes.
    */
-  void buildMesh2D(const std::string & filename, std::unique_ptr<ReplicatedMesh> & mesh);
+  void buildMesh2D(const std::string & filename, MeshBase & mesh);
 
   /**
    * generate() calls this helper function to build 3D ImageMeshes from stacks of images.
    */
-  void buildMesh3D(const std::vector<std::string> & filenames,
-                   std::unique_ptr<ReplicatedMesh> & mesh);
+  void buildMesh3D(const std::vector<std::string> & filenames, MeshBase & mesh);
 
   /**
    * Process a single image with the 'file' command to find out the
@@ -65,4 +58,3 @@ protected:
    */
   const Real & _cells_per_pixel;
 };
-

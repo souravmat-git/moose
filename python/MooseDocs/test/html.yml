@@ -6,13 +6,18 @@ Content:
             - media/framework/under-construction.gif
             - media/framework/github-logo.png
             - media/framework/github-mark.png
-            - large_media/level_set/vortex_out.gif
+            - large_media/level_set/vortex_out.mp4
             - bib/*
             - contrib/**
             - css/*
             - js/*
     test:
         root_dir: python/MooseDocs/test/content
+    external:
+        root_dir: python/MooseDocs/test/content
+        external: True
+        content:
+            - extensions/external.md
 
 Renderer:
     type: MooseDocs.base.HTMLRenderer
@@ -42,7 +47,12 @@ Extensions:
     MooseDocs.extensions.content: default
     MooseDocs.extensions.graph: default
     MooseDocs.extensions.heading: default
+    MooseDocs.extensions.shortcut: default
     MooseDocs.extensions.gallery: default
+    MooseDocs.extensions.pysyntax: default
+    MooseDocs.extensions.modal: default
+    MooseDocs.extensions.datetime: default
+    MooseDocs.extensions.gitutils: default
     MooseDocs.extensions.template:
         active: True
     MooseDocs.extensions.civet:
@@ -67,10 +77,11 @@ Extensions:
                     - python/MooseDocs/test
                 specs:
                     - demo
+
     MooseDocs.extensions.navigation:
         name: MOOSEDocs
         repo: https://github.com/idaholab/moose
-        home: https://www.mooseframework.org
+        home: /index.md
         menu:
             Direct: core.md
             Mega: mega.menu.md
@@ -87,11 +98,12 @@ Extensions:
             libMesh: https://libmesh.github.io/
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/test
-        hide: !include framework/doc/hidden.yml
         remove: !include framework/doc/remove.yml
         includes:
             - framework/include
             - test/include
+    MooseDocs.extensions.ifelse: default
+    MooseDocs.extensions.algorithm: default
 
 Translator:
     type: MooseDocs.base.Translator

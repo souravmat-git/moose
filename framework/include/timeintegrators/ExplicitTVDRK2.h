@@ -11,11 +11,6 @@
 
 #include "TimeIntegrator.h"
 
-class ExplicitTVDRK2;
-
-template <>
-InputParameters validParams<ExplicitTVDRK2>();
-
 /**
  * Explicit TVD (total-variation-diminishing)
  * second-order Runge-Kutta time integration methods:
@@ -58,7 +53,9 @@ public:
   virtual int order() override { return 2; }
 
   virtual void computeTimeDerivatives() override;
-  void computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) const override;
+  void computeADTimeDerivatives(DualReal & ad_u_dot,
+                                const dof_id_type & dof,
+                                DualReal & ad_u_dotdot) const override;
   virtual void solve() override;
   virtual void postResidual(NumericVector<Number> & residual) override;
 
@@ -73,6 +70,9 @@ protected:
 
   /// Buffer to store non-time residual from the first stage.
   NumericVector<Number> & _residual_old;
+
+  /// The older solution
+  const NumericVector<Number> & _solution_older;
 };
 
 template <typename T, typename T2, typename T3>
@@ -92,4 +92,3 @@ ExplicitTVDRK2::computeTimeDerivativeHelper(T & u_dot, const T2 & u_old, const T
     u_dot *= 0.5 / _dt;
   }
 }
-

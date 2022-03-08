@@ -9,13 +9,14 @@ Extensions:
     MooseDocs.extensions.navigation:
         name: MOOSE Fluid Properties Module
         repo: https://github.com/idaholab/moose
-        home: /modules/fluid_properties
+        home: /modules/fluid_properties/index.md
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/modules/fluid_properties
-        hide:
-            framework: !include framework/doc/hidden.yml
-            fluid_properties: !include modules/fluid_properties/doc/hidden.yml
-        remove: !include framework/doc/remove.yml
+        remove:
+            framework: !include framework/doc/remove.yml
+            fluid_properties: !include modules/fluid_properties/doc/remove.yml
+        unregister:
+            framework: !include framework/doc/unregister.yml
         includes:
             - framework/include
             - modules/fluid_properties/include
@@ -27,6 +28,7 @@ Extensions:
         active: True
     MooseDocs.extensions.sqa:
         active: True
+        reports: !include modules/fluid_properties/doc/sqa_reports.yml
         categories:
             framework: !include framework/doc/sqa_framework.yml
             fluid_properties: !include modules/fluid_properties/doc/sqa_fluid_properties.yml

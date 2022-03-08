@@ -11,6 +11,7 @@
 #include "SamplerTransientMultiApp.h"
 #include "Sampler.h"
 #include "StochasticToolsTransfer.h"
+#include "SamplerFullSolveMultiApp.h"
 
 registerMooseObject("StochasticToolsApp", SamplerTransientMultiApp);
 
@@ -20,7 +21,8 @@ SamplerTransientMultiApp::validParams()
   InputParameters params = TransientMultiApp::validParams();
   params += SamplerInterface::validParams();
   params.addClassDescription("Creates a sub-application for each row of each Sampler matrix.");
-  params.addParam<SamplerName>("sampler", "The Sampler object to utilize for creating MultiApps.");
+  params.addRequiredParam<SamplerName>("sampler",
+                                       "The Sampler object to utilize for creating MultiApps.");
   params.suppressParameter<std::vector<Point>>("positions");
   params.suppressParameter<bool>("output_in_position");
   params.suppressParameter<std::vector<FileName>>("positions_file");
@@ -45,36 +47,46 @@ SamplerTransientMultiApp::validParams()
 SamplerTransientMultiApp::SamplerTransientMultiApp(const InputParameters & parameters)
   : TransientMultiApp(parameters),
     SamplerInterface(this),
-    _sampler(SamplerInterface::getSampler("sampler")),
+    _sampler(getSampler("sampler")),
     _mode(getParam<MooseEnum>("mode").getEnum<StochasticTools::MultiAppMode>()),
-    _perf_solve_step(registerTimedSection("solveStep", 1)),
-    _perf_solve_batch_step(registerTimedSection("solveStepBatch", 1)),
-    _perf_initial_setup(registerTimedSection("initialSetup", 2))
-
+    _local_batch_app_index(0),
+    _number_of_sampler_rows(_sampler.getNumberOfRows())
 {
-  if (_mode == StochasticTools::MultiAppMode::BATCH_RESTORE)
-    init(n_processors());
-  else if (_mode == StochasticTools::MultiAppMode::NORMAL)
-    init(_sampler.getNumberOfRows());
-  else
+  if (_mode == StochasticTools::MultiAppMode::BATCH_RESET)
     paramError("mode",
                "The supplied mode, '",
                getParam<MooseEnum>("mode"),
                "', currently is not implemented for the SamplerTransientMultiApp, the available "
                "options are 'normal' or 'batch-restore'.");
+
+  if (getParam<unsigned int>("min_procs_per_app") !=
+          _sampler.getParam<unsigned int>("min_procs_per_row") ||
+      getParam<unsigned int>("max_procs_per_app") !=
+          _sampler.getParam<unsigned int>("max_procs_per_row"))
+    paramError("sampler",
+               "Sampler and multiapp communicator configuration inconsistent. Please ensure that "
+               "'MultiApps/",
+               name(),
+               "/min(max)_procs_per_app' and 'Samplers/",
+               _sampler.name(),
+               "/min(max)_procs_per_row' are the same.");
+
+  init(_sampler.getNumberOfRows(),
+       _sampler.getRankConfig(_mode == StochasticTools::MultiAppMode::BATCH_RESET ||
+                              _mode == StochasticTools::MultiAppMode::BATCH_RESTORE));
 }
 
 void
 SamplerTransientMultiApp::initialSetup()
 {
-  TIME_SECTION(_perf_initial_setup);
+  TIME_SECTION("initialSetup", 2, "Setting Up SamplerTransientMultiApp");
 
   TransientMultiApp::initialSetup();
 
   // Perform initial backup for the batch sub-applications
   if (_mode == StochasticTools::MultiAppMode::BATCH_RESTORE)
   {
-    dof_id_type n = _sampler.getNumberOfLocalRows();
+    dof_id_type n = _rank_config.num_local_sims;
     _batch_backup.resize(n);
     for (MooseIndex(n) i = 0; i < n; ++i)
       for (MooseIndex(_my_num_apps) j = 0; j < _my_num_apps; j++)
@@ -85,7 +97,11 @@ SamplerTransientMultiApp::initialSetup()
 bool
 SamplerTransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
 {
-  TIME_SECTION(_perf_solve_step);
+  TIME_SECTION("solveStep", 3, "Solving SamplerTransientMultiApp");
+
+  if (_sampler.getNumberOfRows() != _number_of_sampler_rows)
+    mooseError("The size of the sampler has changed; SamplerTransientMultiApp object do not "
+               "support dynamic Sampler output.");
 
   bool last_solve_converged = true;
   if (_mode == StochasticTools::MultiAppMode::BATCH_RESTORE)
@@ -98,8 +114,6 @@ SamplerTransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance
 bool
 SamplerTransientMultiApp::solveStepBatch(Real dt, Real target_time, bool auto_advance)
 {
-  TIME_SECTION(_perf_solve_batch_step);
-
   // Value to return
   bool last_solve_converged = true;
 
@@ -111,30 +125,53 @@ SamplerTransientMultiApp::solveStepBatch(Real dt, Real target_time, bool auto_ad
 
   // Initialize to/from transfers
   for (auto transfer : to_transfers)
+  {
+    transfer->setGlobalMultiAppIndex(_rank_config.first_local_app_index);
     transfer->initializeToMultiapp();
+  }
   for (auto transfer : from_transfers)
+  {
+    transfer->setGlobalMultiAppIndex(_rank_config.first_local_app_index);
     transfer->initializeFromMultiapp();
+  }
 
   // Perform batch MultiApp solves
-  dof_id_type num_items = _sampler.getNumberOfLocalRows();
-  for (MooseIndex(num_items) i = 0; i < num_items; ++i)
+  _local_batch_app_index = 0;
+  for (dof_id_type i = _rank_config.first_local_sim_index;
+       i < _rank_config.first_local_sim_index + _rank_config.num_local_sims;
+       ++i)
   {
+    updateRowData(_local_batch_app_index);
+
     if (_mode == StochasticTools::MultiAppMode::BATCH_RESTORE)
       for (MooseIndex(_my_num_apps) j = 0; j < _my_num_apps; j++)
-        _apps[j]->restore(_batch_backup[i][j]);
+        _apps[j]->restore(_batch_backup[_local_batch_app_index][j]);
 
-    for (auto transfer : to_transfers)
+    for (auto & transfer : to_transfers)
+    {
+      transfer->setGlobalRowIndex(i);
+      transfer->setCurrentRow(_row_data);
       transfer->executeToMultiapp();
+    }
 
     last_solve_converged = TransientMultiApp::solveStep(dt, target_time, auto_advance);
 
-    for (auto transfer : from_transfers)
+    for (auto & transfer : from_transfers)
+    {
+      transfer->setGlobalRowIndex(i);
+      transfer->setCurrentRow(_row_data);
       transfer->executeFromMultiapp();
+    }
+
+    incrementTStep(target_time);
 
     if (_mode == StochasticTools::MultiAppMode::BATCH_RESTORE)
       for (MooseIndex(_my_num_apps) j = 0; j < _my_num_apps; j++)
-        _batch_backup[i][j] = _apps[j]->backup();
+        _batch_backup[_local_batch_app_index][j] = _apps[j]->backup();
+
+    _local_batch_app_index++;
   }
+  _local_batch_app_index = 0;
 
   // Finalize to/from transfers
   for (auto transfer : to_transfers)
@@ -155,8 +192,56 @@ SamplerTransientMultiApp::getActiveStochasticToolsTransfers(Transfer::DIRECTION 
   {
     std::shared_ptr<StochasticToolsTransfer> ptr =
         std::dynamic_pointer_cast<StochasticToolsTransfer>(transfer);
-    if (ptr)
+    if (ptr && ptr->getMultiApp().get() == this)
       output.push_back(ptr);
   }
   return output;
+}
+
+std::string
+SamplerTransientMultiApp::getCommandLineArgsParamHelper(unsigned int local_app)
+{
+  std::string args;
+
+  // With multiple processors per app, there are no local rows for non-root processors
+  if (isRootProcessor())
+  {
+    // Since we only store param_names in cli_args, we need to find the values for each param from
+    // sampler data and combine them to get full command line option strings.
+    updateRowData(_mode == StochasticTools::MultiAppMode::NORMAL ? local_app
+                                                                 : _local_batch_app_index);
+    const std::vector<std::string> & cli_args_name =
+        MooseUtils::split(TransientMultiApp::getCommandLineArgsParamHelper(local_app), ";");
+    args = SamplerFullSolveMultiApp::sampledCommandLineArgs(_row_data, cli_args_name);
+  }
+
+  _my_communicator.broadcast(args);
+  return args;
+}
+
+void
+SamplerTransientMultiApp::updateRowData(dof_id_type local_index)
+{
+  if (!isRootProcessor())
+    return;
+
+  mooseAssert(local_index < _sampler.getNumberOfLocalRows(),
+              "Local index must be less than number of local rows.");
+
+  if (_row_data.empty() ||
+      (_local_row_index == _sampler.getNumberOfLocalRows() - 1 && local_index == 0))
+  {
+    mooseAssert(local_index == 0,
+                "The first time calling updateRowData must have a local index of 0.");
+    _local_row_index = 0;
+    _row_data = _sampler.getNextLocalRow();
+  }
+  else if (local_index - _local_row_index == 1)
+  {
+    _local_row_index++;
+    _row_data = _sampler.getNextLocalRow();
+  }
+
+  mooseAssert(local_index == _local_row_index,
+              "Local index must be equal or one greater than the index previously called.");
 }

@@ -1,3 +1,7 @@
+p = 1e5
+E = 3.3e11
+stress_unit = 'Pa'
+
 [Mesh]
   type = GeneratedMesh
   dim = 3
@@ -11,79 +15,76 @@
 []
 
 [AuxVariables]
-  [./temperature]
+  [temperature]
     initial_condition = 900.0
-  [../]
+  []
 []
 
 [Modules/TensorMechanics/Master]
-  [./all]
+  [all]
     strain = FINITE
     add_variables = true
     generate_output = 'vonmises_stress'
-    use_automatic_differentiation = true
-  [../]
+  []
 []
 
 [BCs]
-  [./symmy]
-    type = ADDirichletBC
+  [symmy]
+    type = DirichletBC
     variable = disp_y
     boundary = bottom
     value = 0
-  [../]
-  [./symmx]
-    type = ADDirichletBC
+  []
+  [symmx]
+    type = DirichletBC
     variable = disp_x
     boundary = left
     value = 0
-  [../]
-  [./symmz]
-    type = ADDirichletBC
+  []
+  [symmz]
+    type = DirichletBC
     variable = disp_z
     boundary = back
     value = 0
-  [../]
-  [./pressure_x]
-    type = ADPressure
+  []
+  [pressure_x]
+    type = Pressure
     variable = disp_x
-    component = 0
     boundary = right
-    constant = 1.0e5
-  [../]
-  [./pressure_y]
-    type = ADPressure
+    factor = ${p}
+  []
+  [pressure_y]
+    type = Pressure
     variable = disp_y
-    component = 1
     boundary = top
-    constant = -1.0e5
-  [../]
-  [./pressure_z]
-    type = ADPressure
+    factor = -${p}
+  []
+  [pressure_z]
+    type = Pressure
     variable = disp_z
-    component = 2
     boundary = front
-    constant = -1.0e5
-  [../]
+    factor = -${p}
+  []
 []
 
 [Materials]
-  [./elasticity_tensor]
-    type = ADComputeIsotropicElasticityTensor
-    youngs_modulus = 3.30e11
+  [elasticity_tensor]
+    type = ComputeIsotropicElasticityTensor
+    youngs_modulus = ${E}
     poissons_ratio = 0.3
-  [../]
-  [./stress]
-    type = ADComputeMultipleInelasticStress
+  []
+  [stress]
+    type = ComputeMultipleInelasticStress
     inelastic_models = rom_stress_prediction
-  [../]
-  [./rom_stress_prediction]
+  []
+  [rom_stress_prediction]
     type = SS316HLAROMANCEStressUpdateTest
     temperature = temperature
-    initial_mobile_dislocation_density = 6.0e12
-    initial_immobile_dislocation_density = 4.4e11
+    initial_cell_dislocation_density = 6.0e12
+    initial_wall_dislocation_density = 4.4e11
     outputs = all
-  [../]
+    stress_unit = ${stress_unit}
+  []
 []
 
 [Executioner]
@@ -99,22 +100,22 @@
 []
 
 [Postprocessors]
-  [./effective_strain_avg]
+  [effective_strain_avg]
     type = ElementAverageValue
     variable = effective_creep_strain
-  [../]
-  [./temperature]
+  []
+  [temperature]
     type = ElementAverageValue
     variable = temperature
-  [../]
-  [./mobile_dislocations]
+  []
+  [cell_dislocations]
     type = ElementAverageValue
-    variable = mobile_dislocations
-  [../]
-  [./immobile_disloactions]
+    variable = cell_dislocations
+  []
+  [wall_disloactions]
     type = ElementAverageValue
-    variable = immobile_dislocations
-  [../]
+    variable = wall_dislocations
+  []
 []
 
 [Outputs]

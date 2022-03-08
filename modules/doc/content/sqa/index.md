@@ -15,24 +15,36 @@ engineers and is supported by various funding agencies including the
 [United States Department of Energy](http://energy.gov/). Development is ongoing at INL and by
 collaborators throughout the world.
 
-The software quality documents for MOOSE are listed below:
+!sqa records
 
-- [Software Test Plan (STP)](sqa/moose_stp.md)
-- [System Requirement Specification (SRS)](sqa/moose_srs.md)
-- [Requirements Traceability Matrix (RTM)](sqa/moose_rtm.md)
-- [System Design Description (SDD)](sqa/moose_sdd.md)
-- [Verification and Validation Report](sqa/moose_vvr.md)
+## SQA Training
 
-The following link(s) may also be of interest when creating documentation related to software
-quality.
+Members of the [!ac](CCB) of MOOSE or MOOSE-based application must complete [!ac](INL) training course
+RDHERD01.
 
-- [what_is_a_requirement.md]
+- [Introduction to MOOSE and MOOSE-based Application development processes (RDHERD01)](sqa/training/ccb/index.md)
+
+The project lead and software quality lead for MOOSE or MOOSE-based application(s) must complete [!ac](INL) training
+course 0INL1862.
+
+- [MOOSE and MOOSE-Based Applications Project Lead and SQA Lead Training (0INL1862)](sqa/training/lead/index.md)
+
+## Test Results and Releases
 
 MOOSE employs a continuous integration strategy using [!ac](CIVET); the testing results for
 this version of the documentation is available at the following links:
 
-+Test Results+:
-
 !civet mergeresults
 
-+Releases+: [v1.0.0](https://mooseframework.org/releases/moose/v1.0.0)
+The documentation for the SQA releases can be found using the following links:
+
+- [2021-09-15](https://mooseframework.org/releases/moose/2021-09-15)
+- [2021-05-18](https://mooseframework.org/releases/moose/2021-05-18)
+- [v1.0.0](https://mooseframework.org/releases/moose/v1.0.0)
+
+## Github Backups
+
+[Information on Github Backups for MOOSE, Mastodon, TMAP8, and blackbear](sqa/github_backup.md)
+
+!sqa report
+

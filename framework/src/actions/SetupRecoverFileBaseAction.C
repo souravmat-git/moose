@@ -17,8 +17,6 @@
 registerMooseAction("MooseApp", SetupRecoverFileBaseAction, "setup_recover_file_base");
 registerMooseAction("MooseApp", SetupRecoverFileBaseAction, "recover_meta_data");
 
-defineLegacyParams(SetupRecoverFileBaseAction);
-
 InputParameters
 SetupRecoverFileBaseAction::validParams()
 {
@@ -60,7 +58,9 @@ SetupRecoverFileBaseAction::act()
     {
       const RestartableDataMap & meta_data = map_iter->second.first;
       const std::string & suffix = map_iter->second.second;
-      if (restartable.readRestartableDataHeader(false, suffix))
+      std::string meta_suffix =
+          "_mesh." + _app.getRestartRecoverFileSuffix() + "/meta_data" + suffix;
+      if (restartable.readRestartableDataHeader(false, meta_suffix))
         restartable.readRestartableData(meta_data, DataNames());
     }
   }

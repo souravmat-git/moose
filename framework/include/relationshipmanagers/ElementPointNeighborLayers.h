@@ -13,15 +13,10 @@
 
 #include "libmesh/default_coupling.h"
 
-// Forward declarations
-class ElementPointNeighborLayers;
 namespace libMesh
 {
 class GhostingFunctor;
 }
-
-template <>
-InputParameters validParams<ElementPointNeighborLayers>();
 
 /**
  * ElementPointNeighborLayers is used to increase the halo or stencil depth of each processor's
@@ -34,14 +29,22 @@ public:
 
   ElementPointNeighborLayers(const InputParameters & parameters);
 
+  ElementPointNeighborLayers(const ElementPointNeighborLayers & other);
+
+  /**
+   * A clone() is needed because GhostingFunctor can not be shared between
+   * different meshes. The operations in  GhostingFunctor are mesh dependent.
+   */
+  virtual std::unique_ptr<GhostingFunctor> clone() const override;
+
   virtual std::string getInfo() const override;
-  virtual bool operator==(const RelationshipManager & rhs) const override;
+
+  virtual bool operator>=(const RelationshipManager & rhs) const override;
 
 protected:
-  virtual void internalInit() override;
+  virtual void internalInitWithMesh(const MeshBase &) override;
 
   /// Size of the halo or stencil of elements available in each local processors partition. Only
   /// applicable and necessary when using DistributedMesh.
   unsigned short _layers;
 };
-

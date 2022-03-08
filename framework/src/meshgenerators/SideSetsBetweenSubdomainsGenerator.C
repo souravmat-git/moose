@@ -17,16 +17,19 @@
 
 registerMooseObject("MooseApp", SideSetsBetweenSubdomainsGenerator);
 
-defineLegacyParams(SideSetsBetweenSubdomainsGenerator);
-
 InputParameters
 SideSetsBetweenSubdomainsGenerator::validParams()
 {
   InputParameters params = MeshGenerator::validParams();
 
   params.addRequiredParam<MeshGeneratorName>("input", "The mesh we want to modify");
-  params.addRequiredParam<std::vector<SubdomainName>>(
-      "master_block", "The master set of blocks for which to draw a sideset between");
+  params.addParam<std::vector<SubdomainName>>(
+      "primary_block", "The primary set of blocks for which to draw a sideset between");
+  params.addDeprecatedParam<std::vector<SubdomainName>>(
+      "master_block",
+      "The primary set of blocks for which to draw a sideset between",
+      "The 'master_block' param is deprecated and will be removed on January 1, 2021. Please use "
+      "the 'primary_block' parameter instead.");
   params.addRequiredParam<std::vector<SubdomainName>>(
       "paired_block", "The paired set of blocks for which to draw a sideset between");
   params.addRequiredParam<std::vector<BoundaryName>>("new_boundary",
@@ -48,9 +51,11 @@ SideSetsBetweenSubdomainsGenerator::generate()
 {
   std::unique_ptr<MeshBase> mesh = std::move(_input);
 
-  std::vector<subdomain_id_type> vec_master_ids =
-      MooseMeshUtils::getSubdomainIDs(*mesh, getParam<std::vector<SubdomainName>>("master_block"));
-  std::set<subdomain_id_type> master_ids(vec_master_ids.begin(), vec_master_ids.end());
+  std::vector<subdomain_id_type> vec_primary_ids = MooseMeshUtils::getSubdomainIDs(
+      *mesh,
+      isParamValid("primary_block") ? getParam<std::vector<SubdomainName>>("primary_block")
+                                    : getParam<std::vector<SubdomainName>>("master_block"));
+  std::set<subdomain_id_type> primary_ids(vec_primary_ids.begin(), vec_primary_ids.end());
 
   std::vector<subdomain_id_type> vec_paired_ids =
       MooseMeshUtils::getSubdomainIDs(*mesh, getParam<std::vector<SubdomainName>>("paired_block"));
@@ -74,8 +79,8 @@ SideSetsBetweenSubdomainsGenerator::generate()
   {
     subdomain_id_type curr_subdomain = elem->subdomain_id();
 
-    // We only need to loop over elements in the master subdomain
-    if (master_ids.count(curr_subdomain) == 0)
+    // We only need to loop over elements in the primary subdomain
+    if (primary_ids.count(curr_subdomain) == 0)
       continue;
 
     for (unsigned int side = 0; side < elem->n_sides(); side++)
@@ -99,8 +104,8 @@ SideSetsBetweenSubdomainsGenerator::generate()
 
   if (!mesh->is_serial())
   {
-    Parallel::MessageTag queries_tag = mesh->comm().get_unique_tag(867),
-                         replies_tag = mesh->comm().get_unique_tag(5309);
+    const auto queries_tag = mesh->comm().get_unique_tag(),
+               replies_tag = mesh->comm().get_unique_tag();
 
     std::vector<Parallel::Request> side_requests(my_n_proc - 1), reply_requests(my_n_proc - 1);
 

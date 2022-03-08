@@ -17,7 +17,7 @@ ComputeSmallStrainNOSPD::validParams()
   InputParameters params = ComputeStrainBaseNOSPD::validParams();
   params.addClassDescription(
       "Class for computing nodal quantities for the residual and Jacobian calculation "
-      "for the peridynamic correspondence model under small strain assumptions");
+      "for the peridynamic correspondence models under small strain assumptions");
 
   return params;
 }
@@ -39,6 +39,13 @@ ComputeSmallStrainNOSPD::computeQpStrain()
   // Subtract Eigen strains
   for (auto es : _eigenstrains)
     _mechanical_strain[_qp] -= (*es)[_qp];
+
+  // zero out all strain measures for broken bond
+  if (_bond_status_var->getElementalValue(_current_elem) < 0.5)
+  {
+    _mechanical_strain[_qp].zero();
+    _total_strain[_qp].zero();
+  }
 }
 
 void

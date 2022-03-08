@@ -21,8 +21,6 @@
 
 registerMooseObject("MooseApp", Nemesis);
 
-defineLegacyParams(Nemesis);
-
 InputParameters
 Nemesis::validParams()
 {
@@ -73,7 +71,7 @@ Nemesis::meshChanged()
   _nemesis_num = 1;
 
   // Create the new NemesisIO object
-  _nemesis_io_ptr = libmesh_make_unique<Nemesis_IO>(_problem_ptr->mesh().getMesh());
+  _nemesis_io_ptr = std::make_unique<Nemesis_IO>(_problem_ptr->mesh().getMesh());
   _nemesis_initialized = false;
 }
 
@@ -88,7 +86,7 @@ Nemesis::outputPostprocessors()
   for (const auto & name : pps)
   {
     _global_names.push_back(name);
-    _global_values.push_back(_problem_ptr->getPostprocessorValue(name));
+    _global_values.push_back(_problem_ptr->getPostprocessorValueByName(name));
   }
 }
 

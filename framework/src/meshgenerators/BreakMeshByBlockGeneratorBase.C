@@ -10,8 +10,6 @@
 #include "BreakMeshByBlockGeneratorBase.h"
 #include "InputParameters.h"
 
-defineLegacyParams(BreakMeshByBlockGeneratorBase);
-
 InputParameters
 BreakMeshByBlockGeneratorBase::validParams()
 {
@@ -23,7 +21,7 @@ BreakMeshByBlockGeneratorBase::validParams()
       "the name of the new interface. Cannot be used whit `split_interface=true`");
   params.addParam<bool>("split_interface",
                         false,
-                        "If true, it create a "
+                        "If true, it creates a "
                         "different interface for each block pair.");
   params.addClassDescription("This is the base class used to split a monolithic"
                              "mesh by blocks pairs");
@@ -39,8 +37,8 @@ BreakMeshByBlockGeneratorBase::BreakMeshByBlockGeneratorBase(const InputParamete
   // check input consistency
   if (getParam<bool>("split_interface") && _pars.isParamSetByUser("interface_name"))
   {
-    mooseError("if split_interface == true,  the new interface_name"
-               " cannot be specified by the user. It will be autoamtically assigned");
+    mooseError("if split_interface == true, the new interface_name"
+               " cannot be specified by the user. It will be automatically assigned");
   }
 }
 
@@ -69,17 +67,17 @@ BreakMeshByBlockGeneratorBase::findFreeBoundaryId(MeshBase & mesh)
 
 std::string
 BreakMeshByBlockGeneratorBase::generateBoundaryName(MeshBase & mesh,
-                                                    const subdomain_id_type & masterBlockID,
-                                                    const subdomain_id_type & slaveBlockID)
+                                                    const subdomain_id_type & primaryBlockID,
+                                                    const subdomain_id_type & secondaryBlockID)
 {
-  std::string master_block_name = mesh.subdomain_name(masterBlockID);
-  std::string slave_block_name = mesh.subdomain_name(slaveBlockID);
-  if (master_block_name.empty())
-    master_block_name = "Block" + std::to_string(masterBlockID);
-  if (slave_block_name.empty())
-    slave_block_name = "Block" + std::to_string(slaveBlockID);
+  std::string primary_block_name = mesh.subdomain_name(primaryBlockID);
+  std::string secondary_block_name = mesh.subdomain_name(secondaryBlockID);
+  if (primary_block_name.empty())
+    primary_block_name = "Block" + std::to_string(primaryBlockID);
+  if (secondary_block_name.empty())
+    secondary_block_name = "Block" + std::to_string(secondaryBlockID);
 
-  return master_block_name + "_" + slave_block_name;
+  return primary_block_name + "_" + secondary_block_name;
 }
 
 void
@@ -91,8 +89,8 @@ BreakMeshByBlockGeneratorBase::mapBoundaryIdAndBoundaryName(boundary_id_type & b
 
 void
 BreakMeshByBlockGeneratorBase::findBoundaryNameAndInd(MeshBase & mesh,
-                                                      const subdomain_id_type & masterBlockID,
-                                                      const subdomain_id_type & slaveBlockID,
+                                                      const subdomain_id_type & primaryBlockID,
+                                                      const subdomain_id_type & secondaryBlockID,
                                                       std::string & boundaryName,
                                                       boundary_id_type & boundaryID,
                                                       BoundaryInfo & boundary_info)
@@ -102,7 +100,7 @@ BreakMeshByBlockGeneratorBase::findBoundaryNameAndInd(MeshBase & mesh,
 
   // mpi barrier
   // first check which boundary name will be created
-  boundaryName = generateBoundaryName(mesh, masterBlockID, slaveBlockID);
+  boundaryName = generateBoundaryName(mesh, primaryBlockID, secondaryBlockID);
 
   // check if the boundary name already exist
   bool checkBoundaryAlreadyExist = false;

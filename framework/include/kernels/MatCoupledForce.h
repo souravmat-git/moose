@@ -11,12 +11,6 @@
 
 #include "Kernel.h"
 
-// Forward Declaration
-class MatCoupledForce;
-
-template <>
-InputParameters validParams<MatCoupledForce>();
-
 /**
  * Represents a right hand side force term of the form
  * Sum_j c_j * m_j * v_j, where c is a vector of real numbers,
@@ -38,11 +32,11 @@ protected:
   virtual Real computeQpOffDiagJacobian(unsigned int jvar) override;
 
 private:
-  unsigned int _n_coupled;
-  bool _coupled_props;
-  std::vector<unsigned int> _v_var;
-  std::vector<const VariableValue *> _v;
-  std::vector<Real> _coef;
-  std::vector<const MaterialProperty<Real> *> _mat_props;
+  const unsigned int _n_coupled;
+  const bool _coupled_props;
+  const std::vector<unsigned int> _v_var;
+  const std::vector<const VariableValue *> _v;
+  const std::vector<Real> _coef;
   std::map<unsigned int, unsigned int> _v_var_to_index;
+  std::vector<const MaterialProperty<Real> *> _mat_props;
 };

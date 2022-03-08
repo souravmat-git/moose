@@ -46,6 +46,14 @@
       detail = 'have no oscillations in the solution, and'
       cli_args = "Postprocessors/active='active_upper_lm upper_violations active_lower_lm lower_violations'"
     []
+    [ad_exo]
+      input = ad-upper-and-lower-bound.i
+      type = Exodiff
+      exodiff = ad-upper-and-lower-bound_out.e
+      detail = 'work with automatic differentiation, and'
+      cli_args = "Postprocessors/active='active_upper_lm upper_violations active_lower_lm lower_violations'"
+      ad_indexing_type = 'global'
+    []
     [non_singular]
       input = upper-and-lower-bound.i
       type = RunApp
@@ -96,6 +104,14 @@
       detail = 'is also compatible with algebraic multigrid'
       custom_cmp = 'upper-and-lower.cmp'
       cli_args = 'Outputs/file_base=vi-ssls-amg -pc_type hypre -pc_hypre_type boomeramg -snes_type vinewtonssls'
+    []
+    [rsls_pjfnk]
+      input = vi-bounding.i
+      type = Exodiff
+      exodiff = 'rsls-pjfnk.e'
+      cli_args = 'Executioner/solve_type=PJFNK Outputs/file_base=rsls-pjfnk'
+      custom_cmp = 'upper-and-lower.cmp'
+      detail = 'The reduced space active set method shall work with a matrix-free approximation of the Jacobian, and the function evaluations corresponding to the nonlinear residual and the base for finite-differencing shall be equivalent.'
     []
   []
   [unbounded]

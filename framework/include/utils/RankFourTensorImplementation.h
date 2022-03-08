@@ -11,6 +11,7 @@
 
 // MOOSE includes
 #include "RankTwoTensor.h"
+#include "RankThreeTensor.h"
 #include "MooseEnum.h"
 #include "MooseException.h"
 #include "MooseUtils.h"
@@ -20,6 +21,9 @@
 #include "libmesh/utility.h"
 #include "libmesh/tensor_value.h"
 #include "libmesh/vector_value.h"
+
+// Eigen needs LU
+#include "Eigen/LU"
 
 // C++ includes
 #include <iomanip>
@@ -39,7 +43,7 @@ RankFourTensorTempl<T>::fillMethodEnum()
 {
   return MooseEnum("antisymmetric symmetric9 symmetric21 general_isotropic symmetric_isotropic "
                    "symmetric_isotropic_E_nu antisymmetric_isotropic axisymmetric_rz general "
-                   "principal");
+                   "principal orthotropic");
 }
 
 template <typename T>
@@ -47,9 +51,8 @@ RankFourTensorTempl<T>::RankFourTensorTempl()
 {
   mooseAssert(N == 3, "RankFourTensorTempl<T> is currently only tested for 3 dimensions.");
 
-  unsigned int index = 0;
-  for (unsigned int i = 0; i < N4; ++i)
-    _vals[index++] = 0.0;
+  for (auto i : make_range(N4))
+    _vals[i] = 0.0;
 }
 
 template <typename T>
@@ -63,24 +66,37 @@ RankFourTensorTempl<T>::RankFourTensorTempl(const InitMethod init)
 
     case initIdentity:
       zero();
-      for (unsigned int i = 0; i < N; ++i)
+      for (auto i : make_range(N))
         (*this)(i, i, i, i) = 1.0;
       break;
 
     case initIdentityFour:
-      for (unsigned int i = 0; i < N; ++i)
-        for (unsigned int j = 0; j < N; ++j)
-          for (unsigned int k = 0; k < N; ++k)
-            for (unsigned int l = 0; l < N; ++l)
+      for (auto i : make_range(N))
+        for (auto j : make_range(N))
+          for (auto k : make_range(N))
+            for (auto l : make_range(N))
               _vals[index++] = Real(i == k && j == l);
       break;
 
     case initIdentitySymmetricFour:
+      for (auto i : make_range(N))
+        for (auto j : make_range(N))
+          for (auto k : make_range(N))
+            for (auto l : make_range(N))
+              _vals[index++] = 0.5 * Real(i == k && j == l) + 0.5 * Real(i == l && j == k);
+      break;
+
+    case initIdentityDeviatoric:
       for (unsigned int i = 0; i < N; ++i)
         for (unsigned int j = 0; j < N; ++j)
           for (unsigned int k = 0; k < N; ++k)
             for (unsigned int l = 0; l < N; ++l)
-              _vals[index++] = 0.5 * Real(i == k && j == l) + 0.5 * Real(i == l && j == k);
+            {
+              _vals[index] = Real(i == k && j == l);
+              if ((i == j) && (k == l))
+                _vals[index] -= 1.0 / 3.0;
+              index++;
+            }
       break;
 
     default:
@@ -98,7 +114,7 @@ template <typename T>
 void
 RankFourTensorTempl<T>::zero()
 {
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     _vals[i] = 0.0;
 }
 
@@ -106,14 +122,15 @@ template <typename T>
 RankFourTensorTempl<T> &
 RankFourTensorTempl<T>::operator=(const RankFourTensorTempl<T> & a)
 {
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     _vals[i] = a._vals[i];
   return *this;
 }
 
 template <typename T>
 template <template <typename> class Tensor, typename T2>
-auto RankFourTensorTempl<T>::operator*(const Tensor<T2> & b) const ->
+auto
+RankFourTensorTempl<T>::operator*(const Tensor<T2> & b) const ->
     typename std::enable_if<TwoTensorMultTraits<Tensor, T2>::value,
                             RankTwoTensorTempl<decltype(T() * T2())>>::type
 {
@@ -136,7 +153,7 @@ template <typename T>
 RankFourTensorTempl<T> &
 RankFourTensorTempl<T>::operator*=(const T & a)
 {
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     _vals[i] *= a;
   return *this;
 }
@@ -145,7 +162,7 @@ template <typename T>
 RankFourTensorTempl<T> &
 RankFourTensorTempl<T>::operator/=(const T & a)
 {
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     _vals[i] /= a;
   return *this;
 }
@@ -154,7 +171,7 @@ template <typename T>
 RankFourTensorTempl<T> &
 RankFourTensorTempl<T>::operator+=(const RankFourTensorTempl<T> & a)
 {
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     _vals[i] += a._vals[i];
   return *this;
 }
@@ -166,7 +183,7 @@ RankFourTensorTempl<T>::operator+(const RankFourTensorTempl<T2> & b) const
     -> RankFourTensorTempl<decltype(T() + T2())>
 {
   RankFourTensorTempl<decltype(T() + T2())> result;
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     result._vals[i] = _vals[i] + b._vals[i];
   return result;
 }
@@ -175,7 +192,7 @@ template <typename T>
 RankFourTensorTempl<T> &
 RankFourTensorTempl<T>::operator-=(const RankFourTensorTempl<T> & a)
 {
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     _vals[i] -= a._vals[i];
   return *this;
 }
@@ -187,7 +204,7 @@ RankFourTensorTempl<T>::operator-(const RankFourTensorTempl<T2> & b) const
     -> RankFourTensorTempl<decltype(T() - T2())>
 {
   RankFourTensorTempl<decltype(T() - T2())> result;
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     result._vals[i] = _vals[i] - b._vals[i];
   return result;
 }
@@ -197,42 +214,32 @@ RankFourTensorTempl<T>
 RankFourTensorTempl<T>::operator-() const
 {
   RankFourTensorTempl<T> result;
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     result._vals[i] = -_vals[i];
   return result;
 }
 
 template <typename T>
 template <typename T2>
-auto RankFourTensorTempl<T>::operator*(const RankFourTensorTempl<T2> & b) const
+auto
+RankFourTensorTempl<T>::operator*(const RankFourTensorTempl<T2> & b) const
     -> RankFourTensorTempl<decltype(T() * T2())>
 {
   typedef decltype(T() * T2()) ValueType;
   RankFourTensorTempl<ValueType> result;
 
   unsigned int index = 0;
-  unsigned int ij1 = 0;
-  for (unsigned int i = 0; i < N; ++i)
-  {
-    for (unsigned int j = 0; j < N; ++j)
-    {
-      for (unsigned int k = 0; k < N; ++k)
-      {
-        for (unsigned int l = 0; l < N; ++l)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
         {
           ValueType sum = 0;
-          for (unsigned int p = 0; p < N; ++p)
-          {
-            unsigned int p1 = N * p;
-            for (unsigned int q = 0; q < N; ++q)
-              sum += _vals[ij1 + p1 + q] * b(p, q, k, l);
-          }
+          for (auto p : make_range(N))
+            for (auto q : make_range(N))
+              sum += _vals[i * N3 + j * N2 + p * N + q] * b(p, q, k, l);
           result._vals[index++] = sum;
         }
-      }
-      ij1 += N2;
-    }
-  }
 
   return result;
 }
@@ -243,7 +250,7 @@ RankFourTensorTempl<T>::L2norm() const
 {
   T l2 = 0;
 
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     l2 += Utility::pow<2>(_vals[i]);
 
   return std::sqrt(l2);
@@ -337,14 +344,15 @@ RankFourTensorTempl<Real>::invSymm() const
   // mat[35] = C(1,2,1,2)*2
 
   unsigned int index = 0;
-  for (unsigned int i = 0; i < N; ++i)
-    for (unsigned int j = 0; j < N; ++j)
-      for (unsigned int k = 0; k < N; ++k)
-        for (unsigned int l = 0; l < N; ++l)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
         {
           if (i == j)
             mat[k == l ? i * ntens + k : i * ntens + k + nskip + l] += _vals[index];
-          else // i!=j
+          else
+            // i!=j
             mat[k == l ? (nskip + i + j) * ntens + k : (nskip + i + j) * ntens + k + nskip + l] +=
                 _vals[index]; // note the +=, which results in double-counting and is rectified
                               // below
@@ -352,7 +360,7 @@ RankFourTensorTempl<Real>::invSymm() const
         }
 
   for (unsigned int i = 3; i < ntens; ++i)
-    for (unsigned int j = 0; j < ntens; ++j)
+    for (auto j : make_range(ntens))
       mat[i * ntens + j] /= 2.0; // because of double-counting above
 
   // use LAPACK to find the inverse
@@ -361,15 +369,16 @@ RankFourTensorTempl<Real>::invSymm() const
   // build the resulting rank-four tensor
   // using the inverse of the above algorithm
   index = 0;
-  for (unsigned int i = 0; i < N; ++i)
-    for (unsigned int j = 0; j < N; ++j)
-      for (unsigned int k = 0; k < N; ++k)
-        for (unsigned int l = 0; l < N; ++l)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
         {
           if (i == j)
             result._vals[index] =
                 k == l ? mat[i * ntens + k] : mat[i * ntens + k + nskip + l] / 2.0;
-          else // i!=j
+          else
+            // i!=j
             result._vals[index] = k == l ? mat[(nskip + i + j) * ntens + k]
                                          : mat[(nskip + i + j) * ntens + k + nskip + l] / 2.0;
           index++;
@@ -385,23 +394,23 @@ RankFourTensorTempl<T>::rotate(const TypeTensor<T> & R)
   RankFourTensorTempl<T> old = *this;
 
   unsigned int index = 0;
-  for (unsigned int i = 0; i < N; ++i)
-    for (unsigned int j = 0; j < N; ++j)
-      for (unsigned int k = 0; k < N; ++k)
-        for (unsigned int l = 0; l < N; ++l)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
         {
           unsigned int index2 = 0;
           T sum = 0.0;
-          for (unsigned int m = 0; m < N; ++m)
+          for (auto m : make_range(N))
           {
             const T & a = R(i, m);
-            for (unsigned int n = 0; n < N; ++n)
+            for (auto n : make_range(N))
             {
               const T & ab = a * R(j, n);
-              for (unsigned int o = 0; o < N; ++o)
+              for (auto o : make_range(N))
               {
                 const T & abc = ab * R(k, o);
-                for (unsigned int p = 0; p < N; ++p)
+                for (auto p : make_range(N))
                   sum += abc * R(l, p) * old._vals[index2++];
               }
             }
@@ -414,18 +423,20 @@ template <typename T>
 void
 RankFourTensorTempl<T>::print(std::ostream & stm) const
 {
-  for (unsigned int i = 0; i < N; ++i)
-    for (unsigned int j = 0; j < N; ++j)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
     {
       stm << "i = " << i << " j = " << j << '\n';
-      for (unsigned int k = 0; k < N; ++k)
+      for (auto k : make_range(N))
       {
-        for (unsigned int l = 0; l < N; ++l)
+        for (auto l : make_range(N))
           stm << std::setw(15) << (*this)(i, j, k, l) << " ";
 
         stm << '\n';
       }
     }
+
+  stm << std::flush;
 }
 
 template <typename T>
@@ -435,18 +446,56 @@ RankFourTensorTempl<T>::transposeMajor() const
   RankFourTensorTempl<T> result;
 
   unsigned int index = 0;
-  unsigned int i1 = 0;
-  for (unsigned int i = 0; i < N; ++i)
-  {
-    for (unsigned int j = 0; j < N; ++j)
-      for (unsigned int k = 0; k < N; ++k)
-      {
-        unsigned int ijk1 = k * N3 + i1 + j;
-        for (unsigned int l = 0; l < N; ++l)
-          result._vals[index++] = _vals[ijk1 + l * N2];
-      }
-    i1 += N;
-  }
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
+          result._vals[index++] = _vals[k * N3 + i * N + j + l * N2];
+
+  return result;
+}
+
+template <typename T>
+RankFourTensorTempl<T>
+RankFourTensorTempl<T>::transposeIj() const
+{
+  RankFourTensorTempl<T> result;
+
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
+          result(i, j, k, l) = (*this)(j, i, k, l);
+
+  return result;
+}
+
+template <typename T>
+RankThreeTensorTempl<T>
+RankFourTensorTempl<T>::mixedProductIjklJ(const VectorValue<T> & b) const
+{
+  RankThreeTensorTempl<T> result;
+
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
+          result(i, k, l) += (*this)(i, j, k, l) * b(j);
+
+  return result;
+}
+
+template <typename T>
+RankThreeTensorTempl<T>
+RankFourTensorTempl<T>::mixedProductIjklI(const VectorValue<T> & b) const
+{
+  RankThreeTensorTempl<T> result;
+
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
+          result(j, k, l) += (*this)(i, j, k, l) * b(i);
 
   return result;
 }
@@ -534,154 +583,12 @@ RankFourTensorTempl<T>::fillFromInputVector(const std::vector<T> & input, FillMe
     case principal:
       fillPrincipalFromInputVector(input);
       break;
+    case orthotropic:
+      fillGeneralOrthotropicFromInputVector(input);
+      break;
     default:
       mooseError("fillFromInputVector called with unknown fill_method of ", fill_method);
   }
-}
-
-template <typename T>
-void
-RankFourTensorTempl<T>::fillSymmetric9FromInputVector(const std::vector<T> & input)
-{
-  mooseAssert(input.size() == 9,
-              "To use fillSymmetric9FromInputVector, your input must have size 9.");
-
-  zero();
-
-  (*this)(0, 0, 0, 0) = input[0]; // C1111
-  (*this)(1, 1, 1, 1) = input[3]; // C2222
-  (*this)(2, 2, 2, 2) = input[5]; // C3333
-
-  (*this)(0, 0, 1, 1) = input[1]; // C1122
-  (*this)(1, 1, 0, 0) = input[1];
-
-  (*this)(0, 0, 2, 2) = input[2]; // C1133
-  (*this)(2, 2, 0, 0) = input[2];
-
-  (*this)(1, 1, 2, 2) = input[4]; // C2233
-  (*this)(2, 2, 1, 1) = input[4];
-
-  (*this)(1, 2, 1, 2) = input[6]; // C2323
-  (*this)(2, 1, 2, 1) = input[6];
-  (*this)(2, 1, 1, 2) = input[6];
-  (*this)(1, 2, 2, 1) = input[6];
-
-  (*this)(0, 2, 0, 2) = input[7]; // C1313
-  (*this)(2, 0, 2, 0) = input[7];
-  (*this)(2, 0, 0, 2) = input[7];
-  (*this)(0, 2, 2, 0) = input[7];
-
-  (*this)(0, 1, 0, 1) = input[8]; // C1212
-  (*this)(1, 0, 1, 0) = input[8];
-  (*this)(1, 0, 0, 1) = input[8];
-  (*this)(0, 1, 1, 0) = input[8];
-}
-template <typename T>
-void
-RankFourTensorTempl<T>::fillSymmetric21FromInputVector(const std::vector<T> & input)
-{
-  mooseAssert(input.size() == 21,
-              "To use fillSymmetric21FromInputVector, your input must have size 21.");
-
-  (*this)(0, 0, 0, 0) = input[0];  // C1111
-  (*this)(1, 1, 1, 1) = input[6];  // C2222
-  (*this)(2, 2, 2, 2) = input[11]; // C3333
-
-  (*this)(0, 0, 1, 1) = input[1]; // C1122
-  (*this)(1, 1, 0, 0) = input[1];
-
-  (*this)(0, 0, 2, 2) = input[2]; // C1133
-  (*this)(2, 2, 0, 0) = input[2];
-
-  (*this)(1, 1, 2, 2) = input[7]; // C2233
-  (*this)(2, 2, 1, 1) = input[7];
-
-  (*this)(0, 0, 0, 2) = input[4]; // C1113
-  (*this)(0, 0, 2, 0) = input[4];
-  (*this)(0, 2, 0, 0) = input[4];
-  (*this)(2, 0, 0, 0) = input[4];
-
-  (*this)(0, 0, 0, 1) = input[5]; // C1112
-  (*this)(0, 0, 1, 0) = input[5];
-  (*this)(0, 1, 0, 0) = input[5];
-  (*this)(1, 0, 0, 0) = input[5];
-
-  (*this)(1, 1, 1, 2) = input[8]; // C2223
-  (*this)(1, 1, 2, 1) = input[8];
-  (*this)(1, 2, 1, 1) = input[8];
-  (*this)(2, 1, 1, 1) = input[8];
-
-  (*this)(1, 1, 1, 0) = input[10];
-  (*this)(1, 1, 0, 1) = input[10];
-  (*this)(1, 0, 1, 1) = input[10];
-  (*this)(0, 1, 1, 1) = input[10]; // C2212 //flipped for filling purposes
-
-  (*this)(2, 2, 2, 1) = input[12];
-  (*this)(2, 2, 1, 2) = input[12];
-  (*this)(2, 1, 2, 2) = input[12];
-  (*this)(1, 2, 2, 2) = input[12]; // C3323 //flipped for filling purposes
-
-  (*this)(2, 2, 2, 0) = input[13];
-  (*this)(2, 2, 0, 2) = input[13];
-  (*this)(2, 0, 2, 2) = input[13];
-  (*this)(0, 2, 2, 2) = input[13]; // C3313 //flipped for filling purposes
-
-  (*this)(0, 0, 1, 2) = input[3]; // C1123
-  (*this)(0, 0, 2, 1) = input[3];
-  (*this)(1, 2, 0, 0) = input[3];
-  (*this)(2, 1, 0, 0) = input[3];
-
-  (*this)(1, 1, 0, 2) = input[9];
-  (*this)(1, 1, 2, 0) = input[9];
-  (*this)(0, 2, 1, 1) = input[9]; // C2213  //flipped for filling purposes
-  (*this)(2, 0, 1, 1) = input[9];
-
-  (*this)(2, 2, 0, 1) = input[14];
-  (*this)(2, 2, 1, 0) = input[14];
-  (*this)(0, 1, 2, 2) = input[14]; // C3312 //flipped for filling purposes
-  (*this)(1, 0, 2, 2) = input[14];
-
-  (*this)(1, 2, 1, 2) = input[15]; // C2323
-  (*this)(2, 1, 2, 1) = input[15];
-  (*this)(2, 1, 1, 2) = input[15];
-  (*this)(1, 2, 2, 1) = input[15];
-
-  (*this)(0, 2, 0, 2) = input[18]; // C1313
-  (*this)(2, 0, 2, 0) = input[18];
-  (*this)(2, 0, 0, 2) = input[18];
-  (*this)(0, 2, 2, 0) = input[18];
-
-  (*this)(0, 1, 0, 1) = input[20]; // C1212
-  (*this)(1, 0, 1, 0) = input[20];
-  (*this)(1, 0, 0, 1) = input[20];
-  (*this)(0, 1, 1, 0) = input[20];
-
-  (*this)(1, 2, 0, 2) = input[16];
-  (*this)(0, 2, 1, 2) = input[16]; // C2313 //flipped for filling purposes
-  (*this)(2, 1, 0, 2) = input[16];
-  (*this)(1, 2, 2, 0) = input[16];
-  (*this)(2, 0, 1, 2) = input[16];
-  (*this)(0, 2, 2, 1) = input[16];
-  (*this)(2, 1, 2, 0) = input[16];
-  (*this)(2, 0, 2, 1) = input[16];
-
-  (*this)(1, 2, 0, 1) = input[17];
-  (*this)(0, 1, 1, 2) = input[17]; // C2312 //flipped for filling purposes
-  (*this)(2, 1, 0, 1) = input[17];
-  (*this)(1, 2, 1, 0) = input[17];
-  (*this)(1, 0, 1, 2) = input[17];
-  (*this)(0, 1, 2, 1) = input[17];
-  (*this)(2, 1, 1, 0) = input[17];
-  (*this)(1, 0, 2, 1) = input[17];
-
-  (*this)(0, 2, 0, 1) = input[19];
-  (*this)(0, 1, 0, 2) = input[19]; // C1312 //flipped for filling purposes
-  (*this)(2, 0, 0, 1) = input[19];
-  (*this)(0, 2, 1, 0) = input[19];
-  (*this)(1, 0, 0, 2) = input[19];
-  (*this)(0, 1, 2, 0) = input[19];
-  (*this)(2, 0, 1, 0) = input[19];
-  (*this)(1, 0, 2, 0) = input[19];
 }
 
 template <typename T>
@@ -711,8 +618,8 @@ RankFourTensorTempl<T>::fillAntisymmetricFromInputVector(const std::vector<T> & 
   // have now got the upper parts of vals[0][1], vals[0][2] and vals[1][2]
 
   // fill in from antisymmetry relations
-  for (unsigned int i = 0; i < N; ++i)
-    for (unsigned int j = 0; j < N; ++j)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
     {
       (*this)(0, 1, j, i) = -(*this)(0, 1, i, j);
       (*this)(0, 2, j, i) = -(*this)(0, 2, i, j);
@@ -721,8 +628,8 @@ RankFourTensorTempl<T>::fillAntisymmetricFromInputVector(const std::vector<T> & 
   // have now got all of vals[0][1], vals[0][2] and vals[1][2]
 
   // fill in from antisymmetry relations
-  for (unsigned int i = 0; i < N; ++i)
-    for (unsigned int j = 0; j < N; ++j)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
     {
       (*this)(1, 0, i, j) = -(*this)(0, 1, i, j);
       (*this)(2, 0, i, j) = -(*this)(0, 2, i, j);
@@ -744,16 +651,16 @@ RankFourTensorTempl<T>::fillGeneralIsotropicFromInputVector(const std::vector<T>
 
 template <typename T>
 void
-RankFourTensorTempl<T>::fillGeneralIsotropic(T i0, T i1, T i2)
+RankFourTensorTempl<T>::fillGeneralIsotropic(const T & i0, const T & i1, const T & i2)
 {
-  for (unsigned int i = 0; i < N; ++i)
-    for (unsigned int j = 0; j < N; ++j)
-      for (unsigned int k = 0; k < N; ++k)
-        for (unsigned int l = 0; l < N; ++l)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
         {
           (*this)(i, j, k, l) = i0 * Real(i == j) * Real(k == l) +
                                 i1 * Real(i == k) * Real(j == l) + i1 * Real(i == l) * Real(j == k);
-          for (unsigned int m = 0; m < N; ++m)
+          for (auto m : make_range(N))
             (*this)(i, j, k, l) +=
                 i2 * Real(PermutationTensor::eps(i, j, m)) * Real(PermutationTensor::eps(k, l, m));
         }
@@ -773,7 +680,7 @@ RankFourTensorTempl<T>::fillAntisymmetricIsotropicFromInputVector(const std::vec
 
 template <typename T>
 void
-RankFourTensorTempl<T>::fillAntisymmetricIsotropic(T i0)
+RankFourTensorTempl<T>::fillAntisymmetricIsotropic(const T & i0)
 {
   fillGeneralIsotropic(0.0, 0.0, i0);
 }
@@ -789,10 +696,17 @@ RankFourTensorTempl<T>::fillSymmetricIsotropicFromInputVector(const std::vector<
 
 template <typename T>
 void
-RankFourTensorTempl<T>::fillSymmetricIsotropic(T lambda, T G)
+RankFourTensorTempl<T>::fillSymmetricIsotropic(const T & lambda, const T & G)
 {
-  fillSymmetric9FromInputVector(
-      {lambda + 2.0 * G, lambda, lambda, lambda + 2.0 * G, lambda, lambda + 2.0 * G, G, G, G});
+  // clang-format off
+  fillSymmetric21FromInputVector(std::array<T,21>
+  {{lambda + 2.0 * G, lambda,           lambda,           0.0, 0.0, 0.0,
+                      lambda + 2.0 * G, lambda,           0.0, 0.0, 0.0,
+                                        lambda + 2.0 * G, 0.0, 0.0, 0.0,
+                                                            G, 0.0, 0.0,
+                                                                 G, 0.0,
+                                                                      G}});
+  // clang-format on
 }
 
 template <typename T>
@@ -810,7 +724,7 @@ RankFourTensorTempl<T>::fillSymmetricIsotropicEandNuFromInputVector(const std::v
 
 template <typename T>
 void
-RankFourTensorTempl<T>::fillSymmetricIsotropicEandNu(T E, T nu)
+RankFourTensorTempl<T>::fillSymmetricIsotropicEandNu(const T & E, const T & nu)
 {
   // Calculate lambda and the shear modulus from the given young's modulus and poisson's ratio
   const T & lambda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
@@ -826,17 +740,21 @@ RankFourTensorTempl<T>::fillAxisymmetricRZFromInputVector(const std::vector<T> &
   mooseAssert(input.size() == 5,
               "To use fillAxisymmetricRZFromInputVector, your input must have size 5.");
 
-  // C1111     C1122     C1133     C2222     C2233=C1133
-  fillSymmetric9FromInputVector({input[0],
-                                 input[1],
-                                 input[2],
-                                 input[0],
-                                 input[2],
-                                 // C3333     C2323     C3131=C2323   C1212
-                                 input[3],
-                                 input[4],
-                                 input[4],
-                                 (input[0] - input[1]) * 0.5});
+  // C1111  C1122     C1133       0         0         0
+  //        C2222  C2233=C1133    0         0         0
+  //                  C3333       0         0         0
+  //                            C2323       0         0
+  //                                   C3131=C2323    0
+  //                                                C1212
+  // clang-format off
+  fillSymmetric21FromInputVector(std::array<T,21>
+  {{input[0],input[1],input[2],      0.0,      0.0, 0.0,
+             input[0],input[2],      0.0,      0.0, 0.0,
+                      input[3],      0.0,      0.0, 0.0,
+                                input[4],      0.0, 0.0,
+                                          input[4], 0.0,
+                                                    (input[0] - input[1]) * 0.5}});
+  // clang-format on
 }
 
 template <typename T>
@@ -847,7 +765,7 @@ RankFourTensorTempl<T>::fillGeneralFromInputVector(const std::vector<T> & input)
     mooseError("To use fillGeneralFromInputVector, your input must have size 81. Yours has size ",
                input.size());
 
-  for (unsigned int i = 0; i < N4; ++i)
+  for (auto i : make_range(N4))
     _vals[i] = input[i];
 }
 
@@ -873,6 +791,86 @@ RankFourTensorTempl<T>::fillPrincipalFromInputVector(const std::vector<T> & inpu
 }
 
 template <typename T>
+void
+RankFourTensorTempl<T>::fillGeneralOrthotropicFromInputVector(const std::vector<T> & input)
+{
+  if (input.size() != 12)
+    mooseError("To use fillGeneralOrhotropicFromInputVector, your input must have size 12. Yours "
+               "has size ",
+               input.size());
+
+  const T & Ea = input[0];
+  const T & Eb = input[1];
+  const T & Ec = input[2];
+  const T & Gab = input[3];
+  const T & Gbc = input[4];
+  const T & Gca = input[5];
+  const T & nuba = input[6];
+  const T & nuca = input[7];
+  const T & nucb = input[8];
+  const T & nuab = input[9];
+  const T & nuac = input[10];
+  const T & nubc = input[11];
+
+  // Input must satisfy constraints.
+  bool preserve_symmetry = MooseUtils::absoluteFuzzyEqual(nuab * Eb, nuba * Ea) &&
+                           MooseUtils::absoluteFuzzyEqual(nuca * Ea, nuac * Ec) &&
+                           MooseUtils::absoluteFuzzyEqual(nubc * Ec, nucb * Eb);
+
+  if (!preserve_symmetry)
+    mooseError("Orthotropic elasticity tensor input is not consistent with symmetry requirements. "
+               "Check input for accuracy");
+
+  unsigned int ntens = N * (N + 1) / 2;
+
+  std::vector<T> mat;
+  mat.assign(ntens * ntens, 0);
+
+  T k = 1 - nuab * nuba - nubc * nucb - nuca * nuac - nuab * nubc * nuca - nuba * nucb * nuac;
+
+  bool is_positive_definite =
+      (k > 0) && (1 - nubc * nucb) > 0 && (1 - nuac * nuca) > 0 && (1 - nuab * nuba) > 0;
+  if (!is_positive_definite)
+    mooseError("Orthotropic elasticity tensor input is not positive definite. Check input for "
+               "accuracy");
+
+  mat[0] = Ea * (1 - nubc * nucb) / k;
+  mat[1] = Ea * (nubc * nuca + nuba) / k;
+  mat[2] = Ea * (nuba * nucb + nuca) / k;
+
+  mat[6] = Eb * (nuac * nucb + nuab) / k;
+  mat[7] = Eb * (1 - nuac * nuca) / k;
+  mat[8] = Eb * (nuab * nuca + nucb) / k;
+
+  mat[12] = Ec * (nuab * nubc + nuac) / k;
+  mat[13] = Ec * (nuac * nuba + nubc) / k;
+  mat[14] = Ec * (1 - nuab * nuba) / k;
+
+  mat[21] = 2 * Gab;
+  mat[28] = 2 * Gca;
+  mat[35] = 2 * Gbc;
+
+  // Switching from Voigt to fourth order tensor
+  // Copied from existing code (invSymm)
+  int nskip = N - 1;
+
+  unsigned int index = 0;
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      for (auto k : make_range(N))
+        for (auto l : make_range(N))
+        {
+          if (i == j)
+            (*this)._vals[index] =
+                k == l ? mat[i * ntens + k] : mat[i * ntens + k + nskip + l] / 2.0;
+          else
+            (*this)._vals[index] = k == l ? mat[(nskip + i + j) * ntens + k]
+                                          : mat[(nskip + i + j) * ntens + k + nskip + l] / 2.0;
+          index++;
+        }
+}
+
+template <typename T>
 RankTwoTensorTempl<T>
 RankFourTensorTempl<T>::innerProductTranspose(const RankTwoTensorTempl<T> & b) const
 {
@@ -887,6 +885,34 @@ RankFourTensorTempl<T>::innerProductTranspose(const RankTwoTensorTempl<T> & b) c
   }
 
   return result;
+}
+
+template <typename T>
+T
+RankFourTensorTempl<T>::contractionIj(unsigned int i,
+                                      unsigned int j,
+                                      const RankTwoTensorTempl<T> & M) const
+{
+  T val = 0;
+  for (unsigned int k = 0; k < N; k++)
+    for (unsigned int l = 0; l < N; l++)
+      val += (*this)(i, j, k, l) * M(k, l);
+
+  return val;
+}
+
+template <typename T>
+T
+RankFourTensorTempl<T>::contractionKl(unsigned int k,
+                                      unsigned int l,
+                                      const RankTwoTensorTempl<T> & M) const
+{
+  T val = 0;
+  for (unsigned int i = 0; i < N; i++)
+    for (unsigned int j = 0; j < N; j++)
+      val += (*this)(i, j, k, l) * M(i, j);
+
+  return val;
 }
 
 template <typename T>
@@ -913,13 +939,48 @@ RankFourTensorTempl<T>::sum3x1() const
 }
 
 template <typename T>
+RankFourTensorTempl<T>
+RankFourTensorTempl<T>::tripleProductJkl(const RankTwoTensorTempl<T> & A,
+                                         const RankTwoTensorTempl<T> & B,
+                                         const RankTwoTensorTempl<T> & C) const
+{
+  RankFourTensorTempl<T> R;
+  for (unsigned int i = 0; i < N; i++)
+    for (unsigned int j = 0; j < N; j++)
+      for (unsigned int k = 0; k < N; k++)
+        for (unsigned int l = 0; l < N; l++)
+          for (unsigned int m = 0; m < N; m++)
+            for (unsigned int n = 0; n < N; n++)
+              for (unsigned int t = 0; t < N; t++)
+                R(i, j, k, l) += (*this)(i, m, n, t) * A(j, m) * B(k, n) * C(l, t);
+
+  return R;
+}
+
+template <typename T>
+RankFourTensorTempl<T>
+RankFourTensorTempl<T>::singleProductI(const RankTwoTensorTempl<T> & A) const
+{
+  RankFourTensorTempl<T> R;
+
+  for (unsigned int i = 0; i < N; i++)
+    for (unsigned int j = 0; j < N; j++)
+      for (unsigned int k = 0; k < N; k++)
+        for (unsigned int l = 0; l < N; l++)
+          for (unsigned int m = 0; m < N; m++)
+            R(i, j, k, l) += (*this)(m, j, k, l) * A(i, m);
+
+  return R;
+}
+
+template <typename T>
 bool
 RankFourTensorTempl<T>::isSymmetric() const
 {
-  for (unsigned int i = 1; i < N; ++i)
-    for (unsigned int j = 0; j < i; ++j)
-      for (unsigned int k = 1; k < N; ++k)
-        for (unsigned int l = 0; l < k; ++l)
+  for (auto i : make_range(1u, N))
+    for (auto j : make_range(i))
+      for (auto k : make_range(1u, N))
+        for (auto l : make_range(k))
         {
           // minor symmetries
           if ((*this)(i, j, k, l) != (*this)(j, i, k, l) ||
@@ -951,14 +1012,10 @@ RankFourTensorTempl<T>::isIsotropic() const
     return false;
 
   // off diagonal blocks in Voigt
-  unsigned int i1 = 0;
-  for (unsigned int i = 0; i < N; ++i)
-  {
-    for (unsigned int j = 0; j < N; ++j)
-      if (_vals[i1 + ((j + 1) % N) * N + (j + 2) % N] != 0.0)
+  for (auto i : make_range(N))
+    for (auto j : make_range(N))
+      if (_vals[i * (N3 + N2) + ((j + 1) % N) * N + (j + 2) % N] != 0.0)
         return false;
-    i1 += N3 + N2;
-  }
 
   // top left block
   const T & K1 = (*this)(0, 0, 0, 0);
@@ -967,8 +1024,8 @@ RankFourTensorTempl<T>::isIsotropic() const
     return false;
   if ((*this)(1, 1, 1, 1) != K1 || (*this)(2, 2, 2, 2) != K1)
     return false;
-  for (unsigned int i = 1; i < N; ++i)
-    for (unsigned int j = 0; j < i; ++j)
+  for (auto i : make_range(1u, N))
+    for (auto j : make_range(i))
       if ((*this)(i, i, j, j) != K2)
         return false;
 

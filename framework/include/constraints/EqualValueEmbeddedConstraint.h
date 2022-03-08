@@ -12,12 +12,6 @@
 // MOOSE includes
 #include "NodeElemConstraint.h"
 
-// Forward Declarations
-class EqualValueEmbeddedConstraint;
-
-template <>
-InputParameters validParams<EqualValueEmbeddedConstraint>();
-
 /**
  * A EqualValueEmbeddedConstraint forces the value of a variable to be the same
  * on overlapping portion of two blocks
@@ -47,8 +41,8 @@ public:
   void reinitConstraint();
 
 protected:
-  virtual void prepareSlaveToMasterMap() override;
-  virtual Real computeQpSlaveValue() override;
+  virtual void prepareSecondaryToPrimaryMap() override;
+  virtual Real computeQpSecondaryValue() override;
   virtual Real computeQpResidual(Moose::ConstraintType type) override;
   virtual Real computeQpJacobian(Moose::ConstraintJacobianType type) override;
   virtual Real computeQpOffDiagJacobian(Moose::ConstraintJacobianType type,
@@ -67,4 +61,3 @@ protected:
   /// constraint force needed to enforce the constraint
   Real _constraint_residual;
 };
-

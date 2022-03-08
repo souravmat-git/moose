@@ -64,7 +64,6 @@ AugmentedLagrangianContactProblem::checkNonlinearConvergence(std::string & msg,
                                                              const Real abstol,
                                                              const PetscInt nfuncs,
                                                              const PetscInt /*max_funcs*/,
-                                                             const PetscBool force_iteration,
                                                              const Real ref_resid,
                                                              const Real /*div_threshold*/)
 {
@@ -84,11 +83,10 @@ AugmentedLagrangianContactProblem::checkNonlinearConvergence(std::string & msg,
                                                           abstol,
                                                           nfuncs,
                                                           my_max_funcs,
-                                                          force_iteration,
                                                           ref_resid,
                                                           my_div_threshold);
 
-  _console << "Augmented Lagrangian contact iteration " << _num_lagmul_iterations << "\n";
+  _console << "Augmented Lagrangian contact iteration " << _num_lagmul_iterations << std::endl;
 
   bool _augLM_repeat_step;
 
@@ -124,11 +122,12 @@ AugmentedLagrangianContactProblem::checkNonlinearConvergence(std::string & msg,
       {
         PenetrationLocator & pen_loc = *(it.second);
 
-        BoundaryID slave_boundary = pen_loc._slave_boundary;
+        BoundaryID secondary_boundary = pen_loc._secondary_boundary;
 
-        if (constraints.hasActiveNodeFaceConstraints(slave_boundary, displaced))
+        if (constraints.hasActiveNodeFaceConstraints(secondary_boundary, displaced))
         {
-          const auto & ncs = constraints.getActiveNodeFaceConstraints(slave_boundary, displaced);
+          const auto & ncs =
+              constraints.getActiveNodeFaceConstraints(secondary_boundary, displaced);
 
           for (const auto & nc : ncs)
           {

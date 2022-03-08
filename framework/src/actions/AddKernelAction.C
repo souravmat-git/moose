@@ -14,12 +14,12 @@ registerMooseAction("MooseApp", AddKernelAction, "add_kernel");
 
 registerMooseAction("MooseApp", AddKernelAction, "add_aux_kernel");
 
-defineLegacyParams(AddKernelAction);
-
 InputParameters
 AddKernelAction::validParams()
 {
-  return MooseObjectAction::validParams();
+  InputParameters params = MooseObjectAction::validParams();
+  params.addClassDescription("Add a Kernel object to the simulation.");
+  return params;
 }
 
 AddKernelAction::AddKernelAction(InputParameters params) : MooseObjectAction(params) {}

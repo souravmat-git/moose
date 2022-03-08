@@ -17,21 +17,34 @@ class RadiationTransferAction : public Action
 {
 public:
   RadiationTransferAction(const InputParameters & params);
+
+  static InputParameters validParams();
+
   virtual void act() override;
 
 protected:
-  void addMeshGenerator() const;
+  void addMeshGenerator();
   void addRadiationObject() const;
   void addViewFactorObject() const;
   void addRadiationBCs() const;
+  void addRayStudyObject() const;
+  void addRayBCs() const;
 
   std::vector<std::vector<std::string>> radiationPatchNames() const;
+  std::vector<std::vector<std::string>> bcRadiationPatchNames() const;
   UserObjectName viewFactorObjectName() const;
   UserObjectName radiationObjectName() const;
+  UserObjectName rayStudyName() const;
+  std::string rayBCName() const;
+  std::string symmetryRayBCName() const;
+  MeshGeneratorName meshGeneratorName(unsigned int j) const;
 
-  /// the boundary ids participating in the radiative heat transfer
-  std::vector<boundary_id_type> _boundary_ids;
+  /// provides the updated number of patches for this boundary
+  unsigned int nPatch(unsigned int j) const;
 
-  /// the number of radiation patches per boundary
-  std::vector<unsigned int> _n_patches;
+  /// the boundary names participating in the radiative heat transfer
+  const std::vector<BoundaryName> _boundary_names;
+
+  /// the type of view factor calculation being performed
+  const MooseEnum _view_factor_calculator;
 };

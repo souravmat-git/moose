@@ -50,6 +50,14 @@ fashion as for [images](#images), but also includes some extra settings as liste
        caption=["Big Buck Bunny"](https://en.wikipedia.org/wiki/Big_Buck_Bunny) is an open-source
                animated short.
 
+YouTube videos can also be displayed. The embedded youtube URL is simply provided as the media, this
+URL must contain 'www.youtube.com' and not end with an extension. Similar to locally stored or
+hosted videos, extra settings are provided as listed in [video-settings].
+
+!media https://www.youtube.com/embed/2tJwBsYaLaI
+       id=training-webinar
+       caption=MOOSE training webinar given on June 9--10, 2020.
+
 !devel settings module=MooseDocs.extensions.media
                 object=VideoCommand
                 id=video-settings
@@ -67,3 +75,20 @@ The "id" and "caption" settings are available for both images and videos.
        caption=The Idaho National Laboratory logo.
        style=width:50%;padding:20px;
 !devel-end!
+
+### Float Referencing
+
+Referencing floats is possible using the `!ref` inline command, from both the same page and other pages:
+
+!devel! example id=example-ref-float caption=Example of referencing floats.
+Float from the same page: [!ref](inl-logo)
+
+Figure from different page: [!ref](graph.md#plotly-ext-config)
+
+Table from different page: [!ref](table.md#table-floating)
+
+Algorithm from different page: [!ref](algorithm.md#bk)
+!devel-end!
+
+!devel settings module=MooseDocs.extensions.floats
+                object=FloatReferenceCommand

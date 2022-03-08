@@ -11,12 +11,13 @@
 
 registerMooseObject("MooseApp", TimeDerivativeNodalKernel);
 
-defineLegacyParams(TimeDerivativeNodalKernel);
-
 InputParameters
 TimeDerivativeNodalKernel::validParams()
 {
   InputParameters params = TimeNodalKernel::validParams();
+  params.addClassDescription(
+      "Forms the contribution to the residual and jacobian of the time derivative term from an ODE "
+      "being solved at all nodes.");
   return params;
 }
 

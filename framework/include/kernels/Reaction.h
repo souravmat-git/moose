@@ -11,12 +11,6 @@
 
 #include "Kernel.h"
 
-// Forward Declaration
-class Reaction;
-
-template <>
-InputParameters validParams<Reaction>();
-
 class Reaction : public Kernel
 {
 public:
@@ -27,4 +21,6 @@ public:
 protected:
   virtual Real computeQpResidual() override;
   virtual Real computeQpJacobian() override;
+
+  const Real & _rate;
 };

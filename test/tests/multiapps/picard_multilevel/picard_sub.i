@@ -46,6 +46,16 @@
   [../]
 []
 
+[Postprocessors]
+  # Accumulate the number of times 'timestep_end' is reached
+  # (which is an indicator of the number of Picard iterations)
+  [./cumulative_picard_its_pp]
+    type = TestPostprocessor
+    test_type = custom_execute_on
+    execute_on = 'timestep_end'
+  [../]
+[]
+
 [Executioner]
   type = Transient
   num_steps = 5
@@ -53,11 +63,11 @@
   solve_type = PJFNK
   petsc_options_iname = '-pc_type -pc_hypre_type'
   petsc_options_value = 'hypre boomeramg'
-  picard_max_its = 30
+  fixed_point_max_its = 30
   nl_rel_tol = 1e-8
   nl_abs_tol = 1e-9
-  picard_rel_tol = 1e-8
-  picard_abs_tol = 1e-9
+  fixed_point_rel_tol = 1e-8
+  fixed_point_abs_tol = 1e-9
 []
 
 [Outputs]

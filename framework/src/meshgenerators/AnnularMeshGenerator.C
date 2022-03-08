@@ -16,8 +16,6 @@
 
 registerMooseObject("MooseApp", AnnularMeshGenerator);
 
-defineLegacyParams(AnnularMeshGenerator);
-
 InputParameters
 AnnularMeshGenerator::validParams()
 {
@@ -32,6 +30,8 @@ AnnularMeshGenerator::validParams()
       "rmin>=0.0",
       "Inner radius.  If rmin=0 then a disc mesh (with no central hole) will be created.");
   params.addRequiredParam<Real>("rmax", "Outer radius");
+  params.addParam<std::vector<Real>>("radial_positions",
+                                     "Directly prescribed positions of intermediate radial nodes");
   params.addDeprecatedParam<Real>("tmin",
                                   0.0,
                                   "Minimum angle, measured in radians anticlockwise from x axis",
@@ -39,19 +39,21 @@ AnnularMeshGenerator::validParams()
   params.addDeprecatedParam<Real>(
       "tmax",
       2 * M_PI,
-      "Maximum angle, measured in radians anticlockwise from x axis.  If "
-      "tmin=0 and tmax=2Pi an annular mesh is created.  "
+      "Maximum angle, measured in radians anticlockwise from x axis. If "
+      "tmin=0 and tmax=2Pi an annular mesh is created. "
       "Otherwise, only a sector of an annulus is created",
       "Use dmin instead");
   params.addParam<Real>(
       "dmin", 0.0, "Minimum degree, measured in degrees anticlockwise from x axis");
   params.addParam<Real>("dmax",
                         360.0,
-                        "Maximum angle, measured in degrees anticlockwise from x axis.  If "
-                        "dmin=0 and dmax=360 an annular mesh is created.  "
+                        "Maximum angle, measured in degrees anticlockwise from x axis. If "
+                        "dmin=0 and dmax=360 an annular mesh is created. "
                         "Otherwise, only a sector of an annulus is created");
-  params.addRangeCheckedParam<Real>(
-      "growth_r", 1.0, "growth_r>0.0", "The ratio of radial sizes of successive rings of elements");
+  params.addRangeCheckedParam<Real>("growth_r",
+                                    1.0,
+                                    "growth_r!=0.0",
+                                    "The ratio of radial sizes of successive rings of elements");
   params.addParam<SubdomainID>(
       "quad_subdomain_id", 0, "The subdomain ID given to the QUAD4 elements");
   params.addParam<SubdomainID>("tri_subdomain_id",
@@ -59,11 +61,11 @@ AnnularMeshGenerator::validParams()
                                "The subdomain ID given to the TRI3 elements "
                                "(these exist only if rmin=0, and they exist "
                                "at the center of the disc");
-  params.addClassDescription("For rmin>0: creates an annular mesh of QUAD4 elements.  For rmin=0: "
-                             "creates a disc mesh of QUAD4 and TRI3 elements.  Boundary sidesets "
-                             "are created at rmax and rmin, and given these names.  If dmin!=0 and "
-                             "dmax!=360, a sector of an annulus or disc is created.  In this case "
-                             "boundary sidesets are also created a dmin and dmax, and "
+  params.addClassDescription("For rmin>0: creates an annular mesh of QUAD4 elements. For rmin=0: "
+                             "creates a disc mesh of QUAD4 and TRI3 elements. Boundary sidesets "
+                             "are created at rmax and rmin, and given these names. If dmin!=0 and "
+                             "dmax!=360, a sector of an annulus or disc is created. In this case "
+                             "boundary sidesets are also created at dmin and dmax, and "
                              "given these names");
 
   return params;
@@ -71,10 +73,12 @@ AnnularMeshGenerator::validParams()
 
 AnnularMeshGenerator::AnnularMeshGenerator(const InputParameters & parameters)
   : MeshGenerator(parameters),
-    _nr(getParam<unsigned int>("nr")),
     _nt(getParam<unsigned int>("nt")),
     _rmin(getParam<Real>("rmin")),
     _rmax(getParam<Real>("rmax")),
+    _radial_positions(getParam<std::vector<Real>>("radial_positions")),
+    _nr(parameters.isParamSetByUser("radial_positions") ? _radial_positions.size() + 1
+                                                        : getParam<unsigned int>("nr")),
     _dmin(parameters.isParamSetByUser("tmin") ? getParam<Real>("tmin") / M_PI * 180.0
                                               : getParam<Real>("dmin")),
     _dmax(parameters.isParamSetByUser("tmax") ? getParam<Real>("tmax") / M_PI * 180.0
@@ -83,7 +87,8 @@ AnnularMeshGenerator::AnnularMeshGenerator(const InputParameters & parameters)
                                                                                           : false),
     _growth_r(getParam<Real>("growth_r")),
     _len(_growth_r == 1.0 ? (_rmax - _rmin) / _nr
-                          : (_rmax - _rmin) * (1.0 - _growth_r) / (1.0 - std::pow(_growth_r, _nr))),
+                          : (_rmax - _rmin) * (1.0 - std::abs(_growth_r)) /
+                                (1.0 - std::pow(std::abs(_growth_r), _nr))),
     _full_annulus(_dmin == 0.0 && _dmax == 360),
     _quad_subdomain_id(getParam<SubdomainID>("quad_subdomain_id")),
     _tri_subdomain_id(getParam<SubdomainID>("tri_subdomain_id"))
@@ -92,6 +97,21 @@ AnnularMeshGenerator::AnnularMeshGenerator(const InputParameters & parameters)
       (parameters.isParamSetByUser("dmin") || parameters.isParamSetByUser("dmax")))
     paramError("tmin",
                "You specified the angles using both degrees and radians. Please use degrees.");
+
+  if (_radial_positions.size() != 0)
+  {
+    if (parameters.isParamSetByUser("nr"))
+      paramError("nr", "The 'nr' parameter cannot be specified together with 'radial_positions'");
+    if (parameters.isParamSetByUser("growth_r"))
+      paramError("growth_r",
+                 "The 'growth_r' parameter cannot be specified together with 'radial_positions'");
+    for (auto rpos : _radial_positions)
+      if (rpos <= _rmin || rpos >= _rmax)
+        paramError(
+            "radial_positions",
+            "The following provided value is not within the bounds between 'rmin' and 'rmax': ",
+            rpos);
+  }
 
   if (_rmax <= _rmin)
     paramError("rmax", "rmax must be greater than rmin");
@@ -111,7 +131,7 @@ std::unique_ptr<MeshBase>
 AnnularMeshGenerator::generate()
 {
   // Have MOOSE construct the correct libMesh::Mesh object using Mesh block and CLI parameters.
-  auto mesh = _mesh->buildMeshBaseObject();
+  auto mesh = buildMeshBaseObject();
 
   const Real dt = (_dmax - _dmin) / _nt;
 
@@ -142,8 +162,15 @@ AnnularMeshGenerator::generate()
   {
     if (layer_num == 1)
       current_r = _rmin; // account for precision loss
+    else if (_radial_positions.size() > 0)
+      current_r = _radial_positions[layer_num - 2];
     else
-      current_r -= _len * std::pow(_growth_r, layer_num - 1);
+    {
+      if (_growth_r > 0)
+        current_r -= _len * std::pow(_growth_r, layer_num - 1);
+      else
+        current_r -= _len * std::pow(std::abs(_growth_r), _nr - layer_num);
+    }
 
     // add node at angle = _dmin
     nodes[node_id] = mesh->add_point(Point(current_r * std::cos(_dmin * M_PI / 180.0),

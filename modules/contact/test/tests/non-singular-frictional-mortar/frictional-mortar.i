@@ -92,9 +92,8 @@ refine = 1
 
 [Contact]
   [leftright]
-    mesh = original_file_mesh
-    slave = 10
-    master = 20
+    secondary = 10
+    primary = 20
 
     model = coulomb
     formulation = mortar
@@ -141,6 +140,7 @@ petsc_options = '-snes_converged_reason -ksp_converged_reason -pc_svd_monitor -s
   num_steps = 7
   end_time = 4
   line_search = none
+  snesmf_reuse_base = false
 []
 
 [Debug]

@@ -11,13 +11,12 @@
 
 registerMooseObject("MooseApp", CoupledVarNeumannBC);
 
-defineLegacyParams(CoupledVarNeumannBC);
-
 InputParameters
 CoupledVarNeumannBC::validParams()
 {
   InputParameters params = IntegratedBC::validParams();
   params.addRequiredCoupledVar("v", "Coupled variable setting the gradient on the boundary.");
+  params.addCoupledVar("scale_factor", 1., "Scale factor to multiply the heat flux with");
   params.addParam<Real>(
       "coef", 1.0, "Coefficent ($\\sigma$) multiplier for the coupled force term.");
   params.addClassDescription("Imposes the integrated boundary condition "
@@ -27,12 +26,25 @@ CoupledVarNeumannBC::validParams()
 }
 
 CoupledVarNeumannBC::CoupledVarNeumannBC(const InputParameters & parameters)
-  : IntegratedBC(parameters), _coupled_var(coupledValue("v")), _coef(getParam<Real>("coef"))
+  : IntegratedBC(parameters),
+    _coupled_var(coupledValue("v")),
+    _coupled_num(coupled("v")),
+    _coef(getParam<Real>("coef")),
+    _scale_factor(coupledValue("scale_factor"))
 {
 }
 
 Real
 CoupledVarNeumannBC::computeQpResidual()
 {
-  return -_coef * _test[_i][_qp] * _coupled_var[_qp];
+  return -_scale_factor[_qp] * _coef * _test[_i][_qp] * _coupled_var[_qp];
+}
+
+Real
+CoupledVarNeumannBC::computeQpOffDiagJacobian(const unsigned int jvar)
+{
+  if (jvar == _coupled_num)
+    return -_scale_factor[_qp] * _coef * _test[_i][_qp] * _phi[_j][_qp];
+  else
+    return 0;
 }

@@ -13,19 +13,14 @@
 #include "InputParameters.h"
 #include "MaterialData.h"
 
-// Forward declarations
-class BoundaryRestrictable;
 class MooseMesh;
-
-template <>
-InputParameters validParams<BoundaryRestrictable>();
 
 /**
  * /class BoundaryRestrictable
  * /brief Provides functionality for limiting the object to certain boundary ids
  * The is class the inheriting class with methods useful for limiting an object
  * to certain boundaries. The parameters "_boundary_id" and "boundary", which are
- * created with validParams<BoundaryRestrictable> are used the framework.
+ * created with BoundaryRestrictable::validParams() are used the framework.
  */
 class BoundaryRestrictable
 {
@@ -160,7 +155,7 @@ public:
    * @param prop_name the name of the property to query
    * @return true if the property exists for all boundary ids of the object, otherwise false
    */
-  template <typename T>
+  template <typename T, bool is_ad = false>
   bool hasBoundaryMaterialProperty(const std::string & prop_name) const;
 
   /**
@@ -184,6 +179,9 @@ private:
 
   /// Set of the boundary ids
   std::set<BoundaryID> _bnd_ids;
+
+  /// Vector of the boundary ids
+  std::vector<BoundaryID> _vec_ids;
 
   /// Vector the the boundary names
   std::vector<BoundaryName> _boundary_names;
@@ -219,12 +217,12 @@ protected:
   bool hasBoundaryMaterialPropertyHelper(const std::string & prop_name) const;
 };
 
-template <typename T>
+template <typename T, bool is_ad>
 bool
 BoundaryRestrictable::hasBoundaryMaterialProperty(const std::string & prop_name) const
 {
   // If you get here the supplied property is defined on all boundaries, but is still subject
   // existence in the MateialData class
   return hasBoundaryMaterialPropertyHelper(prop_name) &&
-         _bnd_material_data->haveProperty<T>(prop_name);
+         _bnd_material_data->haveGenericProperty<T, is_ad>(prop_name);
 }

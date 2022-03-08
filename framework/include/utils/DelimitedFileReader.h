@@ -18,6 +18,7 @@
 
 // MOOSE includes
 #include "MooseEnum.h"
+#include "MooseTypes.h"
 
 namespace MooseUtils
 {
@@ -59,6 +60,12 @@ public:
    */
   void read();
 
+  /**
+   * Get the total number of entries in the file
+   * @returns number of entries in file
+   */
+  std::size_t numEntries() const;
+
   ///@{
   /**
    * Set/Get methods for file format controls.
@@ -96,6 +103,12 @@ public:
    * The outer vector is column and the inner the rows.
    */
   const std::vector<std::vector<double>> & getData() const;
+
+  /**
+   * Get the data in Point format. This performs checks that the data
+   * is of valid dimensions to do so.
+   */
+  const std::vector<Point> getDataAsPoints() const;
 
   ///@{
   /**

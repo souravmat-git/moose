@@ -11,6 +11,7 @@
 
 #include "MooseObject.h"
 #include "PerfGraphInterface.h"
+#include "PostprocessorInterface.h"
 
 class SolveObject;
 class Executioner;
@@ -20,10 +21,10 @@ class MooseMesh;
 class NonlinearSystemBase;
 class AuxiliarySystem;
 
-class SolveObject : public MooseObject, public PerfGraphInterface
+class SolveObject : public MooseObject, public PerfGraphInterface, public PostprocessorInterface
 {
 public:
-  SolveObject(Executioner * ex);
+  SolveObject(Executioner & ex);
 
   /**
    * Solve routine provided by this object.

@@ -1,5 +1,7 @@
 #!/bin/bash
-set -eux
+set -eu
+export PATH=/bin:$PATH
+
 export PKG_CONFIG_PATH=$BUILD_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH
 export PETSC_DIR=`pkg-config PETSc --variable=prefix`
 
@@ -13,15 +15,37 @@ function sed_replace(){
         sed -i '' -e "s|${BUILD_PREFIX}|${PREFIX}|g" $PREFIX/libmesh/bin/libmesh-config
     else
         sed -i'' -e "s|${BUILD_PREFIX}|${PREFIX}|g" $PREFIX/libmesh/bin/libmesh-config
+
+        # Fix hard paths to /usr/bin/ when most operating system want these tools in /bin
+        sed -i'' -e "s|/usr/bin/sed|/bin/sed|g" $PREFIX/libmesh/contrib/bin/libtool
+        sed -i'' -e "s|/usr/bin/grep|/bin/grep|g" $PREFIX/libmesh/contrib/bin/libtool
+        sed -i'' -e "s|/usr/bin/dd|/bin/dd|g" $PREFIX/libmesh/contrib/bin/libtool
     fi
 }
+
+# Bootstrap libmesh and it's contribs
+if [[ $target_platform == osx-arm64 ]]; then
+    ./bootstrap
+    cd contrib/metaphysicl
+    ./bootstrap
+    cd ../timpi
+    ./bootstrap
+    cd ../netcdf/netcdf*
+    autoreconf
+    cd ../../../
+fi
 
 mkdir -p build; cd build
 
 if [[ $(uname) == Darwin ]]; then
-    TUNING="-march=core2 -mtune=haswell"
+    if [[ $HOST == arm64-apple-darwin20.0.0 ]]; then
+        CTUNING="-march=armv8.3-a -I$PREFIX/include"
+        LIBRARY_PATH="$PREFIX/lib"
+    else
+        CTUNING="-march=core2 -mtune=haswell"
+    fi
 else
-    TUNING="-march=nocona -mtune=haswell"
+    CTUNING="-march=nocona -mtune=haswell"
 fi
 
 unset LIBMESH_DIR CFLAGS CPPFLAGS CXXFLAGS FFLAGS LIBS \
@@ -32,9 +56,13 @@ export F77=mpifort
 export FC=mpifort
 export CC=mpicc
 export CXX=mpicxx
-export CFLAGS="${TUNING}"
-export CXXFLAGS="${TUNING}"
-export LDFLAGS="-Wl,-S"
+export CFLAGS="${CTUNING}"
+export CXXFLAGS="${CTUNING}"
+if [[ $HOST == arm64-apple-darwin20.0.0 ]]; then
+    LDFLAGS="-L$PREFIX/lib -Wl,-S,-rpath,$PREFIX/lib"
+else
+    export LDFLAGS="-Wl,-S"
+fi
 
 if [[ $mpi == "openmpi" ]]; then
   export OMPI_MCA_plm=isolated
@@ -44,25 +72,15 @@ elif [[ $mpi == "moose-mpich" ]]; then
   export HYDRA_LAUNCHER=fork
 fi
 
-BUILD_CONFIG=`cat <<EOF
---enable-silent-rules \
---enable-unique-id \
---disable-warnings \
---enable-glibcxx-debugging \
---with-thread-model=openmp \
---disable-maintainer-mode \
---enable-petsc-hypre-required \
---enable-metaphysicl-required
-EOF`
+source $SRC_DIR/configure_libmesh.sh
+export INSTALL_BINARY="${SRC_DIR}/build-aux/install-sh -C"
+LIBMESH_DIR=${PREFIX}/libmesh \
+  configure_libmesh --with-vtk-lib=${BUILD_PREFIX}/libmesh-vtk/lib \
+                    --with-vtk-include=${BUILD_PREFIX}/libmesh-vtk/include/vtk-${SHORT_VTK_NAME} \
+                    $*
 
-../configure ${BUILD_CONFIG} \
-                     --prefix=${PREFIX}/libmesh \
-                     --with-vtk-lib=${BUILD_PREFIX}/libmesh-vtk/lib \
-                     --with-vtk-include=${BUILD_PREFIX}/libmesh-vtk/include/vtk-${SHORT_VTK_NAME} \
-                     --with-methods="opt oprof devel dbg" \
-                     --without-gdb-command
-
-make -j $CPU_COUNT
+CORES=$(echo "${CPU_COUNT:-2} / 2" | bc)
+make -j $CORES
 make install
 sed_replace
 

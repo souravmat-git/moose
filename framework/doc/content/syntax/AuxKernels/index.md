@@ -7,16 +7,17 @@ of equations. Examples for both of these use cases shall be discussed further in
 sections.
 
 Creating a custom AuxKernel object is done by creating a new C++ object that inherits from
-`AuxKernel` or `VectorAuxKernel` and overriding the `computeValue` method, which returns a
-scalar (`Real`) or vector (`RealVectorValue`) for the two types respectively. A third type
-(`AuxScalarKernel`) also exists, but the syntax for these objects is different and detailed
-in the [syntax/AuxScalarKernels/index.md].
+`AuxKernel`, `VectorAuxKernel` or `ArrayAuxKernel` and overriding the `computeValue` method,
+which returns a scalar (`Real`), vector (`RealVectorValue`) or a Eigen vector (`RealEigenVector`)
+for the two types respectively. A forth type (`AuxScalarKernel`) also exists, but the syntax for
+these objects is different and detailed in the [syntax/AuxScalarKernels/index.md].
 
 AuxKernel objects, like Kernel objects, must operate on a variable. Thus, there is a required
 parameter ("variable") that indicates the variable that the AuxKernel object is computing. These
-variables are defined in the [AuxVariables](syntax/AuxVariables/index.md) block of the input file,
-for example the following input file snippet creates an auxiliary variable suitable for use
-with an VectorAuxKernel.
+variables are defined in the [AuxVariables](syntax/AuxVariables/index.md) block of the input file.
+AuxKernel objects derived from `AuxKernel`, `VectorAuxKernel` or `ArrayAuxKernel` operate on
+standard scalar, vector or array field variables respectively. For example the following input
+file snippet creates an auxiliary variable suitable for use with an `VectorAuxKernel`.
 
 !listing vector_function_aux.i block=AuxVariables
 
@@ -40,11 +41,21 @@ constant so there is a single DOF per element, but higher monomials are also sup
 
 As is evident by the functionality detailed, the distinction between the two arises from the nature
 of the finite element shape functions. For Lagrange shape functions the DOF values correspond with
-the nodes, while for monomial shape functions the DOF values are not associated with nodes.
+the nodes, while for elemental shape functions the DOF values are not associated with nodes.
 
 The same AuxKernel object can be designed work both as elemental or nodal, for example the
 `computeValue` method for the [FunctionAux.md] object properly handles using the correct spatial
 location based on if the object is nodal or elemental with the `isNodal` method.
+
+## Block vs Boundary Restricted AuxKernel Objects
+
+While auxiliary variables are always defined on mesh subdomains, MOOSE allows auxiliary kernels to be either block (mesh subdomain) or boundary restricted.
+When an auxiliary kernel is boundary restricted, it evaluates an auxiliary variable only on the designated boundaries.
+Because of this, the auxiliary variable will only have meaningful values on the boundaries even though it is defined on mesh subdomains.
+When an auxiliary kernel is block restricted, the variable that it evaluates must be defined on a subdomain covering the blocks where the auxiliary kernel is defined.
+When an auxiliary kernel is boundary restricted, the variable must be defined on a subdomain that all the sides on the boundaries are connected with.
+An elemental auxiliary variable defined on an element that has multiple boundary sides cannot be properly evaluated within a boundary restricted auxiliary kernel because elemental auxiliary variables can only store one value per element.
+Users can split the boundaries and define multiple elemental auxiliary variables for each split to avoid the situation of element connecting with multiple boundary sides.
 
 !listing auxkernels/FunctionAux.C re=Real\sFunctionAux::compute.*}
 
@@ -52,6 +63,16 @@ Nodal AuxKernel objects abuse the notion of quadrature points, the `_qp` member 
 to zero, but still must be used to access coupled variable values and material properties. This
 is done to allow the syntax to be consistent regardless of the AuxKernel flavor: nodal or elemental.
 
+## Mortar Nodal Auxiliary Kernel Objects
+
+In order to compute properties in the mortar sense, it is necessary to loop over the mortar segment
+mesh to spatially integrate variables. `MortarNodalAuxKernel`s offer this functionality where these "weighted" variables,
+which intervene in the computation of contact constraints and their residuals, can be coupled to generate the desired ouput value. 
+Therefore, if postprocessing of mortar quantities is required, nodal mortar auxiliary kernels can be employed. 
+Objects inheriting from `MortarNodalAuxKernel` allow for said operations on the mortar lower-dimensional domains featuring similar
+functionality to other nodal auxiliary kernels, including the possibility of computing quantities in an
+`incremental` manner.
+ 
 ## Execute Flags
 
 AuxKernel objects inherit from the [SetupInterface.md] so they include the "execute_on" variable.

@@ -97,12 +97,16 @@ public:
 
   ///@{
   /**
-   * Assignment operators
+   * Assignment operators/methods
    * @param name/int - a string or int representing one of the enumeration values.
    * @return A reference to this object for chaining
    */
   MooseEnum & operator=(const std::string & name);
   MooseEnum & operator=(int value);
+  MooseEnum & operator=(const MooseEnumItem & item);
+  void assign(const std::string & name);
+  void assign(int value);
+  void assign(const MooseEnumItem & item);
   ///@}
 
   /**
@@ -130,12 +134,12 @@ protected:
   /// Check whether the current value is deprecated when called
   virtual void checkDeprecated() const override;
 
-private:
   /**
-   * Private constructor for use by libmesh::Parameters
+   * Constructor for use by libmesh::Parameters and ReporterMode
    */
   MooseEnum();
 
+private:
   /// The current id
   MooseEnumItem _current;
 };

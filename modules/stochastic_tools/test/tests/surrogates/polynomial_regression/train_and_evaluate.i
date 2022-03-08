@@ -20,12 +20,15 @@
     execute_on = INITIAL
     outputs = none
   []
+[]
+
+[Reporters]
   [results]
-    type = SurrogateTester
+    type = EvaluateSurrogate
     model = surrogate
     sampler = test
-    output_samples = true
     execute_on = final
+    parallel_type = ROOT
   []
 []
 
@@ -41,8 +44,7 @@
     type = PolynomialRegressionTrainer
     regression_type = "ols"
     sampler = sample
-    results_vpp = values
-    results_vector = g_values
+    response = values/g_values
     max_degree = 3
   []
 []

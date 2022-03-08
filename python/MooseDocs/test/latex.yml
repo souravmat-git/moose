@@ -4,14 +4,18 @@ Content:
         content:
             - media/framework/under-construction.png
             - large_media/testing/*
-            - large_media/level_set/vortex_out.gif
+            - large_media/level_set/vortex_out.mp4
             - bib/*
             - contrib/**
             - css/*
             - js/*
     test:
         root_dir: python/MooseDocs/test/content
-
+    external:
+        root_dir: python/MooseDocs/test/content
+        external: True
+        content:
+            - extensions/external.md
 Renderer:
     type: MooseDocs.base.LatexRenderer
 
@@ -29,6 +33,8 @@ Extensions:
     MooseDocs.extensions.devel: default
     MooseDocs.extensions.package: default
     MooseDocs.extensions.alert: default
+    MooseDocs.extensions.datetime: default
+    MooseDocs.extensions.gitutils: default
     MooseDocs.extensions.katex:
         macros:
             \RR: \mathbb{R}
@@ -38,9 +44,12 @@ Extensions:
     MooseDocs.extensions.layout: default
     MooseDocs.extensions.config: default
     MooseDocs.extensions.content: default
+    MooseDocs.extensions.pysyntax: default
+    MooseDocs.extensions.modal: default
     MooseDocs.extensions.graph:
         draft: True
     MooseDocs.extensions.heading: default
+    MooseDocs.extensions.shortcut: default
     MooseDocs.extensions.gallery: disable
     MooseDocs.extensions.template:
         active: True
@@ -66,10 +75,11 @@ Extensions:
                     - python/MooseDocs/test
                 specs:
                     - demo
+
     MooseDocs.extensions.navigation:
         name: MOOSEDocs
         repo: https://github.com/idaholab/moose
-        home: https://www.mooseframework.org
+        home: /index.md
         menu:
             Direct: core.md
             Mega: mega.menu.md
@@ -86,11 +96,11 @@ Extensions:
             libMesh: https://libmesh.github.io/
     MooseDocs.extensions.appsyntax:
         executable: ${MOOSE_DIR}/test
-        hide: !include framework/doc/hidden.yml
         remove: !include framework/doc/remove.yml
         includes:
             - framework/include
             - test/include
+    MooseDocs.extensions.algorithm: default
 
 Translator:
     type: MooseDocs.base.Translator

@@ -11,11 +11,6 @@
 
 #include "AuxKernel.h"
 
-class DiffusionFluxAux;
-
-template <>
-InputParameters validParams<DiffusionFluxAux>();
-
 /**
  * Auxiliary kernel responsible for computing the components of the flux vector
  * in diffusion problems
@@ -29,13 +24,21 @@ public:
 
 protected:
   virtual Real computeValue();
+
+  /// Whether the normal component has been selected
+  const bool _use_normal;
+
   /// Will hold 0, 1, or 2 corresponding to x, y, or z.
-  int _component;
+  const int _component;
 
   /// Holds the solution gradient at the current quadrature points
   const VariableGradient & _grad_u;
 
-  /// Holds the diffusivity from the material system
-  const MaterialProperty<Real> & _diffusion_coef;
-};
+  /// Holds the diffusivity from the material system if non-AD
+  const MaterialProperty<Real> * const _diffusion_coef;
+  /// Holds the diffusivity from the material system if AD
+  const ADMaterialProperty<Real> * const _ad_diffusion_coef;
 
+  /// normals at quadrature points
+  const MooseArray<Point> & _normals;
+};

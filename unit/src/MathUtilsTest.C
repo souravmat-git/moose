@@ -8,6 +8,8 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "gtest/gtest.h"
+#include <vector>
+#include <array>
 
 #include "MathUtils.h"
 
@@ -109,4 +111,70 @@ TEST(MathUtilsTest, round)
 
   for (unsigned int i = 0; i < table.size(); ++i)
     EXPECT_NEAR(MathUtils::round(table[i][0]), table[i][1], 1.e-5);
+}
+
+TEST(MathUtilsTest, poly)
+{
+  std::vector<Real> table1 = {1, 2, 3, 4, 5};
+  std::array<Real, 5> table2 = {1, 2, 3, 4, 5};
+
+  EXPECT_NEAR(MathUtils::poly(table1, 1.5, false), 29.5625, 1e-5);
+  EXPECT_NEAR(MathUtils::poly(table1, 1.5, true), 40.0, 1e-5);
+  EXPECT_NEAR(MathUtils::poly(table2, 1.5, false), 29.5625, 1e-5);
+  EXPECT_NEAR(MathUtils::poly(table2, 1.5, true), 40.0, 1e-5);
+}
+
+TEST(MathUtilsTest, polynomial)
+{
+  std::vector<Real> table1a = {5, 4, 3, 2, 1};
+  std::array<Real, 5> table2a = {5, 4, 3, 2, 1};
+  std::vector<Real> table1b = {5, 4, 3, 2, 1, 0};
+  std::array<Real, 6> table2b = {5, 4, 3, 2, 1, 0};
+
+  // appending a zero coefficient to the list should not change the result
+  EXPECT_NEAR(MathUtils::polynomial(table1a, 1.5), MathUtils::polynomial(table1b, 1.5), 1e-5);
+  EXPECT_NEAR(MathUtils::polynomial(table2a, 1.5), MathUtils::polynomial(table2b, 1.5), 1e-5);
+  EXPECT_NEAR(MathUtils::polynomialDerivative(table1a, 1.5),
+              MathUtils::polynomialDerivative(table1b, 1.5),
+              1e-5);
+  EXPECT_NEAR(MathUtils::polynomialDerivative(table2a, 1.5),
+              MathUtils::polynomialDerivative(table2b, 1.5),
+              1e-5);
+
+  EXPECT_NEAR(MathUtils::polynomial(table1a, 1.5), 29.5625, 1e-5);
+  EXPECT_NEAR(MathUtils::polynomialDerivative(table1a, 1.5), 40.0, 1e-5);
+}
+
+TEST(MathUtilsTest, multiIndex)
+{
+  // Order = 1
+  std::vector<std::vector<unsigned int>> mi_13_answer = {{0}, {1}, {2}, {3}};
+  std::vector<std::vector<unsigned int>> mi_13 = MathUtils::multiIndex(1, 3);
+  for (unsigned int r = 0; r < mi_13.size(); r++)
+    for (unsigned int c = 0; c < mi_13[0].size(); c++)
+      EXPECT_EQ(mi_13[r][c], mi_13_answer[r][c]);
+
+  // Order = 2
+  std::vector<std::vector<unsigned int>> mi_23_answer = {
+      {0, 0}, {0, 1}, {1, 0}, {0, 2}, {1, 1}, {2, 0}, {0, 3}, {1, 2}, {2, 1}, {3, 0}};
+  std::vector<std::vector<unsigned int>> mi_23 = MathUtils::multiIndex(2, 3);
+  for (unsigned int r = 0; r < mi_23.size(); r++)
+    for (unsigned int c = 0; c < mi_23[0].size(); c++)
+      EXPECT_EQ(mi_23[r][c], mi_23_answer[r][c]);
+
+  // Order = 3
+  std::vector<std::vector<unsigned int>> mi_32_answer = {{0, 0, 0},
+                                                         {0, 0, 1},
+                                                         {0, 1, 0},
+                                                         {1, 0, 0},
+                                                         {0, 0, 2},
+                                                         {0, 1, 1},
+                                                         {0, 2, 0},
+                                                         {1, 0, 1},
+                                                         {1, 1, 0},
+                                                         {2, 0, 0}};
+  std::vector<std::vector<unsigned int>> mi_32 = MathUtils::multiIndex(3, 2);
+  for (unsigned int r = 0; r < mi_32.size(); r++)
+    for (unsigned int c = 0; c < mi_32[0].size(); c++)
+      EXPECT_EQ(mi_32[r][c], mi_32_answer[r][c]);
 }

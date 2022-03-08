@@ -6,20 +6,7 @@ used independently or in combination to meet the needs of the application develo
 
 ## Examples
 
-### Parameter Studies, Statistics, and Sensitivity Analysis
-
-- Example 1: [examples/monte_carlo.md]
-- Example 2: [examples/parameter_study.md]
-- Example 3: [examples/nonlin_parameter_study.md]
-- Example 4: [examples/sobol.md]
-
-### Surrogate Models
-
-- Example 5:  [examples/surrogate_creation.md]
-- Example 6: [examples/surrogate_training.md]
-- Example 7: [examples/surrogate_evaluate.md]
-- Example 8: [examples/poly_chaos_surrogate.md]
-- Example 9: [examples/poly_regression_surrogate.md]
+!include modules/stochastic_tools/stochastic_tools_examples.md
 
 ## Performance
 

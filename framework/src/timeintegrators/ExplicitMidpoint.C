@@ -11,12 +11,11 @@
 
 registerMooseObject("MooseApp", ExplicitMidpoint);
 
-defineLegacyParams(ExplicitMidpoint);
-
 InputParameters
 ExplicitMidpoint::validParams()
 {
   InputParameters params = ExplicitRK2::validParams();
+  params.addClassDescription("Time integration using the explicit midpoint method.");
 
   return params;
 }

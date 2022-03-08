@@ -13,6 +13,7 @@
 #include "MooseTypes.h"
 #include "OutputInterface.h"
 #include "MooseEnum.h"
+#include "ReporterContext.h"
 
 // libMesh
 #include "libmesh/parallel.h"
@@ -21,14 +22,10 @@
 class FEProblemBase;
 class InputParameters;
 class SamplerBase;
-class VectorPostprocessor;
 class VectorPostprocessorData;
 
 template <typename T>
 InputParameters validParams();
-
-template <>
-InputParameters validParams<VectorPostprocessor>();
 
 /**
  * Base class for Postprocessors that produce a vector of values.
@@ -38,19 +35,14 @@ class VectorPostprocessor : public OutputInterface
 public:
   static InputParameters validParams();
 
-  VectorPostprocessor(const InputParameters & parameters);
+  VectorPostprocessor(const MooseObject * moose_object);
 
   virtual ~VectorPostprocessor() = default;
 
   /**
-   * This will get called to actually grab the final value the VectorPostprocessor has calculated.
-   */
-  virtual VectorPostprocessorValue & getVector(const std::string & vector_name);
-
-  /**
    * Returns the name of the VectorPostprocessor.
    */
-  std::string PPName() { return _vpp_name; }
+  std::string PPName() const { return _vpp_name; }
 
   /**
    * Return whether or not this VectorPostprocessor contains complete history
@@ -62,6 +54,11 @@ public:
    */
   bool isDistributed() const { return _is_distributed; }
 
+  /**
+   * Return the names of the vectors associated with this object.
+   */
+  const std::set<std::string> & getVectorNames() const;
+
 protected:
   /**
    * Register a new vector to fill up.
@@ -69,10 +66,10 @@ protected:
   VectorPostprocessorValue & declareVector(const std::string & vector_name);
 
   /// The name of the VectorPostprocessor
-  std::string _vpp_name;
+  const std::string _vpp_name;
 
-  /// Pointer to FEProblemBase
-  FEProblemBase * _vpp_fe_problem;
+  /// The FEProblemBase
+  FEProblemBase & _vpp_fe_problem;
 
   /// DISTRIBUTED or REPLICATED
   const MooseEnum & _parallel_type;
@@ -80,7 +77,9 @@ protected:
   friend class SamplerBase;
 
 private:
-  THREAD_ID _vpp_tid;
+  const MooseObject & _vpp_moose_object;
+
+  const THREAD_ID _vpp_tid;
 
   const bool _contains_complete_history;
 
@@ -89,4 +88,38 @@ private:
   const bool _is_broadcast;
 
   std::map<std::string, VectorPostprocessorValue> _thread_local_vectors;
+
+  std::set<std::string> _vector_names;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+// The following itmes were created to maintain the various getScatter methods in the
+// VectorPostprocessorInterface.
+
+// Special consumer modue add
+extern const ReporterMode REPORTER_MODE_VPP_SCATTER;
+
+/*
+ * Special ReporterContext that performs a scatter operation if a getScatter method is called on the
+ * VPP value.
+ *
+ * The source file contains an explicit instantiation.
+ * @see VectorPostprocessorInterface
+ */
+template <typename T>
+class VectorPostprocessorContext : public ReporterGeneralContext<T>
+{
+public:
+  VectorPostprocessorContext(const libMesh::ParallelObject & other,
+                             const MooseObject & producer,
+                             ReporterState<T> & state);
+  virtual void finalize() override;
+  virtual void copyValuesBack() override;
+
+  const ScatterVectorPostprocessorValue & getScatterValue() const;
+  const ScatterVectorPostprocessorValue & getScatterValueOld() const;
+
+private:
+  ScatterVectorPostprocessorValue _scatter_value;
+  ScatterVectorPostprocessorValue _scatter_value_old;
 };

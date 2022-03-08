@@ -10,23 +10,17 @@
 #pragma once
 
 #include "RelationshipManager.h"
-
 #include "libmesh/ghosting_functor.h"
 
-// Forward declarations
-class ProxyRelationshipManager;
 class MooseMesh;
 namespace libMesh
 {
 class System;
 }
 
-template <>
-InputParameters validParams<ProxyRelationshipManager>();
-
 /**
  * Intermediate base class for RelationshipManagers that are simply built
- * using ghosting functors.  The functor should be built in internalInit()
+ * using ghosting functors.  The functor should be built in internalInitWithMesh()
  * and set as _functor
  */
 class ProxyRelationshipManager : public RelationshipManager
@@ -36,6 +30,8 @@ public:
 
   ProxyRelationshipManager(const InputParameters & parameters);
 
+  ProxyRelationshipManager(const ProxyRelationshipManager & other);
+
   virtual void operator()(const MeshBase::const_element_iterator & /*range_begin*/,
                           const MeshBase::const_element_iterator & /*range_end*/,
                           processor_id_type p,
@@ -43,13 +39,19 @@ public:
 
   virtual std::string getInfo() const override;
 
-  virtual bool operator==(const RelationshipManager & /*rhs*/) const override;
+  virtual bool operator>=(const RelationshipManager & /*rhs*/) const override;
+
+  /**
+   * A clone() is needed because GhostingFunctor can not be shared between
+   * different meshes. The operations in  GhostingFunctor are mesh dependent.
+   */
+  virtual std::unique_ptr<GhostingFunctor> clone() const override
+  {
+    return std::make_unique<ProxyRelationshipManager>(*this);
+  }
 
 protected:
-  virtual void internalInit() override{};
-
-  MeshBase * _this_mesh;
+  virtual void internalInitWithMesh(const MeshBase &) override{};
 
   System * _other_system;
 };
-

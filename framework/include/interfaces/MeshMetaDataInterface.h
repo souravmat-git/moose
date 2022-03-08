@@ -55,6 +55,11 @@ protected:
   template <typename T>
   const T & getMeshProperty(const std::string & data_name, const std::string & prefix);
 
+  /**
+   * Whether or not a mesh meta-data exists.
+   */
+  bool hasMeshProperty(const std::string & data_name, const std::string & prefix) const;
+
 private:
   /// Helper function for actually registering the restartable data.
   RestartableDataValue & registerMetaDataOnApp(const std::string & name,
@@ -70,7 +75,7 @@ MeshMetaDataInterface::getMeshProperty(const std::string & data_name, const std:
 
 {
   std::string full_name = std::string(SYSTEM) + "/" + prefix + "/" + data_name;
-  auto data_ptr = libmesh_make_unique<RestartableData<T>>(full_name, nullptr);
+  auto data_ptr = std::make_unique<RestartableData<T>>(full_name, nullptr);
 
   // Here we will create the RestartableData even though we may not use this instance.
   // If it's already in use, the App will return a reference to the existing instance and we'll

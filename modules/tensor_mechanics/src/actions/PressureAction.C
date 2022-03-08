@@ -23,10 +23,6 @@ PressureAction::validParams()
   params.addRequiredParam<std::vector<BoundaryName>>(
       "boundary", "The list of boundary IDs from the mesh where the pressure will be applied");
 
-  params.addParam<VariableName>("disp_x", "The x displacement");
-  params.addParam<VariableName>("disp_y", "The y displacement");
-  params.addParam<VariableName>("disp_z", "The z displacement");
-
   params.addParam<std::vector<VariableName>>(
       "displacements",
       "The displacements appropriate for the simulation geometry and coordinate system");
@@ -39,7 +35,13 @@ PressureAction::validParams()
                                                 "The save_in variables for z displacement");
 
   params.addParam<Real>("factor", 1.0, "The factor to use in computing the pressure");
-  params.addParam<Real>("alpha", 0.0, "alpha parameter for HHT time integration");
+  params.addParam<bool>("use_displaced_mesh", true, "Whether to use the displaced mesh.");
+  params.addParam<Real>("hht_alpha",
+                        0,
+                        "alpha parameter for mass dependent numerical damping induced "
+                        "by HHT time integration scheme");
+  params.addDeprecatedParam<Real>(
+      "alpha", "alpha parameter for HHT time integration", "Please use hht_alpha");
   params.addParam<FunctionName>("function", "The function that describes the pressure");
   params.addParam<bool>("use_automatic_differentiation",
                         false,
@@ -68,23 +70,7 @@ PressureAction::act()
 
   std::string kernel_name = ad_prepend + "Pressure";
 
-  std::vector<VariableName> displacements;
-  if (isParamValid("displacements"))
-    displacements = getParam<std::vector<VariableName>>("displacements");
-  else
-  {
-    // Legacy parameter scheme for displacements
-    if (!isParamValid("disp_x"))
-      mooseError("Specify displacement variables using the `displacements` parameter.");
-    displacements.push_back(getParam<VariableName>("disp_x"));
-
-    if (isParamValid("disp_y"))
-    {
-      displacements.push_back(getParam<VariableName>("disp_y"));
-      if (isParamValid("disp_z"))
-        displacements.push_back(getParam<VariableName>("disp_z"));
-    }
-  }
+  std::vector<VariableName> displacements = getParam<std::vector<VariableName>>("displacements");
 
   // Create pressure BCs
   for (unsigned int i = 0; i < displacements.size(); ++i)
@@ -94,8 +80,12 @@ PressureAction::act()
 
     InputParameters params = _factory.getValidParams(kernel_name);
     params.applyParameters(parameters(), {"factor"});
-    params.set<bool>("use_displaced_mesh") = true;
-    params.set<unsigned int>("component") = i;
+    params.set<bool>("use_displaced_mesh") = getParam<bool>("use_displaced_mesh");
+    params.set<Real>("alpha") =
+        isParamValid("alpha") ? getParam<Real>("alpha") : getParam<Real>("hht_alpha");
+
+    if (_use_ad)
+      params.set<unsigned int>("component") = i;
     params.set<NonlinearVariableName>("variable") = displacements[i];
 
     if (_has_save_in_vars[i])

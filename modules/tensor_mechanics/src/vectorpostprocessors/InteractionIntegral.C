@@ -66,6 +66,9 @@ InteractionIntegral::validParams()
                                      InteractionIntegral::sifModeType(),
                                      "Stress intensity factor to calculate. Choices are: " +
                                          InteractionIntegral::sifModeType().getRawNames());
+  params.addParam<MaterialPropertyName>("eigenstrain_gradient",
+                                        "Material defining gradient of eigenstrain tensor");
+  params.addParam<MaterialPropertyName>("body_force", "Material defining body force");
   params.addClassDescription(
       "Computes the interaction integral, which is used to compute various "
       "fracture mechanics parameters at a crack tip, including KI, KII, KIII, "
@@ -78,12 +81,8 @@ InteractionIntegral::InteractionIntegral(const InputParameters & parameters)
     _ndisp(coupledComponents("displacements")),
     _crack_front_definition(&getUserObject<CrackFrontDefinition>("crack_front_definition")),
     _treat_as_2d(false),
-    _stress(hasMaterialProperty<RankTwoTensor>("stress")
-                ? &getMaterialPropertyByName<RankTwoTensor>("stress")
-                : nullptr),
-    _strain(hasMaterialProperty<RankTwoTensor>("elastic_strain")
-                ? &getMaterialPropertyByName<RankTwoTensor>("elastic_strain")
-                : nullptr),
+    _stress(getMaterialPropertyByName<RankTwoTensor>("stress")),
+    _strain(getMaterialPropertyByName<RankTwoTensor>("elastic_strain")),
     _fe_vars(getCoupledMooseVars()),
     _fe_type(_fe_vars[0]->feType()),
     _grad_disp(3),
@@ -105,22 +104,10 @@ InteractionIntegral::InteractionIntegral(const InputParameters & parameters)
     _z(declareVector("z")),
     _position(declareVector("id")),
     _interaction_integral(declareVector("II_" + Moose::stringify(getParam<MooseEnum>("sif_mode")) +
-                                        "_" + Moose::stringify(_ring_index)))
+                                        "_" + Moose::stringify(_ring_index))),
+    _eigenstrain_gradient(nullptr),
+    _body_force(nullptr)
 {
-  if (!hasMaterialProperty<RankTwoTensor>("stress"))
-    mooseError("InteractionIntegral Error: RankTwoTensor material property 'stress' not found. "
-               "This may be because solid mechanics system is being used to calculate a SymmTensor "
-               "'stress' material property. To use interaction integral calculation with solid "
-               "mechanics application, please set 'solid_mechanics = true' in the DomainIntegral "
-               "block.");
-
-  if (!hasMaterialProperty<RankTwoTensor>("elastic_strain"))
-    mooseError("InteractionIntegral Error: RankTwoTensor material property 'elastic_strain' not "
-               "found. This may be because solid mechanics system is being used to calculate a "
-               "SymmTensor 'elastic_strain' material property. To use interaction integral "
-               "calculation with solid mechanics application, please set 'solid_mechanics = true' "
-               "in the DomainIntegral block.");
-
   if (_has_temp && !_total_deigenstrain_dT)
     mooseError("InteractionIntegral Error: To include thermal strain term in interaction integral, "
                "must both couple temperature in DomainIntegral block and compute "
@@ -143,6 +130,17 @@ InteractionIntegral::InteractionIntegral(const InputParameters & parameters)
   // set unused dimensions to zero
   for (std::size_t i = _ndisp; i < 3; ++i)
     _grad_disp[i] = &_grad_zero;
+
+  if (isParamValid("eigenstrain_gradient"))
+  {
+    _eigenstrain_gradient = &getMaterialProperty<RankThreeTensor>("eigenstrain_gradient");
+    if (_total_deigenstrain_dT)
+      paramError("eigenstrain_gradient",
+                 "eigenstrain_gradient cannot be specified for materials that provide the "
+                 "total_deigenstrain_dT material property");
+  }
+  if (isParamValid("body_force"))
+    _body_force = &getMaterialProperty<RealVectorValue>("body_force");
 }
 
 void
@@ -193,7 +191,8 @@ InteractionIntegral::computeQpIntegral(const std::size_t crack_front_point_index
   else if (_sif_mode == SifMethod::T)
     computeTFields(aux_stress, aux_du);
 
-  RankTwoTensor grad_disp((*_grad_disp[0])[_qp], (*_grad_disp[1])[_qp], (*_grad_disp[2])[_qp]);
+  auto grad_disp = RankTwoTensor::initializeFromRows(
+      (*_grad_disp[0])[_qp], (*_grad_disp[1])[_qp], (*_grad_disp[2])[_qp]);
 
   // Rotate stress, strain, displacement and temperature to crack front coordinate system
   RealVectorValue grad_q_cf =
@@ -201,9 +200,9 @@ InteractionIntegral::computeQpIntegral(const std::size_t crack_front_point_index
   RankTwoTensor grad_disp_cf =
       _crack_front_definition->rotateToCrackFrontCoords(grad_disp, crack_front_point_index);
   RankTwoTensor stress_cf =
-      _crack_front_definition->rotateToCrackFrontCoords((*_stress)[_qp], crack_front_point_index);
+      _crack_front_definition->rotateToCrackFrontCoords((_stress)[_qp], crack_front_point_index);
   RankTwoTensor strain_cf =
-      _crack_front_definition->rotateToCrackFrontCoords((*_strain)[_qp], crack_front_point_index);
+      _crack_front_definition->rotateToCrackFrontCoords((_strain)[_qp], crack_front_point_index);
   RealVectorValue grad_temp_cf =
       _crack_front_definition->rotateToCrackFrontCoords(_grad_temp[_qp], crack_front_point_index);
 
@@ -224,7 +223,7 @@ InteractionIntegral::computeQpIntegral(const std::size_t crack_front_point_index
                grad_disp_cf(2, 0) * tmp2(0, 2);
 
   // Term3 = aux stress * strain * dq_x   (= stress * aux strain * dq_x)
-  Real term3 = dq(0, 0) * aux_stress.doubleContraction(strain_cf);
+  Real term3 = -dq(0, 0) * aux_stress.doubleContraction(strain_cf);
 
   // Term4 (thermal strain term) = q * aux_stress * alpha * dtheta_x
   // - the term including the derivative of alpha is not implemented
@@ -233,6 +232,29 @@ InteractionIntegral::computeQpIntegral(const std::size_t crack_front_point_index
   {
     Real sigma_alpha = aux_stress.doubleContraction((*_total_deigenstrain_dT)[_qp]);
     term4 = scalar_q * sigma_alpha * grad_temp_cf(0);
+  }
+
+  Real term4a = 0.0; // Gradient of arbitrary eigenstrain
+  if (_eigenstrain_gradient)
+  {
+    // Thermal strain gradient term in Nakamura and Parks, IJSS, 1992:
+    // alpha * dT/dx_k*aux_stress*scalar_q
+    // Generalization to the gradient of an arbitrary eigenstrain:
+    // d_eigenstrain/dx_k*aux_stress*scalar_q
+    const RealVectorValue & crack_dir =
+        _crack_front_definition->getCrackDirection(crack_front_point_index);
+    RankTwoTensor eigenstrain_grad_in_crack_dir = crack_dir * (*_eigenstrain_gradient)[_qp];
+    term4a = scalar_q * aux_stress.doubleContraction(eigenstrain_grad_in_crack_dir);
+  }
+
+  Real term5 = 0.0; // Body force
+  if (_body_force)
+  {
+    // Body force term in Nakamura and Parks, IJSS, 1992:
+    // b_i*aux_du*crack_dir*scalar_q
+    const RealVectorValue & crack_dir =
+        _crack_front_definition->getCrackDirection(crack_front_point_index);
+    term5 = -scalar_q * (*_body_force)[_qp] * aux_du * crack_dir;
   }
 
   Real q_avg_seg = 1.0;
@@ -244,7 +266,7 @@ InteractionIntegral::computeQpIntegral(const std::size_t crack_front_point_index
         2.0;
   }
 
-  Real eq = term1 + term2 - term3 + term4;
+  Real eq = term1 + term2 + term3 + term4 + term4a + term5;
 
   return eq / q_avg_seg;
 }

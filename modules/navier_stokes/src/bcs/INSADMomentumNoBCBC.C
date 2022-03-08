@@ -10,6 +10,7 @@
 #include "INSADMomentumNoBCBC.h"
 #include "MooseMesh.h"
 #include "INSADObjectTracker.h"
+#include "NS.h"
 
 registerMooseObject("NavierStokesApp", INSADMomentumNoBCBC);
 
@@ -20,7 +21,8 @@ INSADMomentumNoBCBC::validParams()
 
   params.addClassDescription("This class implements the 'No BC' boundary condition based on the "
                              "'Laplace' form of the viscous stress tensor.");
-  params.addRequiredCoupledVar("p", "pressure");
+  params.addRequiredCoupledVar(NS::pressure, "pressure");
+  params.addDeprecatedCoupledVar("p", NS::pressure, "1/1/2022");
   params.addParam<bool>("integrate_p_by_parts",
                         true,
                         "Allows simulations to be run with pressure BC if set to false");
@@ -36,15 +38,24 @@ INSADMomentumNoBCBC::validParams()
 
 INSADMomentumNoBCBC::INSADMomentumNoBCBC(const InputParameters & parameters)
   : ADVectorIntegratedBC(parameters),
-    _p(adCoupledValue("p")),
+    _p(adCoupledValue(NS::pressure)),
     _integrate_p_by_parts(getParam<bool>("integrate_p_by_parts")),
     _mu(getADMaterialProperty<Real>("mu_name")),
     _form(getParam<MooseEnum>("viscous_form"))
 {
+  std::set<SubdomainID> connected_blocks;
+  for (const auto bnd_id : boundaryIDs())
+  {
+    const auto & these_blocks = _mesh.getBoundaryConnectedBlocks(bnd_id);
+    connected_blocks.insert(these_blocks.begin(), these_blocks.end());
+  }
   auto & obj_tracker = const_cast<INSADObjectTracker &>(
       _fe_problem.getUserObject<INSADObjectTracker>("ins_ad_object_tracker"));
-  obj_tracker.setViscousForm(_form);
-  obj_tracker.setIntegratePByParts(_integrate_p_by_parts);
+  for (const auto block_id : connected_blocks)
+  {
+    obj_tracker.set("viscous_form", _form, block_id);
+    obj_tracker.set("integrate_p_by_parts", _integrate_p_by_parts, block_id);
+  }
 }
 
 ADReal

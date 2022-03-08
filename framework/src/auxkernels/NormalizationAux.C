@@ -11,12 +11,11 @@
 
 registerMooseObject("MooseApp", NormalizationAux);
 
-defineLegacyParams(NormalizationAux);
-
 InputParameters
 NormalizationAux::validParams()
 {
   InputParameters params = AuxKernel::validParams();
+  params.addClassDescription("Normalizes a variable based on a Postprocessor value.");
   params.addRequiredCoupledVar("source_variable", "The variable to be normalized");
   params.addParam<PostprocessorName>("normalization", "The postprocessor on the source");
   params.addParam<PostprocessorName>("shift", "The postprocessor to shift the source");
@@ -37,6 +36,7 @@ Real
 NormalizationAux::computeValue()
 {
   Real denominator = _pp_on_source ? *_pp_on_source : 1.0;
+  mooseAssert(denominator != 0., "postprocessor value is zero");
   Real shift = _shift ? *_shift : 0.0;
   return _src[_qp] * _normal_factor / denominator - shift;
 }

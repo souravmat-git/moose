@@ -11,8 +11,6 @@
 
 registerMooseObject("MooseApp", ArrayVacuumBC);
 
-defineLegacyParams(ArrayVacuumBC);
-
 InputParameters
 ArrayVacuumBC::validParams()
 {
@@ -28,13 +26,17 @@ ArrayVacuumBC::ArrayVacuumBC(const InputParameters & parameters)
     _alpha(isParamValid("alpha") ? getParam<RealEigenVector>("alpha")
                                  : RealEigenVector::Ones(_count))
 {
+  if (_alpha.size() != _count)
+    paramError(
+        "alpha", "Number of values must equal number of variable components (", _count, ").");
+
   _alpha /= 2;
 }
 
-RealEigenVector
-ArrayVacuumBC::computeQpResidual()
+void
+ArrayVacuumBC::computeQpResidual(RealEigenVector & residual)
 {
-  return _alpha.cwiseProduct(_u[_qp]) * _test[_i][_qp];
+  residual = _alpha.cwiseProduct(_u[_qp]) * _test[_i][_qp];
 }
 
 RealEigenVector

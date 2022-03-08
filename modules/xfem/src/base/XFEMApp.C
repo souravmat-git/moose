@@ -9,7 +9,6 @@
 
 #include "XFEMApp.h"
 #include "XFEMAppTypes.h"
-#include "SolidMechanicsApp.h"
 #include "TensorMechanicsApp.h"
 #include "Moose.h"
 #include "AppFactory.h"
@@ -21,10 +20,6 @@ XFEMApp::validParams()
   InputParameters params = MooseApp::validParams();
 
   params.set<bool>("automatic_automatic_scaling") = false;
-
-  // Do not use legacy DirichletBC, that is, set DirichletBC default for preset = true
-  params.set<bool>("use_legacy_dirichlet_bc") = false;
-
   params.set<bool>("use_legacy_material_output") = false;
 
   return params;
@@ -54,7 +49,6 @@ XFEMApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
   Registry::registerActionsTo(af, {"XFEMApp"});
   associateSyntaxInner(s, af);
 
-  SolidMechanicsApp::registerAll(f, af, s);
   TensorMechanicsApp::registerAll(f, af, s);
 
   auto & factory = f; // for registerExecFlags macro
@@ -71,7 +65,6 @@ void
 XFEMApp::registerObjectDepends(Factory & factory)
 {
   mooseDeprecated("use registerAll instead of registerObjectsDepends");
-  SolidMechanicsApp::registerObjects(factory);
   TensorMechanicsApp::registerObjects(factory);
 }
 
@@ -86,7 +79,6 @@ void
 XFEMApp::associateSyntaxDepends(Syntax & syntax, ActionFactory & action_factory)
 {
   mooseDeprecated("use registerAll instead of associateSyntaxDepends");
-  SolidMechanicsApp::associateSyntax(syntax, action_factory);
   TensorMechanicsApp::associateSyntax(syntax, action_factory);
 }
 

@@ -22,9 +22,11 @@ PorousFlowDependencies::PorousFlowDependencies()
 
   _deps.insertDependency("PorousFlowFullySaturated", "PorousFlowSinglePhaseBase");
   _deps.insertDependency("PorousFlowFullySaturated", "PorousFlowFullySaturatedDarcyFlow");
+  _deps.insertDependency("PorousFlowFullySaturated", "PorousFlowFullySaturatedAdvectiveFlux");
   _deps.insertDependency("PorousFlowFullySaturated", "PorousFlowMassTimeDerivative");
   _deps.insertDependency("PorousFlowFullySaturated", "PorousFlowMassVolumetricExpansion");
   _deps.insertDependency("PorousFlowFullySaturated", "PorousFlowFullySaturatedHeatAdvection");
+  _deps.insertDependency("PorousFlowFullySaturated", "PorousFlowFullySaturatedUpwindHeatAdvection");
 
   _deps.insertDependency("PorousFlowBasicTHM", "PorousFlowSinglePhaseBase");
   _deps.insertDependency("PorousFlowBasicTHM", "PorousFlowFullySaturatedDarcyBase");
@@ -71,6 +73,17 @@ PorousFlowDependencies::PorousFlowDependencies()
   _deps.insertDependency("PorousFlowSink", "permeability_qp");
   _deps.insertDependency("PorousFlowSink", "thermal_conductivity_qp");
 
+  _deps.insertDependency("PorousFlowOutflowBC", "pressure_saturation_qp");
+  _deps.insertDependency("PorousFlowOutflowBC", "density_qp");
+  _deps.insertDependency("PorousFlowOutflowBC", "permeability_qp");
+  _deps.insertDependency("PorousFlowOutflowBC", "viscosity_nodal");
+  _deps.insertDependency("PorousFlowOutflowBC", "density_nodal");
+  _deps.insertDependency("PorousFlowOutflowBC", "relative_permeability_nodal");
+  _deps.insertDependency("PorousFlowOutflowBC", "mass_fraction_nodal");
+  _deps.insertDependency("PorousFlowOutflowBC", "enthalpy_nodal");
+  _deps.insertDependency("PorousFlowOutflowBC", "thermal_conductivity_qp");
+  _deps.insertDependency("PorousFlowOutflowBC", "temperature_qp");
+
   // Dirac kernel dependencies
   _deps.insertDependency("PorousFlowPeacemanBorehole", "PorousFlowLineSink");
   _deps.insertDependency("PorousFlowPolyLineSink", "PorousFlowLineSink");
@@ -90,6 +103,9 @@ PorousFlowDependencies::PorousFlowDependencies()
   _deps.insertDependency("PorousFlowAdvectiveFlux", "PorousFlowDarcyBase");
   _deps.insertDependency("PorousFlowAdvectiveFlux", "mass_fraction_nodal");
   _deps.insertDependency("PorousFlowAdvectiveFlux", "relative_permeability_nodal");
+
+  _deps.insertDependency("PorousFlowFullySaturatedAdvectiveFlux", "PorousFlowDarcyBase");
+  _deps.insertDependency("PorousFlowFullySaturatedAdvectiveFlux", "mass_fraction_nodal");
 
   _deps.insertDependency("PorousFlowBasicAdvection", "darcy_velocity_qp");
 
@@ -134,6 +150,9 @@ PorousFlowDependencies::PorousFlowDependencies()
   _deps.insertDependency("PorousFlowFullySaturatedHeatAdvection",
                          "PorousFlowFullySaturatedDarcyBase");
   _deps.insertDependency("PorousFlowFullySaturatedHeatAdvection", "enthalpy_qp");
+
+  _deps.insertDependency("PorousFlowFullySaturatedUpwindHeatAdvection", "PorousFlowDarcyBase");
+  _deps.insertDependency("PorousFlowFullySaturatedUpwindHeatAdvection", "enthalpy_nodal");
 
   _deps.insertDependency("PorousFlowFullySaturatedMassTimeDerivative", "biot_modulus_qp");
   _deps.insertDependency("PorousFlowFullySaturatedMassTimeDerivative", "thermal_expansion_qp");
@@ -259,6 +278,12 @@ PorousFlowDependencies::PorousFlowDependencies()
   _deps.insertDependency("porosity_qp", "pressure_saturation_qp");
   _deps.insertDependency("porosity_qp", "temperature_qp");
   //_deps.insertDependency("porosity_qp", "volumetric_strain_qp");
+
+  // following is so that anything derived from PorousFlowVariableBase (with pf_material_type =
+  // pressure_saturation) will add PorousFlowHysteresisOrder at the nodes or qps, if a
+  // PorousflowHysteresisOrder appears in the input file
+  _deps.insertDependency("pressure_saturation_nodal", "hysteresis_order_nodal");
+  _deps.insertDependency("pressure_saturation_qp", "hysteresis_order_qp");
 
   // Postprocessor dependencies
   _deps.insertDependency("PorousFlowFluidMass", "porosity_nodal");

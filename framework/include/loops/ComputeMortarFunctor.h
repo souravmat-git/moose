@@ -10,6 +10,7 @@
 #pragma once
 
 #include "MooseTypes.h"
+#include "MortarExecutorInterface.h"
 
 #include "libmesh/libmesh_common.h"
 
@@ -19,6 +20,7 @@ class FEProblemBase;
 class AutomaticMortarGeneration;
 class Assembly;
 class MooseMesh;
+class MaterialBase;
 
 namespace libMesh
 {
@@ -28,20 +30,22 @@ class FEGenericBase;
 typedef FEGenericBase<Real> FEBase;
 }
 
-class ComputeMortarFunctor
+class ComputeMortarFunctor : public MortarExecutorInterface
 {
 public:
   ComputeMortarFunctor(
       const std::vector<std::shared_ptr<MortarConstraintBase>> & mortar_constraints,
       const AutomaticMortarGeneration & amg,
       SubProblem & subproblem,
-      FEProblemBase & _fe_problem,
+      FEProblemBase & fe_problem,
       bool displaced);
 
   /**
    * Loops over the mortar segment mesh and computes the residual/Jacobian
    */
   void operator()();
+
+  void mortarSetup() override;
 
 private:
   /// The mortar constraints to loop over when on each element. These must be
@@ -66,18 +70,4 @@ private:
 
   /// A reference to the assembly object
   Assembly & _assembly;
-
-  /// The mortar quadrature rule. Necessary for sizing the number of custom
-  /// points for re-init'ing the slave interior, master interior, and slave face
-  /// elements
-  const libMesh::QBase * const & _qrule_msm;
-
-  /// The slave boundary id needed for reiniting the MOOSE systems on the element (slave) face
-  BoundaryID _slave_boundary_id;
-
-  /// The master boundary id needed for reiniting the MOOSE systems on the neighbor (master) face
-  BoundaryID _master_boundary_id;
-
-  /// boolean flag for holding whether our current mortar segment projects onto a master element
-  bool _has_master;
 };

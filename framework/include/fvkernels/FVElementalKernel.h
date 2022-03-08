@@ -39,16 +39,22 @@ public:
   virtual void computeOffDiagJacobian();
   ///@}
 
+  const MooseVariableFV<Real> & variable() const { return _var; }
+
 protected:
   /// This is the primary function that must be implemented for flux kernel
   /// terms.  Note that solution gradients will be zero unless you are using a
   /// higher-order reconstruction.  Material properties and other values
-  /// should be initialized just like they are for fintie element kernels here -
+  /// should be initialized just like they are for finite element kernels here -
   /// since this is a FE-like volumetric integration term.
   virtual ADReal computeQpResidual() = 0;
 
   MooseVariableFV<Real> & _var;
   const ADVariableValue & _u;
+  const Moose::Functor<ADReal> & _u_functor;
   const unsigned int _qp = 0;
   const Elem * const & _current_elem;
+
+  /// The physical location of the element's quadrature Points, indexed by _qp
+  const MooseArray<Point> & _q_point;
 };

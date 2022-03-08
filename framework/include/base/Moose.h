@@ -32,12 +32,10 @@ class MooseEnumItem;
 class ExecFlagEnum;
 class MooseVariableFieldBase;
 
-#ifdef LIBMESH_HAVE_PETSC
 void MooseVecView(NumericVector<Number> & vector);
 void MooseVecView(const NumericVector<Number> & vector);
 void MooseMatView(SparseMatrix<Number> & mat);
 void MooseMatView(const SparseMatrix<Number> & mat);
-#endif
 
 /**
  * MOOSE now contains C++11 code, so give a reasonable error message
@@ -112,7 +110,8 @@ extern const ExecFlagType EXEC_PRE_DISPLACE;
 extern const ExecFlagType EXEC_SAME_AS_MULTIAPP;
 extern const ExecFlagType EXEC_PRE_MULTIAPP_SETUP;
 extern const ExecFlagType EXEC_TRANSFER;
-
+extern const ExecFlagType EXEC_PRE_KERNELS;
+extern const ExecFlagType EXEC_ALWAYS;
 namespace Moose
 {
 

@@ -12,6 +12,7 @@
 GeochemistrySpeciesSwapper::GeochemistrySpeciesSwapper(unsigned basis_size, Real stoi_tol)
   : _stoi_tol(stoi_tol),
     _swap_matrix(basis_size, basis_size),
+    _true_swap_matrix(basis_size, basis_size),
     _inv_swap_matrix(basis_size, basis_size),
     _swap_sigma(basis_size),
     _swap_U(basis_size, basis_size),
@@ -86,15 +87,15 @@ GeochemistrySpeciesSwapper::constructInverseMatrix(const ModelGeochemicalDatabas
   for (unsigned i = 0; i < num_cols; ++i)
     _swap_matrix(basis_index_to_replace, i) = mgd.eqm_stoichiometry(eqm_index_to_insert, i);
 
+  // record the swap matrix since the SVD trashes it
+  _true_swap_matrix = _swap_matrix;
+
   // In order to invert _swap_matrix, perform the SVD: A = U * D * VT
-  try
-  {
-    _swap_matrix.svd(_swap_sigma, _swap_U, _swap_VT);
-  }
-  catch (...)
-  {
-    mooseException("Matrix is not invertible, which signals an invalid basis swap");
-  }
+  // Although every matrix has a SVD, this process might fail due to numerical errors.  Therefore
+  // the following could be wrapped in a try-catch block, but I have never been able to trigger a
+  // failure since _swap_matrix is always so well-formed due to all the checks on the database while
+  // parsing it
+  _swap_matrix.svd(_swap_sigma, _swap_U, _swap_VT);
   const Real l1norm = _swap_sigma.l1_norm();
   for (unsigned i = 0; i < num_cols; ++i)
     if (std::abs(_swap_sigma(i) / l1norm) < _stoi_tol)
@@ -166,6 +167,11 @@ GeochemistrySpeciesSwapper::alterMGD(ModelGeochemicalDatabase & mgd,
   const unsigned num_rows = mgd.eqm_species_index.size();
   const unsigned num_temperatures = mgd.eqm_log10K.n();
   const unsigned num_redox = mgd.redox_stoichiometry.m();
+  const unsigned kin_rows = mgd.kin_stoichiometry.m();
+  const unsigned num_rate = mgd.kin_rate.size();
+  const unsigned pro_ind_eqm =
+      num_cols + eqm_index_to_insert; // index of the (eqm species that is being swapped into the
+                                      // basis) in the kinetic-rate promoting_indices vectors
 
   // change names
   const std::string basis_name = mgd.basis_species_name[basis_index_to_replace];
@@ -180,6 +186,18 @@ GeochemistrySpeciesSwapper::alterMGD(ModelGeochemicalDatabase & mgd,
   // flag indicating whether the redox_lhs is the equilibrium species that is being put into the
   // basis
   const bool redox_lhs_going_to_basis = (eqm_name == mgd.redox_lhs);
+  mooseAssert(
+      !redox_lhs_going_to_basis,
+      "Should not be able to swap the redox LHS into the basis"); // At present, it is impossible to
+                                                                  // swap redox_lhs into the basis,
+                                                                  // since redox_lhs cannot be an
+                                                                  // equilibrium species, because it
+                                                                  // is explicitly excluded in
+                                                                  // PertinentGeochemicalSystem when
+                                                                  // building the secondary species.
+  /*
+  In past versions of the code, it was possible to swap the redox LHS into the basis.
+  If you want to make it possible again then mgd needs to be modified as follows
   if (redox_lhs_going_to_basis)
   {
     // need to make the redox_lhs equal to the species that is being taken from the basis
@@ -203,6 +221,15 @@ GeochemistrySpeciesSwapper::alterMGD(ModelGeochemicalDatabase & mgd,
             coef * (mgd.redox_log10K(red, t) - mgd.eqm_log10K(eqm_index_to_insert, t));
     }
   }
+  */
+
+  // record that the swap has occurred
+  if (mgd.swap_to_original_basis.n() == 0)
+    mgd.swap_to_original_basis = _true_swap_matrix;
+  else
+    mgd.swap_to_original_basis.left_multiply(_true_swap_matrix);
+  mgd.have_swapped_out_of_basis.push_back(basis_index_to_replace);
+  mgd.have_swapped_into_basis.push_back(eqm_index_to_insert);
 
   // express stoichiometry in new basis
   for (unsigned i = 0; i < num_cols; ++i)
@@ -223,6 +250,13 @@ GeochemistrySpeciesSwapper::alterMGD(ModelGeochemicalDatabase & mgd,
       if (std::abs(mgd.redox_stoichiometry(red, j)) < _stoi_tol)
         mgd.redox_stoichiometry(red, j) = 0.0;
 
+  // express kinetic stoichiometry in new basis
+  mgd.kin_stoichiometry.right_multiply(_inv_swap_matrix);
+  for (unsigned i = 0; i < kin_rows; ++i)
+    for (unsigned j = 0; j < num_cols; ++j)
+      if (std::abs(mgd.kin_stoichiometry(i, j)) < _stoi_tol)
+        mgd.kin_stoichiometry(i, j) = 0.0;
+
   // alter equilibrium constants for each temperature point
   for (unsigned t = 0; t < num_temperatures; ++t)
   {
@@ -238,6 +272,11 @@ GeochemistrySpeciesSwapper::alterMGD(ModelGeochemicalDatabase & mgd,
       for (unsigned red = 0; red < num_redox; ++red)
         mgd.redox_log10K(red, t) -=
             mgd.redox_stoichiometry(red, basis_index_to_replace) * log10k_eqm_species;
+
+    // similar for kinetic
+    for (unsigned kin = 0; kin < kin_rows; ++kin)
+      mgd.kin_log10K(kin, t) -=
+          mgd.kin_stoichiometry(kin, basis_index_to_replace) * log10k_eqm_species;
   }
 
   // swap the "is mineral" information
@@ -249,6 +288,12 @@ GeochemistrySpeciesSwapper::alterMGD(ModelGeochemicalDatabase & mgd,
   const bool basis_was_gas = mgd.basis_species_gas[basis_index_to_replace];
   mgd.basis_species_gas[basis_index_to_replace] = mgd.eqm_species_gas[eqm_index_to_insert];
   mgd.eqm_species_gas[eqm_index_to_insert] = basis_was_gas;
+
+  // swap the "is transported" information
+  const bool basis_was_transported = mgd.basis_species_transported[basis_index_to_replace];
+  mgd.basis_species_transported[basis_index_to_replace] =
+      mgd.eqm_species_transported[eqm_index_to_insert];
+  mgd.eqm_species_transported[eqm_index_to_insert] = basis_was_transported;
 
   // swap the "charge" information
   const Real basis_charge = mgd.basis_species_charge[basis_index_to_replace];
@@ -275,13 +320,15 @@ GeochemistrySpeciesSwapper::alterMGD(ModelGeochemicalDatabase & mgd,
   // No need to swap surface_complexation_info or gas_chi because they are not
   // bound to basis or eqm species
 
-  // express kinetic stoichiometry in new basis
-  mgd.kin_stoichiometry.right_multiply(_inv_swap_matrix);
-  const unsigned kin_rows = mgd.kin_stoichiometry.m();
-  for (unsigned i = 0; i < kin_rows; ++i)
-    for (unsigned j = 0; j < num_cols; ++j)
-      if (std::abs(mgd.kin_stoichiometry(i, j)) < _stoi_tol)
-        mgd.kin_stoichiometry(i, j) = 0.0;
+  // swap promoting indices in the rates
+  for (unsigned r = 0; r < num_rate; ++r)
+  {
+    const Real promoting_index_of_original_basis =
+        mgd.kin_rate[r].promoting_indices[basis_index_to_replace];
+    mgd.kin_rate[r].promoting_indices[basis_index_to_replace] =
+        mgd.kin_rate[r].promoting_indices[pro_ind_eqm];
+    mgd.kin_rate[r].promoting_indices[pro_ind_eqm] = promoting_index_of_original_basis;
+  }
 }
 
 void
@@ -295,4 +342,45 @@ GeochemistrySpeciesSwapper::alterBulkComposition(unsigned basis_size,
   DenseVector<Real> result;
   _inv_swap_matrix.vector_mult_transpose(result, bulk_composition);
   bulk_composition = result;
+}
+
+bool
+GeochemistrySpeciesSwapper::findBestEqmSwap(unsigned basis_ind,
+                                            const ModelGeochemicalDatabase & mgd,
+                                            const std::vector<Real> & eqm_molality,
+                                            bool minerals_allowed,
+                                            bool gas_allowed,
+                                            bool sorption_allowed,
+                                            unsigned & best_eqm_species) const
+{
+  const unsigned num_eqm = mgd.eqm_species_name.size();
+  if (eqm_molality.size() != num_eqm)
+    mooseError("Size of eqm_molality is ",
+               eqm_molality.size(),
+               " which is not equal to the number of equilibrium species ",
+               num_eqm);
+  if (basis_ind >= mgd.basis_species_name.size())
+    mooseError("basis index ", basis_ind, " must be less than ", mgd.basis_species_name.size());
+  best_eqm_species = 0;
+  bool legitimate_swap_found = false;
+  Real best_stoi = 0.0;
+  for (unsigned j = 0; j < num_eqm; ++j)
+  {
+    if (mgd.eqm_stoichiometry(j, basis_ind) == 0.0)
+      continue;
+    if (!minerals_allowed && mgd.eqm_species_mineral[j])
+      continue;
+    if (!gas_allowed && mgd.eqm_species_gas[j])
+      continue;
+    if (!sorption_allowed && mgd.surface_sorption_related[j])
+      continue;
+    const Real stoi = std::abs(mgd.eqm_stoichiometry(j, basis_ind)) * eqm_molality[j];
+    if (stoi >= best_stoi)
+    {
+      best_stoi = stoi;
+      best_eqm_species = j;
+      legitimate_swap_found = true;
+    }
+  }
+  return legitimate_swap_found;
 }
