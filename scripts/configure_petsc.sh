@@ -31,9 +31,72 @@ function configure_petsc()
     SHARED=1
   fi
 
+  # Use --with-make-np if MOOSE_JOBS is given
+  MAKE_NP_STR=""
+  if [ ! -z "$MOOSE_JOBS" ]; then
+    MAKE_NP_STR="--with-make-np=$MOOSE_JOBS"
+  fi
+
+  # Check to see if HDF5 exists using environment variables and expected locations.
+  # If it does, use it.
+  echo "INFO: Checking for HDF5..."
+
+  # Prioritize user-set environment variables HDF5_DIR, HDF5DIR, and HDF5_ROOT,
+  # with the first taking the greatest priority
+  if [ -n "$HDF5_DIR" ]; then
+    echo "INFO: HDF5 installation location was set using HDF5_DIR=$HDF5_DIR"
+    HDF5_STR="--with-hdf5-dir=$HDF5_DIR"
+  elif [ -n "$HDF5DIR" ]; then
+    echo "INFO: HDF5 installation location was set using HDF5DIR=$HDF5DIR"
+    HDF5_STR="--with-hdf5-dir=$HDF5DIR"
+  elif [ -n "$HDF5_ROOT" ]; then
+    echo "INFO: HDF5 installation location was set using HDF5_ROOT=$HDF5_ROOT"
+    HDF5_STR="--with-hdf5-dir=$HDF5_ROOT"
+  fi
+
+  # If not found using a variable, look at a few common library locations
+  HDF5_PATHS=/usr/lib/hdf5:/usr/local/hdf5:/usr/share/hdf5:/usr/local/hdf5/share:$HOME/.local
+  if [ -z "$HDF5_STR" ]; then
+    # Set path delimiter
+    IFS=:
+    for p in $HDF5_PATHS; do
+      # When first instance of hdf5 header is found, report finding, set HDF5_STR,
+      # and break
+      loc=$(find "$p" -name 'hdf5.h' -print -quit 2>/dev/null)
+      if [ ! -z "$loc" ]; then
+        echo "INFO: HDF5 header location was found at: $loc"
+        echo "INFO: Using this HDF5 installation to configure and build PETSc."
+        echo "INFO: If another HDF5 is desired, please set HDF5_DIR and re-run this script."
+        HDF5_STR="--with-hdf5-dir=$loc/../../"
+        break
+      fi
+    done
+    unset IFS
+  fi
+
+  # If HDF5 is not found locally, download it via PETSc (except on Apple Silicon)
+  if [ -z "$HDF5_STR" ]; then
+    if [[ `uname -p` == "arm" ]] && [[ $(uname) == Darwin ]]; then
+      # HDF5 currently doesn't build properly via PETSc download on macOS Apple
+      # Silicon machines due to a build system reconfiguration that is needed.
+      # So, we won't be downloading it by default for now if it isn't found.
+      # Instead, if a user has it installed somewhere, we'll note the variable
+      # they need to set.
+      echo "INFO: HDF5 library not detected; HDF5 related PETSc features will not be enabled."
+      echo "INFO: Set HDF5_DIR to the location of HDF5 and re-run this script, if desired."
+    else
+      HDF5_STR="--download-hdf5=1"
+      HDF5_FORTRAN_STR="--download-hdf5-fortran-bindings=0"
+      echo "INFO: HDF5 library not detected, opting to download via PETSc..."
+    fi
+  fi
+
   cd $PETSC_DIR
   python ./configure --download-hypre=1 \
       --with-shared-libraries=$SHARED \
+      "$HDF5_STR" \
+      "$HDF5_FORTRAN_STR" \
+      "$MAKE_NP_STR" \
       --with-debugging=no \
       --download-fblaslapack=1 \
       --download-metis=1 \

@@ -15,19 +15,17 @@
 # involve MOOSE, leading to unneccessary, redundant use of computing
 # resources, bandwidth, and storage.
 #
-# To build a MOOSE image, there are eight optional arguments and two required
-# arguments to be set using the --build-arg flag.
-#
-# DISTRO_NAME: Optional.  Linux distribution (ubuntu, centos)
-# DISTRO_VERSION: Optional with above (20.04, 8 respectively)
-# LIBMESH_METHODS: Optional. Methods with which to build libmesh; defaults to opt dbg.
-# MOOSE_JOBS: Optional.  Sets number of cores for running make.
-# MOOSE_METHODS: Optional. Methods with which to build MOOSE; defaults to opt.
+# Optional arguments (set with --build-arg):
+# DISTRO_NAME: Linux distribution; defults to ubuntu.
+# DISTRO_VERSION: Linux distribution version; defaults to 20.04 with ubuntu.
+# LIBMESH_METHODS: Methods with which to build libmesh; defaults to "opt dbg".
+# MOOSE_JOBS: Sets number of cores for running make; defaults to 1.
+# MOOSE_METHODS: Methods with which to build MOOSE; defaults to opt.
 # PETSC_REV: Commit hash of submodule petsc.
-# PETSC_OPTIONS: Optional. Options to pass to update_and_rebuild_petsc.sh.
+# PETSC_OPTIONS: Options to pass to update_and_rebuild_petsc.sh.
 # LIBMESH_REV: Commit hash of submodule libmesh.
-# LIBMESH_OPTIONS: Optional. Options to pass to update_and_rebuild_libmesh.sh.
-# BUILD_MODULES: Optional. Set to build all MOOSE modules.
+# LIBMESH_OPTIONS: Options to pass to update_and_rebuild_libmesh.sh.
+# BUILD_MODULES: Set to build all MOOSE modules.
 #-----------------------------------------------------------------------------#
 ARG DISTRO_NAME=ubuntu
 ARG DISTRO_VERSION=20.04
@@ -94,14 +92,14 @@ WORKDIR ${MOOSE_DIR}
 #-----------------------------------------------------------------------------#
 # Install PETSc to system path
 #-----------------------------------------------------------------------------#
-ARG PETSC_REV
+ARG PETSC_REV=f855b95493736b087b8ccc16dc6c5b29bc4b5aa8
 ARG PETSC_OPTIONS
 ENV PETSC_DIR=/usr/local
 COPY scripts/update_and_rebuild_petsc.sh ${MOOSE_DIR}/scripts/update_and_rebuild_petsc.sh
 COPY scripts/configure_petsc.sh ${MOOSE_DIR}/scripts/configure_petsc.sh
 RUN git clone https://gitlab.com/petsc/petsc.git ; \
 cd petsc && git checkout ${PETSC_REV} && cd .. ; \
-PETSC_PREFIX=$PETSC_DIR ./scripts/update_and_rebuild_petsc.sh ${PETSC_OPTIONS} ; \
+PETSC_PREFIX=$PETSC_DIR ./scripts/update_and_rebuild_petsc.sh ${PETSC_OPTIONS} --download-cmake ; \
 rm -rf petsc/* petsc/.* || true ; \
 # Ensure PETSc was installed based on present of library directory
 if [ ! -d $PETSC_DIR/lib/petsc ]; then exit 1; fi
@@ -109,7 +107,7 @@ if [ ! -d $PETSC_DIR/lib/petsc ]; then exit 1; fi
 #-----------------------------------------------------------------------------#
 # Install Libmesh to system path
 #-----------------------------------------------------------------------------#
-ARG LIBMESH_REV
+ARG LIBMESH_REV=ec3954e32a5f6b4d71853a8c007896417aebce58
 ARG LIBMESH_OPTIONS
 ARG LIBMESH_METHODS="opt dbg"
 ENV LIBMESH_DIR=/usr/local \

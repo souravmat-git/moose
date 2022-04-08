@@ -2688,8 +2688,11 @@ namespace // Anonymous namespace for helpers
 // iterator_traits will work.
 // This object specifically is used to insert extra ghost elems into the mesh
 template <typename T>
-struct extra_ghost_elem_inserter : std::iterator<std::output_iterator_tag, T>
+struct extra_ghost_elem_inserter
 {
+  using iterator_category = std::output_iterator_tag;
+  using value_type = T;
+
   extra_ghost_elem_inserter(DistributedMesh & m) : mesh(m) {}
 
   void operator=(const Elem * e) { mesh.add_extra_ghost_elem(const_cast<Elem *>(e)); }
@@ -3209,7 +3212,7 @@ MooseMesh::buildFaceInfo() const
       //
       //  * when the following two (CURRENTLY ONE ACTUALLY) conditions are met:
       //
-      //     - WE AREN'T ACTULLY DOING THIS CHECK RIGHT NOW. SHOULD WE BE? WE DON'T
+      //     - WE AREN'T ACTUALLY DOING THIS CHECK RIGHT NOW. SHOULD WE BE? WE DON'T
       //       DO IT FOR DGKERNELS OR INTERFACE KERNELS
       //       the neighbor is active - this means we aren't looking at a face
       //       between an active element and an inactive (pre-refined version)

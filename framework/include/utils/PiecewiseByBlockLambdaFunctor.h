@@ -77,6 +77,7 @@ protected:
 
   using Moose::FunctorBase<T>::evaluateGradient;
   GradientType evaluateGradient(const Moose::ElemArg & elem_arg, unsigned int) const override;
+  GradientType evaluateGradient(const Moose::FaceArg & face_arg, unsigned int) const override;
 
 private:
   /**
@@ -103,9 +104,6 @@ private:
   /// Functors that will evaluate elements at side quadrature points
   std::unordered_map<SubdomainID, ElemSideQpFn> _elem_side_qp_functor;
 
-  /// The name of this object
-  std::string _name;
-
   /// The mesh that this functor operates on
   const MooseMesh & _mesh;
 };
@@ -118,7 +116,7 @@ PiecewiseByBlockLambdaFunctor<T>::PiecewiseByBlockLambdaFunctor(
     const std::set<ExecFlagType> & clearance_schedule,
     const MooseMesh & mesh,
     const std::set<SubdomainID> & block_ids)
-  : Moose::FunctorBase<T>(clearance_schedule), _name(name), _mesh(mesh)
+  : Moose::FunctorBase<T>(name, clearance_schedule), _mesh(mesh)
 {
   setFunctor(mesh, block_ids, my_lammy);
 }
@@ -139,7 +137,7 @@ PiecewiseByBlockLambdaFunctor<T>::setFunctor(const MooseMesh & mesh,
     auto pr = _elem_functor.emplace(block_id, my_lammy);
     if (!pr.second)
       mooseError("No insertion for the functor material property '",
-                 _name,
+                 this->functorName(),
                  "' for block id ",
                  block_id,
                  ". Another material must already declare this property on that block.");
@@ -180,7 +178,7 @@ PiecewiseByBlockLambdaFunctor<T>::subdomainErrorMessage(const SubdomainID sub_id
   mooseError("The provided subdomain ID ",
              std::to_string(sub_id),
              " doesn't exist in the map for lambda functor '",
-             _name,
+             this->functorName(),
              "'! This is likely because you did not provide a functor material "
              "definition on that subdomain");
 }
@@ -294,4 +292,12 @@ PiecewiseByBlockLambdaFunctor<T>::evaluateGradient(const Moose::ElemArg & elem_a
                                                    unsigned int) const
 {
   return Moose::FV::greenGaussGradient(elem_arg, *this, true, _mesh);
+}
+
+template <typename T>
+typename PiecewiseByBlockLambdaFunctor<T>::GradientType
+PiecewiseByBlockLambdaFunctor<T>::evaluateGradient(const Moose::FaceArg & face_arg,
+                                                   unsigned int) const
+{
+  return Moose::FV::greenGaussGradient(face_arg, *this, true, _mesh);
 }

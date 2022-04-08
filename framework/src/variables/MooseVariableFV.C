@@ -174,9 +174,9 @@ MooseVariableFV<OutputType>::insert(NumericVector<Number> & residual)
 
 template <typename OutputType>
 void
-MooseVariableFV<OutputType>::add(NumericVector<Number> & /*residual*/)
+MooseVariableFV<OutputType>::add(NumericVector<Number> & residual)
 {
-  mooseError("add not supported for FV variables");
+  _element_data->add(residual);
 }
 
 template <typename OutputType>
@@ -424,6 +424,13 @@ void
 MooseVariableFV<OutputType>::setDofValues(const DenseVector<OutputData> & values)
 {
   _element_data->setDofValues(values);
+}
+
+template <typename OutputType>
+bool
+MooseVariableFV<OutputType>::isArray() const
+{
+  return std::is_same<OutputType, RealEigenVector>::value;
 }
 
 template <typename OutputType>
