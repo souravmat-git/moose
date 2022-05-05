@@ -396,6 +396,10 @@ MooseMesh::buildLowerDMesh()
         "does not support mesh re-partitioning and a debug assertion being hit related with "
         "neighbors of lower-dimensional element, with distributed mesh.");
 
+  // Lower-D element build requires neighboring element information
+  if (!mesh.is_prepared())
+    mesh.find_neighbors();
+
   // maximum number of sides of all elements
   unsigned int max_n_sides = 0;
 
@@ -3207,14 +3211,12 @@ MooseMesh::buildFaceInfo() const
       //
       //     - the neighbor has a higher ID than the element - this ensures
       //       that when we revisit the same face when the neighbor is the
-      //       element and vise versa, we only create a face info object once
+      //       element and vice versa, we only create a face info object once
       //       instead of twice.
       //
-      //  * when the following two (CURRENTLY ONE ACTUALLY) conditions are met:
+      //  * when the following two conditions are met:
       //
-      //     - WE AREN'T ACTUALLY DOING THIS CHECK RIGHT NOW. SHOULD WE BE? WE DON'T
-      //       DO IT FOR DGKERNELS OR INTERFACE KERNELS
-      //       the neighbor is active - this means we aren't looking at a face
+      //     - the neighbor is active - this means we aren't looking at a face
       //       between an active element and an inactive (pre-refined version)
       //       of a neighbor
       //
@@ -3230,6 +3232,9 @@ MooseMesh::buildFaceInfo() const
            (elem_id < neighbor->id())) ||
           (neighbor->level() < elem->level()))
       {
+        mooseAssert(!neighbor || (neighbor->level() < elem->level() ? neighbor->active() : true),
+                    "If the neighbor is coarser than the element, we expect that the neighbor must "
+                    "be active.");
         _all_face_info.emplace_back(elem, side, neighbor);
 
         auto & fi = _all_face_info.back();

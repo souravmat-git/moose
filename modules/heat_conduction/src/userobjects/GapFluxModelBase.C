@@ -15,6 +15,15 @@ GapFluxModelBase::validParams()
 {
   InputParameters params = InterfaceUserObjectBase::validParams();
   params.addClassDescription("Gap flux model base class");
+
+  // UOs of this type should not be executed by MOOSE, but only called through
+  // ModularGapConductanceConstraint
+  params.set<ExecFlagEnum>("execute_on") = EXEC_CUSTOM;
+  params.suppressParameter<ExecFlagEnum>("execute_on");
+
+  // flux models default to operating on the displaced mesh
+  params.set<bool>("use_displaced_mesh") = true;
+
   return params;
 }
 
@@ -34,6 +43,7 @@ GapFluxModelBase::computeFluxInternal(
   _gap_width = mortar_constraint._gap_width;
   _surface_integration_factor = mortar_constraint._surface_integration_factor;
   _adjusted_length = mortar_constraint._adjusted_length;
+  _normal_pressure = mortar_constraint._normal_pressure;
 
   return computeFlux();
 }

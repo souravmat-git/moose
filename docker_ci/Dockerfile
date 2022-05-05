@@ -51,6 +51,13 @@ COPY docker_ci/install_packages.sh docker_ci/apt_installs.sh docker_ci/yum_insta
 RUN ./install_packages.sh || exit 1; rm *.sh
 
 #-----------------------------------------------------------------------------#
+# Ensure all local repos are marked as safe for all users
+#-----------------------------------------------------------------------------#
+RUN for CURR_USR in root dev; do \
+    sudo -u $CURR_USR /bin/bash -c "printf '[safe]\n\tdirectory = *\n' > ~/.gitconfig" ; \
+done
+
+#-----------------------------------------------------------------------------#
 # Install mpich-3.3 to system path
 #-----------------------------------------------------------------------------#
 RUN curl -L -O http://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz ; \
@@ -107,7 +114,7 @@ if [ ! -d $PETSC_DIR/lib/petsc ]; then exit 1; fi
 #-----------------------------------------------------------------------------#
 # Install Libmesh to system path
 #-----------------------------------------------------------------------------#
-ARG LIBMESH_REV=ec3954e32a5f6b4d71853a8c007896417aebce58
+ARG LIBMESH_REV=c4ce6d1e397bf58401cf12edf1caa9aa61f0f175
 ARG LIBMESH_OPTIONS
 ARG LIBMESH_METHODS="opt dbg"
 ENV LIBMESH_DIR=/usr/local \

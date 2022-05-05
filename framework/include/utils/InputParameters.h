@@ -264,12 +264,12 @@ public:
   /**
    * Get the syntax for a command-line parameter
    */
-  std::vector<std::string> getSyntax(const std::string & name);
+  std::vector<std::string> getSyntax(const std::string & name) const;
 
   /**
    * Get the documentation string for a parameter
    */
-  const std::string & getDescription(const std::string & name);
+  const std::string & getDescription(const std::string & name) const;
 
   /**
    * This method takes a space delimited list of parameter names and adds them to the specified
@@ -821,6 +821,10 @@ public:
    * usually only set/useable for file-path type parameters.
    */
   std::string & rawParamVal(const std::string & param) { return _params[param]._raw_val; }
+  const std::string & rawParamVal(const std::string & param) const
+  {
+    return _params.at(param)._raw_val;
+  }
 
   /**
    * Informs this object that values for this parameter set from the input file or from the command

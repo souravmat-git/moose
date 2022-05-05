@@ -32,6 +32,8 @@
 #include "libmesh/restore_warnings.h"
 #include "libmesh/tensor_tools.h"
 
+#include "metaphysicl/ct_types.h"
+
 #include <string>
 #include <vector>
 #include <memory>
@@ -121,6 +123,14 @@ template <typename>
 class ADMaterialProperty;
 class InputParameters;
 
+enum class MaterialPropState
+{
+  CURRENT = 0x1,
+  OLD = 0x2,
+  OLDER = 0x4
+};
+using MaterialPropStateInt = std::underlying_type<MaterialPropState>::type;
+
 namespace libMesh
 {
 template <typename>
@@ -166,6 +176,15 @@ struct DecrementRank<Eigen::Matrix<Real, Eigen::Dynamic, LIBMESH_DIM>>
   typedef Eigen::Matrix<Real, Eigen::Dynamic, 1> type;
 };
 }
+}
+
+namespace MetaPhysicL
+{
+template <typename U>
+struct ReplaceAlgebraicType<libMesh::RealEigenVector, U>
+{
+  typedef U type;
+};
 }
 
 /**

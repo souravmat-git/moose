@@ -6,15 +6,6 @@
 # in your application. You can turn it on/off by changing it in your application Makefile.
 GEN_REVISION ?= yes
 
-# Set a default to install the main application's tests if one isn't set in the Makefile
-ifndef INSTALLABLE_DIRS
-  ifneq ($(wildcard $(APPLICATION_DIR)/test/.),)
-    INSTALLABLE_DIRS := test/tests
-  else
-    INSTALLABLE_DIRS := tests
-  endif
-endif
-
 # list of application-wide excluded source files
 excluded_srcfiles :=
 
@@ -308,6 +299,16 @@ ifneq (,$(MODULE_NAME))
   endif
 else
   ifeq ($(BUILD_EXEC),yes)
+
+    # Set a default to install the main application's tests if one isn't set in the Makefile
+    ifndef INSTALLABLE_DIRS
+      ifneq ($(wildcard $(APPLICATION_DIR)/test/.),)
+        INSTALLABLE_DIRS := test/tests->tests
+      else
+        INSTALLABLE_DIRS := tests
+      endif
+    endif
+
     all: $(app_EXEC)
   else
     all: $(app_LIB)
@@ -420,30 +421,49 @@ $(app_EXEC): $(app_LIBS) $(mesh_library) $(main_object) $(app_test_LIB) $(depend
 docs_dir := $(APPLICATION_DIR)/doc
 bindst = $(bin_install_dir)/$(notdir $(app_EXEC))
 binlink = $(share_install_dir)/$(notdir $(app_EXEC))
-copy_input_targets := $(foreach dir,$(INSTALLABLE_DIRS),target_$(APPLICATION_NAME)_$(dir))
+# Strip the trailing slashes (if provided) and transform into a suitable Makefile targets
+copy_input_targets := $(foreach dir,$(INSTALLABLE_DIRS),target_$(APPLICATION_NAME)_$(patsubst %/,%,$(dir)))
 
 lib_install_targets = $(foreach lib,$(applibs),$(dir $(lib))install_lib_$(notdir $(lib)))
 ifneq ($(app_test_LIB),)
 	lib_install_targets += $(dir $(app_test_LIB))install_lib_$(notdir $(app_test_LIB))
 endif
 
-install_libs: $(lib_install_targets)
+install_libs:: $(lib_install_targets)
 
-$(copy_input_targets): all
-	@$(eval target_dir := $(subst target_$(APPLICATION_NAME)_,,$@))
-	@$(eval base_dir := $(notdir $(target_dir)))
-	@echo "Installing inputs from directory \"$(target_dir)\""
-	@rm -rf $(share_install_dir)/$(base_dir)
-	@mkdir -p $(share_install_dir)/$(base_dir)
-	@cp -R $(APPLICATION_DIR)/$(target_dir) $(share_install_dir)/$(base_dir)
+ifneq ($(wildcard $(APPLICATION_DIR)/data/.),)
+install_data_$(APPLICATION_NAME)_src := $(APPLICATION_DIR)/data
+install_data_$(APPLICATION_NAME)_dst := $(share_install_dir)
+install_data:: install_data_$(APPLICATION_NAME)
+endif
+
+install_data_%:
+	@echo "Installing "$($@_src)"..."
+	@mkdir -p $($@_dst)
+	@cp -r $($@_src) $($@_dst)
+
+$(copy_input_targets):
+	@$(eval kv := $(subst ->, ,$(subst target_$(APPLICATION_NAME)_,,$@)))
+	@$(eval source_dir := $(word 1, $(kv)))
+	@$(eval dest_dir := $(if $(word 2, $(kv)),$(word 2, $(kv)),$(source_dir)))
+	@echo "Installing inputs from directory \"$(source_dir)\" into $(dest_dir)"
+	@rm -rf $(share_install_dir)/$(dest_dir)
+	@mkdir -p $(share_install_dir)/$(dest_dir)
+	@$(eval abs_source_dir := $(realpath $(APPLICATION_DIR)/$(source_dir)))
+	@if [ "$(abs_source_dir)" != "" ]; \
+	then \
+		cp -R $(abs_source_dir)/ $(share_install_dir)/$(dest_dir); \
+	else \
+		(echo "ERROR: Source directory $(APPLICATION_DIR)/$(source_dir) does not exist!"; exit 1) \
+	fi;
 	@if [ -e $(APPLICATION_DIR)/testroot ]; \
 	then \
-		cp -f $(APPLICATION_DIR)/testroot $(share_install_dir)/$(base_dir)/; \
-	elif [ -e $(target_dir)/testroot ]; \
+		cp -f $(APPLICATION_DIR)/testroot $(share_install_dir)/$(dest_dir)/; \
+	elif [ -e $(source_dir)/testroot ]; \
 	then \
-		cp -f $(target_dir)/testroot $(share_install_dir)/$(base_dir)/; \
+		cp -f $(source_dir)/testroot $(share_install_dir)/$(dest_dir)/; \
 	else \
-		echo "app_name = $(APPLICATION_NAME)" > $(share_install_dir)/$(base_dir)/testroot; \
+		echo "app_name = $(APPLICATION_NAME)" > $(share_install_dir)/$(dest_dir)/testroot; \
 	fi; \
 
 
@@ -463,7 +483,7 @@ install_lib_%: % all
 $(binlink): all $(copy_input_targets)
 	ln -sf ../../bin/$(notdir $(app_EXEC)) $@
 
-install_$(APPLICATION_NAME)_docs:
+install_$(APPLICATION_NAME)_docs: all
 ifeq ($(MOOSE_SKIP_DOCS),)
 	@echo "Installing docs"
 	@mkdir -p $(docs_install_dir)

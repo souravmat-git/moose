@@ -16,6 +16,7 @@
 #include "ExecFlagEnum.h"
 #include "InfixIterator.h"
 #include "MaterialBase.h"
+#include "Registry.h"
 #include "MortarConstraintBase.h"
 #include "MortarNodalAuxKernel.h"
 
@@ -83,7 +84,9 @@ findTestRoot()
 }
 
 std::string
-installedInputsDir(const std::string & app_name, const std::string & dir_name)
+installedInputsDir(const std::string & app_name,
+                   const std::string & dir_name,
+                   const std::string & extra_error_msg)
 {
   // See moose.mk for a detailed explanation of the assumed installed application
   // layout. Installed inputs are expected to be installed in "share/<app_name>/<folder>".
@@ -93,7 +96,10 @@ installedInputsDir(const std::string & app_name, const std::string & dir_name)
 
   auto test_root = pathjoin(installed_path, "testroot");
   if (!pathExists(installed_path))
-    mooseError("Couldn't locate any installed inputs to copy in path: ", installed_path);
+    mooseError("Couldn't locate any installed inputs to copy in path: ",
+               installed_path,
+               '\n',
+               extra_error_msg);
 
   checkFileReadable(test_root);
   return installed_path;
@@ -224,6 +230,16 @@ pathExists(const std::string & path)
 {
   struct stat buffer;
   return (stat(path.c_str(), &buffer) == 0);
+}
+
+bool
+pathIsDirectory(const std::string & path)
+{
+  struct stat buffer;
+  // stat call fails?
+  if (stat(path.c_str(), &buffer))
+    return false;
+  return S_IFDIR & buffer.st_mode;
 }
 
 bool
