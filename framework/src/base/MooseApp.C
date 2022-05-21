@@ -342,14 +342,14 @@ MooseApp::MooseApp(InputParameters parameters)
     _start_time_set(false),
     _start_time(0.0),
     _global_time_offset(0.0),
-    _output_warehouse(*this),
-    _restartable_data(libMesh::n_threads()),
-    _perf_graph(createRecoverablePerfGraph()),
-    _rank_map(*_comm, _perf_graph),
     _input_parameter_warehouse(new InputParameterWarehouse()),
     _action_factory(*this),
     _action_warehouse(*this, _syntax, _action_factory),
+    _output_warehouse(*this),
     _parser(*this, _action_warehouse),
+    _restartable_data(libMesh::n_threads()),
+    _perf_graph(createRecoverablePerfGraph()),
+    _rank_map(*_comm, _perf_graph),
     _use_executor(parameters.get<bool>("use_executor")),
     _null_executor(NULL),
     _use_nonlinear(true),
@@ -1256,10 +1256,9 @@ MooseApp::recursivelyCreateExecutors(const std::string & current_executor_name,
 
   for (const auto & param : params)
   {
-    if (dynamic_cast<InputParameters::Parameter<ExecutorName> *>(param.second))
+    if (params.have_parameter<ExecutorName>(param.first))
     {
-      const auto & dependency_name =
-          static_cast<InputParameters::Parameter<ExecutorName> *>(param.second)->get();
+      const auto & dependency_name = params.get<ExecutorName>(param.first);
 
       possible_roots.remove(dependency_name);
 

@@ -1035,17 +1035,14 @@ InputParameters::set(const std::string & name, bool quiet_mode)
   checkParamName(name);
   checkConsistentType<T>(name);
 
-  if (!this->have_parameter<T>(name))
-    _values[name] = new Parameter<T>;
-
-  set_attributes(name, false);
+  T & result = this->Parameters::set<T>(name);
 
   if (quiet_mode)
     _params[name]._set_by_add_param = true;
 
   setHelper<T>(name);
 
-  return cast_ptr<Parameter<T> *>(_values[name])->set();
+  return result;
 }
 
 template <typename T, typename... Ts>
@@ -1406,9 +1403,14 @@ template <typename T>
 void
 InputParameters::checkConsistentType(const std::string & name) const
 {
-  // Do we have a parameter with the same name but a different type?
+  // If we don't currently have the Parameter, can't be any inconsistency
   InputParameters::const_iterator it = _values.find(name);
-  if (it != _values.end() && dynamic_cast<const Parameter<T> *>(it->second) == NULL)
+  if (it == _values.end())
+    return;
+
+  // Now, if we already have the Parameter, but it doesn't have the
+  // right type, throw an error.
+  if (!this->Parameters::have_parameter<T>(name))
     mooseError("Attempting to set parameter \"",
                name,
                "\" with type (",

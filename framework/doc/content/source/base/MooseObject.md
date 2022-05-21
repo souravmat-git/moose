@@ -14,20 +14,6 @@ This class holds the main convenience functions, such as
 - `parameters()` to get a reference to the [`InputParameters`](InputParameters.md) of the current object
 - `paramError`, `paramWarning`, and `paramInfo` to output status messages regarding specific parameters that are annotated with the input file location of the parameter
 
-
-## Data files (`getDataFileName`)
-
-Files located in `moose/framework/data`, the `moose/modules/*/data`, or
-`<your_app>/data` directories can be retrieved using the `getDataFileName(const
-std::string & param)` function, where `param` is an input parameter of type
-`FileName`
-
-`getDataFileName` will search (in this order)
-
-- relative to the input file
-- relative to the running binary in the shared directory (assuming the application is installed)
-- relative to all registered data file directories (which are determined by the source file locations when compiling and registered using the `registerDataFilePath` macro in `Registry.h`)
-
 ## Parameter vector pairs
 
 ```C++

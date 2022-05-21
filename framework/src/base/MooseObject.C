@@ -54,6 +54,7 @@ MooseObject::validParams()
 MooseObject::MooseObject(const InputParameters & parameters)
   : ConsoleStreamInterface(*parameters.getCheckedPointerParam<MooseApp *>("_moose_app")),
     ParallelObject(*parameters.getCheckedPointerParam<MooseApp *>("_moose_app")),
+    DataFileInterface<MooseObject>(*this),
     _pars(parameters),
     _app(*getCheckedPointerParam<MooseApp *>("_moose_app")),
     _type(getParam<std::string>("_type")),
@@ -85,40 +86,4 @@ std::string
 MooseObject::typeAndName() const
 {
   return type() + std::string(" \"") + name() + std::string("\"");
-}
-
-std::string
-MooseObject::getDataFileName(const std::string & param)
-{
-  /// - relative to the input file directory
-  {
-    const auto & absolute_path = getParam<FileName>(param);
-    if (MooseUtils::checkFileReadable(absolute_path, false, false, false))
-      return absolute_path;
-  }
-
-  const auto & relative_path = _pars.rawParamVal(param);
-
-  /// - relative to the running binary (assuming the application is installed)
-  const auto share_dir = MooseUtils::pathjoin(Moose::getExecutablePath(), "..", "share");
-  if (MooseUtils::pathIsDirectory(share_dir))
-  {
-    const auto dirs = MooseUtils::listDir(share_dir, false);
-    for (const auto & data_dir : dirs)
-    {
-      const auto path = MooseUtils::pathjoin(share_dir, data_dir, "data", relative_path);
-      if (MooseUtils::checkFileReadable(path, false, false, false))
-        return path;
-    }
-  }
-
-  /// - relative to all registered data file directories
-  for (const auto & data_dir : Registry::getRegistry().getDataFilePaths())
-  {
-    const auto path = MooseUtils::pathjoin(data_dir, relative_path);
-    if (MooseUtils::checkFileReadable(path, false, false, false))
-      return path;
-  }
-
-  mooseException("Unable to find data file '", relative_path, "' anywhere");
 }
