@@ -42,7 +42,7 @@ protected:
   /// Subdomain Names of the ting regions
   const std::vector<SubdomainName> _ring_block_names;
   /// Thickness of each enclosing duct
-  const enum class DuctStyle { apothem, radius } _duct_sizes_style;
+  const PolygonSizeStyle _duct_sizes_style;
   /// Size parameters of the duct regions
   std::vector<Real> _duct_sizes;
   /// Number of layers in each enclosing duct
@@ -62,7 +62,7 @@ protected:
   /// Whether the generated mesh contains duct regions
   const bool _has_ducts;
   /// Type of polygon size parameter
-  const enum class PolygonStyle { apothem, radius } _polygon_size_style;
+  const PolygonSizeStyle _polygon_size_style;
   /// Polygon size parameter
   const Real _polygon_size;
   /// Mesh sector number of each polygon side
@@ -95,6 +95,8 @@ protected:
   const bool _uniform_mesh_on_sides;
   /// Whether the central elements need to be QUAD4
   const bool _quad_center_elements;
+  /// A fractional radius factor used to determine the radial positions of transition nodes in the center region meshed by quad elements (default is 1.0 - 1.0/div_num)
+  const Real _center_quad_factor;
   /// Whether to rotate the generated polygon mesh to ensure that one flat side faces up
   const bool & _flat_side_up;
   /// Maximum smooth iteration number

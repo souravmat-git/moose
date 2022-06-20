@@ -626,6 +626,16 @@ public:
   }
 
   /**
+   * Returns true if the problem is in the process of computing the residual and the Jacobian
+   */
+  const bool & currentlyComputingResidualAndJacobian() const;
+
+  /**
+   * Set whether or not the problem is in the process of computing the Jacobian
+   */
+  void setCurrentlyComputingResidualAndJacobian(bool currently_computing_residual_and_jacobian);
+
+  /**
    * Returns true if the problem is in the process of computing the nonlinear residual
    */
   bool computingNonlinearResid() const { return _computing_nonlinear_residual; }
@@ -783,6 +793,12 @@ public:
   bool hasFunctor(const std::string & name, THREAD_ID tid) const;
 
   /**
+   * checks whether we have a functor of type T corresponding to \p name on the thread id \p tid
+   */
+  template <typename T>
+  bool hasFunctorWithType(const std::string & name, THREAD_ID tid) const;
+
+  /**
    * add a functor to the problem functor container
    */
   template <typename T>
@@ -898,6 +914,9 @@ protected:
   /// Flag to determine whether the problem is currently computing Jacobian
   bool _currently_computing_jacobian;
 
+  /// Flag to determine whether the problem is currently computing the residual and Jacobian
+  bool _currently_computing_residual_and_jacobian;
+
   /// Whether the non-linear residual is being evaluated
   bool _computing_nonlinear_residual;
 
@@ -995,6 +1014,20 @@ SubProblem::getFunctor(const std::string & name,
   return static_cast<Moose::Functor<T> &>(*emplace_ret->second);
 }
 
+template <typename T>
+bool
+SubProblem::hasFunctorWithType(const std::string & name, const THREAD_ID tid) const
+{
+  mooseAssert(tid < _functors.size(), "Too large a thread ID");
+  auto & functors = _functors[tid];
+
+  const auto & it = functors.find("wraps_" + name);
+  if (it == functors.end())
+    return false;
+  else
+    return dynamic_cast<Moose::Functor<T> *>(it->second.get());
+}
+
 template <typename T, typename PolymorphicLambda>
 const Moose::Functor<T> &
 SubProblem::addPiecewiseByBlockLambdaFunctor(const std::string & name,
@@ -1052,6 +1085,19 @@ SubProblem::addFunctor(const std::string & name,
 
   auto new_wrapper = std::make_unique<Moose::Functor<T>>(functor);
   _functors[tid].emplace(std::make_pair("wraps_" + name, std::move(new_wrapper)));
+}
+
+inline const bool &
+SubProblem::currentlyComputingResidualAndJacobian() const
+{
+  return _currently_computing_residual_and_jacobian;
+}
+
+inline void
+SubProblem::setCurrentlyComputingResidualAndJacobian(
+    const bool currently_computing_residual_and_jacobian)
+{
+  _currently_computing_residual_and_jacobian = currently_computing_residual_and_jacobian;
 }
 
 namespace Moose

@@ -66,19 +66,17 @@ PropertyReadFile::PropertyReadFile(const InputParameters & parameters)
     _ngrain(isParamValid("ngrain") ? getParam<unsigned int>("ngrain")
                                    : getParam<unsigned int>("nvoronoi")),
     _mesh(_fe_problem.mesh()),
-    _nelem(_mesh.nElem()),
     _nprop(getParam<unsigned int>("nprop")),
     _nvoronoi(isParamValid("ngrain") ? getParam<unsigned int>("ngrain")
                                      : getParam<unsigned int>("nvoronoi")),
-    _nblock(getParam<unsigned int>("nblock")),
-    _nnode(_mesh.nNodes())
+    _nblock(getParam<unsigned int>("nblock"))
 {
   if (!_use_random_tesselation && parameters.isParamSetByUser("rand_seed"))
     paramError("rand_seed",
                "Random seeds should only be provided if random tesselation is desired");
 
   Point mesh_min, mesh_max;
-  for (unsigned int i : make_range(LIBMESH_DIM))
+  for (unsigned int i : make_range(Moose::dim))
   {
     mesh_min(i) = _mesh.getMinInDimension(i);
     mesh_max(i) = _mesh.getMaxInDimension(i);
@@ -156,16 +154,16 @@ PropertyReadFile::initVoronoiCenterPoints()
   if (_use_random_tesselation)
   {
     MooseRandom::seed(_rand_seed);
-    for (unsigned int i = 0; i < _nvoronoi; i++)
-      for (unsigned int j = 0; j < LIBMESH_DIM; j++)
+    for (const auto i : make_range(_nvoronoi))
+      for (const auto j : make_range(Moose::dim))
         _center[i](j) = _bounding_box.min()(j) +
                         MooseRandom::rand() * (_bounding_box.max() - _bounding_box.min())(j);
   }
   // Read tesselation from file
   else
   {
-    for (unsigned int i = 0; i < _nvoronoi; i++)
-      for (unsigned int j = 0; j < _mesh.dimension(); j++)
+    for (const auto i : make_range(_nvoronoi))
+      for (const auto j : make_range(_mesh.dimension()))
         _center[i](j) = _reader.getData(i)[j];
   }
 }
@@ -173,7 +171,7 @@ PropertyReadFile::initVoronoiCenterPoints()
 Real
 PropertyReadFile::getData(const Elem * const elem, const unsigned int prop_num) const
 {
-  if (prop_num >= _nprop)
+  if (prop_num > _nprop)
     paramError(
         "nprop", "Property number ", prop_num, " greater than total number of properties ", _nprop);
 
@@ -209,11 +207,11 @@ Real
 PropertyReadFile::getElementData(const Elem * elem, unsigned int prop_num) const
 {
   unsigned int jelem = elem->id();
-  if (jelem >= _nelem)
+  if (jelem >= _mesh.nElem())
     mooseError("Element ID ",
                jelem,
                " greater than than total number of element in mesh: ",
-               _nelem,
+               _mesh.nElem(),
                ". Elements should be numbered consecutively.");
   return _reader.getData(jelem)[prop_num];
 }
@@ -222,11 +220,11 @@ Real
 PropertyReadFile::getNodeData(const Node * const node, const unsigned int prop_num) const
 {
   unsigned int jnode = node->id();
-  if (jnode >= _nnode)
+  if (jnode >= _mesh.nNodes())
     mooseError("Node ID ",
                jnode,
                " greater than than total number of nodes in mesh: ",
-               _nnode,
+               _mesh.nNodes(),
                ". Nodes should be numbered consecutively.");
   return _reader.getData(jnode)[prop_num];
 }
@@ -255,7 +253,7 @@ PropertyReadFile::getVoronoiData(const Point & point, const unsigned int prop_nu
   Real min_dist = std::numeric_limits<Real>::max();
   unsigned int ivoronoi = 0;
 
-  for (unsigned int i = 0; i < _nvoronoi; ++i)
+  for (const auto i : make_range(_nvoronoi))
   {
     Real dist = 0.0;
     switch (_rve_type)

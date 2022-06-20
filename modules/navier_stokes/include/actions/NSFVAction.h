@@ -135,9 +135,15 @@ protected:
   /// Compressibility type, can be compressible, incompressible
   /// or weakly-compressible
   const MooseEnum _compressibility;
-  // Switch that can be used to create an integrated energy equation for
+  /// Switch that can be used to or not pressure and mass equations
+  /// for incompressible/weakly compressible simulations.
+  const bool _has_flow_equations;
+  /// Switch that can be used to create an integrated energy equation for
   /// incompressible/weakly compressible simulations.
   const bool _has_energy_equation;
+  /// Switch that can be used to create an integrated energy equation for
+  /// incompressible/weakly compressible simulations.
+  const bool _has_scalar_equation;
   /// Switch to use to enable the Boussinesq approximation for incompressible
   /// fluid simulations
   const bool _boussinesq_approximation;
@@ -191,14 +197,14 @@ protected:
   const std::vector<FunctionName> _pressure_function;
 
   /// Subdomains where we want to have ambient convection
-  const std::vector<SubdomainName> _ambient_convection_blocks;
+  const std::vector<std::vector<SubdomainName>> _ambient_convection_blocks;
   /// The heat exchange coefficients for ambient convection
   const std::vector<MooseFunctorName> _ambient_convection_alpha;
   /// The ambient temperature
   const std::vector<MooseFunctorName> _ambient_temperature;
 
   /// Subdomains where we want to have volumetric friction
-  const std::vector<SubdomainName> _friction_blocks;
+  const std::vector<std::vector<SubdomainName>> _friction_blocks;
   /// The friction correlation types used for each block
   const std::vector<std::vector<std::string>> _friction_types;
   /// The coefficients used for each item if friction type
@@ -210,8 +216,10 @@ protected:
   const MooseFunctorName _dynamic_viscosity_name;
   /// Name of the specific heat material property
   const MooseFunctorName _specific_heat_name;
-  /// Name of the thermal conductivity material property
-  const MooseFunctorName _thermal_conductivity_name;
+  /// Subdomains where we want to have different thermal conduction
+  const std::vector<std::vector<SubdomainName>> _thermal_conductivity_blocks;
+  /// Name of the thermal conductivity functor for each block-group
+  const std::vector<MooseFunctorName> _thermal_conductivity_name;
   /// Name of the thermal expansion material property
   const MooseFunctorName _thermal_expansion_name;
 
@@ -227,9 +235,9 @@ protected:
   /// Passive scalar external source terms
   const std::vector<MooseFunctorName> _passive_scalar_source;
   /// Passive scalar coupled source terms
-  const CoupledName _passive_scalar_coupled_source;
+  const std::vector<std::vector<VariableName>> _passive_scalar_coupled_source;
   /// Passive scalar coupled source term coeffs
-  const std::vector<Real> _passive_scalar_coupled_source_coeff;
+  const std::vector<std::vector<Real>> _passive_scalar_coupled_source_coeff;
   /// Passive scalar inlet types (fixed-value/mass-flow)
   const MultiMooseEnum _passive_scalar_inlet_types;
   /// Passive scalar function names at inlet boundaries
@@ -280,6 +288,9 @@ private:
   void processBlocks();
   /// Process the supplied variable names and if they are not available, create them
   void processVariables();
+  /// Process thermal conductivity (multiple functor input options are available).
+  /// Return true if we have vector thermal conductivity and false if scalar
+  bool processThermalConductivity();
   /// Check for general user errors in the parameters
   void checkGeneralControlErrors();
   /// Check errors regarding the user defined boundary treatments
@@ -302,6 +313,22 @@ private:
   void checkDependentParameterError(const std::string main_parameter,
                                     const std::vector<std::string> dependent_parameters);
 
+  /// Checks that sufficient Rhie Chow coefficients have been defined for the given dimension, used
+  /// for scalar or temperature advection by auxiliary variables
+  void checkRhieChowFunctorsDefined();
+  /// Check that two parameters are the same size
+  void checkSizeFriendParams(const unsigned int param_vector_1_size,
+                             const unsigned int param_vector_2_size,
+                             const std::string & param_name_1,
+                             const std::string & param_name_2,
+                             const std::string & object_name_1) const;
+  /// Check that a parameter is of the expected size
+  void checkSizeParam(const unsigned int param_vector_size,
+                      const std::string & param_name,
+                      const unsigned int size_wanted,
+                      const std::string & object_name,
+                      const std::string & size_source_explanation) const;
+
   /// List to show which advected scalar field variable needs to be created within
   /// this action
   std::vector<bool> _create_scalar_variable;
@@ -309,8 +336,11 @@ private:
   bool _create_velocity;
   /// Boolean showing if the pressure is created in the action or not
   bool _create_pressure;
-  /// Boolean showing if the fludi tempreture is created in the action or not
+  /// Boolean showing if the fluid tempreture is created in the action or not
   bool _create_fluid_temperature;
+  /// Boolean showing if the user wants to disable the generation of the enthalpy
+  /// material within this action
+  bool _use_external_enthalpy_material;
 };
 
 template <typename T>
@@ -318,23 +348,28 @@ void
 NSFVAction::checkBlockwiseConsistency(const std::string block_param_name,
                                       const std::vector<std::string> parameter_names)
 {
-  const std::vector<SubdomainName> & block_names =
-      _pars.get<std::vector<SubdomainName>>(block_param_name);
+  const std::vector<std::vector<SubdomainName>> & block_names =
+      _pars.get<std::vector<std::vector<SubdomainName>>>(block_param_name);
 
   if (block_names.size())
   {
-    for (const auto & block : block_names)
-      if (std::find(_blocks.begin(), _blocks.end(), block) == _blocks.end())
-        paramError(block_param_name,
-                   "Block '" + block + "' is not present in the block IDs of the module!");
+    for (const auto & block_group : block_names)
+      for (const auto & block : block_group)
+        if (std::find(_blocks.begin(), _blocks.end(), block) == _blocks.end())
+          paramError(block_param_name,
+                     "Block '" + block +
+                         "' is not present in the block restriction of the fluid flow action!");
 
     for (const auto & param_name : parameter_names)
     {
       const std::vector<T> & param_vector = _pars.get<std::vector<T>>(param_name);
       if (block_names.size() != param_vector.size())
         paramError(param_name,
-                   "The number of entries in '" + param_name +
-                       "' is not the same as the number of blocks in '" + block_param_name + "'!");
+                   "The number of entries in '" + param_name + "' (" +
+                       std::to_string(param_vector.size()) +
+                       ") is not the same as the number of blocks"
+                       " (" +
+                       std::to_string(block_names.size()) + ") in '" + block_param_name + "'!");
     }
   }
   else

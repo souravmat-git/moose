@@ -65,7 +65,7 @@ rho=1.1
     function = forcing_p
   []
   [mean_zero_pressure]
-    type = FVScalarLagrangeMultiplier
+    type = FVIntegralValueConstraint
     variable = pressure
     lambda = lambda
   []
@@ -193,7 +193,6 @@ rho=1.1
 []
 
 [Outputs]
-  exodus = true
   csv = true
 []
 

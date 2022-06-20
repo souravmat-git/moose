@@ -167,6 +167,11 @@ PolygonConcentricCircleMeshGeneratorBase::validParams()
                         "Whether the side elements are reorganized to have a uniform size.");
   params.addParam<bool>(
       "quad_center_elements", false, "Whether the center elements are quad or triangular.");
+  params.addRangeCheckedParam<Real>(
+      "center_quad_factor",
+      "center_quad_factor>0&center_quad_factor<1",
+      "A fractional radius factor used to determine the radial positions of transition nodes in "
+      "the center region meshed by quad elements.");
   params.addParam<unsigned int>("smoothing_max_it",
                                 0,
                                 "Number of Laplacian smoothing iterations. This number is "
@@ -242,7 +247,7 @@ PolygonConcentricCircleMeshGeneratorBase::PolygonConcentricCircleMeshGeneratorBa
     _ring_block_names(isParamValid("ring_block_names")
                           ? getParam<std::vector<SubdomainName>>("ring_block_names")
                           : std::vector<SubdomainName>()),
-    _duct_sizes_style(getParam<MooseEnum>("duct_sizes_style").template getEnum<DuctStyle>()),
+    _duct_sizes_style(getParam<MooseEnum>("duct_sizes_style").template getEnum<PolygonSizeStyle>()),
     _duct_sizes(isParamValid("duct_sizes") ? getParam<std::vector<Real>>("duct_sizes")
                                            : std::vector<Real>()),
     _duct_intervals(isParamValid("duct_intervals")
@@ -283,8 +288,8 @@ PolygonConcentricCircleMeshGeneratorBase::PolygonConcentricCircleMeshGeneratorBa
     _has_ducts(isParamValid("duct_sizes")),
     _polygon_size_style(
         isParamValid("polygon_size_style")
-            ? getParam<MooseEnum>("polygon_size_style").template getEnum<PolygonStyle>()
-            : getParam<MooseEnum>("hexagon_size_style").template getEnum<PolygonStyle>()),
+            ? getParam<MooseEnum>("polygon_size_style").template getEnum<PolygonSizeStyle>()
+            : getParam<MooseEnum>("hexagon_size_style").template getEnum<PolygonSizeStyle>()),
     _polygon_size(isParamValid("polygon_size") ? getParam<Real>("polygon_size")
                                                : getParam<Real>("hexagon_size")),
     _num_sectors_per_side(getParam<std::vector<unsigned int>>("num_sectors_per_side")),
@@ -326,6 +331,8 @@ PolygonConcentricCircleMeshGeneratorBase::PolygonConcentricCircleMeshGeneratorBa
                                   : std::vector<std::string>()),
     _uniform_mesh_on_sides(getParam<bool>("uniform_mesh_on_sides")),
     _quad_center_elements(getParam<bool>("quad_center_elements")),
+    _center_quad_factor(isParamValid("center_quad_factor") ? getParam<Real>("center_quad_factor")
+                                                           : 0.0),
     _flat_side_up(declareMeshProperty<bool>("flat_side_up", getParam<bool>("flat_side_up"))),
     _smoothing_max_it(getParam<unsigned int>("smoothing_max_it")),
     _sides_to_adapt(isParamValid("sides_to_adapt")
@@ -343,7 +350,7 @@ PolygonConcentricCircleMeshGeneratorBase::PolygonConcentricCircleMeshGeneratorBa
   // classes will trigger this error.
   if (!_sides_to_adapt.empty() && _num_sides != HEXAGON_NUM_SIDES)
     paramError("sides_to_adapt", "If provided, the generated mesh must be a hexagon.");
-  _pitch = 2.0 * (_polygon_size_style == PolygonStyle::apothem
+  _pitch = 2.0 * (_polygon_size_style == PolygonSizeStyle::apothem
                       ? _polygon_size
                       : _polygon_size * std::cos(M_PI / Real(_num_sides)));
   _pitch_meta = _pitch;
@@ -467,7 +474,7 @@ PolygonConcentricCircleMeshGeneratorBase::PolygonConcentricCircleMeshGeneratorBa
                "duct_sizes.");
   if (_has_ducts)
   {
-    if (_duct_sizes_style == DuctStyle::apothem)
+    if (_duct_sizes_style == PolygonSizeStyle::apothem)
       for (unsigned int i = 0; i < _duct_sizes.size(); i++)
         _duct_sizes[i] /= std::cos(M_PI / Real(_num_sides));
     for (unsigned int i = 1; i < _duct_sizes.size(); i++)
@@ -482,7 +489,7 @@ PolygonConcentricCircleMeshGeneratorBase::PolygonConcentricCircleMeshGeneratorBa
                  "This parameter must ensure that ducts are smaller than the polygon size.");
     if (*std::min_element(_duct_intervals.begin(), _duct_intervals.end()) <= 0)
       paramError("duct_intervals", "Elements of this parameter must be positive.");
-    if (_duct_sizes_style == DuctStyle::apothem)
+    if (_duct_sizes_style == PolygonSizeStyle::apothem)
       for (unsigned int i = 0; i < _duct_sizes.size(); i++)
       {
         _duct_inner_boundary_layer_params.widths[i] /= std::cos(M_PI / Real(_num_sides));
@@ -539,16 +546,20 @@ PolygonConcentricCircleMeshGeneratorBase::PolygonConcentricCircleMeshGeneratorBa
         (_has_rings ? _ring_radii.back() : 0.0);
     if (_background_inner_boundary_layer_params.width +
             _background_outer_boundary_layer_params.width *
-                (_duct_sizes_style == DuctStyle::apothem ? 1.0
-                                                         : std::cos(M_PI / Real(_num_sides))) >=
+                (_duct_sizes_style == PolygonSizeStyle::apothem
+                     ? 1.0
+                     : std::cos(M_PI / Real(_num_sides))) >=
         min_background_thickness)
       paramError("background_inner_boundary_layer_width",
                  "The summation of background_inner_boundary_layer_width and "
                  "background_outer_boundary_layer_width must be less than the minimum thickness of "
                  "the background region.");
-    if (_duct_sizes_style == DuctStyle::apothem)
+    if (_duct_sizes_style == PolygonSizeStyle::apothem)
       _background_outer_boundary_layer_params.width /= std::cos(M_PI / Real(_num_sides));
   }
+  if (!_quad_center_elements && _center_quad_factor)
+    paramError("center_quad_factor",
+               "this parameter is only applicable if quad_center_elements is set true.");
 }
 
 std::unique_ptr<MeshBase>
@@ -633,8 +644,6 @@ PolygonConcentricCircleMeshGeneratorBase::generate()
                                 _duct_radial_biases,
                                 _duct_inner_boundary_layer_params,
                                 _duct_outer_boundary_layer_params,
-                                _has_rings,
-                                _has_ducts,
                                 _pitch,
                                 _num_sectors_per_side[0],
                                 _background_intervals,
@@ -647,6 +656,7 @@ PolygonConcentricCircleMeshGeneratorBase::generate()
                                 _azimuthal_angles_array[0],
                                 _block_id_shift,
                                 _quad_center_elements,
+                                _center_quad_factor,
                                 _interface_boundary_id_shift);
   // This loop builds add-on slices and stitches them to the first slice
   for (unsigned int mesh_index = 1; mesh_index < _num_sides; mesh_index++)
@@ -661,8 +671,6 @@ PolygonConcentricCircleMeshGeneratorBase::generate()
                                      _duct_radial_biases,
                                      _duct_inner_boundary_layer_params,
                                      _duct_outer_boundary_layer_params,
-                                     _has_rings,
-                                     _has_ducts,
                                      _pitch,
                                      _num_sectors_per_side[mesh_index],
                                      _background_intervals,
@@ -675,6 +683,7 @@ PolygonConcentricCircleMeshGeneratorBase::generate()
                                      _azimuthal_angles_array[mesh_index],
                                      _block_id_shift,
                                      _quad_center_elements,
+                                     _center_quad_factor,
                                      _interface_boundary_id_shift);
 
     ReplicatedMesh other_mesh(*mesh_tmp);

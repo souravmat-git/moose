@@ -104,7 +104,7 @@ loopOverMortarSegments(const Iterators & secondary_elems_to_mortar_segments,
     const auto & mp_deps = consumer->getMatPropDependencies();
     needed_mat_props.insert(mp_deps.begin(), mp_deps.end());
   }
-  fe_problem.setActiveMaterialProperties(needed_mat_props, /*tid=*/0);
+  fe_problem.setActiveMaterialProperties(needed_mat_props, /*tid=*/tid);
 
   // Loop through secondary elements, accumulating quadrature points for all corresponding mortar
   // segments

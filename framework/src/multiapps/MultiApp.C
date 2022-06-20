@@ -65,7 +65,7 @@ MultiApp::validParams()
   params.addParam<MooseEnum>("app_type",
                              app_types_options,
                              "The type of application to build (applications not "
-                             "registered can be loaded with dynamic libraries. Master "
+                             "registered can be loaded with dynamic libraries. Parent "
                              "application type will be used if not provided.");
   params.addParam<std::string>("library_path",
                                "",
@@ -121,8 +121,8 @@ MultiApp::validParams()
 
   params.addParam<Real>("global_time_offset",
                         0,
-                        "The time offset relative to the master application for the purpose of "
-                        "starting a subapp at different time from the master application. The "
+                        "The time offset relative to the parent application for the purpose of "
+                        "starting a subapp at different time from the parent application. The "
                         "global time will be ahead by the offset specified here.");
   params.addParam<Real>("reset_time",
                         std::numeric_limits<Real>::max(),
@@ -182,8 +182,12 @@ MultiApp::validParams()
       "List of subapp postprocessors to use coupling "
       "algorithm on during Multiapp coupling iterations");
 
+  params.addDeprecatedParam<bool>("clone_master_mesh",
+                                  false,
+                                  "True to clone parent app mesh and use it for this MultiApp.",
+                                  "clone_master_mesh is deprecated, use clone_parent_mesh instead");
   params.addParam<bool>(
-      "clone_master_mesh", false, "True to clone master mesh and use it for this MultiApp.");
+      "clone_parent_mesh", false, "True to clone parent app mesh and use it for this MultiApp.");
 
   params.addParam<bool>("keep_solution_during_restore",
                         false,
@@ -198,12 +202,12 @@ MultiApp::validParams()
   params.declareControllable("cli_args", {EXEC_PRE_MULTIAPP_SETUP});
   params.registerBase("MultiApp");
 
-  params.addParamNamesToGroup("reset_time reset_apps", "Reset MultiApp parameters");
-  params.addParamNamesToGroup("move_time move_apps move_positions",
-                              "Timed move of MultiApps parameters");
+  params.addParamNamesToGroup("reset_time reset_apps", "Reset MultiApp");
+  params.addParamNamesToGroup("move_time move_apps move_positions", "Timed move of MultiApps");
   params.addParamNamesToGroup("relaxation_factor transformed_variables transformed_postprocessors",
                               "Fixed point acceleration of MultiApp quantities");
-
+  params.addParamNamesToGroup("library_name library_path", "Dynamic loading");
+  params.addParamNamesToGroup("cli_args cli_args_files", "Passing command line argument");
   return params;
 }
 
@@ -284,6 +288,16 @@ MultiApp::init(unsigned int num_apps, const LocalRankConfig & config)
   if ((_cli_args.size() > 1) && (_total_num_apps != _cli_args.size()))
     paramError("cli_args",
                "The number of items supplied must be 1 or equal to the number of sub apps.");
+
+  // if cliArgs() != _cli_args, then cliArgs() was overridden and we need to check it
+  auto cla = cliArgs();
+  if (cla != _cli_args)
+  {
+    if ((cla.size() > 1) && (_total_num_apps != cla.size()))
+      mooseError("The number of items supplied as command line argument to subapps must be 1 or "
+                 "equal to the number of sub apps. Note: you use a multiapp that provides its own "
+                 "command line parameters so the error is not in cli_args");
+  }
 }
 
 void
@@ -426,8 +440,8 @@ MultiApp::readCommandLineArguments()
                "number of sub apps ",
                _total_num_apps);
 
-  if (_cli_args_from_file.size() && _cli_args.size())
-    mooseError("Can not set commandLine arguments from both input_file and external files");
+  if (_cli_args_from_file.size() && cliArgs().size())
+    mooseError("Cannot set commandLine arguments from both input_file and external files");
 }
 
 void
@@ -638,7 +652,7 @@ MultiApp::keepSolutionDuringRestore(bool keep_solution_during_restore)
 {
   if (_pars.isParamSetByUser("keep_solution_during_restore"))
     paramError("keep_solution_during_restore",
-               "This parameter should be provided in only master app");
+               "This parameter should only be provided in parent app");
 
   _keep_solution_during_restore = keep_solution_during_restore;
 }
@@ -842,7 +856,7 @@ MultiApp::createApp(unsigned int i, Real start_time)
   app_cli->initForMultiApp(full_name);
   app_params.set<std::shared_ptr<CommandLine>>("_command_line") = app_cli;
 
-  if (_cli_args.size() > 0 || _cli_args_from_file.size() > 0)
+  if (cliArgs().size() > 0 || _cli_args_from_file.size() > 0)
   {
     for (const std::string & str : MooseUtils::split(getCommandLineArgsParamHelper(i), ";"))
     {
@@ -859,10 +873,10 @@ MultiApp::createApp(unsigned int i, Real start_time)
              << COLOR_DEFAULT << std::endl;
   app_params.set<unsigned int>("_multiapp_level") = _app.multiAppLevel() + 1;
   app_params.set<unsigned int>("_multiapp_number") = _first_local_app + i;
-  if (getParam<bool>("clone_master_mesh"))
+  if (getParam<bool>("clone_master_mesh") || getParam<bool>("clone_parent_mesh"))
   {
     if (_fe_problem.verboseMultiApps())
-      _console << COLOR_CYAN << "Cloned master mesh will be used for MultiApp " << name()
+      _console << COLOR_CYAN << "Cloned parent app mesh will be used for MultiApp " << name()
                << COLOR_DEFAULT << std::endl;
     app_params.set<const MooseMesh *>("_master_mesh") = &_fe_problem.mesh();
     auto displaced_problem = _fe_problem.getDisplacedProblem();
@@ -898,8 +912,9 @@ MultiApp::createApp(unsigned int i, Real start_time)
   app->setupOptions();
   // if multiapp does not have file base in Outputs input block, output file base will
   // be empty here since setupOptions() does not set the default file base with the multiapp
-  // input file name. Master will create the default file base for multiapp by taking the
-  // output base of the master problem and appending the name of the multiapp plus a number to it
+  // input file name. Parent app will create the default file base for multiapp by taking the
+  // output base of the parent app problem and appending the name of the multiapp plus a number to
+  // it
   if (app->getOutputFileBase().empty())
     app->setOutputFileBase(_app.getOutputFileBase() + "_" + multiapp_name.str());
   preRunInputFile();
@@ -924,18 +939,18 @@ MultiApp::createApp(unsigned int i, Real start_time)
 std::string
 MultiApp::getCommandLineArgsParamHelper(unsigned int local_app)
 {
+  auto cla = cliArgs();
 
-  mooseAssert(_cli_args.size() || _cli_args_from_file.size(),
-              "There is no commandLine argument \n");
+  mooseAssert(cla.size() || _cli_args_from_file.size(), "There is no commandLine argument \n");
 
   // Single set of "cli_args" to be applied to all sub apps
-  if (_cli_args.size() == 1)
-    return _cli_args[0];
+  if (cla.size() == 1)
+    return cla[0];
   else if (_cli_args_from_file.size() == 1)
     return _cli_args_from_file[0];
-  else if (_cli_args.size())
+  else if (cla.size())
     // Unique set of "cli_args" to be applied to each sub apps
-    return _cli_args[local_app + _first_local_app];
+    return cla[local_app + _first_local_app];
   else
     return _cli_args_from_file[local_app + _first_local_app];
 }

@@ -1523,7 +1523,7 @@ MooseMesh::detectOrthogonalDimRanges(Real tol)
   for (const auto & node : getMesh().node_ptr_range())
     // Check all coordinates, we don't know if this mesh might be lying in a higher dim even if the
     // mesh dimension is lower.
-    for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+    for (const auto i : make_range(Moose::dim))
     {
       if ((*node)(i) < min[i])
         min[i] = (*node)(i);
@@ -1543,7 +1543,7 @@ MooseMesh::detectOrthogonalDimRanges(Real tol)
     // See if the current node is located at one of the extremes
     unsigned int coord_match = 0;
 
-    for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+    for (const auto i : make_range(Moose::dim))
     {
       if (std::abs((*node)(i)-min[i]) < tol)
       {
@@ -1571,7 +1571,7 @@ MooseMesh::detectOrthogonalDimRanges(Real tol)
 
   // Set the bounds
   _bounds.resize(LIBMESH_DIM);
-  for (unsigned int i = 0; i < LIBMESH_DIM; ++i)
+  for (const auto i : make_range(Moose::dim))
   {
     _bounds[i].resize(2);
     _bounds[i][MIN] = min[i];
@@ -3374,25 +3374,6 @@ MooseMesh::cacheVarIndicesByFace(const std::vector<const MooseVariableBase *> & 
       // ID. If ANY_BLOCK_ID is in var_subdomains, inject all subdomains explicitly
       if (var_subdomains.find(Moose::ANY_BLOCK_ID) != var_subdomains.end())
         var_subdomains = this->meshSubdomains();
-
-      // first stash away DoF information; this is more difficult than you would
-      // think because var can be defined on the elem subdomain, the neighbor subdomain
-      // or both subdomains
-      // elem
-      std::vector<dof_id_type> elem_dof_indices;
-      if (var_subdomains.find(elem_subdomain_id) != var_subdomains.end())
-        var->getDofIndices(&elem_elem, elem_dof_indices);
-      else
-        elem_dof_indices = {libMesh::DofObject::invalid_id};
-      face.elemDofIndices(var_name) = elem_dof_indices;
-      // neighbor
-      std::vector<dof_id_type> neighbor_dof_indices;
-      if (neighbor_elem && neighbor_elem != remote_elem &&
-          var_subdomains.find(neighbor_subdomain_id) != var_subdomains.end())
-        var->getDofIndices(neighbor_elem, neighbor_dof_indices);
-      else
-        neighbor_dof_indices = {libMesh::DofObject::invalid_id};
-      face.neighborDofIndices(var_name) = neighbor_dof_indices;
 
       /**
        * The following paragraph of code assigns the VarFaceNeighbors

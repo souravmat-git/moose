@@ -99,6 +99,9 @@
 #include "ADUtils.h"
 #include "Executioner.h"
 #include "VariadicTable.h"
+#include "BoundaryNodeIntegrityCheckThread.h"
+#include "BoundaryElemIntegrityCheckThread.h"
+#include "NodalBCBase.h"
 
 #include "libmesh/exodusII_io.h"
 #include "libmesh/quadrature.h"
@@ -180,6 +183,16 @@ FEProblemBase::validParams()
       "rz_coord_axis", rz_coord_axis, "The rotation axis (X | Y) for axisymetric coordinates");
   params.addParam<bool>(
       "kernel_coverage_check", true, "Set to false to disable kernel->subdomain coverage check");
+  params.addParam<bool>(
+      "boundary_restricted_node_integrity_check",
+      true,
+      "Set to false to disable checking of boundary restricted nodal object variable dependencies, "
+      "e.g. are the variable dependencies defined on the selected boundaries?");
+  params.addParam<bool>("boundary_restricted_elem_integrity_check",
+                        true,
+                        "Set to false to disable checking of boundary restricted elemental object "
+                        "variable dependencies, e.g. are the variable dependencies defined on the "
+                        "selected boundaries?");
   params.addParam<bool>("material_coverage_check",
                         true,
                         "Set to false to disable material->subdomain coverage check");
@@ -287,6 +300,10 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
     _has_nonlocal_coupling(false),
     _calculate_jacobian_in_uo(false),
     _kernel_coverage_check(getParam<bool>("kernel_coverage_check")),
+    _boundary_restricted_node_integrity_check(
+        getParam<bool>("boundary_restricted_node_integrity_check")),
+    _boundary_restricted_elem_integrity_check(
+        getParam<bool>("boundary_restricted_elem_integrity_check")),
     _material_coverage_check(getParam<bool>("material_coverage_check")),
     _fv_bcs_integrity_check(getParam<bool>("fv_bcs_integrity_check")),
     _material_dependency_check(getParam<bool>("material_dependency_check")),
@@ -730,8 +747,9 @@ FEProblemBase::initialSetup()
   std::set<std::string> depend_objects_aux = _aux->getDependObjects();
 
   // This replaces all prior updateDependObjects calls on the old user object warehouses.
+  TheWarehouse::Query uo_query = theWarehouse().query().condition<AttribSystem>("UserObject");
   std::vector<UserObject *> userobjs;
-  theWarehouse().query().condition<AttribSystem>("UserObject").queryInto(userobjs);
+  uo_query.queryInto(userobjs);
   groupUserObjects(
       theWarehouse(), getAuxiliarySystem(), _app.getExecuteOnEnum(), userobjs, depend_objects_ic);
 
@@ -985,6 +1003,61 @@ FEProblemBase::initialSetup()
     }
   }
 
+  if (_boundary_restricted_node_integrity_check)
+  {
+    TIME_SECTION("BoundaryRestrictedNodeIntegrityCheck", 5);
+
+    // check that variables are defined along boundaries of boundary restricted nodal objects
+    ConstBndNodeRange & bnd_nodes = *mesh().getBoundaryNodeRange();
+    BoundaryNodeIntegrityCheckThread bnict(*this, uo_query);
+    Threads::parallel_reduce(bnd_nodes, bnict);
+
+    // Nodal bcs aren't threaded
+    const auto & nodal_bcs = _nl->getNodalBCWarehouse();
+    const auto & node_to_elem_map = _mesh.nodeToActiveSemilocalElemMap();
+    for (const auto & bnode : bnd_nodes)
+    {
+      const auto boundary_id = bnode->_bnd_id;
+      const Node * const node = bnode->_node;
+
+      if (node->processor_id() != this->processor_id() ||
+          !nodal_bcs.hasBoundaryObjects(boundary_id, 0))
+        continue;
+
+      // Only check vertices. Variables may not be defined on non-vertex nodes (think first order
+      // Lagrange on a second order mesh) and user-code can often handle that
+      const Elem * const an_elem =
+          _mesh.getMesh().elem_ptr(libmesh_map_find(node_to_elem_map, node->id()).front());
+      if (!an_elem->is_vertex(an_elem->get_node_index(node)))
+        continue;
+
+      const auto & bnd_name = _mesh.getBoundaryName(boundary_id);
+
+      const auto & bnd_objects = nodal_bcs.getBoundaryObjects(boundary_id, 0);
+      for (const auto & bnd_object : bnd_objects)
+        // Skip if this object uses geometric search because coupled variables may be defined on
+        // paired boundaries instead of the boundary this node is on
+        if (!bnd_object->requiresGeometricSearch() && bnd_object->checkVariableBoundaryIntegrity())
+        {
+          std::set<MooseVariableFieldBase *> vars_to_omit = {&static_cast<MooseVariableFieldBase &>(
+              const_cast<MooseVariableBase &>(bnd_object->variable()))};
+
+          boundaryIntegrityCheckError(
+              *bnd_object, bnd_object->checkAllVariables(*node, vars_to_omit), bnd_name);
+        }
+    }
+  }
+
+  if (_boundary_restricted_elem_integrity_check)
+  {
+    TIME_SECTION("BoundaryRestrictedElemIntegrityCheck", 5);
+
+    // check that variables are defined along boundaries of boundary restricted elemental objects
+    ConstBndElemRange & bnd_elems = *mesh().getBoundaryElementRange();
+    BoundaryElemIntegrityCheckThread beict(*this, uo_query);
+    Threads::parallel_reduce(bnd_elems, beict);
+  }
+
   if (!_app.isRecovering())
   {
     execTransfers(EXEC_INITIAL);
@@ -1158,7 +1231,7 @@ FEProblemBase::timestepSetup()
   }
 
   std::vector<UserObject *> userobjs;
-  theWarehouse().query().condition<AttribSystem>("UserObject").queryInto(userobjs);
+  theWarehouse().query().condition<AttribSystem>("UserObject").queryIntoUnsorted(userobjs);
   for (auto obj : userobjs)
     obj->timestepSetup();
 
@@ -3712,12 +3785,6 @@ FEProblemBase::execute(const ExecFlagType & exec_type)
 {
   // Set the current flag
   setCurrentExecuteOnFlag(exec_type);
-  if (exec_type == EXEC_NONLINEAR)
-  {
-    _currently_computing_jacobian = true;
-    if (_displaced_problem)
-      _displaced_problem->setCurrentlyComputingJacobian(true);
-  }
 
   if (exec_type != EXEC_INITIAL)
     executeControls(exec_type);
@@ -3741,9 +3808,6 @@ FEProblemBase::execute(const ExecFlagType & exec_type)
 
   // Return the current flag to None
   setCurrentExecuteOnFlag(EXEC_NONE);
-  _currently_computing_jacobian = false;
-  if (_displaced_problem)
-    _displaced_problem->setCurrentlyComputingJacobian(false);
 }
 
 void
@@ -5417,6 +5481,172 @@ FEProblemBase::computeResidual(const NumericVector<Number> & soln, NumericVector
     _fe_vector_tags.insert(residual_vector_tag._id);
 
   computeResidualInternal(soln, residual, _fe_vector_tags);
+}
+
+void
+FEProblemBase::computeResidualAndJacobian(const NumericVector<Number> & soln,
+                                          NumericVector<Number> & residual,
+                                          SparseMatrix<Number> & jacobian)
+{
+  // vector tags
+  {
+    const auto & residual_vector_tags = getVectorTags(Moose::VECTOR_TAG_RESIDUAL);
+
+    _fe_vector_tags.clear();
+
+    for (const auto & residual_vector_tag : residual_vector_tags)
+      _fe_vector_tags.insert(residual_vector_tag._id);
+  }
+
+  // matrix tags
+  {
+    _fe_matrix_tags.clear();
+
+    auto & tags = getMatrixTags();
+    for (auto & tag : tags)
+      _fe_matrix_tags.insert(tag.second);
+  }
+
+  try
+  {
+    _nl->setSolution(soln);
+
+    _nl->associateVectorToTag(residual, _nl->residualVectorTag());
+    _nl->associateMatrixToTag(jacobian, _nl->systemMatrixTag());
+
+    for (const auto tag : _fe_matrix_tags)
+      if (_nl->hasMatrix(tag))
+      {
+        auto & matrix = _nl->getMatrix(tag);
+        matrix.zero();
+#ifdef MOOSE_GLOBAL_AD_INDEXING
+        if (haveADObjects())
+          // PETSc algorithms require diagonal allocations regardless of whether there is non-zero
+          // diagonal dependence. With global AD indexing we only add non-zero
+          // dependence, so PETSc will scream at us unless we artificially add the diagonals.
+          for (auto index : make_range(matrix.row_start(), matrix.row_stop()))
+            matrix.add(index, index, 0);
+#endif
+      }
+
+    _nl->zeroVariablesForResidual();
+    _aux->zeroVariablesForResidual();
+
+    unsigned int n_threads = libMesh::n_threads();
+
+    _current_execute_on_flag = EXEC_LINEAR;
+
+    // Random interface objects
+    for (const auto & it : _random_data_objects)
+      it.second->updateSeeds(EXEC_LINEAR);
+
+    _currently_computing_residual_and_jacobian = true;
+    if (_displaced_problem)
+      _displaced_problem->setCurrentlyComputingResidualAndJacobian(true);
+
+    execTransfers(EXEC_LINEAR);
+
+    execMultiApps(EXEC_LINEAR);
+
+    for (unsigned int tid = 0; tid < n_threads; tid++)
+      reinitScalars(tid);
+
+    computeUserObjects(EXEC_LINEAR, Moose::PRE_AUX);
+
+    _aux->residualSetup();
+
+    if (_displaced_problem)
+    {
+      _aux->compute(EXEC_PRE_DISPLACE);
+      try
+      {
+        try
+        {
+          _displaced_problem->updateMesh();
+          if (_mortar_data.hasDisplacedObjects())
+            updateMortarMesh();
+        }
+        catch (libMesh::LogicError & e)
+        {
+          throw MooseException("We caught a libMesh error in FEProblemBase");
+        }
+      }
+      catch (MooseException & e)
+      {
+        setException(e.what());
+      }
+      try
+      {
+        // Propagate the exception to all processes if we had one
+        checkExceptionAndStopSolve();
+      }
+      catch (MooseException &)
+      {
+        // Just end now. We've inserted our NaN into the residual vector
+        return;
+      }
+    }
+
+    for (THREAD_ID tid = 0; tid < n_threads; tid++)
+    {
+      _all_materials.residualSetup(tid);
+      _functions.residualSetup(tid);
+    }
+
+    _nl->computeTimeDerivatives();
+
+    try
+    {
+      _aux->compute(EXEC_LINEAR);
+    }
+    catch (MooseException & e)
+    {
+      _console << "\nA MooseException was raised during Auxiliary variable computation.\n"
+               << "The next solve will fail, the timestep will be reduced, and we will try again.\n"
+               << std::endl;
+
+      // We know the next solve is going to fail, so there's no point in
+      // computing anything else after this.  Plus, using incompletely
+      // computed AuxVariables in subsequent calculations could lead to
+      // other errors or unhandled exceptions being thrown.
+      return;
+    }
+
+    computeUserObjects(EXEC_LINEAR, Moose::POST_AUX);
+
+    executeControls(EXEC_LINEAR);
+
+    _current_execute_on_flag = EXEC_NONE;
+
+    _app.getOutputWarehouse().residualSetup();
+
+    _safe_access_tagged_vectors = false;
+    _safe_access_tagged_matrices = false;
+
+    _nl->computeResidualAndJacobianTags(_fe_vector_tags, _fe_matrix_tags);
+
+    _safe_access_tagged_vectors = true;
+    _safe_access_tagged_matrices = true;
+
+    _nl->disassociateMatrixFromTag(jacobian, _nl->systemMatrixTag());
+    _nl->disassociateVectorFromTag(residual, _nl->residualVectorTag());
+
+    _currently_computing_residual_and_jacobian = false;
+    if (_displaced_problem)
+      _displaced_problem->setCurrentlyComputingResidualAndJacobian(false);
+  }
+  catch (MooseException & e)
+  {
+    // If a MooseException propagates all the way to here, it means
+    // that it was thrown from a MOOSE system where we do not
+    // (currently) properly support the throwing of exceptions, and
+    // therefore we have no choice but to error out.  It may be
+    // *possible* to handle exceptions from other systems, but in the
+    // meantime, we don't want to silently swallow any unhandled
+    // exceptions here.
+    mooseError("An unhandled MooseException was raised during residual computation.  Please "
+               "contact the MOOSE team for assistance.");
+  }
 }
 
 void
