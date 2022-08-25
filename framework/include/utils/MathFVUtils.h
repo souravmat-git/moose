@@ -258,7 +258,7 @@ skewCorrectedLinearInterpolation(const T & value1,
   const auto coeffs = interpCoeffs(InterpMethod::SkewCorrectedAverage, fi, one_is_elem);
 
   auto value = (coeffs.first * value1 + coeffs.second * value2) +
-               face_gradient * (fi.faceCentroid() - fi.rIntersection());
+               face_gradient * fi.skewnessCorrectionVector();
   return value;
 }
 
@@ -461,10 +461,8 @@ interpCoeffs(const Limiter<T> & limiter,
              const bool fi_elem_is_upwind)
 {
   // Using beta, w_f, g nomenclature from Greenshields
-  const auto beta = limiter(phi_upwind,
-                            phi_downwind,
-                            grad_phi_upwind,
-                            fi_elem_is_upwind ? fi.dCF() : RealVectorValue(-fi.dCF()));
+  const auto beta = limiter(
+      phi_upwind, phi_downwind, grad_phi_upwind, fi_elem_is_upwind ? fi.dCN() : Point(-fi.dCN()));
 
   const auto w_f = fi_elem_is_upwind ? fi.gC() : (1. - fi.gC());
 
@@ -651,7 +649,7 @@ containerInterpolate(const FunctorBase<T> & functor, const FaceArg & face)
   if (face.limiter_type == LimiterType::Upwind ||
       face.limiter_type == LimiterType::CentralDifference)
   {
-    for (const auto i : make_range(ret.size()))
+    for (const auto i : index_range(ret))
     {
       const auto &component_upwind = phi_upwind[i], component_downwind = phi_downwind[i];
       std::tie(coeff_upwind, coeff_downwind) = interpCoeffs(*limiter,
@@ -666,7 +664,7 @@ containerInterpolate(const FunctorBase<T> & functor, const FaceArg & face)
   else
   {
     const auto grad_phi_upwind = functor.gradient(upwind_arg);
-    for (const auto i : make_range(ret.size()))
+    for (const auto i : index_range(ret))
     {
       const auto &component_upwind = phi_upwind[i], component_downwind = phi_downwind[i];
       const auto & grad = grad_phi_upwind[i];

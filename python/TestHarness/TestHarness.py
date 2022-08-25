@@ -740,10 +740,12 @@ class TestHarness:
                 for jobs, dag, thread_lock in self.scheduler.retrieveDAGs():
                     original_dag = dag.getOriginalDAG()
                     total_time = float(0.0)
+                    tester = None
                     for tester in dag.topological_sort(original_dag):
                         if not tester.isSkip():
                             total_time += tester.getTiming()
-                    tester_dirs[tester.getTestDir()] = (tester_dirs.get(tester.getTestDir(), 0) + total_time)
+                    if tester is not None:
+                        tester_dirs[tester.getTestDir()] = (tester_dirs.get(tester.getTestDir(), 0) + total_time)
                 for k, v in tester_dirs.items():
                     rel_spec_path = f'{os.path.sep}'.join(k.split(os.path.sep)[-2:])
                     dag_table.append([f'{rel_spec_path}{os.path.sep}{self._infiles[0]}', f'{v:.3f}'])
@@ -1017,7 +1019,7 @@ class TestHarness:
         parser.add_argument('--error', action='store_true', help='Run the tests with warnings as errors (Pass "--error" to executable)')
         parser.add_argument('--error-unused', action='store_true', help='Run the tests with errors on unused parameters (Pass "--error-unused" to executable)')
         parser.add_argument('--error-deprecated', action='store_true', help='Run the tests with errors on deprecations')
-
+        parser.add_argument('--warn-unused',action='store_true', help='Run the tests without errors on unused parameters (Pass "--warn-unused" to executable)')
         # Option to use for passing unwrapped options to the executable
         parser.add_argument('--cli-args', nargs='?', type=str, dest='cli_args', help='Append the following list of arguments to the command line (Encapsulate the command in quotes)')
 
@@ -1036,6 +1038,7 @@ class TestHarness:
         outputgroup.add_argument('-a', '--sep-files-fail', action='store_true', dest='fail_files', help='Write the output of each FAILED test to a separate file. Only quiet output to terminal.')
         outputgroup.add_argument('--include-input-file', action='store_true', dest='include_input', help='Include the contents of the input file when writing the results of a test to a file')
         outputgroup.add_argument("--testharness-unittest", action="store_true", help="Run the TestHarness unittests that test the TestHarness.")
+        outputgroup.add_argument("--json", action="store_true", dest="json", help="Dump the parameters for the testers in JSON Format")
         outputgroup.add_argument("--yaml", action="store_true", dest="yaml", help="Dump the parameters for the testers in Yaml Format")
         outputgroup.add_argument("--dump", action="store_true", dest="dump", help="Dump the parameters for the testers in GetPot Format")
         outputgroup.add_argument("--no-trimmed-output", action="store_true", dest="no_trimmed_output", help="Do not trim the output")
@@ -1152,7 +1155,10 @@ class TestHarness:
         return
 
     def preRun(self):
-        if self.options.yaml:
+        if self.options.json:
+            self.factory.printJSON("Tests")
+            sys.exit(0)
+        elif self.options.yaml:
             self.factory.printYaml("Tests")
             sys.exit(0)
         elif self.options.dump:

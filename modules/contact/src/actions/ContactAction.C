@@ -33,6 +33,7 @@ static unsigned int contact_userobject_counter = 0;
 registerMooseAction("ContactApp", ContactAction, "append_mesh_generator");
 registerMooseAction("ContactApp", ContactAction, "add_aux_variable");
 // for mortar Lagrange multiplier
+registerMooseAction("ContactApp", ContactAction, "add_contact_aux_variable");
 registerMooseAction("ContactApp", ContactAction, "add_mortar_variable");
 registerMooseAction("ContactApp", ContactAction, "add_aux_kernel");
 // for mortar constraint
@@ -171,7 +172,9 @@ ContactAction::validParams()
       "newmark_gamma",
       0.5,
       "Newmark-beta gamma parameter for its inclusion in the weighted gap update formula");
-
+  params.addCoupledVar("wear_depth",
+                       "The name of the mortar auxiliary variable that is used to modify the "
+                       "weighted gap definition");
   return params;
 }
 
@@ -255,7 +258,7 @@ void
 ContactAction::act()
 {
   // proform problem checks/corrections once during the first feasible task
-  if (_current_task == "add_aux_variable")
+  if (_current_task == "add_contact_aux_variable")
   {
     if (!_problem->getDisplacedProblem())
       mooseError(
@@ -384,7 +387,7 @@ ContactAction::act()
     }
   }
 
-  if (_current_task == "add_aux_variable")
+  if (_current_task == "add_contact_aux_variable")
   {
     std::vector<VariableName> displacements = getParam<std::vector<VariableName>>("displacements");
     const auto order =
@@ -579,6 +582,8 @@ ContactAction::addMortarContact()
         params.set<Real>("newmark_beta") = getParam<Real>("newmark_beta");
         params.set<Real>("newmark_gamma") = getParam<Real>("newmark_gamma");
         params.set<Real>("capture_tolerance") = getParam<Real>("capture_tolerance");
+        if (isParamValid("wear_depth"))
+          params.set<CoupledName>("wear_depth") = getParam<CoupledName>("wear_depth");
       }
 
       params.set<bool>("correct_edge_dropping") = _correct_edge_dropping;
@@ -620,6 +625,8 @@ ContactAction::addMortarContact()
         params.set<Real>("newmark_beta") = getParam<Real>("newmark_beta");
         params.set<Real>("newmark_gamma") = getParam<Real>("newmark_gamma");
         params.set<Real>("capture_tolerance") = getParam<Real>("capture_tolerance");
+        if (isParamValid("wear_depth"))
+          params.set<CoupledName>("wear_depth") = getParam<CoupledName>("wear_depth");
       }
       params.set<bool>("correct_edge_dropping") = _correct_edge_dropping;
 

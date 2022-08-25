@@ -44,7 +44,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   // This registers an action to add the "secondary_flux" vector to the system at the right time
   registerTask("add_secondary_flux_vector", false);
   addTaskDependency("add_secondary_flux_vector", "ready_to_init");
-  addTaskDependency("init_problem", "add_secondary_flux_vector");
+  addTaskDependency("setup_dampers", "add_secondary_flux_vector");
 
   registerSyntaxTask("ThermalContactAction", "ThermalContact/*", "add_aux_kernel");
   registerSyntaxTask("ThermalContactAction", "ThermalContact/*", "add_aux_variable");
@@ -111,7 +111,7 @@ HeatConductionApp::associateSyntax(Syntax & syntax, ActionFactory & action_facto
 void
 HeatConductionApp::registerExecFlags(Factory & /*factory*/)
 {
-  mooseDeprecated("use registerAll instead of registerExecFlags");
+  mooseDeprecated("Do not use registerExecFlags, apps no longer require flag registration");
 }
 
 extern "C" void

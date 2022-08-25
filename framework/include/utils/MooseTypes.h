@@ -25,6 +25,8 @@
 #include "libmesh/petsc_macro.h"
 #include "libmesh/boundary_info.h"
 #include "libmesh/parameters.h"
+#include "libmesh/dense_vector.h"
+#include "libmesh/int_range.h"
 
 // BOOST include
 #include "bitmask_operators.h"
@@ -221,12 +223,12 @@ namespace Moose
 const size_t constMaxQpsPerElem = 216;
 
 // These are used by MooseVariableData and MooseVariableDataFV
-enum SolutionState
+enum SolutionState : int
 {
-  Current,
-  Old,
-  Older,
-  PreviousNL
+  Current = 0,
+  Old = 1,
+  Older = 2,
+  PreviousNL = -1
 };
 // These are used by MooseVariableData and MooseVariableDataFV
 enum GeometryType
@@ -421,7 +423,6 @@ struct ADType<VariableSecond>
 {
   typedef ADVariableSecond type;
 };
-
 } // namespace Moose
 
 /**
@@ -493,6 +494,9 @@ template <bool is_ad>
 using GenericVariableGradient = typename Moose::GenericType<VariableGradient, is_ad>;
 template <bool is_ad>
 using GenericVariableSecond = typename Moose::GenericType<VariableSecond, is_ad>;
+template <bool is_ad>
+using GenericDenseVector =
+    typename std::conditional<is_ad, DenseVector<ADReal>, DenseVector<Real>>::type;
 
 // Should be removed with #19439
 #define defineLegacyParams(ObjectType)                                                             \
@@ -953,3 +957,10 @@ extern const TagName OLD_SOLUTION_TAG;
 extern const TagName OLDER_SOLUTION_TAG;
 extern const TagName PREVIOUS_NL_SOLUTION_TAG;
 }
+
+/// macros for adding Tensor index enums locally
+#define usingTensorIndices(...)                                                                    \
+  enum                                                                                             \
+  {                                                                                                \
+    __VA_ARGS__                                                                                    \
+  }

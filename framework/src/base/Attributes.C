@@ -27,8 +27,12 @@
 #include "ShapeElementUserObject.h"
 #include "Reporter.h"
 #include "SystemBase.h"
+#include "DomainUserObject.h"
+#include "ExecFlagRegistry.h"
 
 #include <algorithm>
+
+const ExecFlagType AttribExecOns::EXEC_ALL = registerExecFlag("ALL");
 
 std::ostream &
 operator<<(std::ostream & os, Interfaces & iface)
@@ -60,6 +64,8 @@ operator<<(std::ostream & os, Interfaces & iface)
     os << "|InterfaceUserObject";
   if (static_cast<bool>(iface & Interfaces::Reporter))
     os << "|Reporter";
+  if (static_cast<bool>(iface & Interfaces::DomainUserObject))
+    os << "|DomainUserObject";
   os << ")";
   return os;
 }
@@ -121,13 +127,12 @@ void
 AttribExecOns::initFrom(const MooseObject * obj)
 {
   _vals.clear();
-  auto sup = dynamic_cast<const SetupInterface *>(obj);
-  if (sup)
+  if (const auto sup = dynamic_cast<const SetupInterface *>(obj))
   {
-    auto e = sup->getExecuteOnEnum();
-    for (auto & on : e.items())
-      if (e.contains(on))
-        _vals.push_back(on);
+    const auto & current_items = sup->getExecuteOnEnum();
+    _vals.reserve(current_items.size());
+    for (auto & on : current_items)
+      _vals.push_back(on);
   }
 }
 
@@ -135,14 +140,14 @@ bool
 AttribExecOns::isMatch(const Attribute & other) const
 {
   auto a = dynamic_cast<const AttribExecOns *>(&other);
-  if (!a || a->_vals.size() < 1)
+  if (!a || a->_vals.empty())
     return false;
   auto cond = a->_vals[0];
-  if (cond == Moose::ALL)
+  if (cond == EXEC_ALL)
     return true;
 
-  for (auto val : _vals)
-    if (val == Moose::ALL || val == cond)
+  for (const auto val : _vals)
+    if (val == EXEC_ALL || val == cond)
       return true;
   return false;
 }
@@ -467,6 +472,7 @@ AttribInterfaces::initFrom(const MooseObject * obj)
   _val |= (unsigned int)Interfaces::BlockRestrictable         * (dynamic_cast<const BlockRestrictable *>(obj) != nullptr);
   _val |= (unsigned int)Interfaces::BoundaryRestrictable      * (dynamic_cast<const BoundaryRestrictable *>(obj) != nullptr);
   _val |= (unsigned int)Interfaces::Reporter                  * (dynamic_cast<const Reporter *>(obj) != nullptr);
+  _val |= (unsigned int)Interfaces::DomainUserObject          * (dynamic_cast<const DomainUserObject *>(obj) != nullptr);
   // clang-format on
 }
 

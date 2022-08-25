@@ -79,6 +79,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
 
   registerTask("validate_coordinate_systems", /*is_required=*/false);
   addTaskDependency("validate_coordinate_systems", "create_problem_complete");
+  addTaskDependency("setup_postprocessor_data", "validate_coordinate_systems");
 }
 
 void
@@ -114,7 +115,7 @@ TensorMechanicsApp::associateSyntax(Syntax & syntax, ActionFactory & action_fact
 void
 TensorMechanicsApp::registerExecFlags(Factory & /*factory*/)
 {
-  mooseDeprecated("use registerAll instead of registerExecFlags");
+  mooseDeprecated("Do not use registerExecFlags, apps no longer require flag registration");
 }
 
 extern "C" void

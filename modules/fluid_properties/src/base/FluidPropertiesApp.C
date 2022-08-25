@@ -44,7 +44,12 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerMooseObjectTask("add_fp_output", Output, false);
 
   syntax.addDependency("add_fluid_properties", "init_displaced_problem");
+  syntax.addDependency("add_aux_variable", "add_fluid_properties");
+  syntax.addDependency("add_variable", "add_fluid_properties");
+  syntax.addDependency("add_elemental_field_variable", "add_fluid_properties");
+  syntax.addDependency("add_external_aux_variables", "add_fluid_properties");
   syntax.addDependency("add_fp_output", "add_output");
+  syntax.addDependency("add_postprocessor", "add_fp_output");
 
   syntax.registerActionSyntax("AddFluidPropertiesInterrogatorAction",
                               "FluidPropertiesInterrogator");
@@ -76,7 +81,7 @@ FluidPropertiesApp::associateSyntax(Syntax & syntax, ActionFactory & action_fact
 void
 FluidPropertiesApp::registerExecFlags(Factory & /*factory*/)
 {
-  mooseDeprecated("use registerAll instead of registerExecFlags");
+  mooseDeprecated("Do not use registerExecFlags, apps no longer require flag registration");
 }
 
 extern "C" void

@@ -20,31 +20,27 @@
 #include "PetscSupport.h"
 #include "Syntax.h"
 #include "MooseSyntax.h"
+#include "ExecFlagRegistry.h"
 
 #include <unistd.h>
 
-// Define the available execute flags for MOOSE. The flags using a hex value are setup to retain the
-// same numbers that were utilized with older versions of MOOSE for keeping existing applications
-// working using the deprecated flags. In the future, as in the EXEC_SAME_AS_MULTIAPP flag, there is
-// no reason to keep these flags bitwise comparable or to assigned an id because the MultiMooseEnum
-// that is used to store these has convenience methods for determining the what flags are active.
-const ExecFlagType EXEC_NONE("NONE", 0x00);                     // 0
-const ExecFlagType EXEC_INITIAL("INITIAL", 0x01);               // 1
-const ExecFlagType EXEC_LINEAR("LINEAR", 0x02);                 // 2
-const ExecFlagType EXEC_NONLINEAR("NONLINEAR", 0x04);           // 4
-const ExecFlagType EXEC_TIMESTEP_END("TIMESTEP_END", 0x08);     // 8
-const ExecFlagType EXEC_TIMESTEP_BEGIN("TIMESTEP_BEGIN", 0x10); // 16
-const ExecFlagType EXEC_FINAL("FINAL", 0x20);                   // 32
-const ExecFlagType EXEC_FORCED("FORCED", 0x40);                 // 64
-const ExecFlagType EXEC_FAILED("FAILED", 0x80);                 // 128
-const ExecFlagType EXEC_CUSTOM("CUSTOM", 0x100);                // 256
-const ExecFlagType EXEC_SUBDOMAIN("SUBDOMAIN", 0x200);          // 512
-const ExecFlagType EXEC_ALWAYS("ALWAYS", 0x400);                // 1024
-const ExecFlagType EXEC_PRE_DISPLACE("PRE_DISPLACE");
-const ExecFlagType EXEC_SAME_AS_MULTIAPP("SAME_AS_MULTIAPP");
-const ExecFlagType EXEC_PRE_MULTIAPP_SETUP("PRE_MULTIAPP_SETUP");
-const ExecFlagType EXEC_TRANSFER("TRANSFER");
-const ExecFlagType EXEC_PRE_KERNELS("PRE_KERNELS");
+const ExecFlagType EXEC_NONE = registerExecFlag("NONE");
+const ExecFlagType EXEC_INITIAL = registerExecFlag("INITIAL");
+const ExecFlagType EXEC_LINEAR = registerExecFlag("LINEAR");
+const ExecFlagType EXEC_NONLINEAR = registerExecFlag("NONLINEAR");
+const ExecFlagType EXEC_TIMESTEP_END = registerExecFlag("TIMESTEP_END");
+const ExecFlagType EXEC_TIMESTEP_BEGIN = registerExecFlag("TIMESTEP_BEGIN");
+const ExecFlagType EXEC_FINAL = registerExecFlag("FINAL");
+const ExecFlagType EXEC_FORCED = registerExecFlag("FORCED");
+const ExecFlagType EXEC_FAILED = registerExecFlag("FAILED");
+const ExecFlagType EXEC_CUSTOM = registerExecFlag("CUSTOM");
+const ExecFlagType EXEC_SUBDOMAIN = registerExecFlag("SUBDOMAIN");
+const ExecFlagType EXEC_ALWAYS = registerExecFlag("ALWAYS");
+const ExecFlagType EXEC_PRE_DISPLACE = registerExecFlag("PRE_DISPLACE");
+const ExecFlagType EXEC_SAME_AS_MULTIAPP = registerExecFlag("SAME_AS_MULTIAPP");
+const ExecFlagType EXEC_PRE_MULTIAPP_SETUP = registerExecFlag("PRE_MULTIAPP_SETUP");
+const ExecFlagType EXEC_TRANSFER = registerExecFlag("TRANSFER");
+const ExecFlagType EXEC_PRE_KERNELS = registerExecFlag("PRE_KERNELS");
 
 namespace Moose
 {
@@ -57,7 +53,6 @@ registerAll(Factory & f, ActionFactory & af, Syntax & s)
   registerObjects(f, {"MooseApp"});
   associateSyntaxInner(s, af);
   registerActions(s, af, {"MooseApp"});
-  registerExecFlags(f);
   registerDataFilePath();
 }
 
@@ -384,27 +379,6 @@ registerActions(Syntax & syntax,
 }
 
 void
-registerExecFlags(Factory & factory)
-{
-  registerExecFlag(EXEC_NONE);
-  registerExecFlag(EXEC_INITIAL);
-  registerExecFlag(EXEC_LINEAR);
-  registerExecFlag(EXEC_NONLINEAR);
-  registerExecFlag(EXEC_TIMESTEP_END);
-  registerExecFlag(EXEC_TIMESTEP_BEGIN);
-  registerExecFlag(EXEC_FINAL);
-  registerExecFlag(EXEC_FORCED);
-  registerExecFlag(EXEC_FAILED);
-  registerExecFlag(EXEC_CUSTOM);
-  registerExecFlag(EXEC_TRANSFER);
-  registerExecFlag(EXEC_SUBDOMAIN);
-  registerExecFlag(EXEC_PRE_DISPLACE);
-  registerExecFlag(EXEC_SAME_AS_MULTIAPP);
-  registerExecFlag(EXEC_PRE_MULTIAPP_SETUP);
-  registerExecFlag(EXEC_PRE_KERNELS);
-}
-
-void
 associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
 {
   /**
@@ -437,6 +411,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("CreateDisplacedProblemAction", "Mesh");
   registerSyntax("DisplayGhostingAction", "Mesh");
   registerSyntax("AddMeshGeneratorAction", "Mesh/*");
+  syntax.registerSyntaxType("Mesh/*", "MeshGeneratorName");
 
   registerSyntax("AddFunctionAction", "Functions/*");
   syntax.registerSyntaxType("Functions/*", "FunctionName");
@@ -444,7 +419,10 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("GlobalParamsAction", "GlobalParams");
 
   registerSyntax("AddDistributionAction", "Distributions/*");
+  syntax.registerSyntaxType("Distributions/*", "DistributionName");
+
   registerSyntax("AddSamplerAction", "Samplers/*");
+  syntax.registerSyntaxType("Samplers/*", "SamplerName");
 
   registerSyntax("SetupDebugAction", "Debug");
   registerSyntax("SetupResidualDebugAction", "Debug");
@@ -468,6 +446,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntaxTask("AddInitialConditionAction", "ICs/*", "add_ic");
 
   registerSyntax("AddMaterialAction", "Materials/*");
+  syntax.registerSyntaxType("Materials/*", "MaterialName");
 
   registerSyntax("AddPostprocessorAction", "Postprocessors/*");
   syntax.registerSyntaxType("Postprocessors/*", "PostprocessorName");
@@ -493,6 +472,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("ReadExecutorParamsAction", "Executors/*");
   registerSyntax("SetupTimeStepperAction", "Executioner/TimeStepper");
   registerSyntax("SetupTimeIntegratorAction", "Executioner/TimeIntegrator");
+  syntax.registerSyntaxType("Executors/*", "ExecutorName");
 
   registerSyntax("SetupQuadratureAction", "Executioner/Quadrature");
   registerSyntax("SetupPredictorAction", "Executioner/Predictor");
