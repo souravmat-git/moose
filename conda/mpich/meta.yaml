@@ -5,7 +5,7 @@
 #   libmesh/
 #   template/
 #   moose/
-{% set build = 2 %}
+{% set build = 4 %}
 {% set strbuild = "build_" + build|string %}
 {% set version = "4.0.2" %}
 
@@ -67,7 +67,6 @@ requirements:
     - {{ moose_mesalib }}       # [linux]
     - openssl <3
     - mpi 1.0 mpich
-    - clang-format-12
 
 test:
   commands:

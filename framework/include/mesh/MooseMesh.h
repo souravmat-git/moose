@@ -38,7 +38,7 @@
 class Assembly;
 class RelationshipManager;
 class MooseVariableBase;
-class MooseCoordTransform;
+class MooseAppCoordTransform;
 class MooseUnits;
 
 // libMesh forward declarations
@@ -418,10 +418,44 @@ public:
   ///@}
 
   /**
-   * Returns a map of boundaries to elements.
+   * Returns a map of boundaries to ids of elements on the boundary.
    */
   const std::unordered_map<boundary_id_type, std::unordered_set<dof_id_type>> &
   getBoundariesToElems() const;
+
+  /**
+   * Returns a map of boundaries to ids of elements on the boundary.
+   */
+  const std::unordered_map<boundary_id_type, std::unordered_set<dof_id_type>> &
+  getBoundariesToActiveSemiLocalElemIds() const;
+
+  /**
+   * Return all ids of elements which have a side which is part of a sideset.
+   * Note that boundaries are sided.
+   * @param bid the id of the sideset of interest
+   */
+  std::unordered_set<dof_id_type> getBoundaryActiveSemiLocalElemIds(BoundaryID bid) const;
+
+  /**
+   * Return all ids of neighbors of elements which have a side which is part of a sideset.
+   * Note that boundaries are sided, this is on the neighbor side. For the sideset side, use
+   * getBoundariesActiveLocalElemIds.
+   * Note that while the element is local and active, the neighbor is not guaranteed to be local,
+   * it could be ghosted.
+   * Note that if the neighbor is not ghosted, is a remote_elem, then it will not be included
+   * @param bid the id of the sideset of interest
+   */
+  std::unordered_set<dof_id_type> getBoundaryActiveNeighborElemIds(BoundaryID bid) const;
+
+  /**
+   * Returns whether a boundary (given by its id) is not crossing through a group of blocks,
+   * by which we mean that elements on both sides of the boundary are in those blocks
+   * @param bid the id of the boundary of interest
+   * @param blk_group the group of blocks potentially traversed
+   * @return whether the boundary does not cross between the subdomains in the group
+   */
+  bool isBoundaryFullyExternalToSubdomains(BoundaryID bid,
+                                           const std::set<SubdomainID> & blk_group) const;
 
   /**
    * Returns a read-only reference to the set of subdomains currently
@@ -1162,7 +1196,7 @@ public:
    * @return the coordinate transformation object that describes how to transform this problem's
    * coordinate system into the canonical/reference coordinate system
    */
-  MooseCoordTransform & coordTransform();
+  MooseAppCoordTransform & coordTransform();
 
   /**
    * @return the length unit of this mesh provided through the coordinate transformation object
@@ -1349,8 +1383,6 @@ private:
   /// FaceInfo objects accessible from this process
   mutable std::vector<FaceInfo> _all_face_info;
 
-  /// Map storing the ElemInfo-s of the ghost elements
-  mutable std::unordered_map<std::pair<const Elem *, unsigned int>, ElemInfo> _elem_to_ghost_info;
   /// Map connecting elems with their corresponding ElemInfo
   mutable std::unordered_map<const Elem *, ElemInfo> _elem_to_elem_info;
 
@@ -1471,6 +1503,12 @@ private:
                             int child,
                             int child_side);
 
+  /**
+   * Update the coordinate transformation object based on our coordinate system data. The coordinate
+   * transformation will be created if it hasn't been already
+   */
+  void updateCoordTransform();
+
   /// Holds mappings for volume to volume and parent side to child side
   std::map<std::pair<int, ElemType>, std::vector<std::vector<QpMap>>> _elem_type_to_refinement_map;
 
@@ -1543,13 +1581,16 @@ private:
 
   /// A coordinate transformation object that describes how to transform this problem's coordinate
   /// system into the canonical/reference coordinate system
-  std::unique_ptr<MooseCoordTransform> _coord_transform;
+  std::unique_ptr<MooseAppCoordTransform> _coord_transform;
+
+  /// Whether the coordinate system has been set
+  bool _coord_system_set;
 
   template <typename T>
   struct MeshType;
 };
 
-inline MooseCoordTransform &
+inline MooseAppCoordTransform &
 MooseMesh::coordTransform()
 {
   mooseAssert(_coord_transform, "The coordinate transformation object is null.");

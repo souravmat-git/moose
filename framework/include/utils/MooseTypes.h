@@ -423,6 +423,15 @@ struct ADType<VariableSecond>
 {
   typedef ADVariableSecond type;
 };
+
+/**
+ * This is a helper variable template for cases when we want to use a default compile-time
+ * error with constexpr-based if conditions. The templating delays the triggering
+ * of the static assertion until the template is instantiated.
+ */
+template <class T>
+constexpr std::false_type always_false{};
+
 } // namespace Moose
 
 /**
@@ -643,9 +652,9 @@ enum ConstraintJacobianType
   PrimaryLower
 };
 
-enum CoordinateSystemType
+enum CoordinateSystemType : int
 {
-  COORD_XYZ,
+  COORD_XYZ = 0,
   COORD_RZ,
   COORD_RSPHERICAL
 };
@@ -949,6 +958,12 @@ DerivativeStringClass(ReporterValueName);
 
 /// Name of an Executor.  Used for inputs to Executors
 DerivativeStringClass(ExecutorName);
+
+/// ParsedFunction/ParsedMaterial etc. FParser expression
+DerivativeStringClass(ParsedFunctionExpression);
+
+/// System name support of multiple nonlinear systems on the same mesh
+DerivativeStringClass(NonlinearSystemName);
 
 namespace Moose
 {
