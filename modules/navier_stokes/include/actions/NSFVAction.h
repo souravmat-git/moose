@@ -179,6 +179,8 @@ protected:
   const MultiMooseEnum _momentum_inlet_types;
   /// Momentum/mass inlet flux postprocessors for potential coupling between applications
   const std::vector<PostprocessorName> _flux_inlet_pps;
+  /// Momentum/mass inlet flux directions for potential coupling between applications
+  const std::vector<Point> _flux_inlet_directions;
   /// Velocity function names at velocity inlet boundaries
   const std::vector<std::vector<FunctionName>> _momentum_inlet_function;
   /// Velocity outlet types (pressure/mass-outflow/momentum-outflow)
@@ -290,9 +292,13 @@ protected:
 
 private:
   /// Process the mesh data and convert block names to block IDs
-  void processBlocks();
+  void processMesh();
+  /// Assign the necessary blocks to the input parameters
+  void assignBlocks(InputParameters & params, const std::vector<SubdomainName> & blocks);
   /// Process the supplied variable names and if they are not available, create them
   void processVariables();
+  /// Checks if the input variables are restricted to the same blocks as the action
+  void checkVariableBlockConsistency(const std::string & var_name);
   /// Process thermal conductivity (multiple functor input options are available).
   /// Return true if we have vector thermal conductivity and false if scalar
   bool processThermalConductivity();
@@ -359,12 +365,16 @@ NSFVAction::checkBlockwiseConsistency(const std::string block_param_name,
 
   if (block_names.size())
   {
-    for (const auto & block_group : block_names)
-      for (const auto & block : block_group)
-        if (std::find(_blocks.begin(), _blocks.end(), block) == _blocks.end())
-          paramError(block_param_name,
-                     "Block '" + block +
-                         "' is not present in the block restriction of the fluid flow action!");
+    // We only check block-restrictions if the action is not restricted to `ANY_BLOCK_ID`.
+    // If the users define blocks that are not on the mesh, they will receive errors from the
+    // objects created created by the action
+    if (std::find(_blocks.begin(), _blocks.end(), "ANY_BLOCK_ID") == _blocks.end())
+      for (const auto & block_group : block_names)
+        for (const auto & block : block_group)
+          if (std::find(_blocks.begin(), _blocks.end(), block) == _blocks.end())
+            paramError(block_param_name,
+                       "Block '" + block +
+                           "' is not present in the block restriction of the fluid flow action!");
 
     for (const auto & param_name : parameter_names)
     {

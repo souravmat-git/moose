@@ -42,6 +42,10 @@ For development of MOOSE-based applications see [Application Development](applic
 
 [Test Timing](http://mooseframework.org/docs/timing/)
 
+## Software Quality Assurance Documents
+
+[sqa/index.md exact=True] - Landing page for the MOOSE (and MOOSE Modules) software quality assurance (SQA) pages
+
 ## Utilities
 
 [/PerfGraph.md] - How to time sections of code in MOOSE
@@ -53,6 +57,8 @@ For development of MOOSE-based applications see [Application Development](applic
 [System Integrity Checking](sanity_checking.md) - Parsing and system integrity checks
 
 ## MOOSE Internal Systems
+
+[Actions](source/actions/Action.md) - Objects used to execute various tasks
 
 [Interfaces](framework_development/interfaces/index.md) - Base-classes that allow cross-cutting data retrieval
 

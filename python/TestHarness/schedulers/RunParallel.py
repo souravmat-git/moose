@@ -34,6 +34,15 @@ class RunParallel(Scheduler):
         if self.options.dry_run:
             self.setSuccessfulMessage(tester)
             return
+        elif self.options.show_last_run:
+            job_results = self.options.results_storage[job.getTestDir()][job.getTestName()]
+            status, message, caveats = job.previousTesterStatus(self.options, self.options.results_storage)
+            tester.setStatus(status, message)
+            if caveats:
+                tester.addCaveats(caveats)
+            job.setPreviousTime(job_results['TIMING'])
+            job.setOutput(job_results['OUTPUT'])
+            return
 
         output = ''
 
@@ -72,6 +81,9 @@ class RunParallel(Scheduler):
         except Exception as e:
             output += 'Python exception encountered:\n\n' + traceback.format_exc()
             tester.setStatus(tester.error, 'PYTHON EXCEPTION')
+
+        if job.getOutputFile():
+            job.addMetaData(DIRTY_FILES=[job.getOutputFile()])
 
         # Set testers output with modifications made above so it prints the way we want it
         job.setOutput(output)

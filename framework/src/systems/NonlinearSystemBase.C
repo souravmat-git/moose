@@ -1503,7 +1503,7 @@ NonlinearSystemBase::constraintResiduals(NumericVector<Number> & residual, bool 
 void
 NonlinearSystemBase::residualSetup()
 {
-  TIME_SECTION("computeResidualInternal", 3);
+  TIME_SECTION("residualSetup", 3);
 
   SystemBase::residualSetup();
 
@@ -1525,6 +1525,7 @@ NonlinearSystemBase::residualSetup()
   _nodal_bcs.residualSetup();
 
   _fe_problem.residualSetup();
+  setSolutionInvalid(false);
 }
 
 void
@@ -1567,9 +1568,9 @@ NonlinearSystemBase::computeResidualInternal(const std::set<TagID> & tags)
 
     if (_fe_problem.haveFV())
     {
-      using FVRange = StoredRange<std::vector<const FaceInfo *>::const_iterator, const FaceInfo *>;
+      using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
       ComputeFVFluxResidualThread<FVRange> fvr(_fe_problem, tags);
-      FVRange faces(_fe_problem.mesh().faceInfo().begin(), _fe_problem.mesh().faceInfo().end());
+      FVRange faces(_fe_problem.mesh().ownedFaceInfoBegin(), _fe_problem.mesh().ownedFaceInfoEnd());
       Threads::parallel_reduce(faces, fvr);
     }
 
@@ -1785,9 +1786,9 @@ NonlinearSystemBase::computeResidualAndJacobianInternal(const std::set<TagID> & 
 
     if (_fe_problem.haveFV())
     {
-      using FVRange = StoredRange<std::vector<const FaceInfo *>::const_iterator, const FaceInfo *>;
+      using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
       ComputeFVFluxRJThread<FVRange> fvrj(_fe_problem, vector_tags, matrix_tags);
-      FVRange faces(_fe_problem.mesh().faceInfo().begin(), _fe_problem.mesh().faceInfo().end());
+      FVRange faces(_fe_problem.mesh().ownedFaceInfoBegin(), _fe_problem.mesh().ownedFaceInfoEnd());
       Threads::parallel_reduce(faces, fvrj);
     }
 
@@ -2638,9 +2639,9 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
     {
       // the same loop works for both residual and jacobians because it keys
       // off of FEProblem's _currently_computing_jacobian parameter
-      using FVRange = StoredRange<std::vector<const FaceInfo *>::const_iterator, const FaceInfo *>;
+      using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
       ComputeFVFluxJacobianThread<FVRange> fvj(_fe_problem, tags);
-      FVRange faces(_fe_problem.mesh().faceInfo().begin(), _fe_problem.mesh().faceInfo().end());
+      FVRange faces(_fe_problem.mesh().ownedFaceInfoBegin(), _fe_problem.mesh().ownedFaceInfoEnd());
       Threads::parallel_reduce(faces, fvj);
     }
 
@@ -3352,6 +3353,7 @@ NonlinearSystemBase::checkKernelCoverage(const std::set<SubdomainID> & mesh_subd
   global_kernels_exist |= _nodal_kernels.hasActiveObjects();
 
   _kernels.subdomainsCovered(input_subdomains, kernel_variables);
+  _dg_kernels.subdomainsCovered(input_subdomains, kernel_variables);
   _nodal_kernels.subdomainsCovered(input_subdomains, kernel_variables);
   _scalar_kernels.subdomainsCovered(input_subdomains, kernel_variables);
   _constraints.subdomainsCovered(input_subdomains, kernel_variables);

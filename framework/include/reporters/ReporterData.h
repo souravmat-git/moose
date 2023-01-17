@@ -15,6 +15,7 @@
 #include "ReporterState.h"
 #include "ReporterContext.h"
 #include "libmesh/parallel_object.h"
+#include "libmesh/dense_vector.h"
 #include <memory>
 
 class MooseApp;
@@ -31,7 +32,7 @@ class Receiver;
  * first value is the current value and the data in the vector are the older data.
  *
  * The ReporterState object is a RestartableData object that serves as a helper for managing the
- * time history. A "context" object also exists that uses the ReporterState for preforming special
+ * time history. A "context" object also exists that uses the ReporterState for performing special
  * operations. Refer to ReporterState.h/C for more information.
  *
  * It is important to note that the Reporter values are not threaded. However, the Reporter
@@ -95,6 +96,25 @@ public:
    * Return a list of all reporter names
    */
   std::set<ReporterName> getReporterNames() const;
+
+  /**
+   * Return a list of all postprocessor names
+   */
+  std::set<std::string> getPostprocessorNames() const;
+
+  /**
+   * Get all real reporter values including postprocessor and vector postprocessor values into a
+   * dense vector
+   */
+  DenseVector<Real> getAllRealReporterValues() const;
+
+  /**
+   * Get full names of all real reporter values
+   * Note: For a postprocessor, the full name is the postprocessor name plus '/value'.
+   *       For a vector postprocessor, the full name is the vector postprocessor name
+   *       plus the vector name followed by '/#' where '#' is the index of the vector.
+   */
+  std::vector<std::string> getAllRealReporterFullNames() const;
 
   /**
    * Method for returning read only references to Reporter values.
