@@ -12,9 +12,9 @@
 #include "MooseApp.h"
 
 #include "Exodus.h"
+#include "Nemesis.h"
 
 #include "libmesh/exodusII_io.h"
-#include "libmesh/checkpoint_io.h"
 #include "libmesh/nemesis_io.h"
 
 InputParameters
@@ -27,7 +27,9 @@ MeshGenerator::validParams()
                         "Whether or not to show mesh info after generating the mesh "
                         "(bounding box, element types, sidesets, nodesets, subdomains, etc)");
   params.addParam<std::string>(
-      "save_with_name", std::string(), "Save the current mesh with user-defined name");
+      "save_with_name",
+      std::string(),
+      "Keep the mesh from this mesh generator in memory with the name specified");
 
   params.addParam<bool>(
       "output", false, "Whether or not to output the mesh file after generating the mesh");
@@ -35,6 +37,9 @@ MeshGenerator::validParams()
                         false,
                         "Whether or not to output the mesh file in the nemesis"
                         "format (only if output = true)");
+
+  params.addParamNamesToGroup("show_info output nemesis", "Debugging");
+  params.addParamNamesToGroup("save_with_name", "Advanced");
   params.registerBase("MeshGenerator");
 
   return params;
@@ -277,7 +282,8 @@ MeshGenerator::generateInternal()
       Nemesis_IO nemesis_io(*mesh);
 
       // Default to non-HDF5 output for wider compatibility
-      // nemesis_io.set_hdf5_writing(false);
+      nemesis_io.set_hdf5_writing(false);
+
       nemesis_io.write(name() + "_in.e");
     }
   }
