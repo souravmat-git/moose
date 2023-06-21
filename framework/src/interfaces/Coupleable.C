@@ -134,7 +134,7 @@ Coupleable::isCoupled(const std::string & var_name_in, unsigned int i) const
       mooseError(_c_name,
                  ": The coupled variable \"",
                  var_name,
-                 "\" was never added to this objects's "
+                 "\" was never added to this object's "
                  "InputParameters, please double-check your "
                  "spelling");
 
@@ -2310,8 +2310,8 @@ Coupleable::coupledIndices(const std::string & var_name) const
 VariableName
 Coupleable::coupledName(const std::string & var_name, unsigned int comp) const
 {
-  if (getVar(var_name, comp))
-    return getVar(var_name, comp)->name();
+  if (getFieldVar(var_name, comp))
+    return getFieldVar(var_name, comp)->name();
   // Detect if we are in the case where a constant was passed in lieu of a variable
   else if (isCoupledConstant(var_name))
     mooseError(_c_name,
@@ -2336,6 +2336,13 @@ Coupleable::coupledValues(const std::string & var_name) const
 {
   auto func = [this, &var_name](unsigned int comp) { return &coupledValue(var_name, comp); };
   return coupledVectorHelper<const VariableValue *>(var_name, func);
+}
+
+std::vector<const VectorVariableValue *>
+Coupleable::coupledVectorValues(const std::string & var_name) const
+{
+  auto func = [this, &var_name](unsigned int comp) { return &coupledVectorValue(var_name, comp); };
+  return coupledVectorHelper<const VectorVariableValue *>(var_name, func);
 }
 
 template <>

@@ -262,6 +262,11 @@ SolutionUserObject::readExodusII()
 
   // Build nodal/elemental variable lists, limit to variables listed in 'system_variables', if
   // provided
+  // This function could be called more than once, so clear the member variables so we don't keep
+  // adding to the vectors
+  _nodal_variables.clear();
+  _elemental_variables.clear();
+  _scalar_variables.clear();
   if (!_system_variables.empty())
   {
     for (const auto & var_name : _system_variables)
@@ -550,7 +555,7 @@ SolutionUserObject::initialSetup()
 }
 
 MooseEnum
-SolutionUserObject::getSolutionFileType()
+SolutionUserObject::getSolutionFileType() const
 {
   return _file_type;
 }
@@ -1227,9 +1232,13 @@ SolutionUserObject::readBlockIdMapFromExodusII()
 {
 #ifdef LIBMESH_HAVE_EXODUS_API
   ExodusII_IO_Helper & exio_helper = _exodusII_io->get_exio_helper();
-  std::map<int, std::string> & id_to_block = exio_helper.id_to_block_names;
+  const auto & id_to_block = exio_helper.id_to_block_names;
   _block_name_to_id.clear();
-  for (auto & it : id_to_block)
+  _block_id_to_name.clear();
+  for (const auto & it : id_to_block)
+  {
     _block_name_to_id[it.second] = it.first;
+    _block_id_to_name[it.first] = it.second;
+  }
 #endif
 }

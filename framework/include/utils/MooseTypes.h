@@ -127,14 +127,6 @@ template <typename>
 class ADMaterialProperty;
 class InputParameters;
 
-enum class MaterialPropState
-{
-  CURRENT = 0x1,
-  OLD = 0x2,
-  OLDER = 0x4
-};
-using MaterialPropStateInt = std::underlying_type<MaterialPropState>::type;
-
 namespace libMesh
 {
 template <typename>
@@ -1018,6 +1010,9 @@ DerivativeStringClass(ExtraElementIDName);
 
 /// Name of a Reporter Value, second argument to ReporterName (see Reporter.h)
 DerivativeStringClass(ReporterValueName);
+
+/// Name of a Positions object
+DerivativeStringClass(PositionsName);
 
 /// Name of an Executor.  Used for inputs to Executors
 DerivativeStringClass(ExecutorName);

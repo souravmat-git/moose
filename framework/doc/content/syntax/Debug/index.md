@@ -29,7 +29,7 @@ Helpful information on debugging numerical convergence issues is provided in the
 
 ## Execution ordering output
 
-### Ordering of the problem set-up
+### Ordering of the problem set-up id=debug-setup
 
 MOOSE parses the input file and executes numerous [Actions](actions/Action.md) which progressively
 load/build the mesh, create the variables, kernels, boundary conditions, output objects etc.
@@ -37,13 +37,14 @@ The ordering of this process may be shown using the [!param](/Debug/show_actions
 
 !alert note
 The dependencies of each `Action` should be declared in the source code of each `Action`. This enables MOOSE
-to perform automatic dependency resolution to correctly order them.
+to perform automatic dependency resolution to correctly order them. To view declared action dependencies, please
+use the [!param](/Debug/show_action_dependencies) parameter.
 
 !alert note
 For the automatic ordering of the mesh generators, please refer to the
 [mesh documentation page](syntax/Mesh/index.md).
 
-### Solve and execution ordering
+### Solve and execution ordering id=debug-order
 
 Nearly every solve in MOOSE consists of a succession of operations on nodes, quadrature points,
 elements and elements' faces. These operations may be for example to compute the contribution of a
@@ -58,6 +59,23 @@ interact in arbitrarily complex ways on a group of variables are indeed executed
 by the modeler. If problematic, object execution may be reordered using various boolean parameters, `execute_on` flags, and other manual dependency declarations.
 For example for UserObjects, the `execution_order_group` parameter lets the modeler select the ordering of executions of user objects.
 
+## Viewing objects created by an applications
+
+Numerous applications will use [Actions](actions/Action.md) to simplify the user input. This reduces opportunities for
+mistakes in an input, but has the inconvenience of hiding part of the simulation setup. The [!param](/Debug/show_actions) will,
+for most objects, list the objects created by an action. The `Debug` system also offers several summaries of objects:
+
+- [!param](/Debug/show_material_props) for material properties, created on elements, neighbors and sides
+- [!param](/Debug/show_reporters) for reporters, created directly or from systems that derive from Reporters, such as [VectorPostprocessors](syntax/Postprocessors/index.md) and [Positions](syntax/Positions/index.md)
+- [!param](/Debug/show_functors) for [Functors](syntax/Functors/index.md), an abstraction for objects which includes [Functions](syntax/Functions/index.md) and [Variables](syntax/Variables/index.md)
+
+
+Additionally, [!param](/Debug/show_execution_order) will provide the list of objects executed as they are executed.
+This includes, [Kernels](syntax/Kernels/index.md) (and `Interface`, `Nodal`, finite volume, etc kernels), [AuxKernels](syntax/AuxKernels/index.md), [boundary conditions](syntax/BCs/index.md)
+(including finite volume), [UserObjects](syntax/UserObjects/index.md), [Postprocessors](syntax/Postprocessors/index.md) and
+[VectorPostprocessors](syntax/Postprocessors/index.md).
+
+
 ## Other useful outputs available in other systems
 
 The `[Debug]` system is not the only system that provides useful debugging information. We summarize
@@ -71,6 +89,11 @@ these other helpful resources below:
   They are summarized on this [page about debugging numerical issues](application_usage/failed_solves.md optional=True) and in
   the [PETSc manual](https://www.mcs.anl.gov/petsc/petsc-current/docs/manualpages/).
 
+- to debug a [Mesh](syntax/Mesh/index.md) related issue, please see [this page](syntax/Mesh/index.md#troubleshooting)
+  for built-in MOOSE mesh generation issues and [this page](syntax/Mesh/index.md#issues) for possible issues from an external mesh.
+
+- to debug `Controls`, there is a command line argument, `--show-controls` that can be passed to a MOOSE-application
+  executable to show all active `Controls` and all active objects at all time steps in the simulation.
 
 !alert note
 There are currently no convenient debugging options or tools for `MultiApps`-based fixed point iteration problems.

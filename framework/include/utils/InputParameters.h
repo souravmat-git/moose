@@ -70,6 +70,9 @@ public:
    */
   virtual void set_attributes(const std::string & name, bool inserted_only) override;
 
+  /// Prints the deprecated parameter message, assuming we have the right flags set
+  bool attemptPrintDeprecated(const std::string & name);
+
   /// This functions is called in set as a 'callback' to avoid code duplication
   template <typename T>
   void setHelper(const std::string & name);
@@ -492,6 +495,12 @@ public:
    * See the AttribSystem object for use Attribute.h/C.
    */
   void registerSystemAttributeName(const std::string & value);
+
+  /**
+   * Get the system attribute name if it was registered. Otherwise throw an error.
+   * See the AttribSystem object for use Attribute.h/C.
+   */
+  const std::string & getSystemAttributeName() const;
 
   /**
    * This method is here to indicate which Moose types a particular Action may build. It takes a

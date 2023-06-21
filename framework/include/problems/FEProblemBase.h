@@ -31,6 +31,7 @@
 #include "PerfGraphInterface.h"
 #include "Attributes.h"
 #include "MooseObjectWarehouse.h"
+#include "MaterialPropertyRegistry.h"
 
 #include "libmesh/enum_quadrature_type.h"
 #include "libmesh/equation_systems.h"
@@ -70,6 +71,7 @@ class ElementUserObject;
 class InternalSideUserObject;
 class InterfaceUserObject;
 class GeneralUserObject;
+class Positions;
 class Function;
 class Distribution;
 class Sampler;
@@ -936,6 +938,13 @@ public:
   const UserObject & getUserObjectBase(const std::string & name, const THREAD_ID tid = 0) const;
 
   /**
+   * Get the Positions object by its name
+   * @param name The name of the Positions object being retrieved
+   * @return Const reference to the Positions object
+   */
+  const Positions & getPositionsObject(const std::string & name) const;
+
+  /**
    * Check if there if a user object of given name
    * @param name The name of the user object being checked for
    * @return true if the user object exists, false otherwise
@@ -1339,12 +1348,6 @@ public:
   virtual void addJacobianNeighbor(THREAD_ID tid) override;
   virtual void addJacobianNeighborLowerD(THREAD_ID tid) override;
   virtual void addJacobianLowerD(THREAD_ID tid) override;
-  virtual void addJacobianBlock(SparseMatrix<Number> & jacobian,
-                                unsigned int ivar,
-                                unsigned int jvar,
-                                const DofMap & dof_map,
-                                std::vector<dof_id_type> & dof_indices,
-                                THREAD_ID tid) override;
   virtual void addJacobianBlockTags(SparseMatrix<Number> & jacobian,
                                     unsigned int ivar,
                                     unsigned int jvar,
@@ -1358,6 +1361,7 @@ public:
                                    const DofMap & dof_map,
                                    std::vector<dof_id_type> & dof_indices,
                                    std::vector<dof_id_type> & neighbor_dof_indices,
+                                   const std::set<TagID> & tags,
                                    THREAD_ID tid) override;
   virtual void addJacobianScalar(THREAD_ID tid = 0);
   virtual void addJacobianOffDiagScalar(unsigned int ivar, THREAD_ID tid = 0);
@@ -1365,10 +1369,6 @@ public:
   virtual void cacheJacobian(THREAD_ID tid) override;
   virtual void cacheJacobianNeighbor(THREAD_ID tid) override;
   virtual void addCachedJacobian(THREAD_ID tid) override;
-  /**
-   * Deprecated method. Use addCachedJacobian
-   */
-  virtual void addCachedJacobianContributions(THREAD_ID tid) override;
 
   virtual void prepareShapes(unsigned int var, THREAD_ID tid) override;
   virtual void prepareFaceShapes(unsigned int var, THREAD_ID tid) override;
@@ -1423,6 +1423,14 @@ public:
    * @param file_name The file name for restarting from
    */
   void setRestartFile(const std::string & file_name);
+
+  /**
+   * @return A reference to the material property registry
+   */
+  const MaterialPropertyRegistry & getMaterialPropertyRegistry() const
+  {
+    return _material_prop_registry;
+  }
 
   /**
    * Return a reference to the material property storage
@@ -2040,9 +2048,17 @@ public:
   unsigned int nlSysNum(const NonlinearSystemName & nl_sys_name) const;
 
   /**
+   * Whether it will skip further residual evaluations and fail the next nonlinear convergence check
+   */
+  bool getFailNextNonlinearConvergenceCheck() const
+  {
+    return _fail_next_nonlinear_convergence_check;
+  }
+
+  /**
    * Skip further residual evaluations and fail the next nonlinear convergence check
    */
-  bool failNextNonlinearConvergenceCheck() const { return _fail_next_nonlinear_convergence_check; }
+  void setFailNextNonlinearConvergenceCheck() { _fail_next_nonlinear_convergence_check = true; }
 
   /*
    * Set the status of loop order of execution printing
@@ -2168,6 +2184,7 @@ protected:
   ///@}
 
   // material properties
+  MaterialPropertyRegistry _material_prop_registry;
   MaterialPropertyStorage & _material_props;
   MaterialPropertyStorage & _bnd_material_props;
   MaterialPropertyStorage & _neighbor_material_props;
@@ -2495,10 +2512,6 @@ private:
 
   /// Number of steps in a grid sequence
   unsigned int _num_grid_steps;
-
-  /// MooseEnum describing how to obtain reference points for displaced mesh dgkernels and/or
-  /// interface kernels. Options are invert_elem_phys, use_undisplaced_ref, and the default unset.
-  MooseEnum _displaced_neighbor_ref_pts;
 
   /// Whether to trust the user coupling matrix no matter what. See
   /// https://github.com/idaholab/moose/issues/16395 for detailed background

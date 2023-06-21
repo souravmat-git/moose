@@ -32,7 +32,6 @@ public:
   enum EComponentSetupStatus
   {
     CREATED,                  ///< only created
-    PRE_SETUP_MESH_COMPLETED, ///< preSetupMesh() executed
     MESH_PREPARED,            ///< mesh set up
     INITIALIZED_PRIMARY,      ///< mesh set up, called primary init
     INITIALIZED_SECONDARY,    ///< mesh set up, called both inits
@@ -79,11 +78,6 @@ public:
   const std::vector<std::string> & getDependencies() const { return _dependencies; }
 
   /**
-   * Wrapper function for \c preSetupMesh() that marks the function as being called
-   */
-  void executePreSetupMesh();
-
-  /**
    * Wrapper function for \c init() that marks the function as being called
    */
   void executeInit();
@@ -102,6 +96,11 @@ public:
    * Wrapper function for \c setupMesh() that marks the function as being called
    */
   void executeSetupMesh();
+
+  /**
+   * Adds relationship managers for the component
+   */
+  virtual void addRelationshipManagers(Moose::RelationshipManagerType /*input_rm_type*/) {}
 
   virtual void addVariables() {}
 
@@ -242,11 +241,6 @@ public:
 
 protected:
   /**
-   * Performs any post-constructor, pre-mesh-setup setup
-   */
-  virtual void preSetupMesh() {}
-
-  /**
    * Initializes the component
    *
    * The reason this function exists (as opposed to just having everything in
@@ -274,6 +268,17 @@ protected:
    * Performs mesh setup such as creating mesh or naming mesh sets
    */
   virtual void setupMesh() {}
+
+  /**
+   * Method to add a relationship manager for the objects being added to the system. Relationship
+   * managers have to be added relatively early. In many cases before the Action::act() method
+   * is called.
+   *
+   * This method was copied from Action.
+   *
+   * @param moose_object_pars The MooseObject to inspect for RelationshipManagers to add
+   */
+  void addRelationshipManagersFromParameters(const InputParameters & moose_object_pars);
 
   /**
    * Runtime check to make sure that a parameter of specified type exists in the component's input
@@ -396,6 +401,26 @@ protected:
   THMMesh & _mesh;
 
 private:
+  /**
+   * Method for adding a single relationship manager
+   *
+   * This method was copied from Action.
+   *
+   * @param moose_object_pars The parameters of the MooseObject that requested the RM
+   * @param rm_name The class type of the RM, e.g. ElementSideNeighborLayers
+   * @param rm_type The RelationshipManagerType, e.g. geometric, algebraic, coupling
+   * @param rm_input_parameter_func The RM callback function, typically a lambda defined in the
+   *                                requesting MooseObject's validParams function
+   * @param sys_type A RMSystemType that can be used to limit the systems and consequent dof_maps
+   *                 that the RM can be attached to
+   */
+  void
+  addRelationshipManager(const InputParameters & moose_object_pars,
+                         std::string rm_name,
+                         Moose::RelationshipManagerType rm_type,
+                         Moose::RelationshipManagerInputParameterCallback rm_input_parameter_func,
+                         Moose::RMSystemType sys_type = Moose::RMSystemType::NONE);
+
   /// Component setup status
   mutable EComponentSetupStatus _component_setup_status;
 

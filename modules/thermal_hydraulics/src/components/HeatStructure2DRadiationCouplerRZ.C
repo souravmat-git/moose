@@ -75,7 +75,7 @@ HeatStructure2DRadiationCouplerRZ::check() const
     logError("The primary and secondary boundaries must be aligned.");
 
   if (hasComponentByName<HeatStructureBase>(_hs_names[0]) &&
-      hasComponentByName<HeatStructureBase>(_hs_names[1]) && !constMesh().isDistributedMesh())
+      hasComponentByName<HeatStructureBase>(_hs_names[1]))
   {
     const HeatStructureBase & primary_hs = getComponentByName<HeatStructureBase>(_hs_names[0]);
     const HeatStructureBase & secondary_hs = getComponentByName<HeatStructureBase>(_hs_names[1]);
@@ -106,7 +106,7 @@ HeatStructure2DRadiationCouplerRZ::addMooseObjects()
     params.set<NonlinearVariableName>("variable") = HeatConductionModel::TEMPERATURE;
     params.set<std::string>("coupled_variable") = HeatConductionModel::TEMPERATURE;
     params.set<std::vector<BoundaryName>>("boundary") = {_hs_boundaries[i]};
-    params.set<MeshAlignment2D2D *>("_mesh_alignment") = &_mesh_alignment;
+    params.set<MeshAlignment *>("_mesh_alignment") = &_mesh_alignment;
     params.set<Real>("emissivity") = _emissivities[i];
     params.set<Real>("coupled_emissivity") = _emissivities[j];
     params.set<Real>("view_factor") = _view_factors[i];
@@ -115,7 +115,6 @@ HeatStructure2DRadiationCouplerRZ::addMooseObjects()
     params.set<Real>("stefan_boltzmann_constant") = getParam<Real>("stefan_boltzmann_constant");
     params.set<Point>("axis_point") = hs_cyl.getPosition();
     params.set<RealVectorValue>("axis_dir") = hs_cyl.getDirection();
-    params.set<Real>("offset") = hs_cyl.getInnerRadius() - hs_cyl.getAxialOffset();
     getTHMProblem().addBoundaryCondition(class_name, genName(name(), class_name, i), params);
   }
 }

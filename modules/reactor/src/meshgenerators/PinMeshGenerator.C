@@ -423,6 +423,7 @@ PinMeshGenerator::PinMeshGenerator(const InputParameters & parameters)
     // Set metadata to indicate homogenized assemblies to inform CoreMeshGenerator
     // dummy assembly deletion
     declareMeshProperty("homogenized_assembly", _homogenized);
+    declareMeshProperty("pin_as_assembly", _is_assembly);
   }
 
   if (_extrude && _mesh_dimensions == 3)
@@ -578,7 +579,6 @@ PinMeshGenerator::generate()
         *(*_build_mesh), elem, rgmb_name_id_map, elem_block_name, next_block_id);
   }
 
-  (*_build_mesh)->find_neighbors();
-
+  (*_build_mesh)->set_isnt_prepared();
   return std::move(*_build_mesh);
 }
