@@ -15,7 +15,7 @@
 
 // Forward Declarations
 class ContactLineSearchBase;
-class AugmentedLagrangianContactProblem;
+class AugmentedLagrangianContactProblemInterface;
 enum class ContactModel;
 enum class ContactFormulation;
 
@@ -83,14 +83,14 @@ public:
   virtual bool addCouplingEntriesToJacobian() override { return _primary_secondary_jacobian; }
 
   bool shouldApply() override;
-  void computeContactForce(PenetrationInfo * pinfo, bool update_contact_set);
+  void computeContactForce(const Node & node, PenetrationInfo * pinfo, bool update_contact_set);
 
 protected:
   MooseSharedPointer<DisplacedProblem> _displaced_problem;
-  Real gapOffset(const Node * node);
-  Real nodalArea(PenetrationInfo & pinfo);
-  Real getPenalty(PenetrationInfo & pinfo);
-  Real getTangentialPenalty(PenetrationInfo & pinfo);
+  Real gapOffset(const Node & node);
+  Real nodalArea(const Node & node);
+  Real getPenalty(const Node & node);
+  Real getTangentialPenalty(const Node & node);
 
   const unsigned int _component;
   const ContactModel _model;
@@ -146,7 +146,7 @@ protected:
   const bool _print_contact_nodes;
   static Threads::spin_mutex _contact_set_mutex;
 
-  AugmentedLagrangianContactProblem * const _augmented_lagrange_problem;
+  AugmentedLagrangianContactProblemInterface * const _augmented_lagrange_problem;
   const static unsigned int _no_iterations;
   const unsigned int & _lagrangian_iteration_number;
 

@@ -1014,6 +1014,9 @@ DerivativeStringClass(ReporterValueName);
 /// Name of a Positions object
 DerivativeStringClass(PositionsName);
 
+/// Name of a Times object
+DerivativeStringClass(TimesName);
+
 /// Name of an Executor.  Used for inputs to Executors
 DerivativeStringClass(ExecutorName);
 
@@ -1022,6 +1025,9 @@ DerivativeStringClass(ParsedFunctionExpression);
 
 /// System name support of multiple nonlinear systems on the same mesh
 DerivativeStringClass(NonlinearSystemName);
+
+/// Command line argument, specialized to handle quotes in vector arguments
+DerivativeStringClass(CLIArgString);
 
 namespace Moose
 {

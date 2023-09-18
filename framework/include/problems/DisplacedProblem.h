@@ -140,6 +140,8 @@ public:
   virtual bool matrixTagExists(const TagName & tag_name) override;
   virtual bool matrixTagExists(TagID tag_id) override;
   virtual unsigned int numMatrixTags() const override;
+  virtual bool safeAccessTaggedMatrices() const override;
+  virtual bool safeAccessTaggedVectors() const override;
 
   virtual bool isTransient() const override;
 
@@ -353,6 +355,11 @@ public:
   unsigned int currentNlSysNum() const override;
 
   virtual const std::vector<VectorTag> & currentResidualVectorTags() const override;
+
+  /**
+   * Indicate that we have p-refinement
+   */
+  void havePRefinement();
 
 protected:
   FEProblemBase & _mproblem;

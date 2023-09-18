@@ -14,6 +14,8 @@
 #include "NonlinearSystemBase.h"
 #include "AuxiliarySystem.h"
 #include "NSFVUtils.h"
+#include "INSFVRhieChowInterpolator.h"
+#include "INSFVMomentumAdvection.h"
 
 /**
  * Base class for setting up Navier-Stokes finite volume simulations
@@ -25,6 +27,32 @@ public:
   static InputParameters validParams();
 
   NSFVBase(const InputParameters & parameters);
+
+  ///@{ general public interface functions
+  bool hasEnergyEquation() const { return _has_energy_equation; }
+  bool hasScalar() const { return _has_scalar_equation; }
+  unsigned int dim() const { return _dim; }
+  std::string rhieChowName() const;
+  ///@}
+
+  ///@{ public interface for variable and property names
+  const NonlinearVariableName & pressureName() const { return _pressure_name; }
+  const NonlinearVariableName & fluidTemperatureName() const { return _fluid_temperature_name; }
+  const std::string & velocityName(unsigned int dim) const;
+  const std::vector<std::string> & velocityNames() const { return _velocity_name; }
+  const std::vector<NonlinearVariableName> & passiveScalarNames() const
+  {
+    return _passive_scalar_names;
+  }
+  MooseFunctorName densityName() const { return _density_name; }
+  ///@}
+
+  ///@{ public interface for boundaries
+  bool isInletBoundary(const BoundaryName & boundary_name) const;
+  bool isOutletBoundary(const BoundaryName & boundary_name) const;
+  const std::vector<BoundaryName> & inletBoundaries() const { return _inlet_boundaries; }
+  const std::vector<BoundaryName> & outletBoundaries() const { return _outlet_boundaries; }
+  ///@}
 
 protected:
   /// Type that we use in Actions for declaring coupling between the solutions
@@ -423,6 +451,12 @@ NSFVBase<BaseType>::validParams()
   InputParameters params = BaseType::validParams();
 
   /**
+   * Add params relevant to the objects we may add
+   */
+  params += INSFVRhieChowInterpolator::uniqueParams();
+  params += INSFVMomentumAdvection::uniqueParams();
+
+  /**
    * General parameters used to set up the simulation.
    */
 
@@ -572,7 +606,7 @@ NSFVBase<BaseType>::validParams()
   params.addParam<bool>(
       "pin_pressure", false, "Switch to enable pressure shifting for incompressible simulations.");
 
-  MooseEnum s_type("average point-value", "average");
+  MooseEnum s_type("average point-value average-uo point-value-uo", "average-uo");
   params.addParam<MooseEnum>(
       "pinned_pressure_type",
       s_type,
@@ -882,16 +916,12 @@ NSFVBase<BaseType>::validParams()
                                 exec_enum,
                                 "When the mixing length aux kernels should be executed.");
 
-  params.addRangeCheckedParam<Real>("von_karman_const",
-                                    0.41,
-                                    "von_karman_const > 0.0",
-                                    "Von Karman parameter for the mixing length model");
-  params.addRangeCheckedParam<Real>(
-      "von_karman_const_0", 0.09, "von_karman_const_0 > 0.0", "'Escudier' model parameter");
-  params.addRangeCheckedParam<Real>(
+  params.addParam<MooseFunctorName>(
+      "von_karman_const", 0.41, "Von Karman parameter for the mixing length model");
+  params.addParam<MooseFunctorName>("von_karman_const_0", 0.09, "'Escudier' model parameter");
+  params.addParam<MooseFunctorName>(
       "mixing_length_delta",
       1.0,
-      "mixing_length_delta > 0.0",
       "Tunable parameter related to the thickness of the boundary layer."
       "When it is not specified, Prandtl's original unbounded wall distance mixing length model is"
       "retrieved.");
@@ -1237,8 +1267,14 @@ NSFVBase<BaseType>::copyNSNodalVariables()
             parameters().template get<std::string>("initial_from_file_timestep"));
 
     if (parameters().template get<bool>("pin_pressure"))
-      system.addVariableToCopy(
-          "lambda", "lambda", parameters().template get<std::string>("initial_from_file_timestep"));
+    {
+      auto type = parameters().template get<MooseEnum>("pinned_pressure_type");
+      if (type == "point-value" || type == "average")
+        system.addVariableToCopy(
+            "lambda",
+            "lambda",
+            parameters().template get<std::string>("initial_from_file_timestep"));
+    }
 
     if (_turbulence_handling == "mixing-length")
       getProblem().getAuxiliarySystem().addVariableToCopy(
@@ -1321,11 +1357,13 @@ NSFVBase<BaseType>::addINSVariables()
   // Add lagrange multiplier for pinning pressure, if needed
   if (parameters().template get<bool>("pin_pressure"))
   {
+    auto type = parameters().template get<MooseEnum>("pinned_pressure_type");
     auto lm_params = getFactory().getValidParams("MooseVariableScalar");
     lm_params.template set<MooseEnum>("family") = "scalar";
     lm_params.template set<MooseEnum>("order") = "first";
 
-    addNSNonlinearVariable("MooseVariableScalar", "lambda", lm_params);
+    if (type == "point-value" || type == "average")
+      addNSNonlinearVariable("MooseVariableScalar", "lambda", lm_params);
   }
 
   // Add turbulence-related variables
@@ -1396,6 +1434,7 @@ NSFVBase<BaseType>::addRhieChowUserObjects()
             ? parameters().template get<unsigned short>("porosity_smoothing_layers")
             : 0;
     params.template set<unsigned short>("smoothing_layers") = smoothing_layers;
+    params.applySpecificParameters(parameters(), INSFVRhieChowInterpolator::listOfCommonParams());
     getProblem().addUserObject(
         "PINSFVRhieChowInterpolator", prefix() + "pins_rhie_chow_interpolator", params);
   }
@@ -1416,6 +1455,7 @@ NSFVBase<BaseType>::addRhieChowUserObjects()
       params.template set<MooseFunctorName>("a_w") = "az";
     }
 
+    params.applySpecificParameters(parameters(), INSFVRhieChowInterpolator::listOfCommonParams());
     getProblem().addUserObject(
         "INSFVRhieChowInterpolator", prefix() + "ins_rhie_chow_interpolator", params);
   }
@@ -1595,21 +1635,48 @@ NSFVBase<BaseType>::addINSMassKernels()
   if (parameters().template get<bool>("pin_pressure"))
   {
     MooseEnum pin_type = parameters().template get<MooseEnum>("pinned_pressure_type");
-    std::string kernel_type;
+    std::string object_type;
     if (pin_type == "point-value")
-      kernel_type = "FVPointValueConstraint";
+      object_type = "FVPointValueConstraint";
+    else if (pin_type == "average")
+      object_type = "FVIntegralValueConstraint";
+    else if (pin_type == "average-uo")
+      object_type = "NSFVPressurePin";
     else
-      kernel_type = "FVIntegralValueConstraint";
-    InputParameters params = getFactory().getValidParams(kernel_type);
-    params.template set<CoupledName>("lambda") = {"lambda"};
+      object_type = "NSFVPressurePin";
+
+    // Create the average value postprocessor if needed
+    if (pin_type == "average-uo")
+    {
+      // Volume average by default, but we could do inlet or outlet for example
+      InputParameters params = getFactory().getValidParams("ElementAverageValue");
+      params.template set<std::vector<VariableName>>("variable") = {_pressure_name};
+      assignBlocks(params, _blocks);
+      params.template set<std::vector<OutputName>>("outputs") = {"none"};
+      getProblem().addPostprocessor("ElementAverageValue", "nsfv_pressure_average", params);
+    }
+
+    InputParameters params = getFactory().getValidParams(object_type);
+    if (pin_type == "point-value" || pin_type == "average")
+      params.template set<CoupledName>("lambda") = {"lambda"};
+    else if (pin_type == "point-value-uo")
+      params.template set<MooseEnum>("pin_type") = "point-value";
+    else
+      params.template set<MooseEnum>("pin_type") = "average";
+
     params.template set<PostprocessorName>("phi0") =
         parameters().template get<PostprocessorName>("pinned_pressure_value");
     params.template set<NonlinearVariableName>("variable") = _pressure_name;
-    if (pin_type == "point-value")
+    if (pin_type == "point-value" || pin_type == "point-value-uo")
       params.template set<Point>("point") =
           parameters().template get<Point>("pinned_pressure_point");
+    else if (pin_type == "average-uo")
+      params.template set<PostprocessorName>("pressure_average") = "nsfv_pressure_average";
 
-    getProblem().addFVKernel(kernel_type, prefix() + "ins_mass_pressure_constraint", params);
+    if (pin_type == "point-value" || pin_type == "average")
+      getProblem().addFVKernel(object_type, prefix() + "ins_mass_pressure_constraint", params);
+    else
+      getProblem().addUserObject(object_type, prefix() + "ins_mass_pressure_pin", params);
   }
 }
 
@@ -1636,6 +1703,7 @@ NSFVBase<BaseType>::addINSMomentumAdvectionKernels()
   params.template set<MooseEnum>("advected_interp_method") = _momentum_advection_interpolation;
   if (_porous_medium_treatment)
     params.template set<MooseFunctorName>(NS::porosity) = _flow_porosity_functor_name;
+  params.applySpecificParameters(parameters(), INSFVMomentumAdvection::listOfCommonParams());
 
   for (unsigned int d = 0; d < _dim; ++d)
   {
@@ -1721,11 +1789,12 @@ NSFVBase<BaseType>::addINSMomentumMixingLengthKernels()
         parameters().template get<ExecFlagEnum>("mixing_length_aux_execute_on");
   else
     ml_params.template set<ExecFlagEnum>("execute_on") = {EXEC_INITIAL, EXEC_TIMESTEP_END};
-  ml_params.template set<Real>("von_karman_const") =
-      parameters().template get<Real>("von_karman_const");
-  ml_params.template set<Real>("von_karman_const_0") =
-      parameters().template get<Real>("von_karman_const_0");
-  ml_params.template set<Real>("delta") = parameters().template get<Real>("mixing_length_delta");
+  ml_params.template set<MooseFunctorName>("von_karman_const") =
+      parameters().template get<MooseFunctorName>("von_karman_const");
+  ml_params.template set<MooseFunctorName>("von_karman_const_0") =
+      parameters().template get<MooseFunctorName>("von_karman_const_0");
+  ml_params.template set<MooseFunctorName>("delta") =
+      parameters().template get<MooseFunctorName>("mixing_length_delta");
 
   getProblem().addAuxKernel(ml_kernel_type, prefix() + "mixing_length_aux ", ml_params);
 }
@@ -3036,8 +3105,9 @@ NSFVBase<BaseType>::checkGeneralControlErrors()
     checkDependentParameterError("pin_pressure", {"pinned_pressure_type"}, true);
 
     MooseEnum pin_type = parameters().template get<MooseEnum>("pinned_pressure_type");
-    checkDependentParameterError(
-        "pinned_pressure_type", {"pinned_pressure_point"}, pin_type == "point-value");
+    checkDependentParameterError("pinned_pressure_type",
+                                 {"pinned_pressure_point"},
+                                 pin_type == "point-value" || pin_type == "point-value-uo");
   }
 
   if (!_has_energy_equation)
@@ -3507,4 +3577,38 @@ NSFVBase<BaseType>::checkRhieChowFunctorsDefined()
   if (_dim == 3 && !getProblem().hasFunctor("az", /*thread_id=*/0))
     paramError("add_flow_equations",
                "Rhie Chow coefficient az must be provided for advection by auxiliary velocities");
+}
+
+template <class BaseType>
+const std::string &
+NSFVBase<BaseType>::velocityName(const unsigned int dim) const
+{
+  if (dim >= _velocity_name.size())
+    mooseError("Argument dim = ", dim, " out of bounds");
+  return _velocity_name[dim];
+}
+
+template <class BaseType>
+bool
+NSFVBase<BaseType>::isInletBoundary(const BoundaryName & boundary_name) const
+{
+  return std::find(_inlet_boundaries.begin(), _inlet_boundaries.end(), boundary_name) !=
+         _inlet_boundaries.end();
+}
+
+template <class BaseType>
+bool
+NSFVBase<BaseType>::isOutletBoundary(const BoundaryName & boundary_name) const
+{
+  return std::find(_outlet_boundaries.begin(), _outlet_boundaries.end(), boundary_name) !=
+         _outlet_boundaries.end();
+}
+
+template <class BaseType>
+std::string
+NSFVBase<BaseType>::rhieChowName() const
+{
+  if (_porous_medium_treatment)
+    return prefix() + "pins_rhie_chow_interpolator";
+  return prefix() + "ins_rhie_chow_interpolator";
 }

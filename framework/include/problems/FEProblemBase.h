@@ -32,6 +32,7 @@
 #include "Attributes.h"
 #include "MooseObjectWarehouse.h"
 #include "MaterialPropertyRegistry.h"
+#include "RestartableEquationSystems.h"
 
 #include "libmesh/enum_quadrature_type.h"
 #include "libmesh/equation_systems.h"
@@ -52,7 +53,6 @@ class MultiMooseEnum;
 class MaterialPropertyStorage;
 class MaterialData;
 class MooseEnum;
-class RestartableDataIO;
 class Assembly;
 class JacobianBlock;
 class Control;
@@ -148,7 +148,7 @@ public:
   FEProblemBase(const InputParameters & parameters);
   virtual ~FEProblemBase();
 
-  virtual EquationSystems & es() override { return _eq; }
+  virtual EquationSystems & es() override { return _req.set().es(); }
   virtual MooseMesh & mesh() override { return _mesh; }
   virtual const MooseMesh & mesh() const override { return _mesh; }
   const MooseMesh & mesh(bool use_displaced) const override;
@@ -340,11 +340,6 @@ public:
   unsigned int getMaxQps() const;
 
   /**
-   * @return The maximum number of quadrature points in use on any element in this problem.
-   */
-  unsigned int getMaxShapeFunctions() const;
-
-  /**
    * @return The maximum order for all scalar variables in this problem's systems.
    */
   Order getMaxScalarOrder() const;
@@ -508,6 +503,10 @@ public:
   virtual int & timeStep() const { return _t_step; }
   virtual Real & dt() const { return _dt; }
   virtual Real & dtOld() const { return _dt_old; }
+  /**
+   * Returns the time associated with the requested \p state
+   */
+  Real getTimeFromStateArg(const Moose::StateArg & state) const;
 
   virtual void transient(bool trans) { _transient = trans; }
   virtual bool isTransient() const override { return _transient; }
@@ -794,9 +793,9 @@ public:
    * @param tid The thread id
    * @param swap_stateful Whether to swap stateful material properties between \p MaterialData and
    * \p MaterialPropertyStorage
-   * @param execute_stateful Whether to execute material objects that have stateful properties. This
-   * should be \p false when for example executing material objects for mortar contexts in which
-   * stateful properties don't make sense
+   * @param execute_stateful Whether to execute material objects that have stateful properties.
+   * This should be \p false when for example executing material objects for mortar contexts in
+   * which stateful properties don't make sense
    */
   void reinitMaterialsBoundary(BoundaryID boundary_id,
                                THREAD_ID tid,
@@ -1526,7 +1525,7 @@ public:
    * This is needed when elements/boundary nodes are added to a specific subdomain
    * at an intermediate step
    */
-  void initElementStatefulProps(const ConstElemRange & elem_range);
+  void initElementStatefulProps(const ConstElemRange & elem_range, const bool threaded);
 
   /**
    * Method called to perform a series of sanity checks before a simulation is run. This method
@@ -1631,9 +1630,9 @@ public:
                                             bool no_warn = false);
 
   /*
-   * Return a pointer to the MaterialData
+   * @return The MaterialData for the type \p type for thread \p tid
    */
-  std::shared_ptr<MaterialData> getMaterialData(Moose::MaterialDataType type, THREAD_ID tid = 0);
+  MaterialData & getMaterialData(Moose::MaterialDataType type, THREAD_ID tid = 0);
 
   /**
    * Will return True if the user wants to get an error when
@@ -1712,11 +1711,6 @@ public:
    * @return true if the user required values of the previous Newton iterate
    */
   bool needsPreviousNewtonIteration() const;
-
-  /**
-   * Whether or not to skip loading the additional data when restarting
-   */
-  bool skipAdditionalRestartData() const { return _skip_additional_restart_data; }
 
   ///@{
   /**
@@ -2102,6 +2096,11 @@ public:
    */
   void clearCurrentResidualVectorTags();
 
+  /**
+   * Indicate that we have p-refinement
+   */
+  void havePRefinement();
+
 protected:
   /// Create extra tagged vectors and matrices
   void createTagVectors();
@@ -2110,7 +2109,12 @@ protected:
   void createTagSolutions();
 
   MooseMesh & _mesh;
-  EquationSystems _eq;
+
+private:
+  /// The EquationSystems object, wrapped for restart
+  Restartable::ManagedValue<RestartableEquationSystems> _req;
+
+protected:
   bool _initialized;
 
   std::set<TagID> _fe_vector_tags;
@@ -2183,15 +2187,12 @@ protected:
   ScalarInitialConditionWarehouse _scalar_ics; // use base b/c of setup methods
   ///@}
 
+protected:
   // material properties
   MaterialPropertyRegistry _material_prop_registry;
   MaterialPropertyStorage & _material_props;
   MaterialPropertyStorage & _bnd_material_props;
   MaterialPropertyStorage & _neighbor_material_props;
-
-  std::vector<std::shared_ptr<MaterialData>> _material_data;
-  std::vector<std::shared_ptr<MaterialData>> _bnd_material_data;
-  std::vector<std::shared_ptr<MaterialData>> _neighbor_material_data;
 
   ///@{
   // Material Warehouses
@@ -2338,9 +2339,6 @@ protected:
   /// Whether nor not stateful materials have been initialized
   bool _has_initialized_stateful;
 
-  /// Object responsible for restart (read/write)
-  std::unique_ptr<RestartableDataIO> _restart_io;
-
   /// true if the Jacobian is constant
   bool _const_jacobian;
 
@@ -2383,9 +2381,6 @@ protected:
 
   /// Maximum number of quadrature points used in the problem
   unsigned int _max_qps;
-
-  /// Maximum number of shape functions on any element in the problem
-  unsigned int _max_shape_funcs;
 
   /// Maximum scalar variable order
   Order _max_scalar_order;
@@ -2475,7 +2470,7 @@ private:
   bool _error_on_jacobian_nonzero_reallocation;
   bool _ignore_zeros_in_jacobian;
   const bool _force_restart;
-  const bool _skip_additional_restart_data;
+  const bool _allow_ics_during_restart;
   const bool _skip_nl_system_check;
   bool _fail_next_nonlinear_convergence_check;
   const bool & _allow_invalid_solution;
@@ -2503,7 +2498,6 @@ private:
   friend class NonlinearSystemBase;
   friend class MooseEigenSystem;
   friend class Resurrector;
-  friend class RestartableDataIO;
   friend class Restartable;
   friend class DisplacedProblem;
 
@@ -2593,6 +2587,8 @@ FEProblemBase::addObject(const std::string & type,
                          InputParameters & parameters,
                          const bool threaded)
 {
+  parallel_object_only();
+
   // Add the _subproblem and _sys parameters depending on use_displaced_mesh
   addObjectParamsHelper(parameters, name);
 

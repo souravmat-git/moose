@@ -150,7 +150,12 @@ public:
   /**
    * Return whether or not to save the current mesh
    */
-  bool hasSaveMesh();
+  bool hasSaveMesh() const;
+
+  /**
+   * @return Whether or not to output this mesh generator separately (output parameter is set)
+   */
+  bool hasOutput() const;
 
   /**
    * Return the name of the saved mesh
@@ -186,6 +191,30 @@ protected:
     return setMeshProperty<T, const T &>(data_name, data_value);
   }
   ///@}
+
+  /**
+   * Method for copying attribute from input mesh meta-data store to current mesh meta-data store.
+   * This may often be avoided as getMeshProperty calls can traverse the tree of mesh generators to
+   * find a metadata instance
+   */
+  template <typename T>
+  T & copyMeshProperty(const std::string & target_data_name,
+                       const std::string & source_data_name,
+                       const std::string & source_mesh)
+  {
+    return declareMeshProperty(target_data_name, getMeshProperty<T>(source_data_name, source_mesh));
+  }
+
+  /**
+   * Method for copying attribute from input mesh meta-data store to current mesh meta-data store,
+   * keeping source and target data names the same. This may often be avoided as getMeshProperty
+   * calls can traverse the tree of mesh generators to find a metadata instance
+   */
+  template <typename T>
+  T & copyMeshProperty(const std::string & source_data_name, const std::string & source_mesh)
+  {
+    return copyMeshProperty<T>(source_data_name, source_data_name, source_mesh);
+  }
 
   /**
    * Takes the name of a MeshGeneratorName parameter and then gets a pointer to the
@@ -406,8 +435,8 @@ MeshGenerator::declareMeshProperty(const std::string & data_name, Args &&... arg
   const auto full_name = meshPropertyName(data_name);
   auto new_T_value =
       std::make_unique<RestartableData<T>>(full_name, nullptr, std::forward<Args>(args)...);
-  auto value = &_app.registerRestartableData(
-      full_name, std::move(new_T_value), 0, false, MooseApp::MESH_META_DATA);
+  auto value =
+      &_app.registerRestartableData(std::move(new_T_value), 0, false, MooseApp::MESH_META_DATA);
   mooseAssert(value->declared(), "Should be declared");
 
   RestartableData<T> * T_value = dynamic_cast<RestartableData<T> *>(value);

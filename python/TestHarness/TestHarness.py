@@ -250,6 +250,7 @@ class TestHarness:
 
         checks = {}
         checks['platform'] = util.getPlatforms()
+        checks['machine'] = util.getMachine()
         checks['submodules'] = util.getInitializedSubmodules(self.run_tests_dir)
         checks['exe_objects'] = None # This gets calculated on demand
         checks['registered_apps'] = None # This gets extracted on demand
@@ -766,17 +767,11 @@ class TestHarness:
             self.writeResults()
 
     def writeResults(self):
-        """
-        Don't update the results file when using the following TestHarness options:
-          --failed-tests
-          --show-last-run
-          --re
-        """
-        if (self.options.failed_tests
-            or self.options.show_last_run
-            or self.options.reg_exp):
+        """ Don't update the results file when using the --failed-tests argument """
+        if self.options.failed_tests or self.options.show_last_run:
             return
 
+        """ write test results to disc in some fashion the user has requested """
         all_jobs = self.scheduler.retrieveJobs()
 
         # Gather and print the jobs with race conditions after the jobs are finished
@@ -991,7 +986,8 @@ class TestHarness:
             and not os.path.exists(self.options.results_file)):
             print('A previous run does not exist')
             sys.exit(1)
-
+        elif os.path.exists(self.options.results_file):
+            os.remove(self.options.results_file)
 
     ## Parse command line options and assign them to self.options
     def parseCLArgs(self, argv):
@@ -1157,10 +1153,6 @@ class TestHarness:
         # Update libmesh_dir to reflect arguments
         if opts.libmesh_dir:
             self.libmesh_dir = opts.libmesh_dir
-
-        # When running heavy tests, we'll make sure we use --no-report
-        if opts.heavy_tests:
-            self.options.report_skipped = False
 
         # User wants to write all output, so unify the options involved
         if opts.sep_files:

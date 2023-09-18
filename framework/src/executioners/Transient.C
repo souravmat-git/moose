@@ -178,8 +178,6 @@ Transient::Transient(const InputParameters & parameters)
     _target_time(declareRecoverableData<Real>("target_time", -std::numeric_limits<Real>::max())),
     _use_multiapp_dt(getParam<bool>("use_multiapp_dt")),
     _solution_change_norm(declareRecoverableData<Real>("solution_change_norm", 0.0)),
-    _sln_diff(_check_aux ? _aux.addVector("sln_diff", false, PARALLEL)
-                         : _nl.addVector("sln_diff", false, PARALLEL)),
     _normalize_solution_diff_norm_by_dt(getParam<bool>("normalize_solution_diff_norm_by_dt"))
 {
   _fixed_point_solve->setInnerSolve(_feproblem_solve);
@@ -212,7 +210,7 @@ Transient::Transient(const InputParameters & parameters)
 
   if (_app.halfTransient()) // Cut timesteps and end_time in half...
   {
-    _end_time /= 2.0;
+    _end_time = (_start_time + _end_time) / 2.0;
     _num_steps /= 2.0;
 
     if (_num_steps == 0) // Always do one step in the first half
@@ -738,10 +736,7 @@ Transient::relativeSolutionDifferenceNorm()
       _check_aux ? _aux.solution() : *_nl.currentSolution();
   const NumericVector<Number> & old_solution = _check_aux ? _aux.solutionOld() : _nl.solutionOld();
 
-  _sln_diff = current_solution;
-  _sln_diff -= old_solution;
-
-  return (_sln_diff.l2_norm() / current_solution.l2_norm());
+  return current_solution.l2_norm_diff(old_solution) / current_solution.l2_norm();
 }
 
 void

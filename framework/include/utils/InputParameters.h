@@ -160,6 +160,17 @@ public:
   void addParam(const std::string & name, const std::string & doc_string);
   ///@}
 
+  /**
+   * Enable support for initializer lists as default arguments for container type.
+   */
+  template <typename T>
+  void addParam(const std::string & name,
+                const std::initializer_list<typename T::value_type> & value,
+                const std::string & doc_string)
+  {
+    addParam<T>(name, T{value}, doc_string);
+  }
+
   ///@{
   // BEGIN RANGE CHECKED PARAMETER METHODS
   /**
@@ -420,6 +431,11 @@ public:
    * Returns a boolean indicating whether the specified parameter is required or not
    */
   bool isParamRequired(const std::string & name) const;
+
+  /**
+   * Forces parameter of given name to be not required regardless of type
+   */
+  void makeParamNotRequired(const std::string & name);
 
   /**
    * This method returns parameters that have been initialized in one fashion or another,
@@ -1813,20 +1829,4 @@ InputParameters::have_parameter(std::string_view name_in) const
   const auto name = checkForRename(std::string(name_in));
 
   return Parameters::have_parameter<T>(name);
-}
-
-namespace moose
-{
-namespace internal
-{
-/**
- * Calls the valid parameter method for the object of type T.
- */
-template <typename T>
-InputParameters
-callValidParams()
-{
-  return T::validParams();
-}
-}
 }

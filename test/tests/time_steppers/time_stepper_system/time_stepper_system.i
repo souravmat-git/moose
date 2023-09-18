@@ -1,5 +1,5 @@
 [Mesh]
-  file = restart_test_cp/0005_mesh.cpr
+  file = restart_test_cp/0005-mesh.cpr
 []
 
 [Variables]
@@ -22,11 +22,6 @@
   num_steps = 10
 
   [TimeSteppers]
-    [SolutionTimeAdaptiveDT]
-      type = SolutionTimeAdaptiveDT
-      dt = 0.5
-    []
-
     [LogConstDT]
       type = LogConstantDT
       log_dt = 0.2

@@ -18,11 +18,28 @@
 
 namespace MooseMeshUtils
 {
-// Changes the old ID to new ID in the mesh given in parameters
+/**
+ * Changes the old boundary ID to a new ID in the mesh
+ *
+ * @param mesh the mesh
+ * @param old_id the old boundary id
+ * @param new_id the new boundary id
+ * @param delete_prev whether to delete the previous boundary id from the mesh
+ */
 void changeBoundaryId(MeshBase & mesh,
                       const libMesh::boundary_id_type old_id,
                       const libMesh::boundary_id_type new_id,
                       bool delete_prev);
+
+/**
+ * Changes the old subdomain ID to a new ID in the mesh
+ *
+ * @param mesh the mesh
+ * @param old_id the old subdomain id
+ * @param new_id the new subdomain id
+ */
+void
+changeSubdomainId(MeshBase & mesh, const subdomain_id_type old_id, const subdomain_id_type new_id);
 
 /**
  * Gets the boundary IDs with their names.
@@ -200,7 +217,7 @@ computeFaceInfoFaceCoord(FaceInfo & fi,
  * @param extra_ids extra ids
  * @return map of element id to new extra id
  **/
-std::map<dof_id_type, dof_id_type>
+std::unordered_map<dof_id_type, dof_id_type>
 getExtraIDUniqueCombinationMap(const MeshBase & mesh,
                                const std::set<SubdomainID> & block_ids,
                                std::vector<ExtraElementIDName> extra_ids);

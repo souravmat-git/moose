@@ -60,7 +60,6 @@ DomainIntegralAction::validParams()
   params.addParam<Real>("poissons_ratio", "Poisson's ratio");
   params.addParam<Real>("youngs_modulus", "Young's modulus");
   params.addParam<std::vector<SubdomainName>>("block", "The block ids where integrals are defined");
-
   params.addParam<std::vector<VariableName>>(
       "displacements",
       "The displacements appropriate for the simulation geometry and coordinate system");
@@ -115,6 +114,10 @@ DomainIntegralAction::validParams()
       "updates the values in the vector postprocessor which will allow the crack to grow in XFEM "
       "cutter objects that use the domainIntegral vector postprocssor values as a growth "
       "criterion.");
+  params.addParam<bool>("output_vpp",
+                        true,
+                        "Flag to control the vector postprocessor outputs. Select false to "
+                        "suppress the redundant csv files for each time step and ring");
   return params;
 }
 
@@ -228,6 +231,10 @@ DomainIntegralAction::DomainIntegralAction(const InputParameters & params)
 
   bool youngs_modulus_set(false);
   bool poissons_ratio_set(false);
+
+  // All domain integral types block restrict the objects created by this action.
+  _blocks = getParam<std::vector<SubdomainName>>("block");
+
   MultiMooseEnum integral_moose_enums = getParam<MultiMooseEnum>("integrals");
   for (unsigned int i = 0; i < integral_moose_enums.size(); ++i)
   {
@@ -247,16 +254,10 @@ DomainIntegralAction::DomainIntegralAction(const InputParameters & params)
             "DomainIntegral error: must set Poisson's ratio and Young's modulus for integral: ",
             integral_moose_enums[i]);
 
-      if (!(isParamValid("block")))
-        paramError("block",
-                   "DomainIntegral error: must set block ID or name for integral: ",
-                   integral_moose_enums[i]);
-
       _poissons_ratio = getParam<Real>("poissons_ratio");
       poissons_ratio_set = true;
       _youngs_modulus = getParam<Real>("youngs_modulus");
       youngs_modulus_set = true;
-      _blocks = getParam<std::vector<SubdomainName>>("block");
     }
 
     _integrals.insert(INTEGRAL(int(integral_moose_enums.get(i))));
@@ -659,6 +660,9 @@ DomainIntegralAction::act()
 
       const std::string vpp_type_name("JIntegral");
       InputParameters params = _factory.getValidParams(vpp_type_name);
+      if (!getParam<bool>("output_vpp"))
+        params.set<std::vector<OutputName>>("outputs") = {"none"};
+
       params.set<ExecFlagEnum>("execute_on") = EXEC_TIMESTEP_END;
       params.set<UserObjectName>("crack_front_definition") = uo_name;
       params.set<std::vector<SubdomainName>>("block") = {_blocks};
@@ -703,6 +707,9 @@ DomainIntegralAction::act()
       std::string vpp_type_name(ad_prepend + "InteractionIntegral");
 
       InputParameters params = _factory.getValidParams(vpp_type_name);
+      if (!getParam<bool>("output_vpp"))
+        params.set<std::vector<OutputName>>("outputs") = {"none"};
+
       if (_use_crack_front_points_provider && _used_by_xfem_to_grow_crack)
         params.set<ExecFlagEnum>("execute_on") = {EXEC_TIMESTEP_END, EXEC_NONLINEAR};
       else

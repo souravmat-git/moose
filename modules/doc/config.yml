@@ -45,6 +45,7 @@ Extensions:
                 Creating an Application: getting_started/new_users.md
                 Examples and Tutorials: getting_started/examples_and_tutorials/index.md
                 NCRC Applications: help/inl/applications.md
+                Virtual Test Bed: https://mooseframework.inl.gov/virtual_test_bed/
                 INL HPC Services: help/inl/index.md
                 Supplemental Resources: getting_started/supplemental_resources/index.md
                 Frequently Asked Questions: help/faq/index.md
@@ -136,10 +137,12 @@ Extensions:
             restart: application_usage/restart_recover.md
             samplers: syntax/Samplers/index.md
             scalarkernels: syntax/ScalarKernels/index.md
+            solidproperties: syntax/SolidProperties/index.md
             splits: syntax/Preconditioning/index.md
             surrogates: syntax/Surrogates/index.md
             systems: syntax/Systems/index.md
             timeintegrators: syntax/Executioner/TimeIntegrator/index.md
+            times: syntax/Times/index.md
             timesteppers: syntax/Executioner/TimeStepper/index.md
             transfers: syntax/Transfers/index.md
             userobject: syntax/UserObjects/index.md
@@ -195,3 +198,5 @@ Extensions:
     MooseDocs.extensions.analytics:
         active: True
         google_measurement_id: G-RH7BY5XXNW
+    # Used to create a reference/example page for the tagging extension (see PR #25388)
+    MooseDocs.extensions.tagging: !include modules/electromagnetics/doc/config.yml Extensions MooseDocs.extensions.tagging

@@ -163,6 +163,7 @@ addActionTypes(Syntax & syntax)
   registerMooseObjectTask("add_vector_postprocessor",     VectorPostprocessor,    false);
   registerMooseObjectTask("add_reporter",                 Reporter,               false);
   registerMooseObjectTask("add_positions",                Positions,              false);
+  registerMooseObjectTask("add_times",                    Times,                  false);
 
   registerMooseObjectTask("add_indicator",                Indicator,              false);
   registerMooseObjectTask("add_marker",                   Marker,                 false);
@@ -239,6 +240,7 @@ addActionTypes(Syntax & syntax)
   // Output related actions
   registerTask("add_output_aux_variables", true);
   registerTask("check_output", true);
+  registerTask("declare_late_reporters", true);
 
   registerTask("create_problem_default", true);
   registerTask("create_problem_custom", false);
@@ -311,6 +313,7 @@ addActionTypes(Syntax & syntax)
                            "(add_ic)"
                            "(add_constraint, add_field_split)"
                            "(add_preconditioning)"
+                           "(add_times)"
                            "(add_time_stepper, add_time_steppers)"
                            "(compose_time_stepper)"
                            "(setup_time_steppers)"
@@ -332,6 +335,7 @@ addActionTypes(Syntax & syntax)
                            "(add_vector_postprocessor)" // MaterialVectorPostprocessor requires this
                                                         // to be after material objects are created.
                            "(add_reporter)"
+                           "(declare_late_reporters)"
                            "(add_aux_kernel, add_bc, add_damper, add_dirac_kernel, add_kernel,"
                            " add_nodal_kernel, add_dg_kernel, add_fv_kernel, add_fv_bc, add_fv_ik,"
                            " add_interface_kernel, add_scalar_kernel, add_aux_scalar_kernel,"
@@ -483,6 +487,9 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
 
   registerSyntax("AddPositionsAction", "Positions/*");
   syntax.registerSyntaxType("Positions/*", "PositionsName");
+
+  registerSyntax("AddTimesAction", "Times/*");
+  syntax.registerSyntaxType("Times/*", "TimesName");
 
   registerSyntax("AddDamperAction", "Dampers/*");
 

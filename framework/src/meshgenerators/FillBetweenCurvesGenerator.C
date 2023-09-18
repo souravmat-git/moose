@@ -119,8 +119,9 @@ FillBetweenCurvesGenerator::generate()
   }
   catch (MooseException & e)
   {
-    paramError("curve_1", e.what());
+    paramError("input_mesh_1", e.what());
   }
+
   try
   {
     FillBetweenPointVectorsTools::isCurveOpenSingleSegment(*input_mesh_2,
@@ -130,7 +131,7 @@ FillBetweenCurvesGenerator::generate()
   }
   catch (MooseException & e)
   {
-    paramError("curve_2", e.what());
+    paramError("input_mesh_2", e.what());
   }
 
   std::vector<Point> positions_vector_1;

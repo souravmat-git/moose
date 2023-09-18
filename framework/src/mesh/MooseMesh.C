@@ -427,7 +427,7 @@ MooseMesh::prepare(const MeshBase * const mesh_to_clone)
   {
     const auto rz_coord_blocks = getParam<std::vector<SubdomainName>>("rz_coord_blocks");
     const auto rz_coord_origins = getParam<std::vector<Point>>("rz_coord_origins");
-    const auto rz_coord_directions = getParam<std::vector<Point>>("rz_coord_directions");
+    const auto rz_coord_directions = getParam<std::vector<RealVectorValue>>("rz_coord_directions");
     if (rz_coord_origins.size() == rz_coord_blocks.size() &&
         rz_coord_directions.size() == rz_coord_blocks.size())
     {
@@ -616,44 +616,41 @@ MooseMesh::node(const dof_id_type i)
 const Node &
 MooseMesh::nodeRef(const dof_id_type i) const
 {
-  if (i > getMesh().max_node_id())
-    return *(*_quadrature_nodes.find(i)).second;
-
-  return getMesh().node_ref(i);
+  const auto node_ptr = queryNodePtr(i);
+  mooseAssert(node_ptr, "Missing node");
+  return *node_ptr;
 }
 
 Node &
 MooseMesh::nodeRef(const dof_id_type i)
 {
-  if (i > getMesh().max_node_id())
-    return *_quadrature_nodes[i];
-
-  return getMesh().node_ref(i);
+  return const_cast<Node &>(const_cast<const MooseMesh *>(this)->nodeRef(i));
 }
 
 const Node *
 MooseMesh::nodePtr(const dof_id_type i) const
 {
-  if (i > getMesh().max_node_id())
-    return (*_quadrature_nodes.find(i)).second;
-
-  return getMesh().node_ptr(i);
+  return &nodeRef(i);
 }
 
 Node *
 MooseMesh::nodePtr(const dof_id_type i)
 {
-  if (i > getMesh().max_node_id())
-    return _quadrature_nodes[i];
-
-  return getMesh().node_ptr(i);
+  return &nodeRef(i);
 }
 
 const Node *
 MooseMesh::queryNodePtr(const dof_id_type i) const
 {
   if (i > getMesh().max_node_id())
-    return (*_quadrature_nodes.find(i)).second;
+  {
+    auto it = _quadrature_nodes.find(i);
+    if (it == _quadrature_nodes.end())
+      return nullptr;
+    auto & node_ptr = it->second;
+    mooseAssert(node_ptr, "Uninitialized quadrature node");
+    return node_ptr;
+  }
 
   return getMesh().query_node_ptr(i);
 }
@@ -661,10 +658,7 @@ MooseMesh::queryNodePtr(const dof_id_type i) const
 Node *
 MooseMesh::queryNodePtr(const dof_id_type i)
 {
-  if (i > getMesh().max_node_id())
-    return _quadrature_nodes[i];
-
-  return getMesh().query_node_ptr(i);
+  return const_cast<Node *>(const_cast<const MooseMesh *>(this)->queryNodePtr(i));
 }
 
 void
@@ -883,6 +877,35 @@ MooseMesh::buildElemIDInfo()
   }
   comm().max(_max_ids);
   comm().min(_min_ids);
+}
+
+std::unordered_map<dof_id_type, std::set<dof_id_type>>
+MooseMesh::getElemIDMapping(const std::string & from_id_name, const std::string & to_id_name) const
+{
+  auto & mesh_base = getMesh();
+
+  if (!mesh_base.has_elem_integer(from_id_name))
+    mooseError("Mesh does not have the element integer name '", from_id_name, "'");
+  if (!mesh_base.has_elem_integer(to_id_name))
+    mooseError("Mesh does not have the element integer name '", to_id_name, "'");
+
+  const auto id1 = mesh_base.get_elem_integer_index(from_id_name);
+  const auto id2 = mesh_base.get_elem_integer_index(to_id_name);
+
+  std::unordered_map<dof_id_type, std::set<dof_id_type>> id_map;
+  for (const auto id : getAllElemIDs(id1))
+    id_map[id] = std::set<dof_id_type>();
+
+  for (const auto & elem : mesh_base.active_local_element_ptr_range())
+    id_map[elem->get_extra_integer(id1)].insert(elem->get_extra_integer(id2));
+
+  for (auto & [id, ids] : id_map)
+  {
+    libmesh_ignore(id); // avoid overzealous gcc 9.4 unused var warning
+    comm().set_union(ids);
+  }
+
+  return id_map;
 }
 
 std::set<dof_id_type>
@@ -2501,8 +2524,7 @@ MooseMesh::init()
     // sub-apps need to just build their mesh like normal
     {
       TIME_SECTION("readRecoveredMesh", 2);
-      getMesh().read(_app.getRestartRecoverFileBase() + "_mesh." +
-                     _app.getRestartRecoverFileSuffix());
+      getMesh().read(_app.getRestartRecoverFileBase() + MooseApp::checkpointSuffix());
     }
 
     getMesh().allow_renumbering(allow_renumbering_later);
@@ -2548,10 +2570,16 @@ MooseMesh::effectiveSpatialDimension() const
 unsigned int
 MooseMesh::getBlocksMaxDimension(const std::vector<SubdomainName> & blocks) const
 {
+  const auto & mesh = getMesh();
+
+  // Take a shortcut if possible
+  if (const auto & elem_dims = mesh.elem_dimensions(); mesh.is_prepared() && elem_dims.size() == 1)
+    return *elem_dims.begin();
+
   unsigned short dim = 0;
   const auto subdomain_ids = getSubdomainIDs(blocks);
   const std::set<SubdomainID> subdomain_ids_set(subdomain_ids.begin(), subdomain_ids.end());
-  for (const auto & elem : getMesh().active_subdomain_set_elements_ptr_range(subdomain_ids_set))
+  for (const auto & elem : mesh.active_subdomain_set_elements_ptr_range(subdomain_ids_set))
     dim = std::max(dim, elem->dim());
 
   // Get the maximumal globally
@@ -2915,6 +2943,8 @@ MooseMesh::ghostGhostedBoundaries()
     return;
 
   TIME_SECTION("GhostGhostedBoundaries", 3);
+
+  parallel_object_only();
 
   DistributedMesh & mesh = dynamic_cast<DistributedMesh &>(getMesh());
 

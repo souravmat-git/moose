@@ -1,6 +1,10 @@
-{% set build = 0 %}
-{% set version = "2023.05.12" %}
-{% set strbuild = "build_" + build|string %}
+# Making a Change to this package?
+# REMEMBER TO UPDATE the .yaml files for the following packages:
+#   moose/conda_build_config.yaml
+#   template/conda_build_config.yaml
+#
+# As well as any directions pertaining to modifying those files.
+{% set version = "2023.09.13" %}
 
 package:
   name: moose-dev
@@ -10,8 +14,8 @@ source:
   path: ../moose-dev
 
 build:
-  number: {{ build }}
-  string: {{ strbuild }}
+  number: 0
+  string: build_0
   skip: true  # [win]
 
 requirements:
@@ -19,6 +23,7 @@ requirements:
     - {{ moose_tools }}
     - {{ moose_libmesh }}
     - {{ moose_wasp }}
+    - {{ moose_peacock }}
 
 about:
   home: https://mooseframework.org/

@@ -10,6 +10,7 @@
 #pragma once
 
 // Moose includes
+#include "MooseTypes.h"
 #include "OutputInterface.h"
 #include "ReporterData.h"
 #include "InputParameters.h"
@@ -58,6 +59,16 @@ public:
    * when requested.
    */
   virtual bool shouldStore() const { return true; }
+
+  /**
+   * Method that can be overriden to declare "late" Reporter values.
+   *
+   * Values are considered "late" when they need to be declared after all
+   * other Reporters have been instantiated. This is called by the
+   * "declare_late_reporters" task, which should be called right after
+   * the "add_reporters" task.
+   */
+  virtual void declareLateValues() {}
 
 protected:
   ///@{
@@ -243,6 +254,13 @@ Reporter::declareValueByName(const ReporterValueName & value_name,
 
   buildOutputHideVariableList({state_name.getCombinedName()});
 
+  // Only thread 0 will declare the reporter value. The rest will get a reference
+  // to an UnusedValue
+  const THREAD_ID tid = _reporter_moose_object.parameters().isParamValid("_tid")
+                            ? _reporter_moose_object.parameters().get<THREAD_ID>("_tid")
+                            : 0;
+  if (tid)
+    return declareUnusedValue<T>();
   return _reporter_data.declareReporterValue<T, S>(
       state_name, mode, _reporter_moose_object, args...);
 }

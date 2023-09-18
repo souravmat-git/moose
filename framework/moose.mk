@@ -9,7 +9,7 @@ ENABLE_LIBTORCH ?= false
 
 # this allows us to modify the linked names/rpaths safely later for install targets
 ifneq (,$(findstring darwin,$(libmesh_HOST)))
-	libmesh_LDFLAGS += -headerpad_max_install_names
+	libmesh_LDFLAGS += -Wl,-headerpad_max_install_names
 endif
 
 #
@@ -216,7 +216,6 @@ moose_INC_DIRS := $(filter-out $(ignore_contrib_include), $(moose_INC_DIRS))
 
 moose_INC_DIRS += $(gtest_DIR)
 moose_INC_DIRS += $(HIT_DIR)
-moose_INC_DIRS += $(wasp_incfiles)
 moose_INCLUDE  := $(foreach i, $(moose_INC_DIRS), -I$(i))
 
 #libmesh_INCLUDE := $(moose_INCLUDE) $(libmesh_INCLUDE)
@@ -231,7 +230,8 @@ ifeq ($(MOOSE_UNITY),true)
 
 srcsubdirs := $(shell find $(FRAMEWORK_DIR)/src -type d -not -path '*/.libs*')
 
-moose_non_unity := %/base %/utils
+# This folder does not build with unity
+moose_non_unity := %/utils_nonunity
 
 # Add additional non-unity directories if libtorch is enabled
 ifeq ($(ENABLE_LIBTORCH),true)
