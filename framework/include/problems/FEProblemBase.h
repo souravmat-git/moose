@@ -737,16 +737,19 @@ public:
                                             ConstBndNodeRange & bnd_node_range);
 
   // Materials /////
-  virtual void addMaterial(const std::string & kernel_name,
+  virtual void addMaterial(const std::string & material_name,
                            const std::string & name,
                            InputParameters & parameters);
   virtual void addMaterialHelper(std::vector<MaterialWarehouse *> warehouse,
-                                 const std::string & kernel_name,
+                                 const std::string & material_name,
                                  const std::string & name,
                                  InputParameters & parameters);
-  virtual void addInterfaceMaterial(const std::string & kernel_name,
+  virtual void addInterfaceMaterial(const std::string & material_name,
                                     const std::string & name,
                                     InputParameters & parameters);
+  void addFunctorMaterial(const std::string & functor_material_name,
+                          const std::string & name,
+                          InputParameters & parameters);
 
   /**
    * Add the MooseVariables that the current materials depend on to the dependency list.
@@ -851,13 +854,15 @@ public:
    * @param name Name for the object to be created
    * @param parameters InputParameters for the object
    * @param threaded Whether or not to create n_threads copies of the object
+   * @param var_param_name The name of the parameter on the object which holds the primary variable.
    * @return A vector of shared_ptrs to the added objects
    */
   template <typename T>
   std::vector<std::shared_ptr<T>> addObject(const std::string & type,
                                             const std::string & name,
                                             InputParameters & parameters,
-                                            const bool threaded = true);
+                                            const bool threaded = true,
+                                            const std::string & var_param_name = "variable");
 
   // Postprocessors /////
   virtual void addPostprocessor(const std::string & pp_name,
@@ -2028,12 +2033,6 @@ public:
   MooseAppCoordTransform & coordTransform();
 
   std::size_t numNonlinearSystems() const override { return _num_nl_sys; }
-
-  /**
-   * reinitialize the finite volume assembly data for the provided face and thread
-   */
-  void reinitFVFace(THREAD_ID tid, const FaceInfo & fi);
-
   unsigned int currentNlSysNum() const override;
 
   /**
@@ -2100,6 +2099,11 @@ public:
    * Indicate that we have p-refinement
    */
   void havePRefinement();
+
+  virtual void needFV() override { _have_fv = true; }
+  virtual bool haveFV() const override { return _have_fv; }
+
+  virtual bool hasNonlocalCoupling() const override { return _has_nonlocal_coupling; }
 
 protected:
   /// Create extra tagged vectors and matrices
@@ -2295,7 +2299,9 @@ protected:
    *
    * This is needed due to header includes/forward declaration issues
    */
-  void addObjectParamsHelper(InputParameters & params, const std::string & object_name);
+  void addObjectParamsHelper(InputParameters & params,
+                             const std::string & object_name,
+                             const std::string & var_param_name = "variable");
 
 #ifdef LIBMESH_ENABLE_AMR
   Adaptivity _adaptivity;
@@ -2527,6 +2533,9 @@ private:
   /// data member will be used when APIs like \p cacheResidual, \p addCachedResiduals, etc. are
   /// called
   std::vector<VectorTag> _current_residual_vector_tags;
+
+  /// Whether we are performing some calculations with finite volume discretizations
+  bool _have_fv = false;
 };
 
 using FVProblemBase = FEProblemBase;
@@ -2585,12 +2594,13 @@ std::vector<std::shared_ptr<T>>
 FEProblemBase::addObject(const std::string & type,
                          const std::string & name,
                          InputParameters & parameters,
-                         const bool threaded)
+                         const bool threaded,
+                         const std::string & var_param_name)
 {
   parallel_object_only();
 
   // Add the _subproblem and _sys parameters depending on use_displaced_mesh
-  addObjectParamsHelper(parameters, name);
+  addObjectParamsHelper(parameters, name, var_param_name);
 
   const auto n_threads = threaded ? libMesh::n_threads() : 1;
   std::vector<std::shared_ptr<T>> objects(n_threads);

@@ -176,7 +176,7 @@ FEProblemBase::validParams()
                         "True to skip the NonlinearSystem check for work to do (e.g. Make sure "
                         "that there are variables to solve for).");
   params.addParam<bool>("allow_initial_conditions_with_restart",
-                        true,
+                        false,
                         "True to allow the user to specify initial conditions when restarting. "
                         "Initial conditions can override any restarted field");
 
@@ -1582,8 +1582,7 @@ FEProblemBase::addResidualScalar(THREAD_ID tid /* = 0*/)
 void
 FEProblemBase::cacheResidual(THREAD_ID tid)
 {
-  _assembly[tid][_current_nl_sys->number()]->cacheResidual(Assembly::GlobalDataKey{},
-                                                           currentResidualVectorTags());
+  SubProblem::cacheResidual(tid);
   if (_displaced_problem)
     _displaced_problem->cacheResidual(tid);
 }
@@ -1591,8 +1590,7 @@ FEProblemBase::cacheResidual(THREAD_ID tid)
 void
 FEProblemBase::cacheResidualNeighbor(THREAD_ID tid)
 {
-  _assembly[tid][_current_nl_sys->number()]->cacheResidualNeighbor(Assembly::GlobalDataKey{},
-                                                                   currentResidualVectorTags());
+  SubProblem::cacheResidualNeighbor(tid);
   if (_displaced_problem)
     _displaced_problem->cacheResidualNeighbor(tid);
 }
@@ -1600,9 +1598,7 @@ FEProblemBase::cacheResidualNeighbor(THREAD_ID tid)
 void
 FEProblemBase::addCachedResidual(THREAD_ID tid)
 {
-  _assembly[tid][_current_nl_sys->number()]->addCachedResiduals(Assembly::GlobalDataKey{},
-                                                                currentResidualVectorTags());
-
+  SubProblem::addCachedResidual(tid);
   if (_displaced_problem)
     _displaced_problem->addCachedResidual(tid);
 }
@@ -1700,21 +1696,15 @@ FEProblemBase::addJacobianOffDiagScalar(unsigned int ivar, THREAD_ID tid /* = 0*
 void
 FEProblemBase::cacheJacobian(THREAD_ID tid)
 {
-  _assembly[tid][_current_nl_sys->number()]->cacheJacobian(Assembly::GlobalDataKey{});
-  if (_has_nonlocal_coupling)
-    _assembly[tid][_current_nl_sys->number()]->cacheJacobianNonlocal(Assembly::GlobalDataKey{});
+  SubProblem::cacheJacobian(tid);
   if (_displaced_problem)
-  {
     _displaced_problem->cacheJacobian(tid);
-    if (_has_nonlocal_coupling)
-      _displaced_problem->cacheJacobianNonlocal(tid);
-  }
 }
 
 void
 FEProblemBase::cacheJacobianNeighbor(THREAD_ID tid)
 {
-  _assembly[tid][_current_nl_sys->number()]->cacheJacobianNeighbor(Assembly::GlobalDataKey{});
+  SubProblem::cacheJacobianNeighbor(tid);
   if (_displaced_problem)
     _displaced_problem->cacheJacobianNeighbor(tid);
 }
@@ -1722,7 +1712,7 @@ FEProblemBase::cacheJacobianNeighbor(THREAD_ID tid)
 void
 FEProblemBase::addCachedJacobian(THREAD_ID tid)
 {
-  _assembly[tid][_current_nl_sys->number()]->addCachedJacobian(Assembly::GlobalDataKey{});
+  SubProblem::addCachedJacobian(tid);
   if (_displaced_problem)
     _displaced_problem->addCachedJacobian(tid);
 }
@@ -2223,17 +2213,12 @@ FEProblemBase::addFunction(const std::string & type,
     std::shared_ptr<Function> func = _factory.create<Function>(type, name, parameters, tid);
     _functions.addObject(func, tid);
 
-    auto add_functor = [this, &name, tid](const auto & cast_functor)
-    {
-      this->addFunctor(name, cast_functor, tid);
-      if (_displaced_problem)
-        _displaced_problem->addFunctor(name, cast_functor, tid);
-    };
-
     if (auto * const functor = dynamic_cast<Moose::FunctorBase<Real> *>(func.get()))
-      add_functor(*functor);
-    else if (auto * const functor = dynamic_cast<Moose::FunctorBase<ADReal> *>(func.get()))
-      add_functor(*functor);
+    {
+      this->addFunctor(name, *functor, tid);
+      if (_displaced_problem)
+        _displaced_problem->addFunctor(name, *functor, tid);
+    }
     else
       mooseError("Unrecognized function functor type");
   }
@@ -2470,9 +2455,6 @@ FEProblemBase::addKernel(const std::string & kernel_name,
   {
     parameters.set<SubProblem *>("_subproblem") = _displaced_problem.get();
     parameters.set<SystemBase *>("_sys") = &_displaced_problem->nlSys(nl_sys_num);
-    const auto & disp_names = _displaced_problem->getDisplacementVarNames();
-    parameters.set<std::vector<VariableName>>("displacements") =
-        std::vector<VariableName>(disp_names.begin(), disp_names.end());
     _reinit_displaced_elem = true;
   }
   else
@@ -2573,9 +2555,6 @@ FEProblemBase::addBoundaryCondition(const std::string & bc_name,
   {
     parameters.set<SubProblem *>("_subproblem") = _displaced_problem.get();
     parameters.set<SystemBase *>("_sys") = &_displaced_problem->nlSys(nl_sys_num);
-    const auto & disp_names = _displaced_problem->getDisplacementVarNames();
-    parameters.set<std::vector<VariableName>>("displacements") =
-        std::vector<VariableName>(disp_names.begin(), disp_names.end());
     _reinit_displaced_face = true;
   }
   else
@@ -2913,6 +2892,12 @@ FEProblemBase::addFVKernel(const std::string & fv_kernel_name,
                            const std::string & name,
                            InputParameters & parameters)
 {
+  if (_displaced_problem && parameters.get<bool>("use_displaced_mesh"))
+    // FVElementalKernels are computed in the historically finite element threaded loops. They rely
+    // on Assembly data like _current_elem. When we call reinit on the FEProblemBase we will only
+    // reinit the DisplacedProblem and its associated Assembly objects if we mark this boolean as
+    // true
+    _reinit_displaced_elem = true;
   addObject<FVKernel>(fv_kernel_name, name, parameters);
 }
 
@@ -2929,7 +2914,10 @@ FEProblemBase::addFVInterfaceKernel(const std::string & fv_ik_name,
                                     const std::string & name,
                                     InputParameters & parameters)
 {
-  addObject<FVInterfaceKernel>(fv_ik_name, name, parameters);
+  /// We assume that variable1 and variable2 can live on different systems, in this case
+  /// the user needs to create two interface kernels with flipped variables and parameters
+  addObject<FVInterfaceKernel>(
+      fv_ik_name, name, parameters, /*threaded=*/true, /*variable_param_name=*/"variable1");
 }
 
 // InterfaceKernels ////
@@ -3207,6 +3195,36 @@ FEProblemBase::getMaterialData(Moose::MaterialDataType type, THREAD_ID tid)
   }
 
   mooseError("FEProblemBase::getMaterialData(): Invalid MaterialDataType ", type);
+}
+
+void
+FEProblemBase::addFunctorMaterial(const std::string & functor_material_name,
+                                  const std::string & name,
+                                  InputParameters & parameters)
+{
+  parallel_object_only();
+
+  auto add_functor_materials = [&](const auto & parameters, const auto & name)
+  {
+    for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+    {
+      // Create the general Block/Boundary MaterialBase object
+      std::shared_ptr<MaterialBase> material =
+          _factory.create<MaterialBase>(functor_material_name, name, parameters, tid);
+
+      _all_materials.addObject(material, tid);
+      _materials.addObject(material, tid);
+    }
+  };
+
+  parameters.set<SubProblem *>("_subproblem") = this;
+  add_functor_materials(parameters, name);
+  if (_displaced_problem)
+  {
+    auto disp_params = parameters;
+    disp_params.set<SubProblem *>("_subproblem") = _displaced_problem.get();
+    add_functor_materials(disp_params, name + "_displaced");
+  }
 }
 
 void
@@ -3556,12 +3574,14 @@ FEProblemBase::swapBackMaterialsNeighbor(THREAD_ID tid)
 }
 
 void
-FEProblemBase::addObjectParamsHelper(InputParameters & parameters, const std::string & object_name)
+FEProblemBase::addObjectParamsHelper(InputParameters & parameters,
+                                     const std::string & object_name,
+                                     const std::string & var_param_name)
 {
   const auto nl_sys_num =
-      parameters.isParamValid("variable") &&
-              determineNonlinearSystem(parameters.varName("variable", object_name)).first
-          ? determineNonlinearSystem(parameters.varName("variable", object_name)).second
+      parameters.isParamValid(var_param_name) &&
+              determineNonlinearSystem(parameters.varName(var_param_name, object_name)).first
+          ? determineNonlinearSystem(parameters.varName(var_param_name, object_name)).second
           : (unsigned int)0;
 
   if (_displaced_problem && parameters.have_parameter<bool>("use_displaced_mesh") &&
@@ -6001,13 +6021,9 @@ FEProblemBase::computeResidual(const NumericVector<Number> & soln,
   _current_nl_sys->associateVectorToTag(residual, _current_nl_sys->residualVectorTag());
   const auto & residual_vector_tags = getVectorTags(Moose::VECTOR_TAG_RESIDUAL);
 
-  _fe_vector_tags.clear();
-
-  for (const auto & residual_vector_tag : residual_vector_tags)
-    // We filter out tags which do not have associated vectors in the current nonlinear
-    // system. This is essential to be able to use system-dependent residual tags.
-    if (_current_nl_sys->hasVector(residual_vector_tag._id))
-      _fe_vector_tags.insert(residual_vector_tag._id);
+  // We filter out tags which do not have associated vectors in the current nonlinear
+  // system. This is essential to be able to use system-dependent residual tags.
+  selectVectorTagsFromSystem(*_current_nl_sys, residual_vector_tags, _fe_vector_tags);
 
   computeResidualInternal(soln, residual, _fe_vector_tags);
 }
@@ -6019,12 +6035,12 @@ FEProblemBase::computeResidualAndJacobian(const NumericVector<Number> & soln,
 {
   // vector tags
   {
+    _current_nl_sys->associateVectorToTag(residual, _current_nl_sys->residualVectorTag());
     const auto & residual_vector_tags = getVectorTags(Moose::VECTOR_TAG_RESIDUAL);
 
-    _fe_vector_tags.clear();
-
-    for (const auto & residual_vector_tag : residual_vector_tags)
-      _fe_vector_tags.insert(residual_vector_tag._id);
+    // We filter out tags which do not have associated vectors in the current nonlinear
+    // system. This is essential to be able to use system-dependent residual tags.
+    selectVectorTagsFromSystem(*_current_nl_sys, residual_vector_tags, _fe_vector_tags);
 
     setCurrentResidualVectorTags(_fe_vector_tags);
   }
@@ -7357,7 +7373,6 @@ FEProblemBase::checkUserObjects()
     names.insert(obj->name());
 
   // See if all referenced blocks are covered
-  mesh_subdomains.insert(Moose::ANY_BLOCK_ID);
   std::set<SubdomainID> difference;
   std::set_difference(user_objects_blocks.begin(),
                       user_objects_blocks.end(),
@@ -7409,8 +7424,6 @@ FEProblemBase::checkDependMaterialsHelper(
     // Add zero material properties specific to this block and unrestricted
     block_supplied_props.insert(_zero_block_material_props[it.first].begin(),
                                 _zero_block_material_props[it.first].end());
-    block_supplied_props.insert(_zero_block_material_props[Moose::ANY_BLOCK_ID].begin(),
-                                _zero_block_material_props[Moose::ANY_BLOCK_ID].end());
 
     // Error check to make sure all properties consumed by materials are supplied on this block
     std::set<std::string> difference;
@@ -7647,7 +7660,7 @@ FEProblemBase::checkNonlinearConvergence(std::string & msg,
     }
     else if (_n_nl_pingpong > _n_max_nl_pingpong)
     {
-      oss << "Diverged due to maximum non linear residual pingpong achieved" << '\n';
+      oss << "Diverged due to maximum nonlinear residual pingpong achieved" << '\n';
       reason = MooseNonlinearConvergenceReason::DIVERGED_NL_RESIDUAL_PINGPONG;
     }
   }
@@ -8061,6 +8074,12 @@ void
 FEProblemBase::residualSetup()
 {
   SubProblem::residualSetup();
+  // We need to setup all the nonlinear systems other than our current one which actually called
+  // this method (so we have to make sure we don't go in a circle)
+  for (const auto i : make_range(numNonlinearSystems()))
+    if (i != currentNlSysNum())
+      _nl[i]->residualSetup();
+  // We don't setup the aux sys because that's been done elsewhere
   if (_displaced_problem)
     _displaced_problem->residualSetup();
 }
@@ -8069,6 +8088,12 @@ void
 FEProblemBase::jacobianSetup()
 {
   SubProblem::jacobianSetup();
+  // We need to setup all the nonlinear systems other than our current one which actually called
+  // this method (so we have to make sure we don't go in a circle)
+  for (const auto i : make_range(numNonlinearSystems()))
+    if (i != currentNlSysNum())
+      _nl[i]->jacobianSetup();
+  // We don't setup the aux sys because that's been done elsewhere
   if (_displaced_problem)
     _displaced_problem->jacobianSetup();
 }
@@ -8077,13 +8102,6 @@ MooseAppCoordTransform &
 FEProblemBase::coordTransform()
 {
   return mesh().coordTransform();
-}
-
-void
-FEProblemBase::reinitFVFace(const THREAD_ID tid, const FaceInfo & fi)
-{
-  for (auto & assembly : _assembly[tid])
-    assembly->reinitFVFace(fi);
 }
 
 unsigned int

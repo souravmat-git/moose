@@ -28,11 +28,11 @@ Example Tag command in *.md:
 
 Example output tag dictionary for multiple pages, names, and key:value pairs:
 {data:
-[{name: "heatconduction", path: "moose/modules/heat_conduction/doc/content/modules/heat_conduction/index.md", key_vals: {keyheat: "valheat", key: "val", key1: "val1"}},
-{name: "index", path: "moose/modules/doc/content/index.md", key_vals: {key1: "val1", keya: "val"}},
-{name: "index2", path: "moose/modules/doc/content/index2.md", key_vals: {key1: "val1", keya: "val", thing1: "thing2"}},
-{name: "geochem", path: "moose/modules/geochemistry/doc/content/modules/geochemistry/index.md", key_vals: {keyg: "valg", keychem: "valuechem"}},
-{name: "vortex", path: "moose/modules/level_set/doc/content/modules/level_set/example_vortex.md", key_vals: {keyvor: "valvor", key: "val", key1: "val1"}}]
+[{name: "heatconduction", path: "/modules/heat_conduction/doc/content/modules/heat_conduction/index.md", link: "/heat_conduction/doc/content/modules/heat_conduction/index.html", key_vals: {keyheat: "valheat", key: "val", key1: "val1"}},
+ {name: "index", path: "moose/modules/doc/content/index.md", link: "/doc/content/index.html", key_vals: {key1: "val1", keya: "val"}},
+ {name: "index2", path: "moose/modules/doc/content/index2.md", link: "/doc/content/index2.html", key_vals: {key1: "val1", keya: "val", thing1: "thing2"}},
+ {name: "geochem", path: "moose/modules/geochemistry/doc/content/modules/geochemistry/index.md", link: "/geochemistry/doc/content/modules/geochemistry/index.html", key_vals: {keyg: "valg", keychem: "valuechem"}},
+ {name: "vortex", path: "moose/modules/level_set/doc/content/modules/level_set/example_vortex.md", link: "/level_set/doc/content/modules/level_set/example_vortex.html", key_vals: {keyvor: "valvor", key: "val", key1: "val1"}}]
 }
 """
 
@@ -98,13 +98,49 @@ class TaggingExtension(command.CommandExtension):
                 for entry in key_list_regex:
                     regex_replace=f"'{entry}':"
                     tag_dict_str=re.sub(regex_replace,entry+':', tag_dict_str)
-                tag_dict_str=re.sub("\s","", tag_dict_str)
+                    # add relative link built from the path at the end of the tagging entry
+                    if (entry == 'path'):
+                        path_value = tag_dict_str.split("path: ")[1].split(',')[0].replace("'", "")
+
+                        # splitting the path is dangerous, even at content/, as more than one tagged page could have
+                        # the same name.
+                        if 'content/' in path_value:
+                            path_value_cut = path_value.split('content/')[1]
+                        else:
+                            path_value_cut = path_value.split('/')[-1]
+
+                        # Find the relative path from the filter page (assumed at filter/index.html)
+                        # Check that there is no ambiguity
+                        target_page = self.translator.findPages(path_value_cut)
+                        filter_page = self.translator.findPages("filter/index.html")
+                        if len(target_page) != 1:
+                            LOG.error(str(len(target_page)) + " pages found after truncating address when "
+                                      "tagging for page initially at address: " + path_value)
+                        if len(filter_page) != 1:
+                            LOG.warning(str(len(filter_page)) + " pages have been found for the filter page "
+                                        "when building relative links for tagged pages!")
+                        # We did not find the pages, thus cannot search for their relative path
+                        # So we simply take the full path value and use it to create the link
+                        if (len(target_page) == 0 or len(filter_page) == 0):
+                            link_value = '/' + path_value_cut.replace('.md', '.html')
+                        else:
+                            target_page = target_page[0]
+                            filter_page = filter_page[0]
+                            link_value = target_page.relativeDestination(filter_page)
+
+                        # Insert the link into the dictionary string
+                        index = tag_dict_str.find(', key_vals')
+                        tag_dict_str = tag_dict_str[:index] + ', link: "' + link_value + '"' + tag_dict_str[index:]
+
                 tag_dict_str=re.sub("'",'"', tag_dict_str)
+                # Downstream js cannot handle double quotes
+                tag_dict_str=re.sub("\"\"",'"', tag_dict_str)
                 if len(replace_str) == 0:
                     replace_str += tag_dict_str
                 else:
                     replace_str += "," + tag_dict_str
 
+        # Replace the dummy tag dictionary in the JS file with the collected dictionary from parsing the pages
         replace_str = "{data:[" + replace_str + "]}"
 
         # Find the javascript file with error checking

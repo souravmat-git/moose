@@ -21,6 +21,14 @@
       expect_out = 'Inconsistent orientation of sideset bad_one \(4\) with regards to subdomain pairs'
       detail = 'inconsistently oriented sidesets between subdomains,'
     []
+    [inconsistent_internal_sidesets]
+      type = RunApp
+      input = 'consistent_domains.i'
+      cli_args = '--mesh-only'
+      mesh_mode = 'replicated'
+      expect_out = 'Sideset bad_one \(4\) has two neighboring sides with a very large angle'
+      detail = 'inconsistently oriented sidesets between two neighbor sides within the sideset,'
+    []
     [overlap]
       type = 'RunApp'
       input = 'node_based_test.i'
@@ -155,6 +163,15 @@
       expect_err = 'Number of non-conformal nodes likely due to mesh refinement detected by heuristic: 1'
 
       detail = 'triangle elements of second order,'
+    []
+    [tri_third_order]
+      type = 'RunException'
+      input = 'detect_amr_tri.i'
+      mesh_mode = replicated
+      cli_args = 'Mesh/cut_one/elem_type=TRI7 Mesh/diag/search_for_adaptivity_nonconformality=ERROR --mesh-only'
+      expect_err = 'Number of non-conformal nodes likely due to mesh refinement detected by heuristic: 1'
+
+      detail = 'triangle elements of third order,'
     []
     [tri_two_levels_across]
       type = 'RunApp'

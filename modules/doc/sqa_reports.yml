@@ -96,11 +96,11 @@ Applications:
         remove:
             - framework/doc/remove.yml
 
-    heat_conduction:
+    heat_transfer:
         exe_directory: modules/combined
         app_types:
             - HeatConductionApp
-        content_directory: modules/heat_conduction/doc/content
+        content_directory: modules/heat_transfer/doc/content
         unregister:
             - framework/doc/unregister.yml
         remove:
@@ -300,7 +300,7 @@ Documents:
     software_requirements_specification: sqa/moose_srs.md
     software_design_description: sqa/moose_sdd.md
     software_test_plan: sqa/moose_stp.md
-    requirements_traceablity_matrix: sqa/moose_rtm.md
+    requirements_traceability_matrix: sqa/moose_rtm.md
     verification_validation_report: sqa/moose_vvr.md
     failure_analysis_report: sqa/moose_far.md
     software_library_list: sqa/moose_sll.md
@@ -383,9 +383,9 @@ Requirements:
         directories:
             - modules/functional_expansion_tools
 
-    heat_conduction:
+    heat_transfer:
         directories:
-            - modules/heat_conduction
+            - modules/heat_transfer
 
     geochemistry:
         directories:

@@ -131,12 +131,10 @@ MooseApp::validParams()
       false,
       "Ignore input file and build a minimal application with Transient executioner.");
 
-#ifdef WASP_ENABLED
   params.addCommandLineParam<bool>(
       "language_server",
       "--language-server",
       "Starts a process to communicate with development tools using the language server protocol");
-#endif
 
   params.addCommandLineParam<std::string>(
       "definition", "--definition", "Shows a SON style input definition dump for input validation");
@@ -516,6 +514,7 @@ MooseApp::MooseApp(InputParameters parameters)
   _the_warehouse->registerAttribute<AttribSysNum>("sys_num", libMesh::invalid_uint);
   _the_warehouse->registerAttribute<AttribResidualObject>("residual_object");
   _the_warehouse->registerAttribute<AttribSorted>("sorted");
+  _the_warehouse->registerAttribute<AttribDisplaced>("displaced", -1);
 
   if (isParamValid("_argc") && isParamValid("_argv"))
   {
@@ -1008,7 +1007,6 @@ MooseApp::setupOptions()
     }
   }
 
-#ifdef WASP_ENABLED
   else if (isParamValid("language_server"))
   {
     _perf_graph.disableLivePrint();
@@ -1026,7 +1024,6 @@ MooseApp::setupOptions()
 
     _ready_to_exit = true;
   }
-#endif
 
   else /* The catch-all case for bad options or missing options, etc. */
   {

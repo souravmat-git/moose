@@ -172,6 +172,20 @@ SystemBase::addVariableToZeroOnJacobian(std::string var_name)
 }
 
 void
+SystemBase::setVariableGlobalDoFs(const std::string & var_name)
+{
+  AllLocalDofIndicesThread aldit(_subproblem, {var_name});
+  ConstElemRange & elem_range = *_mesh.getActiveLocalElementRange();
+  Threads::parallel_reduce(elem_range, aldit);
+
+  // Gather the dof indices across procs to get all the dof indices for var_name
+  aldit.dofIndicesSetUnion();
+
+  const auto & all_dof_indices = aldit.getDofIndices();
+  _var_all_dof_indices.assign(all_dof_indices.begin(), all_dof_indices.end());
+}
+
+void
 SystemBase::zeroVariables(std::vector<std::string> & vars_to_be_zeroed)
 {
   if (vars_to_be_zeroed.size() > 0)
@@ -1207,12 +1221,15 @@ SystemBase::copySolutionsBackwards()
 {
   system().update();
 
+  // Copying the solutions backward so the current solution will become the old, and the old will
+  // become older. The same applies to the nonlinear iterates.
   for (const auto iteration_index : index_range(_solution_states))
   {
     const auto states = _solution_states[iteration_index].size();
     if (states > 1)
-      for (unsigned int i = 1; i <= states - 1; ++i)
-        solutionState(i) = solutionState(0);
+      for (unsigned int i = states - 1; i > 0; --i)
+        solutionState(i, Moose::SolutionIterationType(iteration_index)) =
+            solutionState(i - 1, Moose::SolutionIterationType(iteration_index));
   }
 
   if (solutionUDotOld())

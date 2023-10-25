@@ -948,8 +948,20 @@ NonlinearSystemBase::getResidualTimeVector()
   if (!_Re_time)
   {
     _Re_time_tag = _fe_problem.addVectorTag("TIME");
-    _Re_time = &addVector(_Re_time_tag, false, GHOSTED);
+
+    // Most applications don't need the expense of ghosting
+    ParallelType ptype = _need_residual_ghosted ? GHOSTED : PARALLEL;
+    _Re_time = &addVector(_Re_time_tag, false, ptype);
   }
+  else if (_need_residual_ghosted && _Re_time->type() == PARALLEL)
+  {
+    const auto vector_name = _subproblem.vectorTagName(_Re_time_tag);
+
+    // If an application changes its mind, the libMesh API lets us
+    // change the vector.
+    _Re_time = &system().add_vector(vector_name, false, GHOSTED);
+  }
+
   return *_Re_time;
 }
 
@@ -959,8 +971,20 @@ NonlinearSystemBase::getResidualNonTimeVector()
   if (!_Re_non_time)
   {
     _Re_non_time_tag = _fe_problem.addVectorTag("NONTIME");
-    _Re_non_time = &addVector(_Re_non_time_tag, false, GHOSTED);
+
+    // Most applications don't need the expense of ghosting
+    ParallelType ptype = _need_residual_ghosted ? GHOSTED : PARALLEL;
+    _Re_non_time = &addVector(_Re_non_time_tag, false, ptype);
   }
+  else if (_need_residual_ghosted && _Re_non_time->type() == PARALLEL)
+  {
+    const auto vector_name = _subproblem.vectorTagName(_Re_non_time_tag);
+
+    // If an application changes its mind, the libMesh API lets us
+    // change the vector.
+    _Re_non_time = &system().add_vector(vector_name, false, GHOSTED);
+  }
+
   return *_Re_non_time;
 }
 
@@ -1498,7 +1522,9 @@ NonlinearSystemBase::residualSetup()
   _general_dampers.residualSetup();
   _nodal_bcs.residualSetup();
 
-  _fe_problem.residualSetup();
+  // Avoid recursion
+  if (this == &_fe_problem.currentNonlinearSystem())
+    _fe_problem.residualSetup();
   _app.solutionInvalidity().resetSolutionInvalidCurrentIteration();
 }
 
@@ -1544,11 +1570,25 @@ NonlinearSystemBase::computeResidualInternal(const std::set<TagID> & tags)
     ComputeResidualThread cr(_fe_problem, tags);
     Threads::parallel_reduce(elem_range, cr);
 
+    // We pass face information directly to FV residual objects for their evaluation. Consequently
+    // we must make sure to do separate threaded loops for 1) undisplaced face information objects
+    // and undisplaced residual objects and 2) displaced face information objects and displaced
+    // residual objects
+    using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
     if (_fe_problem.haveFV())
     {
-      using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
-      ComputeFVFluxResidualThread<FVRange> fvr(_fe_problem, this->number(), tags);
+      ComputeFVFluxResidualThread<FVRange> fvr(
+          _fe_problem, this->number(), tags, /*on_displaced=*/false);
       FVRange faces(_fe_problem.mesh().ownedFaceInfoBegin(), _fe_problem.mesh().ownedFaceInfoEnd());
+      Threads::parallel_reduce(faces, fvr);
+    }
+    if (auto displaced_problem = _fe_problem.getDisplacedProblem();
+        displaced_problem && displaced_problem->haveFV())
+    {
+      ComputeFVFluxResidualThread<FVRange> fvr(
+          _fe_problem, this->number(), tags, /*on_displaced=*/true);
+      FVRange faces(displaced_problem->mesh().ownedFaceInfoBegin(),
+                    displaced_problem->mesh().ownedFaceInfoEnd());
       Threads::parallel_reduce(faces, fvr);
     }
 
@@ -1766,12 +1806,22 @@ NonlinearSystemBase::computeResidualAndJacobianInternal(const std::set<TagID> & 
     ComputeResidualAndJacobianThread crj(_fe_problem, vector_tags, matrix_tags);
     Threads::parallel_reduce(elem_range, crj);
 
+    using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
     if (_fe_problem.haveFV())
     {
-      using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
-      ComputeFVFluxRJThread<FVRange> fvrj(_fe_problem, this->number(), vector_tags, matrix_tags);
+      ComputeFVFluxRJThread<FVRange> fvrj(
+          _fe_problem, this->number(), vector_tags, matrix_tags, /*on_displaced=*/false);
       FVRange faces(_fe_problem.mesh().ownedFaceInfoBegin(), _fe_problem.mesh().ownedFaceInfoEnd());
       Threads::parallel_reduce(faces, fvrj);
+    }
+    if (auto displaced_problem = _fe_problem.getDisplacedProblem();
+        displaced_problem && displaced_problem->haveFV())
+    {
+      ComputeFVFluxRJThread<FVRange> fvr(
+          _fe_problem, this->number(), vector_tags, matrix_tags, /*on_displaced=*/true);
+      FVRange faces(displaced_problem->mesh().ownedFaceInfoBegin(),
+                    displaced_problem->mesh().ownedFaceInfoEnd());
+      Threads::parallel_reduce(faces, fvr);
     }
 
     mortarConstraints(Moose::ComputeType::ResidualAndJacobian, vector_tags, matrix_tags);
@@ -2533,7 +2583,9 @@ NonlinearSystemBase::jacobianSetup()
   _general_dampers.jacobianSetup();
   _nodal_bcs.jacobianSetup();
 
-  _fe_problem.jacobianSetup();
+  // Avoid recursion
+  if (this == &_fe_problem.currentNonlinearSystem())
+    _fe_problem.jacobianSetup();
   _app.solutionInvalidity().resetSolutionInvalidCurrentIteration();
 }
 
@@ -2607,14 +2659,24 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
         _fe_problem.assembly(i, number()).addCachedJacobian(Assembly::GlobalDataKey{});
     }
 
+    using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
     if (_fe_problem.haveFV())
     {
       // the same loop works for both residual and jacobians because it keys
       // off of FEProblem's _currently_computing_jacobian parameter
-      using FVRange = StoredRange<MooseMesh::const_face_info_iterator, const FaceInfo *>;
-      ComputeFVFluxJacobianThread<FVRange> fvj(_fe_problem, this->number(), tags);
+      ComputeFVFluxJacobianThread<FVRange> fvj(
+          _fe_problem, this->number(), tags, /*on_displaced=*/false);
       FVRange faces(_fe_problem.mesh().ownedFaceInfoBegin(), _fe_problem.mesh().ownedFaceInfoEnd());
       Threads::parallel_reduce(faces, fvj);
+    }
+    if (auto displaced_problem = _fe_problem.getDisplacedProblem();
+        displaced_problem && displaced_problem->haveFV())
+    {
+      ComputeFVFluxJacobianThread<FVRange> fvr(
+          _fe_problem, this->number(), tags, /*on_displaced=*/true);
+      FVRange faces(displaced_problem->mesh().ownedFaceInfoBegin(),
+                    displaced_problem->mesh().ownedFaceInfoEnd());
+      Threads::parallel_reduce(faces, fvr);
     }
 
     mortarConstraints(Moose::ComputeType::Jacobian, {}, tags);
@@ -2861,20 +2923,6 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
   // Accumulate the occurrence of solution invalid warnings for the current iteration cumulative
   // counters
   _app.solutionInvalidity().solutionInvalidAccumulation();
-}
-
-void
-NonlinearSystemBase::setVariableGlobalDoFs(const std::string & var_name)
-{
-  AllLocalDofIndicesThread aldit(_fe_problem, {var_name});
-  ConstElemRange & elem_range = *_mesh.getActiveLocalElementRange();
-  Threads::parallel_reduce(elem_range, aldit);
-
-  // Gather the dof indices across procs to get all the dof indices for var_name
-  aldit.dofIndicesSetUnion();
-
-  const auto & all_dof_indices = aldit.getDofIndices();
-  _var_all_dof_indices.assign(all_dof_indices.begin(), all_dof_indices.end());
 }
 
 void
@@ -3167,7 +3215,28 @@ NonlinearSystemBase::residualGhosted()
 {
   _need_residual_ghosted = true;
   if (!_residual_ghosted)
+  {
+    // The first time we realize we need a ghosted residual vector,
+    // we add it.
     _residual_ghosted = &addVector("residual_ghosted", false, GHOSTED);
+
+    // If we've already realized we need time and/or non-time
+    // residual vectors, but we haven't yet realized they need to be
+    // ghosted, fix that now.
+    //
+    // If an application changes its mind, the libMesh API lets us
+    // change the vector.
+    if (_Re_time)
+    {
+      const auto vector_name = _subproblem.vectorTagName(_Re_time_tag);
+      _Re_time = &system().add_vector(vector_name, false, GHOSTED);
+    }
+    if (_Re_non_time)
+    {
+      const auto vector_name = _subproblem.vectorTagName(_Re_non_time_tag);
+      _Re_non_time = &system().add_vector(vector_name, false, GHOSTED);
+    }
+  }
   return *_residual_ghosted;
 }
 
@@ -3339,7 +3408,7 @@ NonlinearSystemBase::checkKernelCoverage(const std::set<SubdomainID> & mesh_subd
   std::set<SubdomainID> input_subdomains;
   std::set<std::string> kernel_variables;
 
-  bool global_kernels_exist = _kernels.hasActiveBlockObjects(Moose::ANY_BLOCK_ID);
+  bool global_kernels_exist = false;
   global_kernels_exist |= _scalar_kernels.hasActiveObjects();
   global_kernels_exist |= _nodal_kernels.hasActiveObjects();
 

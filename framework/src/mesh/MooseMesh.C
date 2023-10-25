@@ -924,9 +924,6 @@ MooseMesh::getElemIDsOnBlocks(unsigned int elem_id_index, const std::set<Subdoma
   std::set<dof_id_type> unique_ids;
   for (auto & blk : blks)
   {
-    if (blk == Moose::ANY_BLOCK_ID)
-      return getAllElemIDs(elem_id_index);
-
     auto it = _block_id_mapping[elem_id_index].find(blk);
     if (it == _block_id_mapping[elem_id_index].end())
       mooseError("Block ", blk, " is not available on the mesh");
@@ -985,7 +982,6 @@ MooseMesh::nodeToElemMap()
       _node_to_elem_map_built = true; // MUST be set at the end for double-checked locking to work!
     }
   }
-
   return _node_to_elem_map;
 }
 
@@ -1161,7 +1157,6 @@ MooseMesh::isBoundaryFullyExternalToSubdomains(BoundaryID bid,
                                                const std::set<SubdomainID> & blk_group) const
 {
   mooseAssert(_bnd_elem_range, "Boundary element range is not initialized");
-  const bool all_blocks = blk_group.find(Moose::ANY_BLOCK_ID) != blk_group.end();
 
   // Loop over all side elements of the mesh, select those on the boundary
   for (const auto & bnd_elem : *_bnd_elem_range)
@@ -1170,7 +1165,7 @@ MooseMesh::isBoundaryFullyExternalToSubdomains(BoundaryID bid,
     if (elem_bid == bid)
     {
       // If an element is internal to the group of subdomain, check the neighbor
-      if (all_blocks || blk_group.find(elem_ptr->subdomain_id()) != blk_group.end())
+      if (blk_group.find(elem_ptr->subdomain_id()) != blk_group.end())
       {
         const auto * const neighbor = elem_ptr->neighbor_ptr(elem_side);
 
@@ -1183,7 +1178,7 @@ MooseMesh::isBoundaryFullyExternalToSubdomains(BoundaryID bid,
           continue;
         // If the neighbor is also in the group of subdomain,
         // then the boundary cuts the subdomains
-        if (all_blocks || blk_group.find(neighbor->subdomain_id()) != blk_group.end())
+        if (blk_group.find(neighbor->subdomain_id()) != blk_group.end())
           return false;
       }
     }
@@ -1477,16 +1472,13 @@ MooseMesh::getBoundaryIDs(const std::vector<BoundaryName> & boundary_name,
 SubdomainID
 MooseMesh::getSubdomainID(const SubdomainName & subdomain_name) const
 {
-  if (subdomain_name == "ANY_BLOCK_ID")
-    mooseError("Please use getSubdomainIDs() when passing \"ANY_BLOCK_ID\"");
-
   return MooseMeshUtils::getSubdomainID(subdomain_name, getMesh());
 }
 
 std::vector<SubdomainID>
 MooseMesh::getSubdomainIDs(const std::vector<SubdomainName> & subdomain_name) const
 {
-  return MooseMeshUtils::getSubdomainIDs(getMesh(), subdomain_name, _mesh_subdomains);
+  return MooseMeshUtils::getSubdomainIDs(getMesh(), subdomain_name);
 }
 
 void
@@ -1513,20 +1505,7 @@ MooseMesh::getSubdomainNames(const std::vector<SubdomainID> & subdomain_ids) con
   std::vector<SubdomainName> names(subdomain_ids.size());
 
   for (unsigned int i = 0; i < subdomain_ids.size(); i++)
-  {
-    if (subdomain_ids[i] == Moose::ANY_BLOCK_ID)
-    {
-      unsigned int j = 0;
-      for (const auto & sub_id : _mesh_subdomains)
-        names[j++] = getSubdomainName(sub_id);
-      if (i)
-        mooseWarning("You passed \"ANY_BLOCK_ID\" in addition to other block ids. This may be a "
-                     "logic error.");
-      break;
-    }
-
     names[i] = getSubdomainName(subdomain_ids[i]);
-  }
 
   return names;
 }
@@ -3371,15 +3350,12 @@ MooseMesh::buildFiniteVolumeInfo() const
   std::vector<std::tuple<dof_id_type, unsigned short int, boundary_id_type>> side_list =
       buildActiveSideList();
   std::map<Keytype, std::set<boundary_id_type>> side_map;
-  for (auto & e : side_list)
+  for (auto & [elem_id, side, bc_id] : side_list)
   {
-    const Elem * elem = _mesh->elem_ptr(std::get<0>(e));
-    Keytype key(elem, std::get<1>(e));
-    auto it = side_map.find(key);
-    if (it == side_map.end())
-      side_map[key] = {std::get<2>(e)};
-    else
-      side_map[key].insert(std::get<2>(e));
+    const Elem * elem = _mesh->elem_ptr(elem_id);
+    Keytype key(elem, side);
+    auto & bc_set = side_map[key];
+    bc_set.insert(bc_id);
   }
 
   _face_info.clear();
@@ -3428,7 +3404,7 @@ MooseMesh::buildFiniteVolumeInfo() const
         boundary_ids.clear();
 
         // We initialize the weights/other information in faceInfo. If the neighbor does not exist
-        // or is remote (so when we are on some sort of mesh boundary), we initiualize the ghost
+        // or is remote (so when we are on some sort of mesh boundary), we initialize the ghost
         // cell and use it to compute the weights corresponding to the faceInfo.
         if (!neighbor || neighbor == remote_elem)
           fi.computeBoundaryCoefficients();
@@ -3559,13 +3535,9 @@ MooseMesh::cacheVarIndicesByFace(const std::vector<const MooseVariableFieldBase 
     {
       // get the variable, its name, and its domain of definition
       const MooseVariableFieldBase * const var = moose_vars[j];
-      const auto & var_name = var->name();
+      const std::pair<unsigned int, unsigned int> var_sys =
+          std::make_pair(var->number(), var->sys().number());
       std::set<SubdomainID> var_subdomains = var->blockIDs();
-
-      // unfortunately, MOOSE is lazy and all subdomains has its own
-      // ID. If ANY_BLOCK_ID is in var_subdomains, inject all subdomains explicitly
-      if (var_subdomains.find(Moose::ANY_BLOCK_ID) != var_subdomains.end())
-        var_subdomains = this->meshSubdomains();
 
       /**
        * The following paragraph of code assigns the VarFaceNeighbors
@@ -3580,16 +3552,16 @@ MooseMesh::cacheVarIndicesByFace(const std::vector<const MooseVariableFieldBase 
       bool var_defined_neighbor =
           var_subdomains.find(neighbor_subdomain_id) != var_subdomains.end();
       if (var_defined_elem && var_defined_neighbor)
-        face.faceType(var_name) = FaceInfo::VarFaceNeighbors::BOTH;
+        face.faceType(var_sys) = FaceInfo::VarFaceNeighbors::BOTH;
       else if (!var_defined_elem && !var_defined_neighbor)
-        face.faceType(var_name) = FaceInfo::VarFaceNeighbors::NEITHER;
+        face.faceType(var_sys) = FaceInfo::VarFaceNeighbors::NEITHER;
       else
       {
         // this is a boundary face for this variable, set elem or neighbor
         if (var_defined_elem)
-          face.faceType(var_name) = FaceInfo::VarFaceNeighbors::ELEM;
+          face.faceType(var_sys) = FaceInfo::VarFaceNeighbors::ELEM;
         else if (var_defined_neighbor)
-          face.faceType(var_name) = FaceInfo::VarFaceNeighbors::NEIGHBOR;
+          face.faceType(var_sys) = FaceInfo::VarFaceNeighbors::NEIGHBOR;
         else
           mooseError("Should never get here");
       }
