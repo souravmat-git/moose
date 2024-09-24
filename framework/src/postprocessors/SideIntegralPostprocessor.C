@@ -24,6 +24,15 @@ SideIntegralPostprocessor::SideIntegralPostprocessor(const InputParameters & par
 }
 
 void
+SideIntegralPostprocessor::initialSetup()
+{
+  SidePostprocessor::initialSetup();
+
+  if (!_qp_integration && _mesh.allFaceInfo().size() == 0)
+    errorNoFaceInfo();
+}
+
+void
 SideIntegralPostprocessor::initialize()
 {
   _integral_value = 0;
@@ -44,7 +53,7 @@ SideIntegralPostprocessor::getValue() const
 void
 SideIntegralPostprocessor::threadJoin(const UserObject & y)
 {
-  const SideIntegralPostprocessor & pps = static_cast<const SideIntegralPostprocessor &>(y);
+  const auto & pps = static_cast<const SideIntegralPostprocessor &>(y);
   _integral_value += pps._integral_value;
 }
 

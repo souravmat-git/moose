@@ -32,7 +32,7 @@ Kernel::Kernel(const InputParameters & parameters)
     MooseVariableInterface<Real>(this,
                                  false,
                                  "variable",
-                                 Moose::VarKindType::VAR_NONLINEAR,
+                                 Moose::VarKindType::VAR_SOLVER,
                                  Moose::VarFieldType::VAR_FIELD_STANDARD),
     _var(*mooseVariable()),
     _test(_var.phi()),
@@ -50,7 +50,7 @@ Kernel::Kernel(const InputParameters & parameters)
   {
     MooseVariable * var = &_subproblem.getStandardVariable(_tid, _save_in_strings[i]);
 
-    if (_fe_problem.getNonlinearSystemBase().hasVariable(_save_in_strings[i]))
+    if (_fe_problem.getNonlinearSystemBase(_sys.number()).hasVariable(_save_in_strings[i]))
       paramError("save_in", "cannot use solution variable as save-in variable");
 
     if (var->feType() != _var.feType())
@@ -70,7 +70,7 @@ Kernel::Kernel(const InputParameters & parameters)
   {
     MooseVariable * var = &_subproblem.getStandardVariable(_tid, _diag_save_in_strings[i]);
 
-    if (_fe_problem.getNonlinearSystemBase().hasVariable(_diag_save_in_strings[i]))
+    if (_fe_problem.getNonlinearSystemBase(_sys.number()).hasVariable(_diag_save_in_strings[i]))
       paramError("diag_save_in", "cannot use solution variable as diag save-in variable");
 
     if (var->feType() != _var.feType())
@@ -90,6 +90,9 @@ Kernel::Kernel(const InputParameters & parameters)
 void
 Kernel::computeResidual()
 {
+  if (!hasVectorTags())
+    return;
+
   prepareVectorTag(_assembly, _var.number());
 
   precalculateResidual();
@@ -196,7 +199,7 @@ Kernel::computeResidualAndJacobian()
 {
   computeResidual();
 
-  for (const auto & [ivariable, jvariable] : _fe_problem.couplingEntries(_tid))
+  for (const auto & [ivariable, jvariable] : _fe_problem.couplingEntries(_tid, _sys.number()))
   {
     const unsigned int ivar = ivariable->number();
     const unsigned int jvar = jvariable->number();

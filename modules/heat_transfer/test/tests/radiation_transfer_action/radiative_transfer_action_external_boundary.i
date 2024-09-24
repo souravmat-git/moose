@@ -33,7 +33,7 @@
       type = ParsedGenerateSideset
       combinatorial_geometry = 'abs(y - 6) < 1e-10'
       normal = '0 1 0'
-      included_subdomain_ids = 1
+      included_subdomains = 1
       new_sideset_name = 'inner_top'
       input = 'inner_right'
     [../]
@@ -42,7 +42,7 @@
       type = ParsedGenerateSideset
       combinatorial_geometry = 'abs(y) < 1e-10'
       normal = '0 -1 0'
-      included_subdomain_ids = 1
+      included_subdomains = 1
       new_sideset_name = 'inner_bottom'
       input = 'inner_top'
     [../]
@@ -73,7 +73,7 @@
 [GrayDiffuseRadiation]
   [./cavity]
     boundary = '4 5 6 7'
-    emissivity = '0.9 0.8 0.4 1'
+    emissivity = '0.9 0.8 eps_fn 1'
     n_patches = '2 2 2 3'
     partitioners = 'centroid centroid centroid centroid'
     centroid_partitioner_directions = 'x y y x'
@@ -83,6 +83,13 @@
     fixed_boundary_temperatures = '800'
     view_factor_calculator = analytical
   [../]
+[]
+
+[Functions]
+  [eps_fn]
+    type = ConstantFunction
+    value = 0.4
+  []
 []
 
 [BCs]

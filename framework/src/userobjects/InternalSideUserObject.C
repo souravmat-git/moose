@@ -30,8 +30,7 @@ InternalSideUserObject::InternalSideUserObject(const InputParameters & parameter
   : UserObject(parameters),
     BlockRestrictable(this),
     TwoMaterialPropertyInterface(this, blockIDs(), Moose::EMPTY_BOUNDARY_IDS),
-    NeighborCoupleable(this, false, false),
-    MooseVariableDependencyInterface(this),
+    NeighborCoupleableMooseVariableDependencyIntermediateInterface(this, false, false),
     TransientInterface(this),
     ElementIDInterface(this),
     _mesh(_subproblem.mesh()),
@@ -48,10 +47,6 @@ InternalSideUserObject::InternalSideUserObject(const InputParameters & parameter
     _neighbor_elem(_assembly.neighbor()),
     _current_neighbor_volume(_assembly.neighborVolume())
 {
-  // Keep track of which variables are coupled so we know what we depend on
-  const std::vector<MooseVariableFEBase *> & coupled_vars = getCoupledMooseVars();
-  for (const auto & var : coupled_vars)
-    addMooseVariableDependency(var);
 }
 
 const Real &
@@ -99,9 +94,15 @@ InternalSideUserObject::getFaceInfos()
         element = neighbor;
         side = neighbor->which_neighbor_am_i(_current_elem);
       }
-      _face_infos.push_back(_mesh.faceInfo(element, side));
+      const auto fi = _mesh.faceInfo(element, side);
+      mooseAssert(fi, "Face info must not be null.");
+      _face_infos.push_back(fi);
     }
   }
   else
-    _face_infos.push_back(_mesh.faceInfo(_current_elem, _current_side));
+  {
+    const auto fi = _mesh.faceInfo(_current_elem, _current_side);
+    mooseAssert(fi, "Face info must not be null.");
+    _face_infos.push_back(fi);
+  }
 }

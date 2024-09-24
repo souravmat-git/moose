@@ -22,7 +22,6 @@
 #include "libmesh/fe_type.h"
 #include "libmesh/dof_map.h"
 #include "libmesh/enum_fe_family.h"
-#include "DualRealOps.h"
 #include "SubProblem.h"
 
 #include <functional>
@@ -52,6 +51,17 @@ initDofIndices(T & data, const Elem & elem)
     data._dof_map.dof_indices(&elem, data._dof_indices, data._var_num);
     data._prev_elem = &elem;
   }
+}
+}
+
+namespace
+{
+template <typename T, typename T2>
+void
+assignForAllQps(const T & value, T2 & array, const unsigned int nqp)
+{
+  for (const auto qp : make_range(nqp))
+    array[qp] = value;
 }
 }
 
@@ -134,6 +144,11 @@ public:
   void prepareIC();
 
   //////////////////////////////////// Solution getters /////////////////////////////////////
+
+  /**
+   * Local solution value
+   */
+  const FieldVariableValue & sln(Moose::SolutionState state) const;
 
   /**
    * Local time derivative of solution gradient getter
@@ -262,6 +277,9 @@ public:
 
   void meshChanged() override;
 
+protected:
+  virtual const MooseVariableFV<OutputType> & var() const override { return _var; }
+
 private:
   void initializeSolnVars();
 
@@ -276,6 +294,9 @@ private:
    * Helper method that tells us whether it's safe to compute _ad_u_dot
    */
   bool safeToComputeADUDot() const;
+
+  /// A const reference to the owning MooseVariableFV object
+  const MooseVariableFV<OutputType> & _var;
 
   const FEType & _fe_type;
 
@@ -293,7 +314,7 @@ private:
   FieldVariableValue _increment;
 
   /// A zero AD variable
-  const DualReal _ad_zero;
+  const ADReal _ad_zero;
 
   /// SolutionState second_u flags
   mutable bool _need_second;
@@ -334,9 +355,9 @@ private:
   ADTemplateVariableValue<OutputShape> _ad_u;
   ADTemplateVariableGradient<OutputShape> _ad_grad_u;
   ADTemplateVariableSecond<OutputShape> _ad_second_u;
-  MooseArray<DualReal> _ad_dof_values;
-  MooseArray<DualReal> _ad_dofs_dot;
-  MooseArray<DualReal> _ad_dofs_dotdot;
+  MooseArray<ADReal> _ad_dof_values;
+  MooseArray<ADReal> _ad_dofs_dot;
+  MooseArray<ADReal> _ad_dofs_dotdot;
   ADTemplateVariableValue<OutputShape> _ad_u_dot;
   ADTemplateVariableValue<OutputShape> _ad_u_dotdot;
   ADTemplateVariableGradient<OutputShape> _ad_grad_u_dot;
@@ -390,7 +411,6 @@ private:
   /// Cached warehouse query for FVFluxKernels
   TheWarehouse::QueryCache<> _fv_flux_kernel_query_cache;
 
-  using MooseVariableDataBase<OutputType>::_var;
   using MooseVariableDataBase<OutputType>::_sys;
   using MooseVariableDataBase<OutputType>::_subproblem;
   using MooseVariableDataBase<OutputType>::_need_vector_tag_dof_u;
@@ -463,7 +483,7 @@ MooseVariableDataFV<OutputType>::safeToComputeADUDot() const
   // the auxiliary system copy of the time integrator. Some derived time integrator classes do setup
   // in their solve() method, and that solve() method only happens for the nonlinear system copy of
   // the time integrator.
-  return _time_integrator && (_var.kind() == Moose::VAR_NONLINEAR);
+  return _time_integrator && (_var.kind() == Moose::VAR_SOLVER);
 }
 
 template <typename OutputType>

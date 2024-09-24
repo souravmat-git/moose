@@ -181,7 +181,7 @@ GrainGrowthLinearizedInterfaceAction::act()
       // Add upper and lower bound for each variable
       // Upper bound
       {
-        std::string bound_type = "ConstantBoundsAux";
+        std::string bound_type = "ConstantBounds";
         std::string bound_name = var_name + "_upper_bound";
         auto params = _factory.getValidParams(bound_type);
         params.set<AuxVariableName>("variable") = "bounds_dummy";
@@ -192,7 +192,7 @@ GrainGrowthLinearizedInterfaceAction::act()
       }
       // Lower bound
       {
-        std::string bound_type = "ConstantBoundsAux";
+        std::string bound_type = "ConstantBounds";
         std::string bound_name = var_name + "_lower_bound";
         auto params = _factory.getValidParams(bound_type);
         params.set<AuxVariableName>("variable") = "bounds_dummy";
@@ -206,8 +206,8 @@ GrainGrowthLinearizedInterfaceAction::act()
 
   if (_current_task == "add_bounds_vectors")
   {
-    _problem->getNonlinearSystemBase().addVector("lower_bound", false, GHOSTED);
-    _problem->getNonlinearSystemBase().addVector("upper_bound", false, GHOSTED);
+    _problem->getNonlinearSystemBase(/*nl_sys_num=*/0).addVector("lower_bound", false, GHOSTED);
+    _problem->getNonlinearSystemBase(/*nl_sys_num=*/0).addVector("upper_bound", false, GHOSTED);
   }
 
   // Add AuxVriable and AuxKernel for Bnds variable

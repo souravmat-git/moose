@@ -39,7 +39,7 @@ ADKernelTempl<T>::ADKernelTempl(const InputParameters & parameters)
     MooseVariableInterface<T>(this,
                               false,
                               "variable",
-                              Moose::VarKindType::VAR_NONLINEAR,
+                              Moose::VarKindType::VAR_SOLVER,
                               std::is_same<T, Real>::value ? Moose::VarFieldType::VAR_FIELD_STANDARD
                                                            : Moose::VarFieldType::VAR_FIELD_VECTOR),
     ADFunctorInterface(this),
@@ -67,7 +67,7 @@ ADKernelTempl<T>::ADKernelTempl(const InputParameters & parameters)
   {
     MooseVariable * var = &_subproblem.getStandardVariable(_tid, _save_in_strings[i]);
 
-    if (_fe_problem.getNonlinearSystemBase().hasVariable(_save_in_strings[i]))
+    if (_fe_problem.getNonlinearSystemBase(_sys.number()).hasVariable(_save_in_strings[i]))
       paramError("save_in", "cannot use solution variable as save-in variable");
 
     if (var->feType() != _var.feType())
@@ -87,7 +87,7 @@ ADKernelTempl<T>::ADKernelTempl(const InputParameters & parameters)
   {
     MooseVariable * var = &_subproblem.getStandardVariable(_tid, _diag_save_in_strings[i]);
 
-    if (_fe_problem.getNonlinearSystemBase().hasVariable(_diag_save_in_strings[i]))
+    if (_fe_problem.getNonlinearSystemBase(_sys.number()).hasVariable(_diag_save_in_strings[i]))
       paramError("diag_save_in", "cannot use solution variable as diag save-in variable");
 
     if (var->feType() != _var.feType())

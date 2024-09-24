@@ -23,8 +23,6 @@
 #include "libmesh/numeric_vector.h"
 #include "libmesh/elem_side_builder.h"
 
-#include "DualRealOps.h"
-
 #include <unordered_map>
 
 // libMesh forward declarations
@@ -309,12 +307,6 @@ public:
    */
   const MooseArray<Point> & normals() const { return _current_normals; }
 
-  /**
-   * Returns the array of neighbor normals for quadrature points on a current side
-   * @return A _reference_.  Make sure to store this as a reference!
-   */
-  const MooseArray<Point> & neighborNormals() const { return _current_neighbor_normals; }
-
   /***
    * Returns the array of normals for quadrature points on a current side
    */
@@ -327,15 +319,25 @@ public:
   const MooseArray<std::vector<Point>> & tangents() const { return _current_tangents; }
 
   /**
+   * Number of extra element integers Assembly tracked
+   */
+  unsigned int numExtraElemIntegers() const { return _extra_elem_ids.size() - 1; }
+
+  /**
    * Returns an integer ID of the current element given the index associated with the integer
    */
-  const dof_id_type & extraElemID(unsigned int id) const { return _extra_elem_ids[id]; }
+  const dof_id_type & extraElemID(unsigned int id) const
+  {
+    mooseAssert(id < _extra_elem_ids.size(), "An invalid extra element integer id");
+    return _extra_elem_ids[id];
+  }
 
   /**
    * Returns an integer ID of the current element given the index associated with the integer
    */
   const dof_id_type & extraElemIDNeighbor(unsigned int id) const
   {
+    mooseAssert(id < _neighbor_extra_elem_ids.size(), "An invalid extra element integer id");
     return _neighbor_extra_elem_ids[id];
   }
 
@@ -354,7 +356,7 @@ public:
   }
 
   template <bool is_ad>
-  const MooseArray<MooseADWrapper<Point, is_ad>> & genericQPoints() const;
+  const MooseArray<Moose::GenericType<Point, is_ad>> & genericQPoints() const;
 
   /**
    * Return the current element
@@ -720,6 +722,9 @@ public:
    */
   void reinitNeighborAtPhysical(const Elem * neighbor, const std::vector<Point> & physical_points);
 
+  /**
+   * Reinitializes the neighbor side using reference coordinates.
+   */
   void reinitNeighbor(const Elem * neighbor, const std::vector<Point> & reference_points);
 
   /**
@@ -1328,6 +1333,10 @@ public:
   {
     return _vector_curl_phi;
   }
+  const VectorVariablePhiDivergence & divPhi(const MooseVariableField<RealVectorValue> &) const
+  {
+    return _vector_div_phi;
+  }
 
   const VectorVariablePhiValue & phiFace(const MooseVariableField<RealVectorValue> &) const
   {
@@ -1344,6 +1353,10 @@ public:
   const VectorVariablePhiCurl & curlPhiFace(const MooseVariableField<RealVectorValue> &) const
   {
     return _vector_curl_phi_face;
+  }
+  const VectorVariablePhiDivergence & divPhiFace(const MooseVariableField<RealVectorValue> &) const
+  {
+    return _vector_div_phi_face;
   }
 
   const VectorVariablePhiValue & phiNeighbor(const MooseVariableField<RealVectorValue> &) const
@@ -1364,6 +1377,11 @@ public:
   {
     return _vector_curl_phi_neighbor;
   }
+  const VectorVariablePhiDivergence &
+  divPhiNeighbor(const MooseVariableField<RealVectorValue> &) const
+  {
+    return _vector_div_phi_neighbor;
+  }
 
   const VectorVariablePhiValue & phiFaceNeighbor(const MooseVariableField<RealVectorValue> &) const
   {
@@ -1383,6 +1401,11 @@ public:
   curlPhiFaceNeighbor(const MooseVariableField<RealVectorValue> &) const
   {
     return _vector_curl_phi_face_neighbor;
+  }
+  const VectorVariablePhiDivergence &
+  divPhiFaceNeighbor(const MooseVariableField<RealVectorValue> &) const
+  {
+    return _vector_div_phi_face_neighbor;
   }
 
   // Writeable references
@@ -1431,6 +1454,10 @@ public:
   {
     return _vector_curl_phi;
   }
+  VectorVariablePhiDivergence & divPhi(const MooseVariableField<RealVectorValue> &)
+  {
+    return _vector_div_phi;
+  }
 
   VectorVariablePhiValue & phiFace(const MooseVariableField<RealVectorValue> &)
   {
@@ -1447,6 +1474,10 @@ public:
   VectorVariablePhiCurl & curlPhiFace(const MooseVariableField<RealVectorValue> &)
   {
     return _vector_curl_phi_face;
+  }
+  VectorVariablePhiDivergence & divPhiFace(const MooseVariableField<RealVectorValue> &)
+  {
+    return _vector_div_phi_face;
   }
 
   VectorVariablePhiValue & phiNeighbor(const MooseVariableField<RealVectorValue> &)
@@ -1465,6 +1496,10 @@ public:
   {
     return _vector_curl_phi_neighbor;
   }
+  VectorVariablePhiDivergence & divPhiNeighbor(const MooseVariableField<RealVectorValue> &)
+  {
+    return _vector_div_phi_neighbor;
+  }
   VectorVariablePhiValue & phiFaceNeighbor(const MooseVariableField<RealVectorValue> &)
   {
     return _vector_phi_face_neighbor;
@@ -1480,6 +1515,10 @@ public:
   VectorVariablePhiCurl & curlPhiFaceNeighbor(const MooseVariableField<RealVectorValue> &)
   {
     return _vector_curl_phi_face_neighbor;
+  }
+  VectorVariablePhiDivergence & divPhiFaceNeighbor(const MooseVariableField<RealVectorValue> &)
+  {
+    return _vector_div_phi_face_neighbor;
   }
 
   // Writeable references with array variable
@@ -1546,7 +1585,7 @@ public:
   template <typename OutputType>
   const typename OutputTools<OutputType>::VariablePhiSecond & feSecondPhi(FEType type) const
   {
-    _need_second_derivative[type] = true;
+    _need_second_derivative.insert(type);
     buildFE(type);
     return _fe_shape_data[type]->_second_phi;
   }
@@ -1587,7 +1626,7 @@ public:
   template <typename OutputType>
   const typename OutputTools<OutputType>::VariablePhiSecond & feSecondPhiFace(FEType type) const
   {
-    _need_second_derivative[type] = true;
+    _need_second_derivative.insert(type);
     buildFaceFE(type);
     return _fe_shape_data_face[type]->_second_phi;
   }
@@ -1609,7 +1648,7 @@ public:
   template <typename OutputType>
   const typename OutputTools<OutputType>::VariablePhiSecond & feSecondPhiNeighbor(FEType type) const
   {
-    _need_second_derivative_neighbor[type] = true;
+    _need_second_derivative_neighbor.insert(type);
     buildNeighborFE(type);
     return _fe_shape_data_neighbor[type]->_second_phi;
   }
@@ -1633,7 +1672,7 @@ public:
   const typename OutputTools<OutputType>::VariablePhiSecond &
   feSecondPhiFaceNeighbor(FEType type) const
   {
-    _need_second_derivative_neighbor[type] = true;
+    _need_second_derivative_neighbor.insert(type);
     buildFaceNeighborFE(type);
     return _fe_shape_data_face_neighbor[type]->_second_phi;
   }
@@ -1641,7 +1680,7 @@ public:
   template <typename OutputType>
   const typename OutputTools<OutputType>::VariablePhiCurl & feCurlPhi(FEType type) const
   {
-    _need_curl[type] = true;
+    _need_curl.insert(type);
     buildFE(type);
     return _fe_shape_data[type]->_curl_phi;
   }
@@ -1649,7 +1688,7 @@ public:
   template <typename OutputType>
   const typename OutputTools<OutputType>::VariablePhiCurl & feCurlPhiFace(FEType type) const
   {
-    _need_curl[type] = true;
+    _need_curl.insert(type);
     buildFaceFE(type);
     return _fe_shape_data_face[type]->_curl_phi;
   }
@@ -1657,7 +1696,7 @@ public:
   template <typename OutputType>
   const typename OutputTools<OutputType>::VariablePhiCurl & feCurlPhiNeighbor(FEType type) const
   {
-    _need_curl[type] = true;
+    _need_curl.insert(type);
     buildNeighborFE(type);
     return _fe_shape_data_neighbor[type]->_curl_phi;
   }
@@ -1665,9 +1704,39 @@ public:
   template <typename OutputType>
   const typename OutputTools<OutputType>::VariablePhiCurl & feCurlPhiFaceNeighbor(FEType type) const
   {
-    _need_curl[type] = true;
+    _need_curl.insert(type);
     buildFaceNeighborFE(type);
     return _fe_shape_data_face_neighbor[type]->_curl_phi;
+  }
+
+  template <typename OutputType>
+  const typename OutputTools<OutputType>::VariablePhiDivergence & feDivPhi(FEType type) const
+  {
+    buildFE(type);
+    return _fe_shape_data[type]->_div_phi;
+  }
+
+  template <typename OutputType>
+  const typename OutputTools<OutputType>::VariablePhiDivergence & feDivPhiFace(FEType type) const
+  {
+    buildFaceFE(type);
+    return _fe_shape_data_face[type]->_div_phi;
+  }
+
+  template <typename OutputType>
+  const typename OutputTools<OutputType>::VariablePhiDivergence &
+  feDivPhiNeighbor(FEType type) const
+  {
+    buildNeighborFE(type);
+    return _fe_shape_data_neighbor[type]->_div_phi;
+  }
+
+  template <typename OutputType>
+  const typename OutputTools<OutputType>::VariablePhiDivergence &
+  feDivPhiFaceNeighbor(FEType type) const
+  {
+    buildFaceNeighborFE(type);
+    return _fe_shape_data_face_neighbor[type]->_div_phi;
   }
 
   /// On-demand computation of volume element accounting for RZ/RSpherical
@@ -1834,9 +1903,20 @@ public:
   const Elem * const & msmElem() const { return _msm_elem; }
 
   /**
-   * Indicate that we have p-refinement
+   * Indicate that we have p-refinement. This method will perform the following tasks:
+   * - Disable p-refinement as requested by the user with \p disable_p_refinement_for_families
+   * -.Disable p-refinement of Lagrange helper types that we use for getting things like the
+   *   physical locations of quadrature points and JxW. (Don't worry, we still use the element
+   *   p-level when initializing the quadrature rule attached to the Lagrange helper so the number
+   *   of quadrature points reflects the element p-level)
+   * @param disable_p_refinement_for_families Families that we should disable p-refinement for
    */
-  void havePRefinement();
+  void havePRefinement(const std::vector<FEFamily> & disable_p_refinement_for_families);
+
+  /**
+   * Set the current lower dimensional element. This may be null
+   */
+  void setCurrentLowerDElem(const Elem * const lower_d_elem);
 
 private:
   /**
@@ -2290,7 +2370,7 @@ private:
   /// The current coordinate transformation coefficients
   MooseArray<Real> _coord;
   /// The AD version of the current coordinate transformation coefficients
-  MooseArray<DualReal> _ad_coord;
+  MooseArray<ADReal> _ad_coord;
 
   /// Data structure for tracking/grouping a set of quadrature rules for a
   /// particular dimensionality of mesh element.
@@ -2395,8 +2475,6 @@ private:
   MooseArray<Real> _current_JxW_face;
   /// The current Normal vectors at the quadrature points.
   MooseArray<Point> _current_normals;
-  /// The current neighbor Normal vectors at the quadrature points.
-  MooseArray<Point> _current_neighbor_normals;
   /// Mapped normals
   std::vector<Eigen::Map<RealDIMValue>> _mapped_normals;
   /// The current tangent vectors at the quadrature points
@@ -2456,7 +2534,6 @@ private:
   /// Flag specifying whether a custom quadrature rule has been specified for mortar segment mesh
   bool _custom_mortar_qrule;
 
-private:
   /// quadrature rule used on lower dimensional elements. This should always be
   /// the same as the face qrule
   QBase * _current_qrule_lower;
@@ -2591,21 +2668,25 @@ protected:
   VectorVariablePhiGradient _vector_grad_phi;
   VectorVariablePhiSecond _vector_second_phi;
   VectorVariablePhiCurl _vector_curl_phi;
+  VectorVariablePhiDivergence _vector_div_phi;
 
   VectorVariablePhiValue _vector_phi_face;
   VectorVariablePhiGradient _vector_grad_phi_face;
   VectorVariablePhiSecond _vector_second_phi_face;
   VectorVariablePhiCurl _vector_curl_phi_face;
+  VectorVariablePhiDivergence _vector_div_phi_face;
 
   VectorVariablePhiValue _vector_phi_neighbor;
   VectorVariablePhiGradient _vector_grad_phi_neighbor;
   VectorVariablePhiSecond _vector_second_phi_neighbor;
   VectorVariablePhiCurl _vector_curl_phi_neighbor;
+  VectorVariablePhiDivergence _vector_div_phi_neighbor;
 
   VectorVariablePhiValue _vector_phi_face_neighbor;
   VectorVariablePhiGradient _vector_grad_phi_face_neighbor;
   VectorVariablePhiSecond _vector_second_phi_face_neighbor;
   VectorVariablePhiCurl _vector_curl_phi_face_neighbor;
+  VectorVariablePhiDivergence _vector_div_phi_face_neighbor;
 
   class FEShapeData
   {
@@ -2614,6 +2695,7 @@ protected:
     VariablePhiGradient _grad_phi;
     VariablePhiSecond _second_phi;
     VariablePhiCurl _curl_phi;
+    VariablePhiDivergence _div_phi;
   };
 
   class VectorFEShapeData
@@ -2623,6 +2705,7 @@ protected:
     VectorVariablePhiGradient _grad_phi;
     VectorVariablePhiSecond _second_phi;
     VectorVariablePhiCurl _curl_phi;
+    VectorVariablePhiDivergence _div_phi;
   };
 
   /// Shape function values, gradients, second derivatives for each FE type
@@ -2688,30 +2771,30 @@ protected:
   std::vector<Point> _temp_reference_points;
 
   /// AD quantities
-  std::vector<VectorValue<DualReal>> _ad_dxyzdxi_map;
-  std::vector<VectorValue<DualReal>> _ad_dxyzdeta_map;
-  std::vector<VectorValue<DualReal>> _ad_dxyzdzeta_map;
-  std::vector<VectorValue<DualReal>> _ad_d2xyzdxi2_map;
-  std::vector<VectorValue<DualReal>> _ad_d2xyzdxideta_map;
-  std::vector<VectorValue<DualReal>> _ad_d2xyzdeta2_map;
-  std::vector<DualReal> _ad_jac;
-  MooseArray<DualReal> _ad_JxW;
-  MooseArray<VectorValue<DualReal>> _ad_q_points;
-  std::vector<DualReal> _ad_dxidx_map;
-  std::vector<DualReal> _ad_dxidy_map;
-  std::vector<DualReal> _ad_dxidz_map;
-  std::vector<DualReal> _ad_detadx_map;
-  std::vector<DualReal> _ad_detady_map;
-  std::vector<DualReal> _ad_detadz_map;
-  std::vector<DualReal> _ad_dzetadx_map;
-  std::vector<DualReal> _ad_dzetady_map;
-  std::vector<DualReal> _ad_dzetadz_map;
+  std::vector<VectorValue<ADReal>> _ad_dxyzdxi_map;
+  std::vector<VectorValue<ADReal>> _ad_dxyzdeta_map;
+  std::vector<VectorValue<ADReal>> _ad_dxyzdzeta_map;
+  std::vector<VectorValue<ADReal>> _ad_d2xyzdxi2_map;
+  std::vector<VectorValue<ADReal>> _ad_d2xyzdxideta_map;
+  std::vector<VectorValue<ADReal>> _ad_d2xyzdeta2_map;
+  std::vector<ADReal> _ad_jac;
+  MooseArray<ADReal> _ad_JxW;
+  MooseArray<VectorValue<ADReal>> _ad_q_points;
+  std::vector<ADReal> _ad_dxidx_map;
+  std::vector<ADReal> _ad_dxidy_map;
+  std::vector<ADReal> _ad_dxidz_map;
+  std::vector<ADReal> _ad_detadx_map;
+  std::vector<ADReal> _ad_detady_map;
+  std::vector<ADReal> _ad_detadz_map;
+  std::vector<ADReal> _ad_dzetadx_map;
+  std::vector<ADReal> _ad_dzetady_map;
+  std::vector<ADReal> _ad_dzetadz_map;
 
-  MooseArray<DualReal> _ad_JxW_face;
-  MooseArray<VectorValue<DualReal>> _ad_normals;
-  MooseArray<VectorValue<DualReal>> _ad_q_points_face;
+  MooseArray<ADReal> _ad_JxW_face;
+  MooseArray<VectorValue<ADReal>> _ad_normals;
+  MooseArray<VectorValue<ADReal>> _ad_q_points_face;
   MooseArray<Real> _curvatures;
-  MooseArray<DualReal> _ad_curvatures;
+  MooseArray<ADReal> _ad_curvatures;
 
   /**
    * Container of displacement numbers and directions
@@ -2726,9 +2809,13 @@ protected:
   /// adCoordTransformation()
   mutable bool _calculate_ad_coord;
 
-  mutable std::map<FEType, bool> _need_second_derivative;
-  mutable std::map<FEType, bool> _need_second_derivative_neighbor;
-  mutable std::map<FEType, bool> _need_curl;
+  mutable std::set<FEType> _need_second_derivative;
+  mutable std::set<FEType> _need_second_derivative_neighbor;
+  mutable std::set<FEType> _need_curl;
+  mutable std::set<FEType> _need_div;
+  mutable std::set<FEType> _need_face_div;
+  mutable std::set<FEType> _need_neighbor_div;
+  mutable std::set<FEType> _need_face_neighbor_div;
 
   /// The map from global index to variable scaling factor
   const NumericVector<Real> * _scaling_vector = nullptr;
@@ -2756,6 +2843,12 @@ protected:
   /// have libMesh-level constraints (hanging nodes, periodic bcs) applied to them. These are for
   /// storing the dof indices
   std::vector<dof_id_type> _row_indices, _column_indices;
+
+  /// Whether we have ever conducted p-refinement
+  bool _have_p_refinement;
+
+  /// The current reference points on the neighbor element
+  std::vector<Point> _current_neighbor_ref_points;
 };
 
 template <typename OutputType>
@@ -2883,6 +2976,22 @@ Assembly::feCurlPhiNeighbor<VectorValue<Real>>(FEType type) const;
 template <>
 const typename OutputTools<VectorValue<Real>>::VariablePhiCurl &
 Assembly::feCurlPhiFaceNeighbor<VectorValue<Real>>(FEType type) const;
+
+template <>
+const typename OutputTools<VectorValue<Real>>::VariablePhiDivergence &
+Assembly::feDivPhi<VectorValue<Real>>(FEType type) const;
+
+template <>
+const typename OutputTools<VectorValue<Real>>::VariablePhiDivergence &
+Assembly::feDivPhiFace<VectorValue<Real>>(FEType type) const;
+
+template <>
+const typename OutputTools<VectorValue<Real>>::VariablePhiDivergence &
+Assembly::feDivPhiNeighbor<VectorValue<Real>>(FEType type) const;
+
+template <>
+const typename OutputTools<VectorValue<Real>>::VariablePhiDivergence &
+Assembly::feDivPhiFaceNeighbor<VectorValue<Real>>(FEType type) const;
 
 template <>
 inline const ADTemplateVariablePhiGradient<RealVectorValue> &
@@ -3058,4 +3167,10 @@ Assembly::assignDisplacements(
     std::vector<std::pair<unsigned int, unsigned short>> && disp_numbers_and_directions)
 {
   _disp_numbers_and_directions = std::move(disp_numbers_and_directions);
+}
+
+inline void
+Assembly::setCurrentLowerDElem(const Elem * const lower_d_elem)
+{
+  _current_lower_d_elem = lower_d_elem;
 }

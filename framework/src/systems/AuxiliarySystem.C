@@ -29,19 +29,15 @@
 #include "libmesh/numeric_vector.h"
 #include "libmesh/default_coupling.h"
 #include "libmesh/string_to_enum.h"
+#include "libmesh/fe_interface.h"
 
 // AuxiliarySystem ////////
 
 AuxiliarySystem::AuxiliarySystem(FEProblemBase & subproblem, const std::string & name)
-  : SystemBase(subproblem, name, Moose::VAR_AUXILIARY),
+  : SystemBase(subproblem, subproblem, name, Moose::VAR_AUXILIARY),
     PerfGraphInterface(subproblem.getMooseApp().perfGraph(), "AuxiliarySystem"),
-    _fe_problem(subproblem),
     _sys(subproblem.es().add_system<System>(name)),
     _current_solution(_sys.current_local_solution.get()),
-    _u_dot(NULL),
-    _u_dotdot(NULL),
-    _u_dot_old(NULL),
-    _u_dotdot_old(NULL),
     _aux_scalar_storage(_app.getExecuteOnEnum()),
     _nodal_aux_storage(_app.getExecuteOnEnum()),
     _mortar_nodal_aux_storage(_app.getExecuteOnEnum()),
@@ -63,19 +59,6 @@ AuxiliarySystem::AuxiliarySystem(FEProblemBase & subproblem, const std::string &
 }
 
 AuxiliarySystem::~AuxiliarySystem() = default;
-
-void
-AuxiliarySystem::addDotVectors()
-{
-  if (_fe_problem.uDotRequested())
-    _u_dot = &addVector("u_dot", true, GHOSTED);
-  if (_fe_problem.uDotDotRequested())
-    _u_dotdot = &addVector("u_dotdot", true, GHOSTED);
-  if (_fe_problem.uDotOldRequested())
-    _u_dot_old = &addVector("u_dot_old", true, GHOSTED);
-  if (_fe_problem.uDotDotOldRequested())
-    _u_dotdot_old = &addVector("u_dotdot_old", true, GHOSTED);
-}
 
 void
 AuxiliarySystem::initialSetup()
@@ -230,8 +213,7 @@ AuxiliarySystem::addVariable(const std::string & var_type,
 
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
-    if (fe_type.family == LAGRANGE_VEC || fe_type.family == NEDELEC_ONE ||
-        fe_type.family == MONOMIAL_VEC)
+    if (FEInterface::field_type(fe_type) == TYPE_VECTOR)
     {
       auto * var = _vars[tid].getActualFieldVariable<RealVectorValue>(name);
       if (var)
@@ -287,7 +269,8 @@ AuxiliarySystem::addKernel(const std::string & kernel_name,
 {
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
-    if (parameters.get<std::string>("_moose_base") == "AuxKernel")
+    if (parameters.get<std::string>("_moose_base") == "AuxKernel" ||
+        parameters.get<std::string>("_moose_base") == "Bounds")
     {
       std::shared_ptr<AuxKernel> kernel =
           _factory.create<AuxKernel>(kernel_name, name, parameters, tid);
@@ -329,6 +312,11 @@ AuxiliarySystem::addKernel(const std::string & kernel_name,
       else
         _elemental_array_aux_storage.addObject(kernel, tid);
     }
+    else
+      mooseAssert(false,
+                  "Attempting to add AuxKernel of type '" + kernel_name + "' and name '" + name +
+                      "' to the auxiliary system with invalid _moose_base: " +
+                      parameters.get<std::string>("_moose_base"));
   }
 }
 
@@ -359,10 +347,7 @@ AuxiliarySystem::reinitElem(const Elem * /*elem*/, THREAD_ID tid)
 }
 
 void
-AuxiliarySystem::reinitElemFace(const Elem * /*elem*/,
-                                unsigned int /*side*/,
-                                BoundaryID /*bnd_id*/,
-                                THREAD_ID tid)
+AuxiliarySystem::reinitElemFace(const Elem * /*elem*/, unsigned int /*side*/, THREAD_ID tid)
 {
   for (auto * var : _nodal_vars[tid])
     var->computeElemValuesFace();
@@ -373,18 +358,6 @@ AuxiliarySystem::reinitElemFace(const Elem * /*elem*/,
     var->reinitAuxNeighbor();
     var->computeElemValuesFace();
   }
-}
-
-NumericVector<Number> &
-AuxiliarySystem::serializedSolution()
-{
-  if (!_serialized_solution.get())
-  {
-    _serialized_solution = NumericVector<Number>::build(_fe_problem.comm());
-    _serialized_solution->init(_sys.n_dofs(), false, SERIAL);
-  }
-
-  return *_serialized_solution;
 }
 
 void
@@ -733,13 +706,17 @@ AuxiliarySystem::computeMortarNodalVars(const ExecFlagType type)
                 _fe_problem, mortar_nodal_warehouse, bnd_id, index);
             Threads::parallel_reduce(bnd_nodes, mnabt);
           }
-          catch (MooseException & e)
-          {
-            _fe_problem.setException(e.what());
-          }
           catch (libMesh::LogicError & e)
           {
-            _fe_problem.setException("We caught a libMesh::LogicError:" + std::string(e.what()));
+            _fe_problem.setException("The following libMesh::LogicError was raised during mortar "
+                                     "nodal Auxiliary variable computation:\n" +
+                                     std::string(e.what()));
+          }
+          catch (MooseException & e)
+          {
+            _fe_problem.setException("The following MooseException was raised during mortar nodal "
+                                     "Auxiliary variable computation:\n" +
+                                     std::string(e.what()));
           }
           catch (MetaPhysicL::LogicError & e)
           {
@@ -838,7 +815,9 @@ AuxiliarySystem::computeElementalVarsHelper(const MooseObjectWarehouse<AuxKernel
       }
       catch (MooseException & e)
       {
-        _fe_problem.setException(e.what());
+        _fe_problem.setException("The following MooseException was raised during elemental "
+                                 "Auxiliary variable computation:\n" +
+                                 std::string(e.what()));
       }
     }
     PARALLEL_CATCH;
@@ -864,7 +843,9 @@ AuxiliarySystem::computeElementalVarsHelper(const MooseObjectWarehouse<AuxKernel
       }
       catch (MooseException & e)
       {
-        _fe_problem.setException(e.what());
+        _fe_problem.setException("The following MooseException was raised during boundary "
+                                 "elemental Auxiliary variable computation:\n" +
+                                 std::string(e.what()));
       }
     }
     PARALLEL_CATCH;
@@ -910,6 +891,38 @@ AuxiliarySystem::computeNodalVarsHelper(const MooseObjectWarehouse<AuxKernelType
       _sys.update();
     }
     PARALLEL_CATCH;
+  }
+}
+
+void
+AuxiliarySystem::variableWiseRelativeSolutionDifferenceNorm(
+    std::vector<Number> & rel_diff_norms) const
+{
+  rel_diff_norms.resize(nVariables(), 0);
+  // Get dof map from system
+  const auto & dof_map = _sys.get_dof_map();
+
+  for (const auto n : make_range(nVariables()))
+  {
+    // Get local indices from dof map for each variable
+    std::vector<dof_id_type> local_indices_n;
+    dof_map.local_variable_indices(local_indices_n, _mesh, n);
+    Number diff_norm_n = 0;
+    Number norm_n = 0;
+    // Get values from system, update norm
+    for (const auto local_index : local_indices_n)
+    {
+      const Number & value = solution()(local_index);
+      const Number & value_old = solutionOld()(local_index);
+      diff_norm_n += Utility::pow<2, Number>(value - value_old);
+      norm_n += Utility::pow<2, Number>(value);
+    }
+    // Aggregate norm over proceccors
+    _communicator.sum(diff_norm_n);
+    _communicator.sum(norm_n);
+    diff_norm_n = sqrt(diff_norm_n);
+    norm_n = sqrt(norm_n);
+    rel_diff_norms[n] = diff_norm_n / norm_n;
   }
 }
 

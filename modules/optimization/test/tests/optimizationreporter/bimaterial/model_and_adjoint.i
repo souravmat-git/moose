@@ -25,7 +25,7 @@
   [temperature]
   []
   [temperature_adjoint]
-    nl_sys = adjoint
+    solver_sys = adjoint
   []
 []
 
@@ -82,6 +82,7 @@
 [Reporters]
   [measure_data]
     type = OptimizationData
+    objective_name = objective_value
     variable = temperature
   []
   [data]

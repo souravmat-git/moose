@@ -16,6 +16,7 @@
 #include "MooseVariable.h"
 #include "PenetrationLocator.h"
 #include "SystemBase.h"
+#include "GhostBoundary.h"
 
 #include "libmesh/string_to_enum.h"
 
@@ -77,6 +78,16 @@ GapHeatTransfer::validParams()
   // Node based options
   params.addCoupledVar("gap_distance", "Distance across the gap");
   params.addCoupledVar("gap_temp", "Temperature on the other side of the gap");
+
+  params.addRelationshipManager(
+      "GhostBoundary",
+      Moose::RelationshipManagerType::GEOMETRIC,
+      [](const InputParameters & obj_params, InputParameters & rm_params)
+      {
+        auto & boundary = rm_params.set<std::vector<BoundaryName>>("boundary");
+        boundary = obj_params.get<std::vector<BoundaryName>>("boundary");
+        boundary.push_back(obj_params.get<BoundaryName>("paired_boundary"));
+      });
 
   return params;
 }
@@ -223,7 +234,7 @@ GapHeatTransfer::computeJacobian()
              ++_secondary_j)
           K_secondary(_i, _secondary_j) += _JxW[_qp] * _coord[_qp] * computeSecondaryQpJacobian();
 
-      addJacobian(_subproblem.assembly(_tid),
+      addJacobian(_subproblem.assembly(_tid, _sys.number()),
                   K_secondary,
                   _var.dofIndices(),
                   secondary_side_dof_indices,
@@ -290,7 +301,7 @@ GapHeatTransfer::computeOffDiagJacobian(const unsigned int jvar_num)
           K_secondary(_i, _secondary_j) +=
               _JxW[_qp] * _coord[_qp] * computeSecondaryQpOffDiagJacobian(jvar_num);
 
-      addJacobian(_subproblem.assembly(_tid),
+      addJacobian(_subproblem.assembly(_tid, _sys.number()),
                   K_secondary,
                   _var.dofIndices(),
                   secondary_side_dof_indices,

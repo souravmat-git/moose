@@ -34,7 +34,7 @@ VariableResidual::VariableResidual(const InputParameters & parameters)
   : GeneralPostprocessor(parameters),
     _var(_fe_problem.getVariable(_tid,
                                  getParam<VariableName>("variable"),
-                                 Moose::VarKindType::VAR_NONLINEAR,
+                                 Moose::VarKindType::VAR_SOLVER,
                                  Moose::VarFieldType::VAR_FIELD_STANDARD))
 {
 }
@@ -48,7 +48,7 @@ VariableResidual::initialize()
 void
 VariableResidual::execute()
 {
-  NonlinearSystemBase & nl = _fe_problem.getNonlinearSystemBase();
+  NonlinearSystemBase & nl = _fe_problem.getNonlinearSystemBase(_sys.number());
   _var_residual = nl.system().calculate_norm(nl.RHS(), _var.number(), DISCRETE_L2);
 }
 

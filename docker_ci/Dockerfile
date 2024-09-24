@@ -99,7 +99,7 @@ WORKDIR ${MOOSE_DIR}
 #-----------------------------------------------------------------------------#
 # Install PETSc to system path
 #-----------------------------------------------------------------------------#
-ARG PETSC_REV=08c1f94318ee3b3ca1edb31fd14572b8083ef302
+ARG PETSC_REV=0d6defa7a01093b0f9cf3ff983d2b19d1f01a13e
 ARG PETSC_OPTIONS
 ENV PETSC_DIR=/usr/local
 COPY scripts/update_and_rebuild_petsc.sh ${MOOSE_DIR}/scripts/update_and_rebuild_petsc.sh
@@ -114,7 +114,7 @@ if [ ! -d $PETSC_DIR/lib/petsc ]; then exit 1; fi
 #-----------------------------------------------------------------------------#
 # Install Libmesh to system path
 #-----------------------------------------------------------------------------#
-ARG LIBMESH_REV=ceff84386bdc83d87e9eb98ac3a9b745711e415a
+ARG LIBMESH_REV=80e8b6c591a704cd426fb50f8cc05d97994b2241
 ARG LIBMESH_OPTIONS
 ARG LIBMESH_METHODS="opt dbg"
 ENV LIBMESH_DIR=/usr/local \
@@ -136,7 +136,7 @@ if [ ! -d $LIBMESH_DIR/include/libmesh ]; then exit 1; fi
 #-----------------------------------------------------------------------------#
 # Install wasp to system path
 #-----------------------------------------------------------------------------#
-ARG WASP_REV=42b77e3afaae89af4dbac976a80ad6a7d77270ce
+ARG WASP_REV=c8c9ce4259115973f147e345608450d87dc390c4
 ENV WASP_DIR=/usr/local/wasp
 
 COPY scripts/update_and_rebuild_wasp.sh ${MOOSE_DIR}/scripts/update_and_rebuild_wasp.sh

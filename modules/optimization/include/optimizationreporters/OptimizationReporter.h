@@ -26,7 +26,5 @@ public:
   virtual void setMisfitToSimulatedValues() override;
 
 protected:
-private:
-  void setICsandBounds();
-  virtual void setSimulationValuesForTesting(std::vector<Real> & data) override;
+  virtual void setICsandBounds() override;
 };

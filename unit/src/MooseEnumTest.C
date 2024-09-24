@@ -25,7 +25,7 @@ TEST(MooseEnum, multiTestOne)
   EXPECT_EQ(mme.contains("three"), false);
   EXPECT_EQ(mme.contains("four"), false);
 
-  mme.push_back("four");
+  mme.setAdditionalValue("four");
   EXPECT_EQ(mme.contains("one"), false);
   EXPECT_EQ(mme.contains("two"), true);
   EXPECT_EQ(mme.contains("three"), false);
@@ -34,10 +34,10 @@ TEST(MooseEnum, multiTestOne)
   // isValid
   EXPECT_EQ(mme.isValid(), true);
 
-  mme.clear();
+  mme.clearSetValues();
   EXPECT_EQ(mme.isValid(), false);
 
-  mme.push_back("one three");
+  mme.setAdditionalValue("one three");
   EXPECT_EQ(mme.contains("one"), true);
   EXPECT_EQ(mme.contains("two"), false);
   EXPECT_EQ(mme.contains("three"), true);
@@ -65,20 +65,30 @@ TEST(MooseEnum, multiTestOne)
   EXPECT_EQ(mme.contains("four"), false);
 
   // Insert
-  mme.push_back(mvec);
+  mme.setAdditionalValue(mvec);
   EXPECT_EQ(mme.contains("one"), true);
   EXPECT_EQ(mme.contains("two"), true);
   EXPECT_EQ(mme.contains("three"), true);
   EXPECT_EQ(mme.contains("four"), false);
 
-  mme.clear();
+  // Insert another valid multi-enum
+  mme.clearSetValues();
+  mme = "one four";
+  MultiMooseEnum mme2("one two three four", "three");
+  mme.setAdditionalValue(mme2);
+  EXPECT_EQ(mme.contains("one"), true);
+  EXPECT_EQ(mme.contains("two"), false);
+  EXPECT_EQ(mme.contains("three"), true);
+  EXPECT_EQ(mme.contains("four"), true);
+
+  mme.clearSetValues();
   mme = "one four";
   EXPECT_EQ(mme.contains("one"), true);
   EXPECT_EQ(mme.contains("two"), false);
   EXPECT_EQ(mme.contains("three"), false);
   EXPECT_EQ(mme.contains("four"), true);
 
-  mme.push_back("three four");
+  mme.setAdditionalValue("three four");
   EXPECT_EQ(mme.contains("one"), true);
   EXPECT_EQ(mme.contains("two"), false);
   EXPECT_EQ(mme.contains("three"), true);
@@ -104,7 +114,7 @@ TEST(MooseEnum, multiTestOne)
   EXPECT_EQ(difference.size(), 0);
 
   // Order and indexing
-  mme.clear();
+  mme.clearSetValues();
   mme = "one two four";
   EXPECT_EQ(mme.contains("three"), false);
 
@@ -147,7 +157,7 @@ TEST(MooseEnum, testDeprecate)
   {
     MultiMooseEnum mme("one too two three four");
     mme.deprecate("too", "two");
-    mme.push_back("one");
+    mme.setAdditionalValue("one");
     mme = "too";
     FAIL() << "missing expected error";
   }
@@ -224,19 +234,20 @@ TEST(MultiMooseEnum, testExecuteOn)
 
   // Checks that names are added and removed
   EXPECT_EQ(exec_enum.getRawNames(),
-            "NONE INITIAL LINEAR NONLINEAR TIMESTEP_END TIMESTEP_BEGIN MULTIAPP_FIXED_POINT_END "
-            "MULTIAPP_FIXED_POINT_BEGIN FINAL CUSTOM ALWAYS");
+            "NONE INITIAL LINEAR NONLINEAR POSTCHECK TIMESTEP_END TIMESTEP_BEGIN "
+            "MULTIAPP_FIXED_POINT_END "
+            "MULTIAPP_FIXED_POINT_BEGIN FINAL CUSTOM");
   std::vector<std::string> opts = {"NONE",
                                    "INITIAL",
                                    "LINEAR",
                                    "NONLINEAR",
+                                   "POSTCHECK",
                                    "TIMESTEP_END",
                                    "TIMESTEP_BEGIN",
                                    "MULTIAPP_FIXED_POINT_END",
                                    "MULTIAPP_FIXED_POINT_BEGIN",
                                    "FINAL",
-                                   "CUSTOM",
-                                   "ALWAYS"};
+                                   "CUSTOM"};
   EXPECT_EQ(exec_enum.getNames(), opts);
 
   // Check that added names can be used
@@ -289,9 +300,9 @@ TEST(MultiMooseEnum, testExecuteOn)
   std::string doc = exec_enum.getDocString();
   EXPECT_EQ(doc,
             "The list of flag(s) indicating when this object should be executed, the "
-            "available options include NONE, INITIAL, LINEAR, NONLINEAR, TIMESTEP_END, "
+            "available options include NONE, INITIAL, LINEAR, NONLINEAR, POSTCHECK, TIMESTEP_END, "
             "TIMESTEP_BEGIN, MULTIAPP_FIXED_POINT_END, MULTIAPP_FIXED_POINT_BEGIN, FINAL, FAILED, "
-            "CUSTOM, ALWAYS.");
+            "CUSTOM.");
 
   // Tests with ExecFlagType assignment operators
   exec_enum = EXEC_FINAL;
@@ -358,25 +369,6 @@ TEST(MooseEnum, operatorEqual)
     ASSERT_NE(msg.find("Invalid id \"3\" in MooseEnum. Valid ids are \"1, 2\"."), std::string::npos)
         << "failed with unexpected error: " << msg;
   }
-}
-
-TEST(MooseEnum, operatorPlus)
-{
-  MooseEnum a("a=1 b=2", "a");
-  a += "c=3";
-  a += {"d=4", "e=5"};
-
-  MooseEnum b("a=1 b=2 c=3 d=4 e=5");
-
-  EXPECT_TRUE(a.items() == b.items());
-
-  MultiMooseEnum c("a=1 b=2", "a");
-  c += "c=3";
-  c += {"d=4", "e=5"};
-
-  MultiMooseEnum d("a=1 b=2 c=3 d=4 e=5");
-
-  EXPECT_TRUE(c.items() == d.items());
 }
 
 TEST(MooseEnum, getIDs)

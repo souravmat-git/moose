@@ -52,6 +52,11 @@ AdjointSolve::solve()
   if (_inner_solve && !_inner_solve->solve())
     return false;
 
+  // enforce PETSc options are passed to the adjoint solve as well, as set in the user file
+  auto & petsc_options = _problem.getPetscOptions();
+  auto & pars = _problem.solverParams();
+  Moose::PetscSupport::petscSetOptions(petsc_options, pars);
+
   _problem.execute(OptimizationAppTypes::EXEC_ADJOINT_TIMESTEP_BEGIN);
   if (!_problem.execMultiApps(OptimizationAppTypes::EXEC_ADJOINT_TIMESTEP_BEGIN))
   {
@@ -103,10 +108,15 @@ AdjointSolve::assembleAdjointSystem(SparseMatrix<Number> & matrix,
                                     const NumericVector<Number> & /*solution*/,
                                     NumericVector<Number> & rhs)
 {
+  if (_nl_adjoint.hasVector("scaling_factors"))
+    mooseWarning("Scaling factors are given to adjoint variables by the user. It is not necessary "
+                 "to scale a adjoint system therefore the scaling factors will not be used.");
+
   _problem.computeJacobian(*_nl_forward.currentSolution(), matrix, _forward_sys_num);
 
   _problem.setCurrentNonlinearSystem(_adjoint_sys_num);
   _problem.computeResidualTag(*_nl_adjoint.currentSolution(), rhs, _nl_adjoint.nonTimeVectorTag());
+
   rhs.scale(-1.0);
 }
 
@@ -139,12 +149,12 @@ AdjointSolve::applyNodalBCs(SparseMatrix<Number> & matrix,
     auto petsc_solution = dynamic_cast<const PetscVector<Number> *>(&solution);
     auto petsc_rhs = dynamic_cast<PetscVector<Number> *>(&rhs);
     if (petsc_matrix && petsc_solution && petsc_rhs)
-      MatZeroRowsColumns(petsc_matrix->mat(),
-                         cast_int<PetscInt>(nbc_dofs.size()),
-                         numeric_petsc_cast(nbc_dofs.data()),
-                         1.0,
-                         petsc_solution->vec(),
-                         petsc_rhs->vec());
+      LIBMESH_CHKERR(MatZeroRowsColumns(petsc_matrix->mat(),
+                                        cast_int<PetscInt>(nbc_dofs.size()),
+                                        numeric_petsc_cast(nbc_dofs.data()),
+                                        1.0,
+                                        petsc_solution->vec(),
+                                        petsc_rhs->vec()));
     else
       mooseError("Using PETSc matrices and vectors is required for applying homogenized boundary "
                  "conditions.");

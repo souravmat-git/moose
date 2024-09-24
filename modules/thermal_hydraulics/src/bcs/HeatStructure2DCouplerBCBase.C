@@ -27,12 +27,11 @@ HeatStructure2DCouplerBCBase::HeatStructure2DCouplerBCBase(const InputParameters
   : ADIntegratedBC(parameters),
 
     _coupled_variable_number(
-        _subproblem
-            .getVariable(_tid, getParam<std::string>("coupled_variable"), Moose::VAR_NONLINEAR)
+        _subproblem.getVariable(_tid, getParam<std::string>("coupled_variable"), Moose::VAR_SOLVER)
             .number()),
     _mesh_alignment(*getParam<MeshAlignment *>("_mesh_alignment")),
 
-    _nl_sys(_subproblem.systemBaseNonlinear()),
+    _nl_sys(_subproblem.systemBaseNonlinear(_sys.number())),
     _serialized_solution(_nl_sys.currentSolution())
 {
 }

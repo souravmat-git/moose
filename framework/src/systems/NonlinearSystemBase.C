@@ -78,6 +78,8 @@
 #include "FVScalarLagrangeMultiplierInterface.h"
 #include "UserObject.h"
 #include "OffDiagonalScalingMatrix.h"
+#include "HDGKernel.h"
+#include "HDGIntegratedBC.h"
 
 // libMesh
 #include "libmesh/nonlinear_solver.h"
@@ -96,6 +98,8 @@
 #include "libmesh/petsc_matrix.h"
 #include "libmesh/default_coupling.h"
 #include "libmesh/diagonal_matrix.h"
+#include "libmesh/fe_interface.h"
+#include "libmesh/petsc_solver_exception.h"
 
 #include <ios>
 
@@ -108,21 +112,12 @@ EXTERN_C_END
 NonlinearSystemBase::NonlinearSystemBase(FEProblemBase & fe_problem,
                                          System & sys,
                                          const std::string & name)
-  : SystemBase(fe_problem, name, Moose::VAR_NONLINEAR),
+  : SolverSystem(fe_problem, fe_problem, name, Moose::VAR_SOLVER),
     PerfGraphInterface(fe_problem.getMooseApp().perfGraph(), "NonlinearSystemBase"),
-    _fe_problem(fe_problem),
     _sys(sys),
     _last_nl_rnorm(0.),
-    _initial_residual_before_preset_bcs(0.),
-    _initial_residual_after_preset_bcs(0.),
     _current_nl_its(0),
-    _compute_initial_residual_before_preset_bcs(true),
-    _current_solution(NULL),
     _residual_ghosted(NULL),
-    _u_dot(NULL),
-    _u_dotdot(NULL),
-    _u_dot_old(NULL),
-    _u_dotdot_old(NULL),
     _Re_time_tag(-1),
     _Re_time(NULL),
     _Re_non_time_tag(-1),
@@ -133,9 +128,8 @@ NonlinearSystemBase::NonlinearSystemBase(FEProblemBase & fe_problem,
     _ad_preset_nodal_bcs(/*threaded=*/false),
     _splits(/*threaded=*/false),
     _increment_vec(NULL),
-    _pc_side(Moose::PCS_DEFAULT),
-    _ksp_norm(Moose::KSPN_UNPRECONDITIONED),
     _use_finite_differenced_preconditioner(false),
+    _fdcoloring(nullptr),
     _have_decomposition(false),
     _use_field_split_preconditioner(false),
     _add_implicit_geometric_coupling_entries_to_jacobian(false),
@@ -147,7 +141,10 @@ NonlinearSystemBase::NonlinearSystemBase(FEProblemBase & fe_problem,
     _n_linear_iters(0),
     _n_residual_evaluations(0),
     _final_residual(0.),
-    _computing_initial_residual(false),
+    _computing_pre_smo_residual(false),
+    _pre_smo_residual(0),
+    _initial_residual(0),
+    _use_pre_smo_residual(false),
     _print_all_var_norms(false),
     _has_save_in(false),
     _has_diag_save_in(false),
@@ -169,6 +166,8 @@ NonlinearSystemBase::NonlinearSystemBase(FEProblemBase & fe_problem,
 
   _Re_tag = _fe_problem.addVectorTag("RESIDUAL");
 
+  _sys.identify_variable_groups(_fe_problem.identifyVariableGroupsInNL());
+
   if (!_fe_problem.defaultGhosting())
   {
     auto & dof_map = _sys.get_dof_map();
@@ -180,33 +179,15 @@ NonlinearSystemBase::NonlinearSystemBase(FEProblemBase & fe_problem,
 NonlinearSystemBase::~NonlinearSystemBase() = default;
 
 void
-NonlinearSystemBase::init()
+NonlinearSystemBase::preInit()
 {
-  SystemBase::init();
+  SolverSystem::preInit();
 
   if (_fe_problem.hasDampers())
     setupDampers();
 
-  _current_solution = _sys.current_local_solution.get();
-
-  if (_serialized_solution.get())
-    _serialized_solution->init(_sys.n_dofs(), false, SERIAL);
-
   if (_residual_copy.get())
     _residual_copy->init(_sys.n_dofs(), false, SERIAL);
-}
-
-void
-NonlinearSystemBase::addDotVectors()
-{
-  if (_fe_problem.uDotRequested())
-    _u_dot = &addVector("u_dot", true, GHOSTED);
-  if (_fe_problem.uDotOldRequested())
-    _u_dot_old = &addVector("u_dot_old", true, GHOSTED);
-  if (_fe_problem.uDotDotRequested())
-    _u_dotdot = &addVector("u_dotdot", true, GHOSTED);
-  if (_fe_problem.uDotDotOldRequested())
-    _u_dotdot_old = &addVector("u_dotdot_old", true, GHOSTED);
 }
 
 void
@@ -217,20 +198,11 @@ NonlinearSystemBase::turnOffJacobian()
 }
 
 void
-NonlinearSystemBase::restoreSolutions()
-{
-  // call parent
-  SystemBase::restoreSolutions();
-  // and update _current_solution
-  _current_solution = _sys.current_local_solution.get();
-}
-
-void
 NonlinearSystemBase::initialSetup()
 {
   TIME_SECTION("nlInitialSetup", 2, "Setting Up Nonlinear System");
 
-  SystemBase::initialSetup();
+  SolverSystem::initialSetup();
 
   {
     TIME_SECTION("kernelsInitialSetup", 2, "Setting Up Kernels/BCs/Constraints");
@@ -329,7 +301,7 @@ NonlinearSystemBase::initialSetup()
 void
 NonlinearSystemBase::timestepSetup()
 {
-  SystemBase::timestepSetup();
+  SolverSystem::timestepSetup();
 
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
@@ -383,7 +355,7 @@ NonlinearSystemBase::timestepSetup()
 void
 NonlinearSystemBase::customSetup(const ExecFlagType & exec_type)
 {
-  SystemBase::customSetup(exec_type);
+  SolverSystem::customSetup(exec_type);
 
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
@@ -435,6 +407,13 @@ NonlinearSystemBase::customSetup(const ExecFlagType & exec_type)
 }
 
 void
+NonlinearSystemBase::setupDM()
+{
+  if (haveFieldSplitPreconditioner())
+    Moose::PetscSupport::petscSetupDM(*this, _decomposition_split);
+}
+
+void
 NonlinearSystemBase::setDecomposition(const std::vector<std::string> & splits)
 {
   /// Although a single top-level split is allowed in Problem, treat it as a list of splits for conformity with the Split input syntax.
@@ -457,7 +436,7 @@ NonlinearSystemBase::setupFieldDecomposition()
     return;
 
   std::shared_ptr<Split> top_split = getSplit(_decomposition_split);
-  top_split->setup();
+  top_split->setup(*this);
 }
 
 void
@@ -489,6 +468,38 @@ NonlinearSystemBase::addKernel(const std::string & kernel_name,
     _has_save_in = true;
   if (parameters.get<std::vector<AuxVariableName>>("diag_save_in").size() > 0)
     _has_diag_save_in = true;
+}
+
+void
+NonlinearSystemBase::addHDGKernel(const std::string & kernel_name,
+                                  const std::string & name,
+                                  InputParameters & parameters)
+{
+  // The hybridized objects require that the residual and Jacobian be computed together
+  residualAndJacobianTogether();
+
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+  {
+    parameters.set<MooseObjectWarehouse<HDGIntegratedBC> *>("hibc_warehouse") = &_hybridized_ibcs;
+    // Create the kernel object via the factory and add to warehouse
+    auto kernel = _factory.create<HDGKernel>(kernel_name, name, parameters, tid);
+    _kernels.addObject(kernel, tid);
+    _hybridized_kernels.addObject(kernel, tid);
+    postAddResidualObject(*kernel);
+  }
+}
+
+void
+NonlinearSystemBase::addHDGIntegratedBC(const std::string & bc_name,
+                                        const std::string & name,
+                                        InputParameters & parameters)
+{
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+  {
+    // Create the bc object via the factory and add to warehouse
+    auto bc = _factory.create<HDGIntegratedBC>(bc_name, name, parameters, tid);
+    _hybridized_ibcs.addObject(bc, tid);
+  }
 }
 
 void
@@ -716,6 +727,51 @@ NonlinearSystemBase::getSplit(const std::string & name)
   return _splits.getActiveObject(name);
 }
 
+bool
+NonlinearSystemBase::shouldEvaluatePreSMOResidual() const
+{
+  if (_fe_problem.solverParams()._type == Moose::ST_LINEAR)
+    return false;
+
+  // The legacy behavior (#10464) _always_ performs the pre-SMO residual evaluation
+  // regardless of whether it is needed.
+  //
+  // This is not ideal and has been fixed by #23472. This legacy option ensures a smooth transition
+  // to the new behavior. Modules and Apps that want to migrate to the new behavior should set this
+  // parameter to false.
+  if (_app.parameters().get<bool>("use_legacy_initial_residual_evaluation_behavior"))
+    return true;
+
+  return _use_pre_smo_residual;
+}
+
+Real
+NonlinearSystemBase::referenceResidual() const
+{
+  return usePreSMOResidual() ? preSMOResidual() : initialResidual();
+}
+
+Real
+NonlinearSystemBase::preSMOResidual() const
+{
+  if (!shouldEvaluatePreSMOResidual())
+    mooseError("pre-SMO residual is requested but not evaluated.");
+
+  return _pre_smo_residual;
+}
+
+Real
+NonlinearSystemBase::initialResidual() const
+{
+  return _initial_residual;
+}
+
+void
+NonlinearSystemBase::setInitialResidual(Real r)
+{
+  _initial_residual = r;
+}
+
 void
 NonlinearSystemBase::zeroVectorForResidual(const std::string & vector_name)
 {
@@ -876,19 +932,24 @@ NonlinearSystemBase::setInitialSolution()
   deactiveAllMatrixTags();
 
   NumericVector<Number> & initial_solution(solution());
-  if (_predictor.get() && _predictor->shouldApply())
+  if (_predictor.get())
   {
-    TIME_SECTION("applyPredictor", 2, "Applying Predictor");
+    if (_predictor->shouldApply())
+    {
+      TIME_SECTION("applyPredictor", 2, "Applying Predictor");
 
-    _predictor->apply(initial_solution);
-    _fe_problem.predictorCleanup(initial_solution);
+      _predictor->apply(initial_solution);
+      _fe_problem.predictorCleanup(initial_solution);
+    }
+    else
+      _console << " Skipping predictor this step" << std::endl;
   }
 
   // do nodal BC
   {
     TIME_SECTION("initialBCs", 2, "Applying BCs To Initial Condition");
 
-    ConstBndNodeRange & bnd_nodes = *_mesh.getBoundaryNodeRange();
+    const ConstBndNodeRange & bnd_nodes = _fe_problem.getCurrentAlgebraicBndNodeRange();
     for (const auto & bnode : bnd_nodes)
     {
       BoundaryID boundary_id = bnode->_bnd_id;
@@ -934,7 +995,7 @@ NonlinearSystemBase::setPredictor(std::shared_ptr<Predictor> predictor)
 void
 NonlinearSystemBase::subdomainSetup(SubdomainID subdomain, THREAD_ID tid)
 {
-  SystemBase::subdomainSetup();
+  SolverSystem::subdomainSetup();
 
   _kernels.subdomainSetup(subdomain, tid);
   _nodal_kernels.subdomainSetup(subdomain, tid);
@@ -1006,22 +1067,6 @@ NonlinearSystemBase::residualVector(TagID tag)
 }
 
 void
-NonlinearSystemBase::computeTimeDerivatives(bool jacobian_calculation)
-{
-  // If we're doing any Jacobian calculation other than the initial Jacobian calculation for
-  // automatic variable scaling, then we can just return because the residual function evaluation
-  // has already done this work for us
-  if (jacobian_calculation && !_fe_problem.computingScalingJacobian())
-    return;
-
-  if (_time_integrator)
-  {
-    _time_integrator->preStep();
-    _time_integrator->computeTimeDerivatives();
-  }
-}
-
-void
 NonlinearSystemBase::enforceNodalConstraintsResidual(NumericVector<Number> & residual)
 {
   THREAD_ID tid = 0; // constraints are going to be done single-threaded
@@ -1076,6 +1121,68 @@ NonlinearSystemBase::enforceNodalConstraintsJacobian()
 }
 
 void
+NonlinearSystemBase::reinitNodeFace(const Node & secondary_node,
+                                    const BoundaryID secondary_boundary,
+                                    const PenetrationInfo & info,
+                                    const bool displaced)
+{
+  auto & subproblem = displaced ? static_cast<SubProblem &>(*_fe_problem.getDisplacedProblem())
+                                : static_cast<SubProblem &>(_fe_problem);
+
+  const Elem * primary_elem = info._elem;
+  unsigned int primary_side = info._side_num;
+  std::vector<Point> points;
+  points.push_back(info._closest_point);
+
+  // *These next steps MUST be done in this order!*
+  // ADL: This is a Chesterton's fence situation. I don't know which calls exactly the above comment
+  // is referring to. If I had to guess I would guess just the reinitNodeFace and prepareAssembly
+  // calls since the former will size the variable's dof indices and then the latter will resize the
+  // residual/Jacobian based off the variable's cached dof indices size
+
+  // This reinits the variables that exist on the secondary node
+  _fe_problem.reinitNodeFace(&secondary_node, secondary_boundary, 0);
+
+  // This will set aside residual and jacobian space for the variables that have dofs on
+  // the secondary node
+  _fe_problem.prepareAssembly(0);
+
+  _fe_problem.setNeighborSubdomainID(primary_elem, 0);
+
+  //
+  // Reinit material on undisplaced mesh
+  //
+
+  const Elem * const undisplaced_primary_elem =
+      displaced ? _mesh.elemPtr(primary_elem->id()) : primary_elem;
+  const Point undisplaced_primary_physical_point =
+      [&points, displaced, primary_elem, undisplaced_primary_elem]()
+  {
+    if (displaced)
+    {
+      const Point reference_point =
+          FEMap::inverse_map(primary_elem->dim(), primary_elem, points[0]);
+      return FEMap::map(primary_elem->dim(), undisplaced_primary_elem, reference_point);
+    }
+    else
+      // If our penetration locator is on the reference mesh, then our undisplaced
+      // physical point is simply the point coming from the penetration locator
+      return points[0];
+  }();
+
+  _fe_problem.reinitNeighborPhys(
+      undisplaced_primary_elem, primary_side, {undisplaced_primary_physical_point}, 0);
+  // Stateful material properties are only initialized for neighbor material data for internal faces
+  // for discontinuous Galerkin methods or for conforming interfaces for interface kernels. We don't
+  // have either of those use cases here where we likely have disconnected meshes
+  _fe_problem.reinitMaterialsNeighbor(primary_elem->subdomain_id(), 0, /*swap_stateful=*/false);
+
+  // Reinit points for constraint enforcement
+  if (displaced)
+    subproblem.reinitNeighborPhys(primary_elem, primary_side, points, 0);
+}
+
+void
 NonlinearSystemBase::setConstraintSecondaryValues(NumericVector<Number> & solution, bool displaced)
 {
 
@@ -1102,6 +1209,13 @@ NonlinearSystemBase::setConstraintSecondaryValues(NumericVector<Number> & soluti
     {
       const auto & constraints =
           _constraints.getActiveNodeFaceConstraints(secondary_boundary, displaced);
+      std::unordered_set<unsigned int> needed_mat_props;
+      for (const auto & constraint : constraints)
+      {
+        const auto & mp_deps = constraint->getMatPropDependencies();
+        needed_mat_props.insert(mp_deps.begin(), mp_deps.end());
+      }
+      _fe_problem.setActiveMaterialProperties(needed_mat_props, /*tid=*/0);
 
       for (unsigned int i = 0; i < secondary_nodes.size(); i++)
       {
@@ -1114,23 +1228,12 @@ NonlinearSystemBase::setConstraintSecondaryValues(NumericVector<Number> & soluti
           {
             PenetrationInfo & info = *pen_loc._penetration_info[secondary_node_num];
 
-            const Elem * primary_elem = info._elem;
-            unsigned int primary_side = info._side_num;
-
-            // reinit variables at the node
-            _fe_problem.reinitNodeFace(&secondary_node, secondary_boundary, 0);
-
-            _fe_problem.prepareAssembly(0);
-
-            std::vector<Point> points;
-            points.push_back(info._closest_point);
-
-            // reinit variables on the primary element's face at the contact point
-            _fe_problem.setNeighborSubdomainID(primary_elem, 0);
-            subproblem.reinitNeighborPhys(primary_elem, primary_side, points, 0);
+            reinitNodeFace(secondary_node, secondary_boundary, info, displaced);
 
             for (const auto & nfc : constraints)
             {
+              if (nfc->isExplicitConstraint())
+                continue;
               // Return if this constraint does not correspond to the primary-secondary pair
               // prepared by the outer loops.
               // This continue statement is required when, e.g. one secondary surface constrains
@@ -1143,6 +1246,16 @@ NonlinearSystemBase::setConstraintSecondaryValues(NumericVector<Number> & soluti
               {
                 constraints_applied = true;
                 nfc->computeSecondaryValue(solution);
+              }
+
+              if (nfc->hasWritableCoupledVariables())
+              {
+                Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
+                for (auto * var : nfc->getWritableCoupledVariables())
+                {
+                  if (var->isNodalDefined())
+                    var->insert(_fe_problem.getAuxiliarySystem().solution());
+                }
               }
             }
           }
@@ -1244,6 +1357,8 @@ NonlinearSystemBase::constraintResiduals(NumericVector<Number> & residual, bool 
     BoundaryID secondary_boundary = pen_loc._secondary_boundary;
     BoundaryID primary_boundary = pen_loc._primary_boundary;
 
+    bool has_writable_variables(false);
+
     if (_constraints.hasActiveNodeFaceConstraints(secondary_boundary, displaced))
     {
       const auto & constraints =
@@ -1260,24 +1375,7 @@ NonlinearSystemBase::constraintResiduals(NumericVector<Number> & residual, bool 
           {
             PenetrationInfo & info = *pen_loc._penetration_info[secondary_node_num];
 
-            const Elem * primary_elem = info._elem;
-            unsigned int primary_side = info._side_num;
-
-            // *These next steps MUST be done in this order!*
-
-            // This reinits the variables that exist on the secondary node
-            _fe_problem.reinitNodeFace(&secondary_node, secondary_boundary, 0);
-
-            // This will set aside residual and jacobian space for the variables that have dofs on
-            // the secondary node
-            _fe_problem.prepareAssembly(0);
-
-            std::vector<Point> points;
-            points.push_back(info._closest_point);
-
-            // reinit variables on the primary element's face at the contact point
-            _fe_problem.setNeighborSubdomainID(primary_elem, 0);
-            subproblem.reinitNeighborPhys(primary_elem, primary_side, points, 0);
+            reinitNodeFace(secondary_node, secondary_boundary, info, displaced);
 
             for (const auto & nfc : constraints)
             {
@@ -1319,11 +1417,33 @@ NonlinearSystemBase::constraintResiduals(NumericVector<Number> & residual, bool 
                   _fe_problem.cacheResidual(0);
                 _fe_problem.cacheResidualNeighbor(0);
               }
+              if (nfc->hasWritableCoupledVariables())
+              {
+                Threads::spin_mutex::scoped_lock lock(Threads::spin_mtx);
+                has_writable_variables = true;
+                for (auto * var : nfc->getWritableCoupledVariables())
+                {
+                  if (var->isNodalDefined())
+                    var->insert(_fe_problem.getAuxiliarySystem().solution());
+                }
+              }
             }
           }
         }
       }
     }
+    _communicator.max(has_writable_variables);
+
+    if (has_writable_variables)
+    {
+      // Explicit contact dynamic constraints write to auxiliary variables and update the old
+      // displacement solution on the constraint boundaries. Close solutions and update system
+      // accordingly.
+      _fe_problem.getAuxiliarySystem().solution().close();
+      _fe_problem.getAuxiliarySystem().system().update();
+      solutionOld().close();
+    }
+
     if (_assemble_constraints_separately)
     {
       // Make sure that secondary contribution to primary are assembled, and ghosts have been
@@ -1499,11 +1619,60 @@ NonlinearSystemBase::constraintResiduals(NumericVector<Number> & residual, bool 
 }
 
 void
+NonlinearSystemBase::overwriteNodeFace(NumericVector<Number> & soln)
+{
+  // Overwrite results from integrator in case we have explicit dynamics contact constraints
+  auto & subproblem = _fe_problem.getDisplacedProblem()
+                          ? static_cast<SubProblem &>(*_fe_problem.getDisplacedProblem())
+                          : static_cast<SubProblem &>(_fe_problem);
+  const auto & penetration_locators = subproblem.geomSearchData()._penetration_locators;
+
+  for (const auto & it : penetration_locators)
+  {
+    PenetrationLocator & pen_loc = *(it.second);
+
+    const auto & secondary_nodes = pen_loc._nearest_node._secondary_nodes;
+    const BoundaryID secondary_boundary = pen_loc._secondary_boundary;
+    const BoundaryID primary_boundary = pen_loc._primary_boundary;
+
+    if (_constraints.hasActiveNodeFaceConstraints(secondary_boundary, true))
+    {
+      const auto & constraints =
+          _constraints.getActiveNodeFaceConstraints(secondary_boundary, true);
+      for (const auto i : index_range(secondary_nodes))
+      {
+        const auto secondary_node_num = secondary_nodes[i];
+        const Node & secondary_node = _mesh.nodeRef(secondary_node_num);
+
+        if (secondary_node.processor_id() == processor_id())
+          if (pen_loc._penetration_info[secondary_node_num])
+            for (const auto & nfc : constraints)
+            {
+              if (!nfc->isExplicitConstraint())
+                continue;
+
+              // Return if this constraint does not correspond to the primary-secondary pair
+              // prepared by the outer loops.
+              // This continue statement is required when, e.g. one secondary surface constrains
+              // more than one primary surface.
+              if (nfc->secondaryBoundary() != secondary_boundary ||
+                  nfc->primaryBoundary() != primary_boundary)
+                continue;
+
+              nfc->overwriteBoundaryVariables(soln, secondary_node);
+            }
+      }
+    }
+  }
+  soln.close();
+}
+
+void
 NonlinearSystemBase::residualSetup()
 {
   TIME_SECTION("residualSetup", 3);
 
-  SystemBase::residualSetup();
+  SolverSystem::residualSetup();
 
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
@@ -1565,7 +1734,7 @@ NonlinearSystemBase::computeResidualInternal(const std::set<TagID> & tags)
   {
     TIME_SECTION("Kernels", 3 /*, "Computing Kernels"*/);
 
-    ConstElemRange & elem_range = *_mesh.getActiveLocalElementRange();
+    const ConstElemRange & elem_range = _fe_problem.getCurrentAlgebraicElementRange();
 
     ComputeResidualThread cr(_fe_problem, tags);
     Threads::parallel_reduce(elem_range, cr);
@@ -1654,7 +1823,7 @@ NonlinearSystemBase::computeResidualInternal(const std::set<TagID> & tags)
 
       ComputeNodalKernelsThread cnk(_fe_problem, _nodal_kernels, tags);
 
-      ConstNodeRange & range = *_mesh.getLocalNodeRange();
+      const ConstNodeRange & range = _fe_problem.getCurrentAlgebraicNodeRange();
 
       if (range.begin() != range.end())
       {
@@ -1686,7 +1855,7 @@ NonlinearSystemBase::computeResidualInternal(const std::set<TagID> & tags)
 
       ComputeNodalKernelBcsThread cnk(_fe_problem, _nodal_kernels, tags);
 
-      ConstBndNodeRange & bnd_node_range = *_mesh.getBoundaryNodeRange();
+      const ConstBndNodeRange & bnd_node_range = _fe_problem.getCurrentAlgebraicBndNodeRange();
 
       Threads::parallel_reduce(bnd_node_range, cnk);
 
@@ -1744,6 +1913,7 @@ NonlinearSystemBase::computeResidualInternal(const std::set<TagID> & tags)
 
   // Accumulate the occurrence of solution invalid warnings for the current iteration cumulative
   // counters
+  _app.solutionInvalidity().sync();
   _app.solutionInvalidity().solutionInvalidAccumulation();
 }
 
@@ -1765,11 +1935,15 @@ NonlinearSystemBase::computeResidualAndJacobianInternal(const std::set<TagID> & 
     // Necessary for speed
     if (auto petsc_matrix = dynamic_cast<PetscMatrix<Number> *>(&jacobian))
     {
-      MatSetOption(petsc_matrix->mat(),
-                   MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
-                   PETSC_TRUE);
+      auto ierr = MatSetOption(petsc_matrix->mat(),
+                               MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
+                               PETSC_TRUE);
+      LIBMESH_CHKERR(ierr);
       if (!_fe_problem.errorOnJacobianNonzeroReallocation())
-        MatSetOption(petsc_matrix->mat(), MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
+      {
+        ierr = MatSetOption(petsc_matrix->mat(), MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
+        LIBMESH_CHKERR(ierr);
+      }
     }
   }
 
@@ -1801,7 +1975,7 @@ NonlinearSystemBase::computeResidualAndJacobianInternal(const std::set<TagID> & 
   {
     TIME_SECTION("Kernels", 3 /*, "Computing Kernels"*/);
 
-    ConstElemRange & elem_range = *_mesh.getActiveLocalElementRange();
+    const ConstElemRange & elem_range = _fe_problem.getCurrentAlgebraicElementRange();
 
     ComputeResidualAndJacobianThread crj(_fe_problem, vector_tags, matrix_tags);
     Threads::parallel_reduce(elem_range, crj);
@@ -1869,40 +2043,43 @@ NonlinearSystemBase::computeNodalBCs(const std::set<TagID> & tags)
   if (_has_save_in)
     _fe_problem.getAuxiliarySystem().solution().close();
 
+  // Select nodal kernels
+  MooseObjectWarehouse<NodalBCBase> * nbc_warehouse;
+
+  if (tags.size() == _fe_problem.numVectorTags(Moose::VECTOR_TAG_RESIDUAL) || !tags.size())
+    nbc_warehouse = &_nodal_bcs;
+  else if (tags.size() == 1)
+    nbc_warehouse = &(_nodal_bcs.getVectorTagObjectWarehouse(*(tags.begin()), 0));
+  else
+    nbc_warehouse = &(_nodal_bcs.getVectorTagsObjectWarehouse(tags, 0));
+
+  // Return early if there is no nodal kernel
+  if (!nbc_warehouse->size())
+    return;
+
   PARALLEL_TRY
   {
-    ConstBndNodeRange & bnd_nodes = *_mesh.getBoundaryNodeRange();
+    const ConstBndNodeRange & bnd_nodes = _fe_problem.getCurrentAlgebraicBndNodeRange();
 
     if (!bnd_nodes.empty())
     {
       TIME_SECTION("NodalBCs", 3 /*, "Computing NodalBCs"*/);
-
-      MooseObjectWarehouse<NodalBCBase> * nbc_warehouse;
-
-      // Select nodal kernels
-      if (tags.size() == _fe_problem.numVectorTags(Moose::VECTOR_TAG_RESIDUAL) || !tags.size())
-        nbc_warehouse = &_nodal_bcs;
-      else if (tags.size() == 1)
-        nbc_warehouse = &(_nodal_bcs.getVectorTagObjectWarehouse(*(tags.begin()), 0));
-      else
-        nbc_warehouse = &(_nodal_bcs.getVectorTagsObjectWarehouse(tags, 0));
 
       for (const auto & bnode : bnd_nodes)
       {
         BoundaryID boundary_id = bnode->_bnd_id;
         Node * node = bnode->_node;
 
-        if (node->processor_id() == processor_id())
+        if (node->processor_id() == processor_id() &&
+            nbc_warehouse->hasActiveBoundaryObjects(boundary_id))
         {
           // reinit variables in nodes
           _fe_problem.reinitNodeFace(node, boundary_id, 0);
-          if (nbc_warehouse->hasActiveBoundaryObjects(boundary_id))
-          {
-            const auto & bcs = nbc_warehouse->getActiveBoundaryObjects(boundary_id);
-            for (const auto & nbc : bcs)
-              if (nbc->shouldApply())
-                nbc->computeResidual();
-          }
+
+          const auto & bcs = nbc_warehouse->getActiveBoundaryObjects(boundary_id);
+          for (const auto & nbc : bcs)
+            if (nbc->shouldApply())
+              nbc->computeResidual();
         }
       }
     }
@@ -1919,7 +2096,7 @@ NonlinearSystemBase::computeNodalBCsResidualAndJacobian()
 {
   PARALLEL_TRY
   {
-    ConstBndNodeRange & bnd_nodes = *_mesh.getBoundaryNodeRange();
+    const ConstBndNodeRange & bnd_nodes = _fe_problem.getCurrentAlgebraicBndNodeRange();
 
     if (!bnd_nodes.empty())
     {
@@ -2105,13 +2282,20 @@ NonlinearSystemBase::constraintJacobians(bool displaced)
 
   auto & jacobian = getMatrix(systemMatrixTag());
 
+  auto ierr = (PetscErrorCode)0;
   if (!_fe_problem.errorOnJacobianNonzeroReallocation())
-    MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
-                 MAT_NEW_NONZERO_ALLOCATION_ERR,
-                 PETSC_FALSE);
+  {
+    ierr = MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
+                        MAT_NEW_NONZERO_ALLOCATION_ERR,
+                        PETSC_FALSE);
+    LIBMESH_CHKERR(ierr);
+  }
   if (_fe_problem.ignoreZerosInJacobian())
-    MatSetOption(
+  {
+    ierr = MatSetOption(
         static_cast<PetscMatrix<Number> &>(jacobian).mat(), MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE);
+    LIBMESH_CHKERR(ierr);
+  }
 
   std::vector<numeric_index_type> zero_rows;
 
@@ -2157,23 +2341,13 @@ NonlinearSystemBase::constraintJacobians(bool displaced)
           {
             PenetrationInfo & info = *pen_loc._penetration_info[secondary_node_num];
 
-            const Elem * primary_elem = info._elem;
-            unsigned int primary_side = info._side_num;
-
-            // reinit variables at the node
-            _fe_problem.reinitNodeFace(&secondary_node, secondary_boundary, 0);
-
-            _fe_problem.prepareAssembly(0);
+            reinitNodeFace(secondary_node, secondary_boundary, info, displaced);
             _fe_problem.reinitOffDiagScalars(0);
 
-            std::vector<Point> points;
-            points.push_back(info._closest_point);
-
-            // reinit variables on the primary element's face at the contact point
-            _fe_problem.setNeighborSubdomainID(primary_elem, 0);
-            subproblem.reinitNeighborPhys(primary_elem, primary_side, points, 0);
             for (const auto & nfc : constraints)
             {
+              if (nfc->isExplicitConstraint())
+                continue;
               // Return if this constraint does not correspond to the primary-secondary pair
               // prepared by the outer loops.
               // This continue statement is required when, e.g. one secondary surface constrains
@@ -2242,13 +2416,14 @@ NonlinearSystemBase::constraintJacobians(bool displaced)
                 for (const auto & jvar : coupled_vars)
                 {
                   // Only compute jacobians for nonlinear variables
-                  if (jvar->kind() != Moose::VAR_NONLINEAR)
+                  if (jvar->kind() != Moose::VAR_SOLVER)
                     continue;
 
                   // Only compute Jacobian entries if this coupling is being used by the
                   // preconditioner
                   if (nfc->variable().number() == jvar->number() ||
-                      !_fe_problem.areCoupled(nfc->variable().number(), jvar->number()))
+                      !_fe_problem.areCoupled(
+                          nfc->variable().number(), jvar->number(), this->number()))
                     continue;
 
                   // Need to zero out the matrices first
@@ -2301,9 +2476,10 @@ NonlinearSystemBase::constraintJacobians(bool displaced)
 
       if (constraints_applied)
       {
-        MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
-                     MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
-                     PETSC_TRUE);
+        auto ierr = MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
+                                 MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
+                                 PETSC_TRUE);
+        LIBMESH_CHKERR(ierr);
 
         jacobian.close();
         jacobian.zero_rows(zero_rows, 0.0);
@@ -2320,9 +2496,10 @@ NonlinearSystemBase::constraintJacobians(bool displaced)
 
     if (constraints_applied)
     {
-      MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
-                   MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
-                   PETSC_TRUE);
+      auto ierr = MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
+                               MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
+                               PETSC_TRUE);
+      LIBMESH_CHKERR(ierr);
 
       jacobian.close();
       jacobian.zero_rows(zero_rows, 0.0);
@@ -2457,13 +2634,14 @@ NonlinearSystemBase::constraintJacobians(bool displaced)
                 for (const auto & jvar : coupled_vars)
                 {
                   // Only compute jacobians for nonlinear variables
-                  if (jvar->kind() != Moose::VAR_NONLINEAR)
+                  if (jvar->kind() != Moose::VAR_SOLVER)
                     continue;
 
                   // Only compute Jacobian entries if this coupling is being used by the
                   // preconditioner
                   if (nec->variable().number() == jvar->number() ||
-                      !_fe_problem.areCoupled(nec->variable().number(), jvar->number()))
+                      !_fe_problem.areCoupled(
+                          nec->variable().number(), jvar->number(), this->number()))
                     continue;
 
                   // Need to zero out the matrices first
@@ -2503,9 +2681,10 @@ NonlinearSystemBase::constraintJacobians(bool displaced)
 
   if (constraints_applied)
   {
-    MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
-                 MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
-                 PETSC_TRUE);
+    auto ierr = MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
+                             MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
+                             PETSC_TRUE);
+    LIBMESH_CHKERR(ierr);
 
     jacobian.close();
     jacobian.zero_rows(zero_rows, 0.0);
@@ -2564,7 +2743,7 @@ NonlinearSystemBase::computeScalarKernelsJacobians(const std::set<TagID> & tags)
 void
 NonlinearSystemBase::jacobianSetup()
 {
-  SystemBase::jacobianSetup();
+  SolverSystem::jacobianSetup();
 
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
@@ -2608,11 +2787,15 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
     // Necessary for speed
     if (auto petsc_matrix = dynamic_cast<PetscMatrix<Number> *>(&jacobian))
     {
-      MatSetOption(petsc_matrix->mat(),
-                   MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
-                   PETSC_TRUE);
+      auto ierr = MatSetOption(petsc_matrix->mat(),
+                               MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
+                               PETSC_TRUE);
+      LIBMESH_CHKERR(ierr);
       if (!_fe_problem.errorOnJacobianNonzeroReallocation())
-        MatSetOption(petsc_matrix->mat(), MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
+      {
+        ierr = MatSetOption(petsc_matrix->mat(), MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
+        LIBMESH_CHKERR(ierr);
+      }
     }
   }
 
@@ -2649,8 +2832,8 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
     // Block restricted Nodal Kernels
     if (_nodal_kernels.hasActiveBlockObjects())
     {
-      ComputeNodalKernelJacobiansThread cnkjt(_fe_problem, _nodal_kernels, tags);
-      ConstNodeRange & range = *_mesh.getLocalNodeRange();
+      ComputeNodalKernelJacobiansThread cnkjt(_fe_problem, *this, _nodal_kernels, tags);
+      const ConstNodeRange & range = _fe_problem.getCurrentAlgebraicNodeRange();
       Threads::parallel_reduce(range, cnkjt);
 
       unsigned int n_threads = libMesh::n_threads();
@@ -2682,7 +2865,7 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
     mortarConstraints(Moose::ComputeType::Jacobian, {}, tags);
 
     // Get our element range for looping over
-    ConstElemRange & elem_range = *_mesh.getActiveLocalElementRange();
+    const ConstElemRange & elem_range = _fe_problem.getCurrentAlgebraicElementRange();
 
     if (_fe_problem.computingScalingJacobian())
     {
@@ -2697,6 +2880,12 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
       for (unsigned int i = 0; i < n_threads;
            i++) // Add any Jacobian contributions still hanging around
         _fe_problem.addCachedJacobian(i);
+
+      // Check whether any exceptions were thrown and propagate this information for parallel
+      // consistency before
+      // 1) we do parallel communication when closing tagged matrices
+      // 2) early returning before reaching our PARALLEL_CATCH below
+      _fe_problem.checkExceptionAndStopSolve();
 
       closeTaggedMatrices(tags);
 
@@ -2718,8 +2907,8 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
         // Boundary restricted Nodal Kernels
         if (_nodal_kernels.hasActiveBoundaryObjects())
         {
-          ComputeNodalKernelBCJacobiansThread cnkjt(_fe_problem, _nodal_kernels, tags);
-          ConstBndNodeRange & bnd_range = *_mesh.getBoundaryNodeRange();
+          ComputeNodalKernelBCJacobiansThread cnkjt(_fe_problem, *this, _nodal_kernels, tags);
+          const ConstBndNodeRange & bnd_range = _fe_problem.getCurrentAlgebraicBndNodeRange();
 
           Threads::parallel_reduce(bnd_range, cnkjt);
           unsigned int n_threads = libMesh::n_threads();
@@ -2743,8 +2932,8 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
         // Boundary restricted Nodal Kernels
         if (_nodal_kernels.hasActiveBoundaryObjects())
         {
-          ComputeNodalKernelBCJacobiansThread cnkjt(_fe_problem, _nodal_kernels, tags);
-          ConstBndNodeRange & bnd_range = *_mesh.getBoundaryNodeRange();
+          ComputeNodalKernelBCJacobiansThread cnkjt(_fe_problem, *this, _nodal_kernels, tags);
+          const ConstBndNodeRange & bnd_range = _fe_problem.getCurrentAlgebraicBndNodeRange();
 
           Threads::parallel_reduce(bnd_range, cnkjt);
           unsigned int n_threads = libMesh::n_threads();
@@ -2777,7 +2966,7 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
   PARALLEL_TRY
   {
     // Add in Jacobian contributions from other Constraints
-    if (_fe_problem._has_constraints)
+    if (_fe_problem._has_constraints && tags.count(systemMatrixTag()))
     {
       // Some constraints need values from the Jacobian
       closeTaggedMatrices(tags);
@@ -2841,7 +3030,7 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
             // and the BC's own variable
             std::set<unsigned int> & var_set = bc_involved_vars[bc->name()];
             for (const auto & coupled_var : coupled_moose_vars)
-              if (coupled_var->kind() == Moose::VAR_NONLINEAR)
+              if (coupled_var->kind() == Moose::VAR_SOLVER)
                 var_set.insert(coupled_var->number());
 
             var_set.insert(bc->variable().number());
@@ -2860,10 +3049,10 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
       // which variables are "coupled" as far as the preconditioner is
       // concerned, not what variables a boundary condition specifically
       // depends on.
-      auto & coupling_entries = _fe_problem.couplingEntries(/*_tid=*/0);
+      auto & coupling_entries = _fe_problem.couplingEntries(/*_tid=*/0, this->number());
 
       // Compute Jacobians for NodalBCBases
-      ConstBndNodeRange & bnd_nodes = *_mesh.getBoundaryNodeRange();
+      const ConstBndNodeRange & bnd_nodes = _fe_problem.getCurrentAlgebraicBndNodeRange();
       for (const auto & bnode : bnd_nodes)
       {
         BoundaryID boundary_id = bnode->_bnd_id;
@@ -2922,6 +3111,7 @@ NonlinearSystemBase::computeJacobianInternal(const std::set<TagID> & tags)
 
   // Accumulate the occurrence of solution invalid warnings for the current iteration cumulative
   // counters
+  _app.solutionInvalidity().sync();
   _app.solutionInvalidity().solutionInvalidAccumulation();
 }
 
@@ -2990,13 +3180,17 @@ NonlinearSystemBase::computeJacobianBlocks(std::vector<JacobianBlock *> & blocks
   {
     SparseMatrix<Number> & jacobian = blocks[i]->_jacobian;
 
-    MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
-                 MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
-                 PETSC_TRUE);
+    auto ierr = MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
+                             MAT_KEEP_NONZERO_PATTERN, // This is changed in 3.1
+                             PETSC_TRUE);
+    LIBMESH_CHKERR(ierr);
     if (!_fe_problem.errorOnJacobianNonzeroReallocation())
-      MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
-                   MAT_NEW_NONZERO_ALLOCATION_ERR,
-                   PETSC_TRUE);
+    {
+      ierr = MatSetOption(static_cast<PetscMatrix<Number> &>(jacobian).mat(),
+                          MAT_NEW_NONZERO_ALLOCATION_ERR,
+                          PETSC_TRUE);
+      LIBMESH_CHKERR(ierr);
+    }
 
     jacobian.zero();
   }
@@ -3006,7 +3200,7 @@ NonlinearSystemBase::computeJacobianBlocks(std::vector<JacobianBlock *> & blocks
 
   PARALLEL_TRY
   {
-    ConstElemRange & elem_range = *_mesh.getActiveLocalElementRange();
+    const ConstElemRange & elem_range = _fe_problem.getCurrentAlgebraicElementRange();
     ComputeJacobianBlocksThread cjb(_fe_problem, blocks, tags);
     Threads::parallel_reduce(elem_range, cjb);
   }
@@ -3027,7 +3221,7 @@ NonlinearSystemBase::computeJacobianBlocks(std::vector<JacobianBlock *> & blocks
     std::vector<numeric_index_type> zero_rows;
     PARALLEL_TRY
     {
-      ConstBndNodeRange & bnd_nodes = *_mesh.getBoundaryNodeRange();
+      const ConstBndNodeRange & bnd_nodes = _fe_problem.getCurrentAlgebraicBndNodeRange();
       for (const auto & bnode : bnd_nodes)
       {
         BoundaryID boundary_id = bnode->_bnd_id;
@@ -3105,8 +3299,8 @@ NonlinearSystemBase::computeDamping(const NumericVector<Number> & solution,
         TIME_SECTION("computeDampers", 3, "Computing Dampers");
         has_active_dampers = true;
         *_increment_vec = update;
-        ComputeElemDampingThread cid(_fe_problem);
-        Threads::parallel_reduce(*_mesh.getActiveLocalElementRange(), cid);
+        ComputeElemDampingThread cid(_fe_problem, *this);
+        Threads::parallel_reduce(_fe_problem.getCurrentAlgebraicElementRange(), cid);
         damping = std::min(cid.damping(), damping);
       }
       PARALLEL_CATCH;
@@ -3120,8 +3314,8 @@ NonlinearSystemBase::computeDamping(const NumericVector<Number> & solution,
 
         has_active_dampers = true;
         *_increment_vec = update;
-        ComputeNodalDampingThread cndt(_fe_problem);
-        Threads::parallel_reduce(*_mesh.getLocalNodeRange(), cndt);
+        ComputeNodalDampingThread cndt(_fe_problem, *this);
+        Threads::parallel_reduce(_fe_problem.getCurrentAlgebraicNodeRange(), cndt);
         damping = std::min(cndt.damping(), damping);
       }
       PARALLEL_CATCH;
@@ -3302,33 +3496,6 @@ NonlinearSystemBase::augmentSparsity(SparsityPattern::Graph & sparsity,
 }
 
 void
-NonlinearSystemBase::serializeSolution()
-{
-  if (_serialized_solution.get())
-  {
-    if (!_serialized_solution->initialized() || _serialized_solution->size() != _sys.n_dofs())
-    {
-      _serialized_solution->clear();
-      _serialized_solution->init(_sys.n_dofs(), false, SERIAL);
-    }
-
-    _current_solution->localize(*_serialized_solution);
-  }
-}
-
-void
-NonlinearSystemBase::setSolution(const NumericVector<Number> & soln)
-{
-  _current_solution = &soln;
-
-  auto tag = _subproblem.getVectorTagID(Moose::SOLUTION_TAG);
-  associateVectorToTag(const_cast<NumericVector<Number> &>(soln), tag);
-
-  if (_serialized_solution.get())
-    serializeSolution();
-}
-
-void
 NonlinearSystemBase::setSolutionUDot(const NumericVector<Number> & u_dot)
 {
   *_u_dot = u_dot;
@@ -3350,18 +3517,6 @@ void
 NonlinearSystemBase::setSolutionUDotDotOld(const NumericVector<Number> & u_dotdot_old)
 {
   *_u_dotdot_old = u_dotdot_old;
-}
-
-NumericVector<Number> &
-NonlinearSystemBase::serializedSolution()
-{
-  if (!_serialized_solution.get())
-  {
-    _serialized_solution = NumericVector<Number>::build(_communicator);
-    _serialized_solution->init(_sys.n_dofs(), false, SERIAL);
-  }
-
-  return *_serialized_solution;
 }
 
 void
@@ -3555,38 +3710,6 @@ NonlinearSystemBase::containsTimeKernel()
   return time_kernels.hasActiveObjects();
 }
 
-void
-NonlinearSystemBase::setPCSide(MooseEnum pcs)
-{
-  if (pcs == "left")
-    _pc_side = Moose::PCS_LEFT;
-  else if (pcs == "right")
-    _pc_side = Moose::PCS_RIGHT;
-  else if (pcs == "symmetric")
-    _pc_side = Moose::PCS_SYMMETRIC;
-  else if (pcs == "default")
-    _pc_side = Moose::PCS_DEFAULT;
-  else
-    mooseError("Unknown PC side specified.");
-}
-
-void
-NonlinearSystemBase::setMooseKSPNormType(MooseEnum kspnorm)
-{
-  if (kspnorm == "none")
-    _ksp_norm = Moose::KSPN_NONE;
-  else if (kspnorm == "preconditioned")
-    _ksp_norm = Moose::KSPN_PRECONDITIONED;
-  else if (kspnorm == "unpreconditioned")
-    _ksp_norm = Moose::KSPN_UNPRECONDITIONED;
-  else if (kspnorm == "natural")
-    _ksp_norm = Moose::KSPN_NATURAL;
-  else if (kspnorm == "default")
-    _ksp_norm = Moose::KSPN_DEFAULT;
-  else
-    mooseError("Unknown ksp norm type specified.");
-}
-
 bool
 NonlinearSystemBase::needBoundaryMaterialOnSide(BoundaryID bnd_id, THREAD_ID tid) const
 {
@@ -3599,8 +3722,9 @@ NonlinearSystemBase::needInterfaceMaterialOnSide(BoundaryID bnd_id, THREAD_ID ti
   return _interface_kernels.hasActiveBoundaryObjects(bnd_id, tid);
 }
 
-bool NonlinearSystemBase::needSubdomainMaterialOnSide(SubdomainID /*subdomain_id*/,
-                                                      THREAD_ID /*tid*/) const
+bool
+NonlinearSystemBase::needSubdomainMaterialOnSide(SubdomainID /*subdomain_id*/,
+                                                 THREAD_ID /*tid*/) const
 {
   return _doing_dg;
 }
@@ -3709,11 +3833,16 @@ NonlinearSystemBase::setupScalingData()
                     libmesh_map_find(number_to_var_map, i)->name()) !=
           _ignore_variables_for_autoscaling.end())
         _variable_autoscaled[i] = false;
+
+  _auto_scaling_initd = true;
 }
 
-void
+bool
 NonlinearSystemBase::computeScaling()
 {
+  if (_compute_scaling_once && _computed_scaling)
+    return true;
+
   _console << "\nPerforming automatic scaling calculation\n" << std::endl;
 
   TIME_SECTION("computeScaling", 3, "Computing Automatic Scaling");
@@ -3771,6 +3900,10 @@ NonlinearSystemBase::computeScaling()
     _fe_problem.computingScalingResidual(false);
   }
 
+  // Did something bad happen during residual/Jacobian scaling computation?
+  if (_fe_problem.getFailNextNonlinearConvergenceCheck())
+    return false;
+
   auto examine_dof_indices = [this,
                               jac_scaling,
                               resid_scaling,
@@ -3799,7 +3932,7 @@ NonlinearSystemBase::computeScaling()
   };
 
   // Compute our scaling factors for the spatial field variables
-  for (const auto & elem : *mesh().getActiveLocalElementRange())
+  for (const auto & elem : _fe_problem.getCurrentAlgebraicElementRange())
     for (const auto i : make_range(system().n_vars()))
       if (_variable_autoscaled[i] && system().variable_type(i).family != SCALAR)
       {
@@ -3861,7 +3994,8 @@ NonlinearSystemBase::computeScaling()
     displaced_problem->systemBaseNonlinear(number()).applyScalingFactors(
         flattened_inverse_scaling_factors);
 
-  _auto_scaling_initd = true;
+  _computed_scaling = true;
+  return true;
 }
 
 void
@@ -3885,17 +4019,19 @@ NonlinearSystemBase::assembleScalingVector()
        as_range(lm_mesh.active_local_elements_begin(), lm_mesh.active_local_elements_end()))
     for (const auto * const field_var : field_variables)
     {
-      mooseAssert(field_var->count() == 1,
-                  "Contact Alex Lindsay and tell him to make this work for array variables.");
-      dof_map.dof_indices(elem, dof_indices, field_var->number());
-      for (const auto dof : dof_indices)
-        scaling_vector.set(dof, field_var->scalingFactor());
+      const auto & factors = field_var->arrayScalingFactor();
+      for (const auto i : make_range(field_var->count()))
+      {
+        dof_map.dof_indices(elem, dof_indices, field_var->number() + i);
+        for (const auto dof : dof_indices)
+          scaling_vector.set(dof, factors[i]);
+      }
     }
 
   for (const auto * const scalar_var : scalar_variables)
   {
     mooseAssert(scalar_var->count() == 1,
-                "Contact Alex Lindsay and tell him to make this work for array variables.");
+                "Scalar variables should always have only one component.");
     dof_map.SCALAR_dof_indices(dof_indices, scalar_var->number());
     for (const auto dof : dof_indices)
       scaling_vector.set(dof, scalar_var->scalingFactor());
@@ -3907,4 +4043,40 @@ NonlinearSystemBase::assembleScalingVector()
   if (auto * displaced_problem = _fe_problem.getDisplacedProblem().get())
     // copy into the corresponding displaced system vector because they should be the exact same
     displaced_problem->systemBaseNonlinear(number()).getVector("scaling_factors") = scaling_vector;
+}
+
+bool
+NonlinearSystemBase::preSolve()
+{
+  // Clear the iteration counters
+  _current_l_its.clear();
+  _current_nl_its = 0;
+
+  // Initialize the solution vector using a predictor and known values from nodal bcs
+  setInitialSolution();
+
+  // Now that the initial solution has ben set, potentially perform a residual/Jacobian evaluation
+  // to determine variable scaling factors
+  if (_automatic_scaling)
+  {
+    const bool scaling_succeeded = computeScaling();
+    if (!scaling_succeeded)
+      return false;
+  }
+
+  // We do not know a priori what variable a global degree of freedom corresponds to, so we need a
+  // map from global dof to scaling factor. We just use a ghosted NumericVector for that mapping
+  assembleScalingVector();
+
+  return true;
+}
+
+void
+NonlinearSystemBase::destroyColoring()
+{
+  if (matrixFromColoring())
+  {
+    auto ierr = MatFDColoringDestroy(&_fdcoloring);
+    LIBMESH_CHKERR(ierr);
+  }
 }

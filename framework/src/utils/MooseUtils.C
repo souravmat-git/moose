@@ -33,6 +33,7 @@
 #include <fstream>
 #include <istream>
 #include <iterator>
+#include <filesystem>
 #include <ctime>
 #include <cstdlib>
 
@@ -53,10 +54,10 @@
 
 namespace MooseUtils
 {
-std::string
-pathjoin(const std::string & s)
+std::filesystem::path
+pathjoin(const std::filesystem::path & p)
 {
-  return s;
+  return p;
 }
 
 std::string
@@ -245,11 +246,10 @@ pathExists(const std::string & path)
 bool
 pathIsDirectory(const std::string & path)
 {
-  struct stat buffer;
-  // stat call fails?
-  if (stat(path.c_str(), &buffer))
-    return false;
-  return S_IFDIR & buffer.st_mode;
+  // We use the non-throwing overload of this so that we suppress any issues with
+  // reading and just report it as an unavailable directory
+  std::error_code ec;
+  return std::filesystem::is_directory(path, ec);
 }
 
 bool
@@ -410,42 +410,28 @@ hasExtension(const std::string & filename, std::string ext, bool strip_exodus_ex
 }
 
 std::string
-stripExtension(const std::string & s)
+getExtension(const std::string & filename, const bool rfind)
 {
-  auto pos = s.rfind(".");
-  if (pos != std::string::npos)
-    return s.substr(0, pos);
-  return s;
+  std::string file_ext = "";
+  if (filename != "")
+  {
+    // The next line splits filename at the last "/" and gives the file name after "/"
+    const std::string stripped_filename = splitFileName<std::string>(filename).second;
+    auto pos = rfind ? stripped_filename.rfind(".") : stripped_filename.find(".");
+    if (pos != std::string::npos)
+      file_ext += stripped_filename.substr(pos + 1, std::string::npos);
+  }
+
+  return file_ext;
 }
 
-std::pair<std::string, std::string>
-splitFileName(std::string full_file)
+std::string
+stripExtension(const std::string & s, const bool rfind)
 {
-  // Error if path ends with /
-  if (full_file.empty() || *full_file.rbegin() == '/')
-    mooseError("Invalid full file name: ", full_file);
-
-  // Define the variables to output
-  std::string path;
-  std::string file;
-
-  // Locate the / sepearting the file from path
-  std::size_t found = full_file.find_last_of("/");
-
-  // If no / is found used "." for the path, otherwise seperate the two
-  if (found == std::string::npos)
-  {
-    path = ".";
-    file = full_file;
-  }
-  else
-  {
-    path = full_file.substr(0, found);
-    file = full_file.substr(found + 1);
-  }
-
-  // Return the path and file as a pair
-  return std::pair<std::string, std::string>(path, file);
+  const std::string ext = getExtension(s, rfind);
+  const bool offset = (ext.size() != 0);
+  // -1 offset accounts for the extension's leading dot ("."), if there is an extension
+  return s.substr(0, s.size() - ext.size() - offset);
 }
 
 std::string
@@ -997,7 +983,7 @@ convertStringToInt(const std::string & str, bool throw_on_failure)
   }
 
   // Check to see if it's an integer (and within range of an integer)
-  if (double_val == static_cast<T>(double_val))
+  if (double_val == static_cast<long double>(static_cast<T>(double_val)))
     return use_int ? val : static_cast<T>(double_val);
 
   // Still failure
@@ -1249,48 +1235,7 @@ fileSize(const std::string & filename)
 std::string
 realpath(const std::string & path)
 {
-  char dummy[PETSC_MAX_PATH_LEN];
-  if (PetscGetFullPath(path.c_str(), dummy, sizeof(dummy)))
-    mooseError("Failed to get real path for ", path);
-  return dummy;
-}
-
-std::string
-relativepath(const std::string & path, const std::string & start)
-{
-  std::vector<std::string> vecpath;
-  std::vector<std::string> vecstart;
-  size_t index_size;
-  unsigned int same_size(0);
-
-  vecpath = split(path, "/");
-  vecstart = split(realpath(start), "/");
-  if (vecstart.size() < vecpath.size())
-    index_size = vecstart.size();
-  else
-    index_size = vecpath.size();
-
-  for (unsigned int i = 0; i < index_size; ++i)
-  {
-    if (vecstart[i] != vecpath[i])
-    {
-      same_size = i;
-      break;
-    }
-  }
-
-  std::string relative_path("");
-  for (unsigned int i = 0; i < (vecstart.size() - same_size); ++i)
-    relative_path += "../";
-
-  for (unsigned int i = same_size; i < vecpath.size(); ++i)
-  {
-    relative_path += vecpath[i];
-    if (i < (vecpath.size() - 1))
-      relative_path += "/";
-  }
-
-  return relative_path;
+  return std::filesystem::absolute(path);
 }
 
 BoundingBox

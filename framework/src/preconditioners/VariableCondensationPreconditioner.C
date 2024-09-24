@@ -49,6 +49,7 @@ VariableCondensationPreconditioner::validParams()
 
   params.addParam<std::vector<NonlinearVariableName>>(
       "coupled_groups",
+      {},
       "List multiple space separated groups of comma separated variables. "
       "Off-diagonal jacobians will be generated for all pairs within a group.");
 
@@ -79,7 +80,7 @@ VariableCondensationPreconditioner::VariableCondensationPreconditioner(
     const InputParameters & params)
   : MoosePreconditioner(params),
     Preconditioner<Number>(MoosePreconditioner::_communicator),
-    _nl(_fe_problem.getNonlinearSystemBase()),
+    _nl(_fe_problem.getNonlinearSystemBase(_nl_sys_num)),
     _mesh(_fe_problem.mesh()),
     _dofmap(_nl.system().get_dof_map()),
     _is_lm_coupling_diagonal(getParam<bool>("is_lm_coupling_diagonal")),
@@ -146,24 +147,25 @@ VariableCondensationPreconditioner::VariableCondensationPreconditioner(
 
     // off-diagonal entries from the off_diag_row and off_diag_column parameters
     std::vector<std::vector<unsigned int>> off_diag(_n_vars);
-    for (const auto i : index_range(getParam<std::vector<NonlinearVariableName>>("off_diag_row")))
-    {
-      const unsigned int row =
-          _nl.getVariable(0, getParam<std::vector<NonlinearVariableName>>("off_diag_row")[i])
-              .number();
-      const unsigned int column =
-          _nl.getVariable(0, getParam<std::vector<NonlinearVariableName>>("off_diag_column")[i])
-              .number();
-      (*cm)(row, column) = 1;
-    }
+    if (isParamValid("off_diag_row") && isParamValid("off_diag_column"))
+
+      for (const auto i : index_range(getParam<std::vector<NonlinearVariableName>>("off_diag_row")))
+      {
+        const unsigned int row =
+            _nl.getVariable(0, getParam<std::vector<NonlinearVariableName>>("off_diag_row")[i])
+                .number();
+        const unsigned int column =
+            _nl.getVariable(0, getParam<std::vector<NonlinearVariableName>>("off_diag_column")[i])
+                .number();
+        (*cm)(row, column) = 1;
+      }
 
     // off-diagonal entries from the coupled_groups parameters
-    std::vector<NonlinearVariableName> groups =
-        getParam<std::vector<NonlinearVariableName>>("coupled_groups");
-    for (const auto i : index_range(groups))
+    for (const auto & coupled_group :
+         getParam<std::vector<NonlinearVariableName>>("coupled_groups"))
     {
       std::vector<NonlinearVariableName> vars;
-      MooseUtils::tokenize<NonlinearVariableName>(groups[i], vars, 1, ",");
+      MooseUtils::tokenize<NonlinearVariableName>(coupled_group, vars, 1, ",");
       for (unsigned int j : index_range(vars))
         for (unsigned int k = j + 1; k < vars.size(); ++k)
         {
@@ -340,7 +342,7 @@ VariableCondensationPreconditioner::init()
 void
 VariableCondensationPreconditioner::condenseSystem()
 {
-  PetscErrorCode ierr = 0;
+  PetscErrorCode ierr = (PetscErrorCode)0;
 
   // extract _M from the original matrix
   _matrix->create_submatrix(*_M, _rows, _lm_dofs);
@@ -401,7 +403,7 @@ VariableCondensationPreconditioner::computeCondensedJacobian(PetscMatrix<Number>
                                                              const std::vector<dof_id_type> & grows,
                                                              PetscMatrix<Number> & block_mat)
 {
-  PetscErrorCode ierr = 0;
+  PetscErrorCode ierr = (PetscErrorCode)0;
 
   // obtain entries from the original matrix
   PetscInt pc_ncols = 0, block_ncols = 0;
@@ -503,7 +505,7 @@ VariableCondensationPreconditioner::preallocateCondensedJacobian(
   // condensed matrix
   std::vector<dof_id_type> n_nz, n_oz;
 
-  PetscErrorCode ierr = 0;
+  PetscErrorCode ierr = (PetscErrorCode)0;
 
   // Get number of nonzeros from original_mat and block_mat for each row
   for (const auto & row_id : _rows)
@@ -650,7 +652,7 @@ VariableCondensationPreconditioner::getCondensedXY(const NumericVector<Number> &
                                                    NumericVector<Number> & x)
 {
   Mat mdinv;
-  PetscErrorCode ierr = 0;
+  PetscErrorCode ierr = (PetscErrorCode)0;
   // calculate mdinv
   ierr = MatMatMult(_M->mat(), _dinv, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &mdinv);
   LIBMESH_CHKERR(ierr);
@@ -753,7 +755,7 @@ VariableCondensationPreconditioner::findZeroDiagonals(SparseMatrix<Number> & mat
   for (PetscInt i = 0; i < nrows; ++i)
     indices.push_back(petsc_idx[i]);
 
-  ISRestoreIndices(zerodiags_all, &petsc_idx);
+  ierr = ISRestoreIndices(zerodiags_all, &petsc_idx);
   LIBMESH_CHKERR(ierr);
   ierr = ISDestroy(&zerodiags);
   LIBMESH_CHKERR(ierr);

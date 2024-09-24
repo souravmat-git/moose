@@ -102,7 +102,7 @@ loopOverMortarSegments(
   const auto & JxW_msm = assembly.jxWMortar();
 
   // Set required material properties
-  std::set<unsigned int> needed_mat_props;
+  std::unordered_set<unsigned int> needed_mat_props;
   for (const auto & consumer : consumers)
   {
     const auto & mp_deps = consumer->getMatPropDependencies();
@@ -246,13 +246,8 @@ loopOverMortarSegments(
       // it's safest to keep making calls on fe_problem instead of subproblem
 
       // reinit the variables/residuals/jacobians on the secondary interior
-      fe_problem.reinitElemFaceRef(reinit_secondary_elem,
-                                   secondary_side_id,
-                                   secondary_boundary_id,
-                                   TOLERANCE,
-                                   &xi1_pts,
-                                   nullptr,
-                                   tid);
+      fe_problem.reinitElemFaceRef(
+          reinit_secondary_elem, secondary_side_id, TOLERANCE, &xi1_pts, nullptr, tid);
 
       const Elem * reinit_primary_elem = primary_ip;
 
@@ -262,13 +257,8 @@ loopOverMortarSegments(
         reinit_primary_elem = fe_problem.mesh().elemPtr(reinit_primary_elem->id());
 
       // reinit the variables/residuals/jacobians on the primary interior
-      fe_problem.reinitNeighborFaceRef(reinit_primary_elem,
-                                       primary_side_id,
-                                       primary_boundary_id,
-                                       TOLERANCE,
-                                       &xi2_pts,
-                                       nullptr,
-                                       tid);
+      fe_problem.reinitNeighborFaceRef(
+          reinit_primary_elem, primary_side_id, TOLERANCE, &xi2_pts, nullptr, tid);
 
       // reinit neighbor materials, but be careful not to execute stateful materials since
       // conceptually they don't make sense with mortar (they're not interpolary)

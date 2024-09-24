@@ -34,24 +34,20 @@ rho = 1.1
     pressure_function = '0'
 
     friction_types = 'darcy'
-    friction_coeffs = '25'
+    friction_coeffs = 'friction_coefficient'
 
     mass_advection_interpolation = 'average'
     momentum_advection_interpolation = 'average'
+    standard_friction_formulation = false
   []
 []
 
-[Materials]
+[FunctorMaterials]
+  inactive = exponential_friction_coefficient
   [const]
     type = ADGenericFunctorMaterial
     prop_names = 'rho mu'
     prop_values = '${rho} ${mu}'
-  []
-  [speed_material]
-    type = PINSFVSpeedFunctorMaterial
-    superficial_vel_x = vel_x
-    superficial_vel_y = vel_y
-    porosity = 1
   []
   [Re_material]
     type = ReynoldsNumberFunctorMaterial
@@ -60,12 +56,22 @@ rho = 1.1
     rho = ${rho}
     mu = ${mu}
   []
-  [exponential_friction_coefficient]
+  [exponential_coeff]
     type = ExponentialFrictionMaterial
-    friction_factor_name = 'friction_coefficient'
+    friction_factor_name = 'exponential_coeff'
     Re = Re
     c1 = 0.25
     c2 = 0.55
+  []
+  [exponential_friction_coefficient]
+    type = ADGenericVectorFunctorMaterial
+    prop_names = 'friction_coefficient'
+    prop_values = 'exponential_coeff exponential_coeff exponential_coeff'
+  []
+  [friction_coefficient]
+    type = ADGenericVectorFunctorMaterial
+    prop_names = 'friction_coefficient'
+    prop_values = '25 25 25'
   []
 []
 

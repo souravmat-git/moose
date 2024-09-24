@@ -21,20 +21,17 @@ Load the following modules:
 !style-end!
 
 ```bash
-module load use.moose moose-apps moose
+module load use.moose moose-openmpi
 ```
 
 !alert warning
 If you receive an error about modules not being known, please make sure you are logged into either
 Sawtooth or Lemhi.
 
-!alert tip
-In generally, Sawtooth may have a more up-to-date version.
-
 Once loaded, `moose` becomes available. You need now only provide input files to run simulations.
 Example input files are also available while this module is loaded.
 
-!template load file=getting_started/installation/workshop_tutorial.md.template MOOSE_SHARE=$MOOSE_DIR/moose/share/moose TUTORIAL=heat_conduction
+!template load file=getting_started/installation/workshop_tutorial.md.template MOOSE_SHARE=$MOOSE_DIR/moose/share/moose TUTORIAL=heat_transfer
 
 ## View Results
 
@@ -61,7 +58,7 @@ Paraview should open. From here, you can select `File`, `Open`, and navigate to 
 containing your exodus file, and open it.
 
 In many cases it is more desirable to view results using your local machine. This is done by copying
-result files from the remote machine to your local machine using `scp` or `rsnyc`.
+result files from the remote machine to your local machine using `scp` or `rsync`.
 
 !alert note title=Copying files from remote HPC machine to your machine
 Copying files from an HPC cluster to your machine first requires that you follow the instructions:
@@ -83,7 +80,7 @@ Perform the above command while on your machine. Not while on an HPC machine.
 ## Examples
 
 !style! halign=left
-Continue on to see more examples and tuturials using MOOSE! However, most of the next section is
+Continue on to see more examples and tutorials using MOOSE! However, most of the next section is
 geared towards developing your own application.
 !style-end!
 

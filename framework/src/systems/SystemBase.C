@@ -25,9 +25,11 @@
 #include "MooseMesh.h"
 #include "MooseUtils.h"
 #include "FVBoundaryCondition.h"
+#include "FEProblemBase.h"
 
 #include "libmesh/dof_map.h"
 #include "libmesh/string_to_enum.h"
+#include "libmesh/fe_interface.h"
 
 /// Free function used for a libMesh callback
 void
@@ -49,11 +51,13 @@ extraSparsity(SparsityPattern::Graph & sparsity,
 }
 
 SystemBase::SystemBase(SubProblem & subproblem,
+                       FEProblemBase & fe_problem,
                        const std::string & name,
                        Moose::VarKindType var_kind)
   : libMesh::ParallelObject(subproblem),
     ConsoleStreamInterface(subproblem.getMooseApp()),
     _subproblem(subproblem),
+    _fe_problem(fe_problem),
     _app(subproblem.getMooseApp()),
     _factory(_app.getFactory()),
     _mesh(subproblem.mesh()),
@@ -61,10 +65,14 @@ SystemBase::SystemBase(SubProblem & subproblem,
     _vars(libMesh::n_threads()),
     _var_map(),
     _max_var_number(0),
-    _saved_old(NULL),
-    _saved_older(NULL),
-    _saved_dot_old(NULL),
-    _saved_dotdot_old(NULL),
+    _u_dot(nullptr),
+    _u_dotdot(nullptr),
+    _u_dot_old(nullptr),
+    _u_dotdot_old(nullptr),
+    _saved_old(nullptr),
+    _saved_older(nullptr),
+    _saved_dot_old(nullptr),
+    _saved_dotdot_old(nullptr),
     _var_kind(var_kind),
     _max_var_n_dofs_per_elem(0),
     _max_var_n_dofs_per_node(0),
@@ -346,10 +354,7 @@ SystemBase::reinitElem(const Elem * /*elem*/, THREAD_ID tid)
 }
 
 void
-SystemBase::reinitElemFace(const Elem * /*elem*/,
-                           unsigned int /*side*/,
-                           BoundaryID /*bnd_id*/,
-                           THREAD_ID tid)
+SystemBase::reinitElemFace(const Elem * /*elem*/, unsigned int /*side*/, THREAD_ID tid)
 {
   const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
@@ -357,10 +362,7 @@ SystemBase::reinitElemFace(const Elem * /*elem*/,
 }
 
 void
-SystemBase::reinitNeighborFace(const Elem * /*elem*/,
-                               unsigned int /*side*/,
-                               BoundaryID /*bnd_id*/,
-                               THREAD_ID tid)
+SystemBase::reinitNeighborFace(const Elem * /*elem*/, unsigned int /*side*/, THREAD_ID tid)
 {
   const std::vector<MooseVariableFieldBase *> & vars = _vars[tid].fieldVariables();
   for (const auto & var : vars)
@@ -723,15 +725,16 @@ SystemBase::addVariable(const std::string & var_type,
     blocks.insert(blk_id);
   }
 
-  auto fe_type = FEType(Utility::string_to_enum<Order>(parameters.get<MooseEnum>("order")),
-                        Utility::string_to_enum<FEFamily>(parameters.get<MooseEnum>("family")));
+  const auto fe_type =
+      FEType(Utility::string_to_enum<Order>(parameters.get<MooseEnum>("order")),
+             Utility::string_to_enum<FEFamily>(parameters.get<MooseEnum>("family")));
+  const auto fe_field_type = FEInterface::field_type(fe_type);
 
   unsigned int var_num;
 
   if (var_type == "ArrayMooseVariable")
   {
-    if (fe_type.family == NEDELEC_ONE || fe_type.family == LAGRANGE_VEC ||
-        fe_type.family == MONOMIAL_VEC)
+    if (fe_field_type == TYPE_VECTOR)
       mooseError("Vector family type cannot be used in an array variable");
 
     // Build up the variable names
@@ -839,10 +842,29 @@ SystemBase::isScalarVariable(unsigned int var_num) const
 unsigned int
 SystemBase::nVariables() const
 {
+  unsigned int n = nFieldVariables();
+  n += _vars[0].scalars().size();
+
+  return n;
+}
+
+unsigned int
+SystemBase::nFieldVariables() const
+{
   unsigned int n = 0;
   for (auto & var : _vars[0].fieldVariables())
     n += var->count();
-  n += _vars[0].scalars().size();
+
+  return n;
+}
+
+unsigned int
+SystemBase::nFVVariables() const
+{
+  unsigned int n = 0;
+  for (auto & var : _vars[0].fieldVariables())
+    if (var->isFV())
+      n += var->count();
 
   return n;
 }
@@ -1189,28 +1211,15 @@ SystemBase::copyVars(ExodusII_IO & io)
 }
 
 void
-SystemBase::update(const bool update_libmesh_system)
+SystemBase::update()
 {
-  if (update_libmesh_system)
-    system().update();
-  std::vector<VariableName> std_field_variables;
-  getStandardFieldVariableNames(std_field_variables);
-  cacheVarIndicesByFace(std_field_variables);
+  system().update();
 }
 
 void
 SystemBase::solve()
 {
   system().solve();
-}
-
-void
-SystemBase::getStandardFieldVariableNames(std::vector<VariableName> & std_field_variables) const
-{
-  std_field_variables.clear();
-  for (auto & p : _vars[0].fieldVariables())
-    if (p->fieldType() == 0)
-      std_field_variables.push_back(p->name());
 }
 
 /**
@@ -1221,6 +1230,15 @@ SystemBase::copySolutionsBackwards()
 {
   system().update();
 
+  copyOldSolutions();
+}
+
+/**
+ * Shifts the solutions backwards in time
+ */
+void
+SystemBase::copyOldSolutions()
+{
   // Copying the solutions backward so the current solution will become the old, and the old will
   // become older. The same applies to the nonlinear iterates.
   for (const auto iteration_index : index_range(_solution_states))
@@ -1231,26 +1249,6 @@ SystemBase::copySolutionsBackwards()
         solutionState(i, Moose::SolutionIterationType(iteration_index)) =
             solutionState(i - 1, Moose::SolutionIterationType(iteration_index));
   }
-
-  if (solutionUDotOld())
-    *solutionUDotOld() = *solutionUDot();
-  if (solutionUDotDotOld())
-    *solutionUDotDotOld() = *solutionUDotDot();
-  if (solutionPreviousNewton())
-    *solutionPreviousNewton() = *currentSolution();
-}
-
-/**
- * Shifts the solutions backwards in time
- */
-void
-SystemBase::copyOldSolutions()
-{
-  const auto states =
-      _solution_states[static_cast<unsigned short>(Moose::SolutionIterationType::Time)].size();
-  if (states > 1)
-    for (unsigned int i = states - 1; i > 0; --i)
-      solutionState(i) = solutionState(i - 1);
 
   if (solutionUDotOld())
     *solutionUDotOld() = *solutionUDot();
@@ -1419,16 +1417,21 @@ SystemBase::applyScalingFactors(const std::vector<Real> & inverse_scaling_factor
   for (MooseIndex(_vars) thread = 0; thread < _vars.size(); ++thread)
   {
     auto & field_variables = _vars[thread].fieldVariables();
-    for (MooseIndex(field_variables) i = 0; i < field_variables.size(); ++i)
-      field_variables[i]->scalingFactor(1. / inverse_scaling_factors[i] *
-                                        field_variables[i]->scalingFactor());
+    for (MooseIndex(field_variables) i = 0, p = 0; i < field_variables.size(); ++i)
+    {
+      auto factors = field_variables[i]->arrayScalingFactor();
+      for (unsigned int j = 0; j < field_variables[i]->count(); ++j, ++p)
+        factors[j] /= inverse_scaling_factors[p];
+
+      field_variables[i]->scalingFactor(factors);
+    }
 
     auto offset = field_variables.size();
 
     auto & scalar_variables = _vars[thread].scalars();
     for (MooseIndex(scalar_variables) i = 0; i < scalar_variables.size(); ++i)
-      scalar_variables[i]->scalingFactor(1. / inverse_scaling_factors[offset + i] *
-                                         scalar_variables[i]->scalingFactor());
+      scalar_variables[i]->scalingFactor(
+          {1. / inverse_scaling_factors[offset + i] * scalar_variables[i]->scalingFactor()});
 
     if (thread == 0 && _verbose)
     {
@@ -1439,8 +1442,13 @@ SystemBase::applyScalingFactors(const std::vector<Real> & inverse_scaling_factor
       _console.precision(6);
 
       for (const auto & field_variable : field_variables)
-        _console << "  " << field_variable->name() << ": " << field_variable->scalingFactor()
-                 << "\n";
+      {
+        const auto & factors = field_variable->arrayScalingFactor();
+        _console << "  " << field_variable->name() << ":";
+        for (const auto i : make_range(field_variable->count()))
+          _console << " " << factors[i];
+        _console << "\n";
+      }
       for (const auto & scalar_variable : scalar_variables)
         _console << "  " << scalar_variable->name() << ": " << scalar_variable->scalingFactor()
                  << "\n";
@@ -1454,34 +1462,10 @@ SystemBase::applyScalingFactors(const std::vector<Real> & inverse_scaling_factor
 }
 
 void
-SystemBase::cacheVarIndicesByFace(const std::vector<VariableName> & vars)
-{
-  if (!_subproblem.haveFV())
-    return;
-
-  // prepare a vector of MooseVariables from names
-  std::vector<const MooseVariableFieldBase *> moose_vars;
-  for (auto & v : vars)
-  {
-    // first make sure this is not a scalar variable
-    if (hasScalarVariable(v))
-      mooseError("Variable ", v, " is a scalar variable");
-
-    // now make sure this is a standard variable [not array/vector]
-    if (getVariable(0, v).fieldType() != 0)
-      mooseError("Variable ", v, " not a standard field variable [either VECTOR or ARRAY].");
-    moose_vars.push_back(static_cast<MooseVariableFieldBase *>(&getVariable(0, v)));
-  }
-
-  _mesh.cacheVarIndicesByFace(moose_vars);
-  _mesh.computeFaceInfoFaceCoords();
-}
-
-void
 SystemBase::addScalingVector()
 {
   addVector("scaling_factors", /*project=*/false, libMesh::ParallelType::GHOSTED);
-  _subproblem.hasScalingVector();
+  _subproblem.hasScalingVector(number());
 }
 
 bool
@@ -1495,6 +1479,19 @@ SystemBase::initialSetup()
 {
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
     _vars[tid].initialSetup();
+
+  // If we need raw gradients, we initialize them here.
+  bool gradient_storage_initialized = false;
+  for (const auto & field_var : _vars[0].fieldVariables())
+    if (!gradient_storage_initialized && field_var->needsGradientVectorStorage())
+    {
+      _raw_grad_container.clear();
+      for (const auto i : make_range(this->_mesh.dimension()))
+      {
+        libmesh_ignore(i);
+        _raw_grad_container.push_back(currentSolution()->zero_clone());
+      }
+    }
 }
 
 void
@@ -1550,6 +1547,31 @@ SystemBase::setActiveScalarVariableCoupleableVectorTags(const std::set<TagID> & 
                                                         THREAD_ID tid)
 {
   _vars[tid].setActiveScalarVariableCoupleableVectorTags(vtags);
+}
+
+void
+SystemBase::addDotVectors()
+{
+  if (_fe_problem.uDotRequested())
+    _u_dot = &addVector("u_dot", true, GHOSTED);
+  if (_fe_problem.uDotOldRequested())
+    _u_dot_old = &addVector("u_dot_old", true, GHOSTED);
+  if (_fe_problem.uDotDotRequested())
+    _u_dotdot = &addVector("u_dotdot", true, GHOSTED);
+  if (_fe_problem.uDotDotOldRequested())
+    _u_dotdot_old = &addVector("u_dotdot_old", true, GHOSTED);
+}
+
+NumericVector<Number> &
+SystemBase::serializedSolution()
+{
+  if (!_serialized_solution.get())
+  {
+    _serialized_solution = NumericVector<Number>::build(_communicator);
+    _serialized_solution->init(system().n_dofs(), false, SERIAL);
+  }
+
+  return *_serialized_solution;
 }
 
 template MooseVariableFE<Real> & SystemBase::getFieldVariable<Real>(THREAD_ID tid,

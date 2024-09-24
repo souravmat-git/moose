@@ -59,5 +59,11 @@ GhostEverything::operator()(const MeshBase::const_element_iterator & range_begin
 bool
 GhostEverything::operator>=(const RelationshipManager & other) const
 {
-  return dynamic_cast<const GhostEverything *>(&other);
+  return baseGreaterEqual(other);
+}
+
+std::unique_ptr<GhostingFunctor>
+GhostEverything::clone() const
+{
+  return _app.getFactory().copyConstruct(*this);
 }

@@ -1,7 +1,7 @@
-mu=1.1
-rho=1.1
-darcy=1.1
-forch=1.1
+mu = 1.1
+rho = 1.1
+darcy = 1.1
+forch = 1.1
 
 [Mesh]
   [gen]
@@ -20,6 +20,9 @@ forch=1.1
   [eps_out]
     type = MooseVariableFVReal
   []
+  [eps_smoothed_out]
+    type = MooseVariableFVReal
+  []
 []
 
 [AuxKernels]
@@ -29,37 +32,46 @@ forch=1.1
     functor = porosity
     execute_on = 'timestep_end'
   []
+  [eps_smoothed_out]
+    type = FunctorAux
+    variable = eps_smoothed_out
+    functor = smoothed_porosity
+  []
 []
 
-[Modules]
-  [NavierStokesFV]
-    compressibility = 'incompressible'
+[Physics]
+  [NavierStokes]
+    [Flow]
+      [flow]
+        compressibility = 'incompressible'
 
-    porous_medium_treatment = true
-    porosity = porosity
-    porosity_smoothing_layers = 2
+        porous_medium_treatment = true
+        porosity = porosity
+        porosity_smoothing_layers = 2
 
-    friction_types = 'darcy forchheimer'
-    friction_coeffs = 'Darcy_coefficient Forchheimer_coefficient'
-    use_friction_correction = true
-    consistent_scaling = 1.0
+        friction_types = 'darcy forchheimer'
+        friction_coeffs = 'Darcy_coefficient Forchheimer_coefficient'
+        use_friction_correction = true
+        consistent_scaling = 1.0
 
-    density = 'rho'
-    dynamic_viscosity = 'mu'
+        density = 'rho'
+        dynamic_viscosity = 'mu'
 
-    initial_velocity = '1 1 0'
-    initial_pressure = 0.0
+        initial_velocity = '1 1 0'
+        initial_pressure = 0.0
 
-    inlet_boundaries = 'left top bottom'
-    momentum_inlet_types = 'fixed-velocity fixed-velocity fixed-velocity'
-    momentum_inlet_function = 'exact_u exact_v; exact_u exact_v; exact_u exact_v'
+        inlet_boundaries = 'left top bottom'
+        momentum_inlet_types = 'fixed-velocity fixed-velocity fixed-velocity'
+        momentum_inlet_functors = 'exact_u exact_v; exact_u exact_v; exact_u exact_v'
 
-    outlet_boundaries = 'right'
-    momentum_outlet_types = 'fixed-pressure'
-    pressure_function = 'exact_p'
+        outlet_boundaries = 'right'
+        momentum_outlet_types = 'fixed-pressure'
+        pressure_functors = 'exact_p'
 
-    mass_advection_interpolation = 'average'
-    momentum_advection_interpolation = 'average'
+        mass_advection_interpolation = 'average'
+        momentum_advection_interpolation = 'average'
+      []
+    []
   []
 []
 
@@ -85,7 +97,7 @@ forch=1.1
   []
 []
 
-[Materials]
+[FunctorMaterials]
   [darcy]
     type = ADGenericVectorFunctorMaterial
     prop_names = 'Darcy_coefficient Forchheimer_coefficient'
@@ -110,7 +122,7 @@ forch=1.1
   []
   [forcing_u]
     type = ParsedFunction
-    expression = '-mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(-1/4*pi^2*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + 0.025*pi^2*sin((1/4)*x*pi)*sin((1/4)*y*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + 0.00625*pi^2*sin((1/4)*x*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + 0.00125*pi^2*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)^2*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^3) - mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(-1/4*pi^2*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + 0.00625*pi^2*sin((1/4)*x*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + 0.025*pi^2*sin((1/2)*x*pi)*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/4)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + 0.00125*pi^2*sin((1/2)*y*pi)*cos((1/4)*x*pi)^2*cos((1/2)*x*pi)*cos((1/4)*y*pi)^2/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^3) - 0.025*pi*mu*(-1/2*pi*sin((1/2)*x*pi)*sin((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - 0.025*pi*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2)*cos((1/4)*x*pi)*cos((1/4)*y*pi) + 0.025*pi*mu*((1/2)*pi*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + 0.025*pi*sin((1/4)*x*pi)*sin((1/4)*y*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2)*sin((1/4)*x*pi)*sin((1/4)*y*pi) + rho*(darcy + forch)*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - 1/2*pi*rho*sin((1/4)*x*pi)*sin((1/2)*y*pi)^2*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + (1/2)*pi*rho*sin((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)^2/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - pi*rho*sin((1/2)*x*pi)*sin((1/2)*y*pi)^2*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + 0.025*pi*rho*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 - 0.025*pi*rho*sin((1/2)*y*pi)^2*cos((1/4)*x*pi)*cos((1/2)*x*pi)^2*cos((1/4)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 - 1/4*pi*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*sin((1/4)*x*pi)*sin((3/2)*y*pi)'
+    expression = 'darcy*mu*sin((1/2)*y*pi)*cos((1/2)*x*pi) + (1/2)*forch*rho*sqrt(sin((1/4)*x*pi)^2*cos((1/2)*y*pi)^2 + sin((1/2)*y*pi)^2*cos((1/2)*x*pi)^2)*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(0.1*pi^2*sin((1/4)*x*pi)*sin((1/4)*y*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + 0.025*pi^2*sin((1/4)*x*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + 0.01*pi^2*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)^2*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^3 - 1/4*pi^2*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)) - mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(0.025*pi^2*sin((1/4)*x*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + 0.1*pi^2*sin((1/2)*x*pi)*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/4)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + 0.01*pi^2*sin((1/2)*y*pi)*cos((1/4)*x*pi)^2*cos((1/2)*x*pi)*cos((1/4)*y*pi)^2/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^3 - 1/4*pi^2*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)) + 0.025*pi*mu*(0.1*pi*sin((1/4)*x*pi)*sin((1/4)*y*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + (1/2)*pi*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5))*sin((1/4)*x*pi)*sin((1/4)*y*pi) - 0.025*pi*mu*(-0.1*pi*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 - 1/2*pi*sin((1/2)*x*pi)*sin((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5))*cos((1/4)*x*pi)*cos((1/4)*y*pi) + 0.1*pi*rho*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)*sin((1/2)*y*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 - 0.1*pi*rho*sin((1/2)*y*pi)^2*cos((1/4)*x*pi)*cos((1/2)*x*pi)^2*cos((1/4)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 - 1/2*pi*rho*sin((1/4)*x*pi)*sin((1/2)*y*pi)^2*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + (1/2)*pi*rho*sin((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)^2/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - pi*rho*sin((1/2)*x*pi)*sin((1/2)*y*pi)^2*cos((1/2)*x*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - 1/4*pi*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*sin((1/4)*x*pi)*sin((3/2)*y*pi)'
     symbol_names = 'mu rho darcy forch'
     symbol_values = '${mu} ${rho} ${darcy} ${forch}'
   []
@@ -120,7 +132,7 @@ forch=1.1
   []
   [forcing_v]
     type = ParsedFunction
-    expression = '-mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(-1/4*pi^2*sin((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - 0.025*pi^2*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)*sin((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + 0.00625*pi^2*sin((1/4)*x*pi)^2*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + 0.00125*pi^2*sin((1/4)*x*pi)^3*sin((1/4)*y*pi)^2*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^3) - mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(-1/16*pi^2*sin((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + 0.00625*pi^2*sin((1/4)*x*pi)^2*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 - 0.0125*pi^2*cos((1/4)*x*pi)^2*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + 0.00125*pi^2*sin((1/4)*x*pi)*cos((1/4)*x*pi)^2*cos((1/4)*y*pi)^2*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^3) + 0.025*pi*mu*(-1/2*pi*sin((1/4)*x*pi)*sin((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + 0.025*pi*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2)*sin((1/4)*x*pi)*sin((1/4)*y*pi) - 0.025*pi*mu*((1/4)*pi*cos((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - 0.025*pi*sin((1/4)*x*pi)*cos((1/4)*x*pi)*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2)*cos((1/4)*x*pi)*cos((1/4)*y*pi) + rho*(darcy + forch)*sin((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - pi*rho*sin((1/4)*x*pi)^2*sin((1/2)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - 1/2*pi*rho*sin((1/4)*x*pi)*sin((1/2)*x*pi)*sin((1/2)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + (1/4)*pi*rho*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + 0.025*pi*rho*sin((1/4)*x*pi)^3*sin((1/4)*y*pi)*cos((1/2)*y*pi)^2/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 - 0.025*pi*rho*sin((1/4)*x*pi)*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)^2 + (3/2)*pi*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*cos((1/4)*x*pi)*cos((3/2)*y*pi)'
+    expression = 'darcy*mu*sin((1/4)*x*pi)*cos((1/2)*y*pi) + (1/2)*forch*rho*sqrt(sin((1/4)*x*pi)^2*cos((1/2)*y*pi)^2 + sin((1/2)*y*pi)^2*cos((1/2)*x*pi)^2)*sin((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(-0.1*pi^2*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)*sin((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + 0.025*pi^2*sin((1/4)*x*pi)^2*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + 0.01*pi^2*sin((1/4)*x*pi)^3*sin((1/4)*y*pi)^2*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^3 - 1/4*pi^2*sin((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)) - mu*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*(0.025*pi^2*sin((1/4)*x*pi)^2*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 - 0.05*pi^2*cos((1/4)*x*pi)^2*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + 0.01*pi^2*sin((1/4)*x*pi)*cos((1/4)*x*pi)^2*cos((1/4)*y*pi)^2*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^3 - 1/16*pi^2*sin((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)) + 0.025*pi*mu*(0.1*pi*sin((1/4)*x*pi)^2*sin((1/4)*y*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 - 1/2*pi*sin((1/4)*x*pi)*sin((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5))*sin((1/4)*x*pi)*sin((1/4)*y*pi) - 0.025*pi*mu*(-0.1*pi*sin((1/4)*x*pi)*cos((1/4)*x*pi)*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 + (1/4)*pi*cos((1/4)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5))*cos((1/4)*x*pi)*cos((1/4)*y*pi) + 0.1*pi*rho*sin((1/4)*x*pi)^3*sin((1/4)*y*pi)*cos((1/2)*y*pi)^2/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 - 0.1*pi*rho*sin((1/4)*x*pi)*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/4)*y*pi)*cos((1/2)*y*pi)/(0.2*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 1)^2 - pi*rho*sin((1/4)*x*pi)^2*sin((1/2)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) - 1/2*pi*rho*sin((1/4)*x*pi)*sin((1/2)*x*pi)*sin((1/2)*y*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + (1/4)*pi*rho*sin((1/2)*y*pi)*cos((1/4)*x*pi)*cos((1/2)*x*pi)*cos((1/2)*y*pi)/(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5) + (3/2)*pi*(0.1*sin((1/4)*x*pi)*cos((1/4)*y*pi) + 0.5)*cos((1/4)*x*pi)*cos((3/2)*y*pi)'
     symbol_names = 'mu rho darcy forch'
     symbol_values = '${mu} ${rho} ${darcy} ${forch}'
   []

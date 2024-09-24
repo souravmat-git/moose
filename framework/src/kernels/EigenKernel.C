@@ -34,7 +34,8 @@ EigenKernel::validParams()
 EigenKernel::EigenKernel(const InputParameters & parameters)
   : Kernel(parameters),
     _eigen(getParam<bool>("eigen")),
-    _eigen_sys(dynamic_cast<MooseEigenSystem *>(&_fe_problem.getNonlinearSystemBase())),
+    _eigen_sys(
+        dynamic_cast<MooseEigenSystem *>(&_fe_problem.getNonlinearSystemBase(_sys.number()))),
     _eigenvalue(NULL)
 {
   // The name to the postprocessor storing the eigenvalue
@@ -184,6 +185,13 @@ EigenKernel::enabled() const
   bool flag = MooseObject::enabled();
   if (_eigen)
   {
+    if (!_eigen_sys)
+      mooseError("Eigen kernel ",
+                 name(),
+                 " requires a MooseEigenSystem and was designed to work with old eigenvalue",
+                 " executioners such as 'NonlinearEigen'.  It is suggested to use the new",
+                 " eigenvalue executioner 'Eigenvalue' along with kernel tagging");
+
     if (_is_implicit)
       return flag && (!_eigen_sys->activeOnOld());
     else

@@ -73,11 +73,28 @@ gamma = 1.4
     pressure_function = '${fparse p0}'
     momentum_advection_interpolation = 'upwind'
     mass_advection_interpolation = 'upwind'
-    friction_types = 'Darcy'
-    friction_coeffs = 'Darcy_coef'
     porous_medium_treatment = true
     porosity = porosity
     energy_advection_interpolation = 'average'
+  []
+[]
+
+[FVKernels]
+  [u_friction]
+    type = PINSFVMomentumFriction
+    variable = superficial_vel_x
+    Darcy_name = linear_friction_coeff
+    momentum_component = 'x'
+    standard_friction_formulation = false
+    rho = rho
+  []
+  [v_friction]
+    type = PINSFVMomentumFriction
+    variable = superficial_vel_y
+    Darcy_name = linear_friction_coeff
+    momentum_component = 'y'
+    standard_friction_formulation = false
+    rho = rho
   []
 []
 
@@ -106,7 +123,7 @@ gamma = 1.4
   []
 []
 
-[Materials]
+[FunctorMaterials]
   [fluid_props_to_mat_props]
     type = GeneralFunctorFluidProps
     fp = air
@@ -121,14 +138,21 @@ gamma = 1.4
 
   [scalar_props]
     type = ADGenericFunctorMaterial
-    prop_names = 'porosity'
-    prop_values = '1      '
+    prop_names = 'porosity loss_coeff'
+    prop_values = '1       1.3'
   []
 
-  [vector_props]
+  [linear_friction]
+    type = ADParsedFunctorMaterial
+    property_name = 'linear_friction'
+    expression = 'loss_coeff * rho'
+    functor_names = 'loss_coeff rho'
+  []
+
+  [linear_friction_coeff]
     type = ADGenericVectorFunctorMaterial
-    prop_names = 'Darcy_coef'
-    prop_values = '1.3 1.3 1.3'
+    prop_names = 'linear_friction_coeff'
+    prop_values = 'linear_friction linear_friction linear_friction'
   []
 []
 

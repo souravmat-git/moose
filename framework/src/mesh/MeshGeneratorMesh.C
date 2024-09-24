@@ -9,6 +9,9 @@
 
 #include "MeshGeneratorMesh.h"
 
+#include "MeshGeneratorSystem.h"
+#include "MooseApp.h"
+
 #include "libmesh/face_quad4.h"
 #include "libmesh/face_tri3.h"
 
@@ -22,6 +25,10 @@ MeshGeneratorMesh::validParams()
 
   params.addParam<std::string>("final_generator",
                                "The name of the mesh generator output to use for the final Mesh");
+  params.addParam<std::string>(MeshGeneratorSystem::data_driven_generator_param,
+                               "Set to make all dependencies of this mesh generator run in data "
+                               "driven mode, where a mesh is not generated");
+
   params.addClassDescription("Mesh generated using mesh generators");
   return params;
 }
@@ -31,7 +38,7 @@ MeshGeneratorMesh::MeshGeneratorMesh(const InputParameters & parameters) : Moose
 std::unique_ptr<MooseMesh>
 MeshGeneratorMesh::safeClone() const
 {
-  return std::make_unique<MeshGeneratorMesh>(*this);
+  return _app.getFactory().copyConstruct(*this);
 }
 
 void

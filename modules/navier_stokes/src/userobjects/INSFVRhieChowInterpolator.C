@@ -351,8 +351,17 @@ INSFVRhieChowInterpolator::initialize()
 
   // Reset map of coefficients to zero.
   // The keys should not have changed unless the mesh has changed
-  for (const auto & pair : _a)
-    _a[pair.first] = 0;
+  // Dont reset if not in current system
+  // IDEA: clear them derivatives
+  if (_u->sys().number() == _fe_problem.currentNlSysNum())
+    for (auto & pair : _a)
+      pair.second = 0;
+  else
+    for (auto & pair : _a)
+    {
+      auto & a_val = pair.second;
+      a_val = MetaPhysicL::raw_value(a_val);
+    }
 }
 
 void
@@ -408,6 +417,10 @@ void
 INSFVRhieChowInterpolator::finalize()
 {
   if (!needAComputation() || this->n_processors() == 1)
+    return;
+
+  // If advecting with auxiliary variables, no need to try to run those kernels
+  if (_fe_problem.currentNlSysNum() != _u->sys().number())
     return;
 
   using Datum = std::pair<dof_id_type, VectorValue<ADReal>>;
@@ -540,7 +553,12 @@ INSFVRhieChowInterpolator::getVelocity(const Moose::FV::InterpMethod m,
         &fi, Moose::FV::LimiterType::CentralDifference, true, correct_skewness, boundary_elem};
     auto velocity = vel(boundary_face, time);
     incorporate_mesh_velocity(boundary_face, velocity);
-    return velocity;
+
+    // If not solving for velocity, clear derivatives
+    if (_fe_problem.currentNlSysNum() != _u->sys().number())
+      return MetaPhysicL::raw_value(velocity);
+    else
+      return velocity;
   }
 
   VectorValue<ADReal> velocity;
@@ -556,10 +574,15 @@ INSFVRhieChowInterpolator::getVelocity(const Moose::FV::InterpMethod m,
 
   incorporate_mesh_velocity(face, velocity);
 
+  // If not solving for velocity, clear derivatives
+  if (_fe_problem.currentNlSysNum() != _u->sys().number())
+    velocity = MetaPhysicL::raw_value(velocity);
+
   // Return if Rhie-Chow was not requested or if we have a porosity jump
   if (m == Moose::FV::InterpMethod::Average ||
       std::get<0>(NS::isPorosityJumpFace(epsilon(tid), fi, time)))
     return velocity;
+
   // Rhie-Chow coefficients are not available on initial
   if (_fe_problem.getCurrentExecuteOnFlag() == EXEC_INITIAL)
   {
@@ -635,7 +658,7 @@ INSFVRhieChowInterpolator::getVelocity(const Moose::FV::InterpMethod m,
                                elem_has_fi ? side : loc_neighbor->which_neighbor_am_i(elem));
 
       Moose::FaceArg loc_face{
-          fi_loc, Moose::FV::LimiterType::CentralDifference, true, correct_skewness, nullptr};
+          fi_loc, Moose::FV::LimiterType::CentralDifference, true, correct_skewness, elem};
 
       MooseMeshUtils::coordTransformFactor(
           elem->vertex_average(), coord_multiplier, coord_type, rz_radial_coord);
@@ -645,8 +668,17 @@ INSFVRhieChowInterpolator::getVelocity(const Moose::FV::InterpMethod m,
                                       coord_multiplier;
 
       for (const auto i : make_range(_volumetric_force.size()))
+      {
+        // Add which side (can be both, then we use a nullptr) of the face info the force is defined
+        // on
+        loc_face.face_side =
+            this->_volumetric_force[i]->hasFaceSide(*fi_loc, true)
+                ? (this->_volumetric_force[i]->hasFaceSide(*fi_loc, false) ? nullptr
+                                                                           : fi_loc->elemPtr())
+                : fi_loc->neighborPtr();
         elem_value += (*this->_volumetric_force[i])(loc_face, time) * face_volume_contribution *
                       (fi_loc->normal() * unit_basis_vector);
+      }
     }
     elem_value = elem_value / elem->volume();
 
@@ -661,7 +693,7 @@ INSFVRhieChowInterpolator::getVelocity(const Moose::FV::InterpMethod m,
                                elem_has_fi ? side : loc_elem->which_neighbor_am_i(neighbor));
 
       Moose::FaceArg loc_face{
-          fi_loc, Moose::FV::LimiterType::CentralDifference, true, correct_skewness, nullptr};
+          fi_loc, Moose::FV::LimiterType::CentralDifference, true, correct_skewness, elem};
 
       MooseMeshUtils::coordTransformFactor(
           neighbor->vertex_average(), coord_multiplier, coord_type, rz_radial_coord);
@@ -671,8 +703,15 @@ INSFVRhieChowInterpolator::getVelocity(const Moose::FV::InterpMethod m,
                                       coord_multiplier;
 
       for (const auto i : make_range(_volumetric_force.size()))
+      {
+        loc_face.face_side =
+            this->_volumetric_force[i]->hasFaceSide(*fi_loc, true)
+                ? (this->_volumetric_force[i]->hasFaceSide(*fi_loc, false) ? nullptr
+                                                                           : fi_loc->elemPtr())
+                : fi_loc->neighborPtr();
         neigh_value += (*this->_volumetric_force[i])(loc_face, time) * face_volume_contribution *
                        (fi_loc->normal() * unit_basis_vector);
+      }
     }
     neigh_value = neigh_value / neighbor->volume();
 
@@ -781,5 +820,9 @@ INSFVRhieChowInterpolator::getVelocity(const Moose::FV::InterpMethod m,
     }
   }
 
-  return velocity;
+  // If not solving for velocity, clear derivatives
+  if (_fe_problem.currentNlSysNum() != _u->sys().number())
+    return MetaPhysicL::raw_value(velocity);
+  else
+    return velocity;
 }

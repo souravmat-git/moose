@@ -4,8 +4,22 @@ MOOSE is a dynamic project with changes occurring daily. In order to help users 
 major changes to the project monthly highlights will be produced. These highlights will be posted
 monthly to the [MOOSE discussion forum](contact_us.md) as well as provided below.
 
+## 2024
+
+- [August, 2024](2024_08.md)
+- [July, 2024](2024_07.md)
+- [June, 2024](2024_06.md)
+- [May, 2024](2024_05.md)
+- [April, 2024](2024_04.md)
+- [March, 2024](2024_03.md)
+- [February, 2024](2024_02.md)
+- [January, 2024](2024_01.md)
+
 ## 2023
 
+- [December, 2023](2023_12.md)
+- [November, 2023](2023_11.md)
+- [October, 2023](2023_10.md)
 - [September, 2023](2023_09.md)
 - [August, 2023](2023_08.md)
 - [July, 2023](2023_07.md)

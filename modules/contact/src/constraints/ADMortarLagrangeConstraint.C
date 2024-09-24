@@ -47,7 +47,7 @@ ADMortarLagrangeConstraint::initialSetup()
   SetupInterface::initialSetup();
 
   // Detect if preconditioner is VCP. If so, disable automatic derivative trimming.
-  auto const * mpc = feProblem().getNonlinearSystemBase().getPreconditioner();
+  auto const * mpc = feProblem().getNonlinearSystemBase(_sys.number()).getPreconditioner();
 
   if (auto * const is_vcp = dynamic_cast<const VariableCondensationPreconditioner *>(mpc))
     _apply_derivative_threshold = false;
@@ -107,7 +107,7 @@ ADMortarLagrangeConstraint::computeResidual(Moose::MortarType mortar_type)
 void
 ADMortarLagrangeConstraint::computeJacobian(Moose::MortarType mortar_type)
 {
-  std::vector<DualReal> residuals;
+  std::vector<ADReal> residuals;
   size_t test_space_size = 0;
   typedef Moose::ConstraintJacobianType JType;
   typedef Moose::MortarType MType;
@@ -164,7 +164,7 @@ ADMortarLagrangeConstraint::computeJacobian(Moose::MortarType mortar_type)
     number_indices_on_lowerd++;
   }
 
-  std::vector<DualReal> residuals_lower;
+  std::vector<ADReal> residuals_lower;
   residuals_lower.resize(number_indices_on_lowerd, 0);
 
   // Only populate nodal residuals on the primary/secondary surfaces

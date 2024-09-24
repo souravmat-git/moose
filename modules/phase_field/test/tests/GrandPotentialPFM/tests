@@ -31,6 +31,7 @@
     type = 'Exodiff'
     input = 'GrandPotentialStrictMassConservation.i'
     exodiff = 'GrandPotentialStrictMassConservation_out.e'
+    custom_cmp = GrandPotentialStrictMassConservation.cmp
     issues = '#23329'
     design = '/GrandPotentialKernelAction.md'
     requirement = 'The system shall provide classes to implement a Grand Potential phase field '
@@ -45,6 +46,7 @@
     design = '/GrandPotentialInterface.md'
     requirement = 'The system shall provide a material to automatically compute grand potential '
                   'model interface parameters based on provided interfacial free energies and widths'
+    valgrind = 'heavy'
   []
   [GrandPotentialAnisotropyAntitrap]
     type = 'Exodiff'
@@ -90,5 +92,26 @@
     design = '/GrandPotentialSinteringMaterial.md'
     requirement = 'The system shall provide a Grand Potential based sintering model with ideal '
                   'solution defect free energies'
+  []
+
+  [GrandPotentialMultiphase_ad]
+    type = 'Exodiff'
+    input = 'GrandPotentialMultiphase_AD.i'
+    exodiff = 'GrandPotentialMultiphase_out.e'
+    issues = '#15573'
+    design = '/ACSwitching.md /CoupledSwitchingTimeDerivative.md'
+    requirement = 'MOOSE shall provide a Grand Potential based multiphase model with AD option'
+  []
+
+  [ADGrandPotentialMultiphase_jac]
+    type = 'PetscJacobianTester'
+    input = 'GrandPotentialMultiphase_AD.i'
+    run_sim = 'True'
+    cli_args = 'Outputs/exodus=false Executioner/num_steps=1'
+    ratio_tol = 1e-7
+    difference_tol = 1e-4
+    issues = '#15573'
+    design = '/ACSwitching.md /CoupledSwitchingTimeDerivative.md'
+    requirement = 'The jacobian for the AD Allen-Cahn problem with a variable dependent coeffecients shall be perfect'
   []
 []

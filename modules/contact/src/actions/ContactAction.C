@@ -29,6 +29,17 @@
 #include "libmesh/petsc_nonlinear_solver.h"
 #include "libmesh/string_to_enum.h"
 
+// Make newer nanoflann API compatible with older nanoflann versions
+#if NANOFLANN_VERSION < 0x150
+namespace nanoflann
+{
+typedef SearchParams SearchParameters;
+
+template <typename T, typename U>
+using ResultItem = std::pair<T, U>;
+}
+#endif
+
 using NodeBoundaryIDInfo = std::pair<const Node *, BoundaryID>;
 
 // Counter for naming mortar auxiliary kernels
@@ -69,6 +80,7 @@ ContactAction::validParams()
       "secondary", "The list of boundary IDs referring to secondary sidesets");
   params.addParam<std::vector<BoundaryName>>(
       "automatic_pairing_boundaries",
+      {},
       "List of boundary IDs for sidesets that are automatically paired with any other boundary in "
       "this list having a centroid-to-centroid distance less than the value specified in the "
       "'automatic_pairing_distance' parameter. ");
@@ -92,6 +104,7 @@ ContactAction::validParams()
                                 "Offset to gap distance mapped from primary side");
   params.addParam<std::vector<VariableName>>(
       "displacements",
+      {},
       "The displacements appropriate for the simulation geometry and coordinate system");
   params.addParam<Real>(
       "penalty",
@@ -472,7 +485,7 @@ ContactAction::act()
 
         std::vector<VariableName> displacements =
             getParam<std::vector<VariableName>>("displacements");
-        const auto order = _problem->systemBaseNonlinear()
+        const auto order = _problem->systemBaseNonlinear(/*nl_sys_num=*/0)
                                .system()
                                .variable_type(displacements[0])
                                .order.get_order();
@@ -542,8 +555,10 @@ ContactAction::act()
   if (_current_task == "add_contact_aux_variable")
   {
     std::vector<VariableName> displacements = getParam<std::vector<VariableName>>("displacements");
-    const auto order =
-        _problem->systemBaseNonlinear().system().variable_type(displacements[0]).order.get_order();
+    const auto order = _problem->systemBaseNonlinear(/*nl_sys_num=*/0)
+                           .system()
+                           .variable_type(displacements[0])
+                           .order.get_order();
     // Add ContactPenetrationVarAction
     {
       auto var_params = _factory.getValidParams("MooseVariable");
@@ -642,8 +657,10 @@ ContactAction::addContactPressureAuxKernel()
     params.applyParameters(parameters(), {"order"});
 
     std::vector<VariableName> displacements = getParam<std::vector<VariableName>>("displacements");
-    const auto order =
-        _problem->systemBaseNonlinear().system().variable_type(displacements[0]).order.get_order();
+    const auto order = _problem->systemBaseNonlinear(/*nl_sys_num=*/0)
+                           .system()
+                           .variable_type(displacements[0])
+                           .order.get_order();
 
     params.set<MooseEnum>("order") = Utility::enum_to_string<Order>(OrderWrapper{order});
     params.set<std::vector<BoundaryName>>("boundary") = boundary_vector;
@@ -736,10 +753,10 @@ ContactAction::addMortarContact()
     if (!add_aux_lm || penalty_traction)
       params.set<bool>("use_dual") = _use_dual;
 
-    mooseAssert(_problem->systemBaseNonlinear().hasVariable(displacements[0]),
+    mooseAssert(_problem->systemBaseNonlinear(/*nl_sys_num=*/0).hasVariable(displacements[0]),
                 "Displacement variable is missing");
     const auto primal_type =
-        _problem->systemBaseNonlinear().system().variable_type(displacements[0]);
+        _problem->systemBaseNonlinear(/*nl_sys_num=*/0).system().variable_type(displacements[0]);
 
     const int lm_order = primal_type.order.get_order();
 
@@ -1167,8 +1184,10 @@ ContactAction::addNodeFaceContact()
                           "primary",
                           "secondary"});
 
-  const auto order =
-      _problem->systemBaseNonlinear().system().variable_type(displacements[0]).order.get_order();
+  const auto order = _problem->systemBaseNonlinear(/*nl_sys_num=*/0)
+                         .system()
+                         .variable_type(displacements[0])
+                         .order.get_order();
 
   params.set<std::vector<VariableName>>("displacements") = displacements;
   params.set<bool>("use_displaced_mesh") = true;
@@ -1285,8 +1304,8 @@ ContactAction::createSidesetsFromNodeProximity()
   kd_tree->buildIndex();
 
   // data structures for kd-tree search
-  nanoflann::SearchParams search_params;
-  std::vector<std::pair<std::size_t, Real>> ret_matches;
+  nanoflann::SearchParameters search_params;
+  std::vector<nanoflann::ResultItem<std::size_t, Real>> ret_matches;
 
   const auto radius_for_search = getParam<Real>("automatic_pairing_distance");
 

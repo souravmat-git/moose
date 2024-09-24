@@ -22,6 +22,14 @@
       input = 'element_centroid_positions.i'
       jsondiff = 'element_centroid_positions_out.json'
       detail = 'element centroids from a mesh, with or without block restriction,'
+      # PR #26848. Clang 16 Apple Si is not compatible.
+      machine = X86_64
+    []
+    [mesh_quadrature_points]
+      type = 'JSONDiff'
+      input = 'quadrature_point_positions.i'
+      jsondiff = 'quadrature_point_positions_out.json'
+      detail = 'default element quadrature points from a mesh, with or without block restriction,'
     []
     [blocks_and_extra_ids]
       type = 'JSONDiff'
@@ -57,6 +65,21 @@
                   Positions/multiapp/use_apps_centroid=true'
       jsondiff = 'multiapp_centroids_out.json'
       detail = 'and one or more multiapp mesh centroids.'
+    []
+  []
+  [operations]
+    requirement = 'The system shall be able to perform'
+    [transform]
+      type = JSONDiff
+      input = 'transformed_positions.i'
+      jsondiff = transformed_positions_out.json
+      detail = 'simple linear operations such as scaling, translation and rotation to positions, and'
+    []
+    [distribution]
+      type = JSONDiff
+      input = 'distributed_positions.i'
+      jsondiff = 'distributed_positions_out.json'
+      detail = 'a distribution, through translations, of positions from one set of positions onto another.'
     []
   []
 []

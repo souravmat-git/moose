@@ -45,31 +45,31 @@ pressure_tag = "pressure_grad"
   [vel_x]
     type = INSFVVelocityVariable
     initial_condition = 0.0
-    nl_sys = u_system
+    solver_sys = u_system
     two_term_boundary_expansion = false
   []
   [vel_y]
     type = INSFVVelocityVariable
     initial_condition = 0.0
-    nl_sys = v_system
+    solver_sys = v_system
     two_term_boundary_expansion = false
   []
   [vel_z]
     type = INSFVVelocityVariable
     initial_condition = 0.5
-    nl_sys = w_system
+    solver_sys = w_system
     two_term_boundary_expansion = false
   []
   [pressure]
     type = INSFVPressureVariable
-    nl_sys = pressure_system
+    solver_sys = pressure_system
     initial_condition = 0.2
     two_term_boundary_expansion = false
   []
   [T_fluid]
     type = INSFVEnergyVariable
     initial_condition = 300
-    nl_sys = energy_system
+    solver_sys = energy_system
     two_term_boundary_expansion = false
   []
 []
@@ -226,21 +226,21 @@ pressure_tag = "pressure_grad"
   []
 []
 
-[Materials]
+[FunctorMaterials]
   [const_functor]
     type = ADGenericFunctorMaterial
     prop_names = 'cp alpha'
     prop_values = '${cp} ${alpha}'
   []
   [ins_fv]
-    type = INSFVEnthalpyMaterial
+    type = INSFVEnthalpyFunctorMaterial
     rho = ${rho}
     temperature = 'T_fluid'
   []
 []
 
 [Executioner]
-  type = SIMPLE
+  type = SIMPLENonlinearAssembly
   # petsc_options_iname = '-pc_type -pc_hypre_type -pc_factor_shift_type'
   # petsc_options_value = 'hypre boomeramg NONZERO'
   rhie_chow_user_object = 'rc'

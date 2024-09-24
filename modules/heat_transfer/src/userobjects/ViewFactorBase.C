@@ -103,7 +103,7 @@ ViewFactorBase::finalize()
 void
 ViewFactorBase::threadJoin(const UserObject & y)
 {
-  const ViewFactorBase & pps = static_cast<const ViewFactorBase &>(y);
+  const auto & pps = static_cast<const ViewFactorBase &>(y);
   for (unsigned int i = 0; i < _n_sides; ++i)
   {
     for (unsigned int j = 0; j < _n_sides; ++j)
@@ -278,7 +278,7 @@ ViewFactorBase::checkAndNormalizeViewFactor()
   Real max_sum_deviation_after_normalization = maxDevRowSum();
   Real max_reciprocity_deviation_after_normalization = maxDevReciprocity();
 
-  // print symmary
+  // print summary
   _console << std::endl;
   _console << COLOR_CYAN << "Summary of the view factor computation"
            << "\n"

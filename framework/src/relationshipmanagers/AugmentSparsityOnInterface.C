@@ -321,17 +321,13 @@ AugmentSparsityOnInterface::operator()(const MeshBase::const_element_iterator & 
         // in our lower-dimensional subdomains and their interior parents
 
         mooseAssert(primary_boundary_id != Moose::INVALID_BOUNDARY_ID,
-                    "Primary boundary id should exist by now. If you're using a MeshModifier "
-                    "please use the corresponding MeshGenerator instead");
+                    "Primary boundary id should exist by now.");
         mooseAssert(secondary_boundary_id != Moose::INVALID_BOUNDARY_ID,
-                    "Secondary boundary id should exist by now. If you're using a MeshModifier "
-                    "please use the corresponding MeshGenerator instead");
+                    "Secondary boundary id should exist by now.");
         mooseAssert(primary_subdomain_id != Moose::INVALID_BLOCK_ID,
-                    "Primary subdomain id should exist by now. If you're using a MeshModifier "
-                    "please use the corresponding MeshGenerator instead");
+                    "Primary subdomain id should exist by now.");
         mooseAssert(secondary_subdomain_id != Moose::INVALID_BLOCK_ID,
-                    "Secondary subdomain id should exist by now. If you're using a MeshModifier "
-                    "please use the corresponding MeshGenerator instead");
+                    "Secondary subdomain id should exist by now.");
 
         // Higher-dimensional boundary elements
         const BoundaryInfo & binfo = _mesh->get_boundary_info();
@@ -397,4 +393,10 @@ AugmentSparsityOnInterface::operator>=(const RelationshipManager & other) const
       return true;
   }
   return false;
+}
+
+std::unique_ptr<GhostingFunctor>
+AugmentSparsityOnInterface::clone() const
+{
+  return _app.getFactory().copyConstruct(*this);
 }

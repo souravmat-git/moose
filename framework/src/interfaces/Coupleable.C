@@ -21,6 +21,7 @@
 #include "AuxKernel.h"
 #include "ElementUserObject.h"
 #include "NodalUserObject.h"
+#include "NodeFaceConstraint.h"
 
 Coupleable::Coupleable(const MooseObject * moose_object, bool nodal, bool is_fv)
   : _c_parameters(moose_object->parameters()),
@@ -94,6 +95,10 @@ Coupleable::Coupleable(const MooseObject * moose_object, bool nodal, bool is_fv)
             // traditional pre-evaluation and quadrature point indexing
             tmp_var->requireQpComputations();
             _coupled_standard_fv_moose_vars.push_back(tmp_var);
+          }
+          else if (auto * tmp_var = dynamic_cast<MooseLinearVariableFV<Real> *>(moose_var))
+          {
+            _coupled_standard_linear_fv_moose_vars.push_back(tmp_var);
           }
           else
             _obj->paramError(name, "provided c++ type for variable parameter is not supported");
@@ -342,7 +347,14 @@ Coupleable::getDefaultValue(const std::string & var_name, unsigned int comp) con
     default_value_it = _default_value.find(var_name);
   }
 
-  return default_value_it->second[comp].get();
+  const auto & default_value_vec = default_value_it->second;
+  const auto n_default_vals = default_value_vec.size();
+  if (comp >= n_default_vals)
+    mooseError("Requested comp ",
+               comp,
+               " is equal to or greater than the number of default values ",
+               n_default_vals);
+  return default_value_vec[comp].get();
 }
 
 const VectorVariableValue *
@@ -439,9 +451,9 @@ Coupleable::coupled(const std::string & var_name, unsigned int comp) const
   }
   checkFuncType(var_name, VarType::Ignore, FuncAge::Curr);
 
-  if (var->kind() == Moose::VAR_NONLINEAR &&
+  if (var->kind() == Moose::VAR_SOLVER &&
       // are we not an object that feeds into the nonlinear system?
-      (!_c_sys || _c_sys->varKind() != Moose::VAR_NONLINEAR ||
+      (!_c_sys || _c_sys->varKind() != Moose::VAR_SOLVER ||
        // are we an object that impacts the nonlinear system and this variable is within our
        // nonlinear system?
        var->sys().number() == _c_sys->number()))
@@ -765,7 +777,7 @@ Coupleable::coupledMatrixTagValue(const std::string & var_names,
                                   TagID tag,
                                   unsigned int index) const
 {
-  const auto * var = getVar(var_names, index);
+  const auto * var = getVarHelper<MooseVariableField<Real>>(var_names, index);
   if (!var)
     mooseError(var_names, ": invalid variable name for coupledMatrixTagValue");
   checkFuncType(var_names, VarType::Ignore, FuncAge::Curr);
@@ -855,12 +867,13 @@ Coupleable::writableVariable(const std::string & var_name, unsigned int comp)
   const auto * aux = dynamic_cast<const AuxKernel *>(this);
   const auto * euo = dynamic_cast<const ElementUserObject *>(this);
   const auto * nuo = dynamic_cast<const NodalUserObject *>(this);
+  const auto * nfc = dynamic_cast<const NodeFaceConstraint *>(this);
 
-  if (!aux && !euo && !nuo)
-    mooseError("writableVariable() can only be called from AuxKernels, ElementUserObjects, or "
-               "NodalUserObjects. '",
+  if (!aux && !euo && !nuo && !nfc)
+    mooseError("writableVariable() can only be called from AuxKernels, ElementUserObjects, "
+               "NodalUserObjects, or NodeFaceConstraints. '",
                _obj->name(),
-               "' is neither of those.");
+               "' is none of those.");
 
   if (aux && !aux->isNodal() && var->isNodal())
     mooseError("The elemental AuxKernel '",
@@ -922,14 +935,23 @@ Coupleable::writableCoupledValue(const std::string & var_name, unsigned int comp
 void
 Coupleable::checkWritableVar(MooseWritableVariable * var)
 {
-  // check block restrictions for compatibility
+  // check domain restrictions for compatibility
   const auto * br = dynamic_cast<const BlockRestrictable *>(this);
-  if (!var->hasBlocks(br->blockIDs()))
+  const auto * nfc = dynamic_cast<const NodeFaceConstraint *>(this);
+
+  if (br && !var->hasBlocks(br->blockIDs()))
     mooseError("The variable '",
                var->name(),
                "' must be defined on all blocks '",
                _obj->name(),
-               "' is defined on");
+               "' is defined on.");
+
+  if (nfc && !var->hasBlocks(nfc->getSecondaryConnectedBlocks()))
+    mooseError("The variable '",
+               var->name(),
+               " must be defined on all blocks '",
+               _obj->name(),
+               "'s secondary surface is defined on.");
 
   // make sure only one object can access a variable
   for (const auto & ci : _obj->getMooseApp().getInterfaceObjects<Coupleable>())
@@ -940,6 +962,8 @@ Coupleable::checkWritableVar(MooseWritableVariable * var)
       const auto * br_other = dynamic_cast<const BlockRestrictable *>(ci);
       if (br && br_other && br->blockRestricted() && br_other->blockRestricted() &&
           !MooseUtils::setsIntersect(br->blockIDs(), br_other->blockIDs()))
+        continue;
+      else if (nfc)
         continue;
 
       mooseError("'",
@@ -953,6 +977,7 @@ Coupleable::checkWritableVar(MooseWritableVariable * var)
   // var is unique across threads, so we could forego having a separate set per thread, but we
   // need quick access to the list of all variables that need to be inserted into the solution
   // vector by a given thread.
+
   _writable_coupled_variables[_c_tid].insert(var);
 }
 
@@ -1427,6 +1452,31 @@ Coupleable::coupledDotDotDu(const std::string & var_name, unsigned int comp) con
   }
 }
 
+const VariableValue &
+Coupleable::coupledArrayDotDu(const std::string & var_name, unsigned int comp) const
+{
+  const auto * const var = getArrayVar(var_name, comp);
+  if (!var)
+  {
+    _default_value_zero.resize(_coupleable_max_qps, 0);
+    return _default_value_zero;
+  }
+  checkFuncType(var_name, VarType::Dot, FuncAge::Curr);
+
+  if (!_coupleable_neighbor)
+  {
+    if (_c_nodal)
+      return var->dofValuesDuDotDu();
+    return var->duDotDu();
+  }
+  else
+  {
+    if (_c_nodal)
+      return var->dofValuesDuDotDuNeighbor();
+    return var->duDotDuNeighbor();
+  }
+}
+
 const VariableGradient &
 Coupleable::coupledGradient(const std::string & var_name, unsigned int comp) const
 {
@@ -1611,6 +1661,19 @@ Coupleable::coupledArrayGradientOlder(const std::string & var_name, unsigned int
   return var->gradSlnOlderNeighbor();
 }
 
+const ArrayVariableGradient &
+Coupleable::coupledArrayGradientDot(const std::string & var_name, unsigned int comp) const
+{
+  const auto * const var = getArrayVar(var_name, comp);
+  if (!var)
+    return _default_array_gradient;
+  checkFuncType(var_name, VarType::Gradient, FuncAge::Older);
+
+  if (!_coupleable_neighbor)
+    return var->gradSlnDot();
+  return var->gradSlnNeighborDot();
+}
+
 const VectorVariableCurl &
 Coupleable::coupledCurl(const std::string & var_name, unsigned int comp) const
 {
@@ -1657,6 +1720,54 @@ Coupleable::coupledCurlOlder(const std::string & var_name, unsigned int comp) co
   if (!_coupleable_neighbor)
     return var->curlSlnOlder();
   return var->curlSlnOlderNeighbor();
+}
+
+const VectorVariableDivergence &
+Coupleable::coupledDiv(const std::string & var_name, unsigned int comp) const
+{
+  const auto * var = getVectorVar(var_name, comp);
+  if (!var)
+  {
+    _default_div.resize(_coupleable_max_qps);
+    return _default_div;
+  }
+  checkFuncType(var_name, VarType::Gradient, FuncAge::Curr);
+
+  if (!_coupleable_neighbor)
+    return (_c_is_implicit) ? var->divSln() : var->divSlnOld();
+  return (_c_is_implicit) ? var->divSlnNeighbor() : var->divSlnOldNeighbor();
+}
+
+const VectorVariableDivergence &
+Coupleable::coupledDivOld(const std::string & var_name, unsigned int comp) const
+{
+  const auto * var = getVectorVar(var_name, comp);
+  if (!var)
+  {
+    _default_div.resize(_coupleable_max_qps);
+    return _default_div;
+  }
+  checkFuncType(var_name, VarType::Gradient, FuncAge::Old);
+
+  if (!_coupleable_neighbor)
+    return (_c_is_implicit) ? var->divSlnOld() : var->divSlnOlder();
+  return (_c_is_implicit) ? var->divSlnOldNeighbor() : var->divSlnOlderNeighbor();
+}
+
+const VectorVariableDivergence &
+Coupleable::coupledDivOlder(const std::string & var_name, unsigned int comp) const
+{
+  const auto * var = getVectorVar(var_name, comp);
+  if (!var)
+  {
+    _default_div.resize(_coupleable_max_qps);
+    return _default_div;
+  }
+  checkFuncType(var_name, VarType::Gradient, FuncAge::Older);
+
+  if (!_coupleable_neighbor)
+    return var->divSlnOlder();
+  return var->divSlnOlderNeighbor();
 }
 
 const VariableSecond &
@@ -2516,6 +2627,13 @@ std::vector<const VariableValue *>
 Coupleable::coupledValuesOld(const std::string & var_name) const
 {
   auto func = [this, &var_name](unsigned int comp) { return &coupledValueOld(var_name, comp); };
+  return coupledVectorHelper<const VariableValue *>(var_name, func);
+}
+
+std::vector<const VariableValue *>
+Coupleable::coupledValuesOlder(const std::string & var_name) const
+{
+  auto func = [this, &var_name](unsigned int comp) { return &coupledValueOlder(var_name, comp); };
   return coupledVectorHelper<const VariableValue *>(var_name, func);
 }
 

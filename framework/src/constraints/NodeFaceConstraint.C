@@ -46,7 +46,7 @@ NodeFaceConstraint::NodeFaceConstraint(const InputParameters & parameters)
     // and it is not at nodes (so passing false)
     NeighborCoupleableMooseVariableDependencyIntermediateInterface(this, true, false),
     NeighborMooseVariableInterface<Real>(
-        this, true, Moose::VarKindType::VAR_NONLINEAR, Moose::VarFieldType::VAR_FIELD_STANDARD),
+        this, true, Moose::VarKindType::VAR_SOLVER, Moose::VarFieldType::VAR_FIELD_STANDARD),
     _secondary(_mesh.getBoundaryID(getParam<BoundaryName>("secondary"))),
     _primary(_mesh.getBoundaryID(getParam<BoundaryName>("primary"))),
     _var(_sys.getFieldVariable<Real>(_tid, parameters.get<NonlinearVariableName>("variable"))),
@@ -283,4 +283,18 @@ bool
 NodeFaceConstraint::overwriteSecondaryResidual()
 {
   return _overwrite_secondary_residual;
+}
+
+const std::set<BoundaryID> &
+NodeFaceConstraint::buildBoundaryIDs()
+{
+  _boundary_ids.insert(_primary);
+  _boundary_ids.insert(_secondary);
+  return _boundary_ids;
+}
+
+std::set<SubdomainID>
+NodeFaceConstraint::getSecondaryConnectedBlocks() const
+{
+  return _mesh.getBoundaryConnectedBlocks(_secondary);
 }

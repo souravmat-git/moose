@@ -51,7 +51,7 @@ MortarConstraintBase::validParams()
   // Neither is guaranteed to be a superset of the other. For instance ghosting of lower-d point
   // neighbors (AugmentSparsityOnInterface with ghost_point_neighbors = true) is only guaranteed to
   // ghost those lower-d point neighbors on *processes that own lower-d elements*. And you may have
-  // a process that only owns higher-dimensionsional elements
+  // a process that only owns higher-dimensional elements
   //
   // Note that in my experience it is only important for the higher-d lower-d point neighbors to be
   // ghosted when forming sparsity patterns and so I'm putting this here instead of at the
@@ -101,7 +101,7 @@ MortarConstraintBase::MortarConstraintBase(const InputParameters & parameters)
     MooseVariableInterface<Real>(this,
                                  true,
                                  isParamValid("variable") ? "variable" : "secondary_variable",
-                                 Moose::VarKindType::VAR_NONLINEAR,
+                                 Moose::VarKindType::VAR_SOLVER,
                                  Moose::VarFieldType::VAR_FIELD_STANDARD),
     _fe_problem(*getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
     _var(isParamValid("variable")
@@ -120,7 +120,6 @@ MortarConstraintBase::MortarConstraintBase(const InputParameters & parameters)
     _compute_lm_residuals(!_var ? false : getParam<bool>("compute_lm_residuals")),
     _test_dummy(),
     _use_dual(_var ? _var->useDual() : false),
-    _normals_primary(_assembly.neighborNormals()),
     _tangents(_assembly.tangents()),
     _coord(_assembly.mortarCoordTransformation()),
     _q_point(_assembly.qPointsMortar()),

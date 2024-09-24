@@ -27,10 +27,8 @@
 #include "libmesh/numeric_vector.h"
 
 ComputeUserObjectsThread::ComputeUserObjectsThread(FEProblemBase & problem,
-                                                   SystemBase & sys,
                                                    const TheWarehouse::Query & query)
   : ThreadedElementLoop<ConstElemRange>(problem),
-    _soln(*sys.currentSolution()),
     _query(query),
     _query_subdomain(_query),
     _query_boundary(_query),
@@ -41,7 +39,6 @@ ComputeUserObjectsThread::ComputeUserObjectsThread(FEProblemBase & problem,
 // Splitting Constructor
 ComputeUserObjectsThread::ComputeUserObjectsThread(ComputeUserObjectsThread & x, Threads::split)
   : ThreadedElementLoop<ConstElemRange>(x._fe_problem),
-    _soln(x._soln),
     _query(x._query),
     _query_subdomain(x._query_subdomain),
     _query_boundary(x._query_boundary),
@@ -77,7 +74,7 @@ ComputeUserObjectsThread::subdomainChanged()
   _fe_problem.subdomainSetup(_subdomain, _tid);
 
   std::set<MooseVariableFEBase *> needed_moose_vars;
-  std::set<unsigned int> needed_mat_props;
+  std::unordered_set<unsigned int> needed_mat_props;
   std::set<TagID> needed_fe_var_vector_tags;
   for (const auto obj : objs)
   {
@@ -108,9 +105,8 @@ ComputeUserObjectsThread::subdomainChanged()
       _subdomain, needed_fe_var_vector_tags, _tid);
 
   _fe_problem.setActiveElementalMooseVariables(needed_moose_vars, _tid);
-  _fe_problem.setActiveMaterialProperties(needed_mat_props, _tid);
   _fe_problem.setActiveFEVariableCoupleableVectorTags(needed_fe_var_vector_tags, _tid);
-  _fe_problem.prepareMaterials(_subdomain, _tid);
+  _fe_problem.prepareMaterials(needed_mat_props, _subdomain, _tid);
 
   querySubdomain(Interfaces::InternalSideUserObject, _internal_side_objs);
   querySubdomain(Interfaces::ElementUserObject, _element_objs);
@@ -176,7 +172,7 @@ ComputeUserObjectsThread::onBoundary(const Elem * elem,
   if (userobjs.size() == 0 && _domain_objs.size() == 0)
     return;
 
-  _fe_problem.reinitElemFace(elem, side, bnd_id, _tid);
+  _fe_problem.reinitElemFace(elem, side, _tid);
 
   // Reinitialize lower-dimensional variables for use in boundary Materials
   if (lower_d_elem)
@@ -253,6 +249,16 @@ ComputeUserObjectsThread::onInternalSide(const Elem * elem, unsigned int side)
       uo->preExecuteOnInternalSide();
       uo->executeOnInternalSide();
     }
+}
+
+void
+ComputeUserObjectsThread::onExternalSide(const Elem * elem, unsigned int side)
+{
+  // We are not initializing any materials here because objects that perform calculations should
+  // run onBoundary. onExternalSide should be used for mesh updates (e.g. adding/removing
+  // boundaries). Note that _current_elem / _current_side are not getting updated either.
+  for (auto & uo : _domain_objs)
+    uo->executeOnExternalSide(elem, side);
 }
 
 void

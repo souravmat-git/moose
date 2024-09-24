@@ -9,36 +9,44 @@
 
 #include "DataFileInterface.h"
 #include "MooseError.h"
-#include "MooseObject.h"
-#include "Action.h"
+#include "ParallelParamObject.h"
+#include "Registry.h"
 
-template <class T>
-DataFileInterface<T>::DataFileInterface(const T & parent) : _parent(parent)
-{
-}
+#include <filesystem>
 
-template <class T>
+DataFileInterface::DataFileInterface(const ParallelParamObject & parent) : _parent(parent) {}
+
 std::string
-DataFileInterface<T>::getDataFileName(const std::string & param) const
+DataFileInterface::getDataFileName(const std::string & param) const
 {
-  /// - relative to the input file directory
+  // The path from the parameters, which has not been modified because it is a DataFileName
+  const auto & value = _parent.template getParam<DataFileParameterType>(param);
+  if (value.empty())
+    _parent.paramInfo(param, "Data file name is empty");
+
+  const std::filesystem::path value_path = std::filesystem::path(std::string(value));
+
+  // If the file is absolute, we should reference that directly and don't need to add
+  // any info beacuse this is not ambiguous
+  if (value_path.is_absolute() && MooseUtils::checkFileReadable(value, false, false, false))
+    return value;
+
+  // Look relative to the input file
+  const auto base = _parent.parameters().getParamFileBase(param);
+  const std::string relative_to_context = std::filesystem::absolute(base / value_path).c_str();
+  if (MooseUtils::checkFileReadable(relative_to_context, false, false, false))
   {
-    const auto & absolute_path = _parent.template getParam<FileName>(param);
-    if (MooseUtils::checkFileReadable(absolute_path, false, false, false))
-    {
-      _parent.paramInfo(param, "Data file '", absolute_path, "' found relative to the input file.");
-      return absolute_path;
-    }
+    _parent.paramInfo(param, "Data file '", value, "' found relative to the input file.");
+    return relative_to_context;
   }
 
-  const auto & relative_path = _parent.parameters().rawParamVal(param);
-  return getDataFileNameByName(relative_path, &param);
+  // Isn't absolute and couldn't find relative to the input file, so search the data
+  return getDataFileNameByName(value, &param);
 }
 
-template <class T>
 std::string
-DataFileInterface<T>::getDataFileNameByName(const std::string & relative_path,
-                                            const std::string * param) const
+DataFileInterface::getDataFileNameByName(const std::string & relative_path,
+                                         const std::string * param) const
 {
   /// - relative to the running binary (assuming the application is installed)
   const auto share_dir = MooseUtils::pathjoin(Moose::getExecutablePath(), "..", "share");
@@ -79,6 +87,3 @@ DataFileInterface<T>::getDataFileNameByName(const std::string & relative_path,
                  relative_path,
                  "' anywhere");
 }
-
-template class DataFileInterface<Action>;
-template class DataFileInterface<MooseObject>;

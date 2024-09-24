@@ -119,6 +119,12 @@ public:
   bool activeOnSubdomains(const std::set<SubdomainID> & subdomains) const;
 
   /**
+   * Check if this variable needs a raw vector of gradients at dof-values.
+   * This is mainly used for finite volume variables.
+   */
+  virtual bool needsGradientVectorStorage() const { return false; }
+
+  /**
    * Prepare the initial condition
    */
   virtual void prepareIC() = 0;
@@ -173,8 +179,21 @@ public:
 
   virtual unsigned int numberOfDofsNeighbor() = 0;
 
-  virtual void insert(NumericVector<Number> & residual) = 0;
-  virtual void add(NumericVector<Number> & residual) = 0;
+  /**
+   * Insert the currently cached degree of freedom values into the provided \p vector
+   */
+  virtual void insert(NumericVector<Number> & vector) = 0;
+
+  /**
+   * Insert the currently cached degree of freedom values for a lower-dimensional element into the
+   * provided \p vector
+   */
+  virtual void insertLower(NumericVector<Number> & vector) = 0;
+
+  /**
+   * Add the currently cached degree of freedom values into the provided \p vector
+   */
+  virtual void add(NumericVector<Number> & vector) = 0;
 
   /**
    * Return phi size

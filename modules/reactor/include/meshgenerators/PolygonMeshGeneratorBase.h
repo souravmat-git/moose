@@ -16,7 +16,11 @@
 #include "libmesh/replicated_mesh.h"
 #include "libmesh/mesh_modification.h"
 #include "libmesh/face_quad4.h"
+#include "libmesh/face_quad8.h"
+#include "libmesh/face_quad9.h"
 #include "libmesh/face_tri3.h"
+#include "libmesh/face_tri6.h"
+#include "libmesh/face_tri7.h"
 #include "libmesh/serial_mesh.h"
 #include "libmesh/boundary_info.h"
 #include "libmesh/utility.h"
@@ -72,6 +76,20 @@ public:
   {
     HEXAGON_NUM_SIDES = 6,
     SQUARE_NUM_SIDES = 4
+  };
+
+  enum class TRI_ELEM_TYPE
+  {
+    TRI3,
+    TRI6,
+    TRI7
+  };
+
+  enum class QUAD_ELEM_TYPE
+  {
+    QUAD4,
+    QUAD8,
+    QUAD9
   };
 
   /// Contains multiple blocks's boundary layer related parameters
@@ -133,6 +151,8 @@ protected:
    * @param boundary_id_shift shift of the interface boundary ids
    * @param generate_side_specific_boundaries whether the side-specific external boundaries are
    * generated or not
+   * @param tri_elem_type type of the triangular elements to be generated
+   * @param quad_elem_type type of the quadrilateral elements to be generated
    * @return a mesh of a polygon slice
    */
   std::unique_ptr<ReplicatedMesh>
@@ -162,7 +182,9 @@ protected:
                    const bool create_inward_interface_boundaries = false,
                    const bool create_outward_interface_boundaries = true,
                    const boundary_id_type boundary_id_shift = 0,
-                   const bool generate_side_specific_boundaries = true);
+                   const bool generate_side_specific_boundaries = true,
+                   const TRI_ELEM_TYPE tri_elem_type = TRI_ELEM_TYPE::TRI3,
+                   const QUAD_ELEM_TYPE quad_elem_type = QUAD_ELEM_TYPE::QUAD4);
 
   /**
    * Creates a mesh of a general polygon slice with a triangular shape and circular regions on one
@@ -276,6 +298,8 @@ protected:
    * length.
    * @param generate_side_specific_boundaries whether the side-specific external boundaries are
    * generated or not
+   * @param tri_elem_type type of the triangular elements to be generated
+   * @param quad_elem_type type of the quadrilateral elements to be generated
    * @return a mesh of a slice
    */
   std::unique_ptr<ReplicatedMesh>
@@ -306,7 +330,9 @@ protected:
              const bool create_outward_interface_boundaries = true,
              const boundary_id_type boundary_id_shift = 0,
              const Real pitch_scale_factor = 1.0,
-             const bool generate_side_specific_boundaries = true);
+             const bool generate_side_specific_boundaries = true,
+             const TRI_ELEM_TYPE tri_elem_type = TRI_ELEM_TYPE::TRI3,
+             const QUAD_ELEM_TYPE quad_elem_type = QUAD_ELEM_TYPE::QUAD4);
 
   /**
    * Creates nodes of the very central mesh layer of the polygon for quad central elements.
@@ -405,6 +431,7 @@ protected:
    * @param side_index index of the polygon side (only used if external boundary ids are assigned)
    * @param generate_side_specific_boundaries whether the side-specific external boundaries are
    * generated or not
+   * @param quad_elem_type type of the quadrilateral elements to be generated
    */
   void cenQuadElemDef(ReplicatedMesh & mesh,
                       const unsigned int div_num,
@@ -414,7 +441,8 @@ protected:
                       std::vector<std::vector<Node *>> & nodes,
                       const bool assign_external_boundary = false,
                       const unsigned int side_index = 0,
-                      const bool generate_side_specific_boundaries = true) const;
+                      const bool generate_side_specific_boundaries = true,
+                      const QUAD_ELEM_TYPE quad_elem_type = QUAD_ELEM_TYPE::QUAD4) const;
 
   /**
    * Defines triangular elements in the very central region of the polygon.
@@ -430,6 +458,7 @@ protected:
    * @param side_index index of the polygon side (only used if external boundary ids are assigned)
    * @param generate_side_specific_boundaries whether the side-specific external boundaries are
    * generated or not
+   * @param tri_elem_type type of the triangular elements to be generated
    */
   void cenTriElemDef(ReplicatedMesh & mesh,
                      const unsigned int num_sectors_per_side,
@@ -439,7 +468,8 @@ protected:
                      const boundary_id_type boundary_id_shift = 0,
                      const bool assign_external_boundary = false,
                      const unsigned int side_index = 0,
-                     const bool generate_side_specific_boundaries = true) const;
+                     const bool generate_side_specific_boundaries = true,
+                     const TRI_ELEM_TYPE tri_elem_type = TRI_ELEM_TYPE::TRI3) const;
 
   /**
    * Defines general quad elements for the polygon.
@@ -458,6 +488,7 @@ protected:
    * @param boundary_id_shift shift of the interface boundary ids
    * @param generate_side_specific_boundaries whether the side-specific external boundaries are
    * generated or not
+   * @param quad_elem_type type of the quadrilateral elements to be generated
    */
   void quadElemDef(ReplicatedMesh & mesh,
                    const unsigned int num_sectors_per_side,
@@ -469,15 +500,34 @@ protected:
                    const bool create_inward_interface_boundaries = false,
                    const bool create_outward_interface_boundaries = true,
                    const boundary_id_type boundary_id_shift = 0,
-                   const bool generate_side_specific_boundaries = true) const;
+                   const bool generate_side_specific_boundaries = true,
+                   const QUAD_ELEM_TYPE quad_elem_type = QUAD_ELEM_TYPE::QUAD4) const;
 
   /**
    * Makes radial correction to preserve ring area.
    * @param azimuthal_list azimuthal angles (in degrees) of all the nodes on the circle
+   * @param full_circle whether the circle is a full or partial circle
+   * @param order order of mesh elements
+   * @param is_first_value_vertex whether the first value of the azimuthal_list belongs to a vertex
+   * instead of a midpoint
    * @return a correction factor to preserve the area of the circle after polygonization during
    * meshing
    */
-  Real radiusCorrectionFactor(const std::vector<Real> & azimuthal_list) const;
+  Real radiusCorrectionFactor(const std::vector<Real> & azimuthal_list,
+                              const bool full_circle = true,
+                              const unsigned int order = 1,
+                              const bool is_first_value_vertex = true) const;
+
+  /**
+   * Based on a pair of azimuthal angles, calculates the volume of a TRI6 element with one vertex at
+   * the origin, the other two vertices on the unit circle. Here, the second vertex is on the
+   * x-axis, the third vertex has an azimuthal angle the summation of the two input angles, and the
+   * mid-edge node between the second and third vertices has an azimuthal angle of the first of the
+   * two input angles.
+   * @param azi_pair a pair of the input azimuthal angles
+   * @return the volume of the TRI6 element
+   */
+  Real dummyTRI6VolCalculator(const std::pair<Real, Real> & azi_pair) const;
 
   /**
    * Creates peripheral area mesh for the patterned hexagon mesh. Note that the function create the
@@ -495,6 +545,7 @@ protected:
    * created
    * @param create_outward_interface_boundaries whether outward interface boundary sidesets are
    * created
+   * @param quad_elem_type type of quad element to be created
    * @return a mesh with the peripheral region added to a hexagon input mesh
    */
   std::unique_ptr<ReplicatedMesh>
@@ -503,8 +554,18 @@ protected:
                         const std::vector<std::pair<Real, Real>> & position_inner,
                         const std::vector<std::pair<Real, Real>> & d_position_outer,
                         const subdomain_id_type id_shift,
+                        const QUAD_ELEM_TYPE quad_elem_type,
                         const bool create_inward_interface_boundaries = false,
                         const bool create_outward_interface_boundaries = true);
+
+  /**
+   * Adjusts the mid-edge node locations in boundary regions when using quadratic elements with
+   * uniform boundary node spacing enabled.
+   * @param out_mesh mesh to be adjusted.
+   * @param boundary_quad_elem_type boundary quad element type.
+   */
+  void adjustPeripheralQuadraticElements(MeshBase & out_mesh,
+                                         const QUAD_ELEM_TYPE boundary_quad_elem_type) const;
 
   /**
    * Calculates the point coordinates of within a parallelogram region using linear interpolation.
@@ -703,4 +764,73 @@ protected:
                        const std::vector<unsigned int> ring_intervals,
                        const bool ring_wise_id,
                        const bool quad_center_elements);
+
+  /**
+   * reassign interface boundary IDs on the input mesh by applying the boundary ID shift
+   * @param mesh input mesh
+   * @param id_shift ID shift value to be applied
+   * @param boundary_ids list of boundary IDs to be reassigned
+   * @param reverse remove boundary ID shift
+   */
+  void reassignBoundaryIDs(MeshBase & mesh,
+                           const boundary_id_type id_shift,
+                           const std::set<boundary_id_type> & boundary_ids,
+                           const bool reverse = false);
+
+  /**
+   * returns a list of interface boundary IDs on the mesh generated by this mesh generator
+   * @param pattern pattern of cells used in this mesh generator
+   * @param interface_boundary_id_shift_pattern 2D pattern of shift values applied to the boundary
+   * IDs inside each pattern cells
+   * @param boundary_ids list of boundary IDs on the mesh generated by this mesh generator
+   * @param input_interface_boundary_ids list of interface boundary IDs of the pattern cells
+   * @param use_interface_boundary_id_shift whether ID shifts are applied to interface boundary IDs
+   * of the pattern cells
+   * @param create_interface_boundary_id whether interface boundary IDs are generated by this
+   * mesh generator
+   * @param num_extra_layers number of extra layers to define background and duct regions on the
+   * patterned mesh generated by this mesh generator
+   */
+  std::set<boundary_id_type> getInterfaceBoundaryIDs(
+      const std::vector<std::vector<unsigned int>> & pattern,
+      const std::vector<std::vector<boundary_id_type>> & interface_boundary_id_shift_pattern,
+      const std::set<boundary_id_type> & boundary_ids,
+      const std::vector<std::set<boundary_id_type>> & input_interface_boundary_ids,
+      const bool use_interface_boundary_id_shift,
+      const bool create_interface_boundary_id,
+      const unsigned int num_extra_layers) const;
+
+  /**
+   * Modifies the input multi boundary layer parameters for node generation, especially for the
+   * quadratic elements
+   * @param original_multi_bdry_layer_params original multi boundary layer parameters
+   * @param order order of the elements
+   * @return modified multi boundary layer parameters
+   */
+  multiBdryLayerParams
+  modifiedMultiBdryLayerParamsCreator(const multiBdryLayerParams & original_multi_bdry_layer_params,
+                                      const unsigned int order) const;
+
+  /**
+   * Modifies the input single boundary layer parameters for node generation, especially for the
+   * quadratic elements
+   * @param original_single_bdry_layer_params original single boundary layer parameters
+   * @param order order of the elements
+   * @return modified single boundary layer parameters
+   */
+  singleBdryLayerParams modifiedSingleBdryLayerParamsCreator(
+      const singleBdryLayerParams & original_single_bdry_layer_params,
+      const unsigned int order) const;
+
+  /**
+   * Generate a string that contains the detailed metadata information for inconsistent input mesh
+   * metadata error messages
+   * @param input_names list of input mesh generator names
+   * @param metadata_vals list of input mesh metadata values
+   * @param metadata_name name of the input mesh metadata
+   * @return a string that contains the detailed metadata information
+   */
+  std::string pitchMetaDataErrorGenerator(const std::vector<MeshGeneratorName> & input_names,
+                                          const std::vector<Real> & metadata_vals,
+                                          const std::string & metadata_name) const;
 };

@@ -16,10 +16,11 @@
 
 #include "libmesh/vector_value.h"
 #include "libmesh/tensor_value.h"
-#include "libmesh/numeric_vector.h"
-#include "libmesh/elem.h"
 
-#include "DualRealOps.h"
+#include "libmesh/elem.h"
+#include "libmesh/petsc_vector.h"
+#include "libmesh/enum_solver_package.h"
+#include "libmesh/petsc_solver_exception.h"
 
 template <>
 void
@@ -43,6 +44,14 @@ dataStore(std::ostream & stream, std::string & v, void * /*context*/)
 template <>
 void
 dataStore(std::ostream & stream, VariableName & v, void * context)
+{
+  auto & name = static_cast<std::string &>(v);
+  dataStore(stream, name, context);
+}
+
+template <>
+void
+dataStore(std::ostream & stream, UserObjectName & v, void * context)
 {
   auto & name = static_cast<std::string &>(v);
   dataStore(stream, name, context);
@@ -86,11 +95,11 @@ dataStore(std::ostream & stream, RankFourTensor & rft, void * context)
 
 template <>
 void
-dataStore(std::ostream & stream, DualReal & dn, void * context)
+dataStore(std::ostream & stream, ADReal & dn, void * context)
 {
   dataStore(stream, dn.value(), context);
 
-  if (DualReal::do_derivatives)
+  if (ADReal::do_derivatives)
   {
     auto & derivatives = dn.derivatives();
     std::size_t size = derivatives.size();
@@ -225,7 +234,7 @@ dataStore(std::ostream & stream, TensorValue<T> & v, void * context)
 }
 
 template void dataStore(std::ostream & stream, TensorValue<Real> & v, void * context);
-template void dataStore(std::ostream & stream, TensorValue<DualReal> & v, void * context);
+template void dataStore(std::ostream & stream, TensorValue<ADReal> & v, void * context);
 
 template <typename T>
 void
@@ -244,7 +253,7 @@ dataStore(std::ostream & stream, DenseMatrix<T> & v, void * context)
 }
 
 template void dataStore(std::ostream & stream, DenseMatrix<Real> & v, void * context);
-template void dataStore(std::ostream & stream, DenseMatrix<DualReal> & v, void * context);
+template void dataStore(std::ostream & stream, DenseMatrix<ADReal> & v, void * context);
 
 template <typename T>
 void
@@ -260,7 +269,7 @@ dataStore(std::ostream & stream, VectorValue<T> & v, void * context)
 }
 
 template void dataStore(std::ostream & stream, VectorValue<Real> & v, void * context);
-template void dataStore(std::ostream & stream, VectorValue<DualReal> & v, void * context);
+template void dataStore(std::ostream & stream, VectorValue<ADReal> & v, void * context);
 
 void
 dataStore(std::ostream & stream, Point & p, void * context)
@@ -311,6 +320,43 @@ dataStore(std::ostream & stream, libMesh::Parameters & p, void * context)
   }
 }
 
+template <>
+void
+dataStore(std::ostream & stream,
+          std::unique_ptr<libMesh::NumericVector<Number>> & v,
+          void * context)
+{
+  mooseAssert(v, "Null vector");
+  mooseAssert(context, "Needs a context of the communicator");
+  const auto & comm = *static_cast<const libMesh::Parallel::Communicator *>(context);
+  mooseAssert(&comm == &v->comm(), "Inconsistent communicator");
+
+  if (v->type() == GHOSTED)
+    mooseError("Cannot store ghosted numeric vectors");
+
+  // Store the communicator size for sanity checking later
+  unsigned int comm_size = comm.size();
+  dataStore(stream, comm_size, nullptr);
+
+  // Store the solver package so that we know what vector type to construct
+  libMesh::SolverPackage solver_package;
+  if (dynamic_cast<libMesh::PetscVector<Number> *>(v.get()))
+    solver_package = PETSC_SOLVERS;
+  else
+    mooseError("Can only store unique_ptrs of PetscVectors");
+  int solver_package_int = solver_package;
+  dataStore(stream, solver_package_int, nullptr);
+
+  // Store the sizes
+  dof_id_type size = v->size();
+  dataStore(stream, size, nullptr);
+  dof_id_type local_size = v->local_size();
+  dataStore(stream, local_size, nullptr);
+
+  // Store the vector itself
+  dataStore(stream, *v, nullptr);
+}
+
 // global load functions
 
 template <>
@@ -345,6 +391,14 @@ dataLoad(std::istream & stream, VariableName & v, void * context)
 
 template <>
 void
+dataLoad(std::istream & stream, UserObjectName & v, void * context)
+{
+  auto & name = static_cast<std::string &>(v);
+  dataLoad(stream, name, context);
+}
+
+template <>
+void
 dataLoad(std::istream & stream, bool & v, void * /*context*/)
 {
   stream.read((char *)&v, sizeof(v));
@@ -360,11 +414,11 @@ dataLoad(std::istream & stream, std::vector<bool> & v, void * context)
 
 template <>
 void
-dataLoad(std::istream & stream, DualReal & dn, void * context)
+dataLoad(std::istream & stream, ADReal & dn, void * context)
 {
   dataLoad(stream, dn.value(), context);
 
-  if (DualReal::do_derivatives)
+  if (ADReal::do_derivatives)
   {
     auto & derivatives = dn.derivatives();
     std::size_t size = 0;
@@ -523,7 +577,7 @@ dataLoad(std::istream & stream, TensorValue<T> & v, void * context)
 }
 
 template void dataLoad(std::istream & stream, TensorValue<Real> & v, void * context);
-template void dataLoad(std::istream & stream, TensorValue<DualReal> & v, void * context);
+template void dataLoad(std::istream & stream, TensorValue<ADReal> & v, void * context);
 
 template <typename T>
 void
@@ -543,7 +597,7 @@ dataLoad(std::istream & stream, DenseMatrix<T> & v, void * context)
 }
 
 template void dataLoad(std::istream & stream, DenseMatrix<Real> & v, void * context);
-template void dataLoad(std::istream & stream, DenseMatrix<DualReal> & v, void * context);
+template void dataLoad(std::istream & stream, DenseMatrix<ADReal> & v, void * context);
 
 template <typename T>
 void
@@ -560,7 +614,7 @@ dataLoad(std::istream & stream, VectorValue<T> & v, void * context)
 }
 
 template void dataLoad(std::istream & stream, VectorValue<Real> & v, void * context);
-template void dataLoad(std::istream & stream, VectorValue<DualReal> & v, void * context);
+template void dataLoad(std::istream & stream, VectorValue<ADReal> & v, void * context);
 
 void
 dataLoad(std::istream & stream, Point & p, void * context)
@@ -613,16 +667,62 @@ dataLoad(std::istream & stream, libMesh::Parameters & p, void * context)
 
 template <>
 void
+dataLoad(std::istream & stream, std::unique_ptr<libMesh::NumericVector<Number>> & v, void * context)
+{
+  mooseAssert(context, "Needs a context of the communicator");
+  const auto & comm = *static_cast<const libMesh::Parallel::Communicator *>(context);
+  if (v)
+    mooseAssert(&comm == &v->comm(), "Inconsistent communicator");
+
+  // Load the communicator size for consistency checks
+  unsigned int comm_size;
+  dataLoad(stream, comm_size, nullptr);
+  mooseAssert(comm.size() == comm_size, "Inconsistent communicator size");
+
+  // Load the solver package to build the vector
+  int solver_package_int;
+  dataLoad(stream, solver_package_int, nullptr);
+  libMesh::SolverPackage solver_package = static_cast<libMesh::SolverPackage>(solver_package_int);
+
+  // Load the sizes
+  dof_id_type size, local_size;
+  dataLoad(stream, size, nullptr);
+  dataLoad(stream, local_size, nullptr);
+
+  // Construct the vector given the type, only if we need to. v could be non-null here
+  // if we're advancing back and loading a backup
+  if (!v)
+  {
+    v = NumericVector<Number>::build(comm, solver_package);
+    v->init(size, local_size);
+  }
+  else
+    mooseAssert(v->type() != GHOSTED, "Cannot be ghosted");
+
+  // Make sure that the sizes are consistent; this will happen if we're calling this
+  // on a vector that has already been loaded previously
+  mooseAssert(v->size() == size, "Inconsistent size");
+  mooseAssert(v->local_size() == local_size, "Inconsistent local size");
+
+  // Now that we have an initialized vector, fill the entries
+  dataLoad(stream, *v, nullptr);
+}
+
+template <>
+void
 dataLoad(std::istream & stream, Vec & v, void * context)
 {
   PetscInt local_size;
-  VecGetLocalSize(v, &local_size);
+  auto ierr = VecGetLocalSize(v, &local_size);
+  LIBMESH_CHKERR(ierr);
   PetscScalar * array;
-  VecGetArray(v, &array);
+  ierr = VecGetArray(v, &array);
+  LIBMESH_CHKERR(ierr);
   for (PetscInt i = 0; i < local_size; i++)
     dataLoad(stream, array[i], context);
 
-  VecRestoreArray(v, &array);
+  ierr = VecRestoreArray(v, &array);
+  LIBMESH_CHKERR(ierr);
 }
 
 template <>
@@ -630,11 +730,14 @@ void
 dataStore(std::ostream & stream, Vec & v, void * context)
 {
   PetscInt local_size;
-  VecGetLocalSize(v, &local_size);
+  auto ierr = VecGetLocalSize(v, &local_size);
+  LIBMESH_CHKERR(ierr);
   PetscScalar * array;
-  VecGetArray(v, &array);
+  ierr = VecGetArray(v, &array);
+  LIBMESH_CHKERR(ierr);
   for (PetscInt i = 0; i < local_size; i++)
     dataStore(stream, array[i], context);
 
-  VecRestoreArray(v, &array);
+  ierr = VecRestoreArray(v, &array);
+  LIBMESH_CHKERR(ierr);
 }

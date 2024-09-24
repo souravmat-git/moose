@@ -2,8 +2,11 @@
 # REMEMBER TO UPDATE the .yaml files for the following packages:
 #   moose-dev/*
 #
+#   And documentation:
+#   framework/doc/packages_config.yml
+#
 # As well as any directions pertaining to modifying those files.
-{% set version = "2023.10.19" %}
+{% set version = "2024.07.19" %}
 
 package:
   name: moose-tools
@@ -14,6 +17,9 @@ source:
 
 build:
   number: 0
+  script_env:
+    - REQUESTS_CA_BUNDLE
+    - SSL_CERT_FILE
 
 requirements:
   build:
@@ -24,18 +30,22 @@ requirements:
     - {{ clang_format }}
     - clang-tools
     - deepdiff
+    - git-lfs
     - gitpython
     - graphviz
+    - h5py
     - jinja2
     - livereload
     - lxml
     - mako
-    - matplotlib-base
+    - matplotlib-base !=3.9.0
     - mock
     - numpy
     - packaging
     - pandas
+    - paramiko
     - psycopg2
+    - pyarrow
     - pybtex
     - pycobertura
     - pyflakes
@@ -43,17 +53,19 @@ requirements:
     - pylint
     - python
     - pyyaml
+    - requests
     - scikit-image
     - setuptools
     - sympy
     - tabulate
+    - uncertainties
     - xmltodict
     - yaml
-
 test:
   commands:
     - clang-format --version
     - dot -V
+    - git-lfs --version
     - pg_config --help
   imports:
     - bs4
@@ -67,11 +79,13 @@ test:
     - numpy
     - pandas
     - psycopg2
+    - pyarrow
     - pybtex
     - pycobertura
     - pyflakes
     - pylatexenc
     - pylint
+    - requests
     - skimage
     - sympy
     - tabulate

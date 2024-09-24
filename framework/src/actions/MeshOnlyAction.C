@@ -57,7 +57,7 @@ MeshOnlyAction::act()
 
   if (should_generate)
   {
-    mesh_file = _app.parser().getPrimaryFileName();
+    mesh_file = _app.builder().getPrimaryFileName();
     size_t pos = mesh_file.find_last_of('.');
 
     // Default to writing out an ExodusII mesh base on the input filename.
@@ -192,11 +192,11 @@ MeshOnlyAction::act()
     }
   }
 
-  else if (mesh_file.find(".cpr") + 4 == mesh_file.size())
+  else if (mesh_file.find(".cpa.gz") + 7 == mesh_file.size())
   {
     TIME_SECTION("act", 1, "Writing Checkpoint");
 
-    CheckpointIO io(mesh_ptr->getMesh(), true);
+    CheckpointIO io(mesh_ptr->getMesh(), false);
     io.write(mesh_file);
 
     // Write mesh metadata

@@ -49,9 +49,9 @@ ImplicitMidpoint::computeTimeDerivatives()
 }
 
 void
-ImplicitMidpoint::computeADTimeDerivatives(DualReal & ad_u_dot,
+ImplicitMidpoint::computeADTimeDerivatives(ADReal & ad_u_dot,
                                            const dof_id_type & dof,
-                                           DualReal & /*ad_u_dotdot*/) const
+                                           ADReal & /*ad_u_dotdot*/) const
 {
   computeTimeDerivativeHelper(ad_u_dot, _solution_old(dof));
 }
@@ -68,24 +68,24 @@ ImplicitMidpoint::solve()
   _n_linear_iterations = 0;
 
   // Compute first stage
-  _fe_problem.initPetscOutput();
+  _fe_problem.initPetscOutputAndSomeSolverSettings();
   _console << "1st stage" << std::endl;
   _stage = 1;
   _fe_problem.time() = time_half;
-  _fe_problem.getNonlinearSystemBase().system().solve();
+  _nl.system().solve();
   _n_nonlinear_iterations += getNumNonlinearIterationsLastSolve();
   _n_linear_iterations += getNumLinearIterationsLastSolve();
 
   // Abort time step immediately on stage failure - see TimeIntegrator doc page
-  if (!_fe_problem.converged())
+  if (!_fe_problem.converged(_nl.number()))
     return;
 
   // Compute second stage
-  _fe_problem.initPetscOutput();
+  _fe_problem.initPetscOutputAndSomeSolverSettings();
   _console << "2nd stage" << std::endl;
   _stage = 2;
   _fe_problem.time() = time_new;
-  _fe_problem.getNonlinearSystemBase().system().solve();
+  _nl.system().solve();
   _n_nonlinear_iterations += getNumNonlinearIterationsLastSolve();
   _n_linear_iterations += getNumLinearIterationsLastSolve();
 }

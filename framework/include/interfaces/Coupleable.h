@@ -14,6 +14,7 @@
 #include "MooseArray.h"
 #include "MooseVariableFE.h"
 #include "MooseVariableFV.h"
+#include "MooseLinearVariableFV.h"
 #include "InputParameters.h"
 #include "HasMembers.h"
 
@@ -479,8 +480,8 @@ protected:
 
   /**
    * Returns value of a coupled array variable
-   * @param var_name Name of coupled vector variable
-   * @param comp Component number for vector of coupled vector variables
+   * @param var_name Name of coupled array variable
+   * @param comp Component number for vector of coupled array variables
    * @return Reference to a ArrayVariableValue for the coupled vector variable
    * @see ArrayKernel::_u
    */
@@ -552,6 +553,13 @@ protected:
                                                   unsigned int comp = 0) const;
 
   /**
+   * Returns the older values for all of a coupled variable's components
+   * @param var_name Name of coupled variable
+   * @return Vector of VariableValue pointers for each component of \p var_name
+   */
+  std::vector<const VariableValue *> coupledValuesOlder(const std::string & var_name) const;
+
+  /**
    * Returns value of previous Newton iterate of a coupled variable
    * @param var_name Name of coupled variable
    * @param comp Component number for vector of coupled variables
@@ -581,9 +589,9 @@ protected:
                                                               unsigned int comp = 0) const;
 
   /**
-   * Returns an old value from previous time step  of a coupled array variable
-   * @param var_name Name of coupled variable
-   * @param comp Component number for vector of coupled variables
+   * Returns an old value from previous time step of a coupled array variable
+   * @param var_name Name of coupled array variable
+   * @param comp Component number for vector of coupled array variables
    * @return Reference to a ArrayVariableValue containing the old value of the coupled variable
    * @see ArrayKernel::_u_old
    */
@@ -592,8 +600,8 @@ protected:
 
   /**
    * Returns an old value from two time steps previous of a coupled array variable
-   * @param var_name Name of coupled variable
-   * @param comp Component number for vector of coupled variables
+   * @param var_name Name of coupled array variable
+   * @param comp Component number for vector of coupled array variables
    * @return Reference to a ArrayVariableValue containing the older value of the coupled variable
    * @see ArrayKernel::_u_older
    */
@@ -812,6 +820,16 @@ protected:
                                                                   unsigned int comp = 0) const;
 
   /**
+   * Retun a gradient of a coupled array variable's time derivative
+   * @param var_name Name of coupled array variable
+   * @param comp Component number for vector of coupled array variables
+   * @return Reference to a ArrayVariableGradient containing the gradient of the time derivative
+   * the coupled array variable
+   */
+  virtual const ArrayVariableGradient & coupledArrayGradientDot(const std::string & var_name,
+                                                                unsigned int comp = 0) const;
+
+  /**
    * Returns curl of a coupled variable
    * @param var_name Name of coupled variable
    * @param comp Component number for vector of coupled variables
@@ -840,6 +858,39 @@ protected:
    */
   virtual const VectorVariableCurl & coupledCurlOlder(const std::string & var_name,
                                                       unsigned int comp = 0) const;
+
+  /**
+   * Returns divergence of a coupled variable
+   * @param var_name Name of coupled variable
+   * @param comp Component number for vector of coupled variables
+   * @return Reference to a VectorVariableDivergence containing the divergence of the coupled
+   * variable
+   * @see Kernel::_div_u
+   */
+  virtual const VectorVariableDivergence & coupledDiv(const std::string & var_name,
+                                                      unsigned int comp = 0) const;
+
+  /**
+   * Returns an old divergence from previous time step of a coupled variable
+   * @param var_name Name of coupled variable
+   * @param comp Component number for vector of coupled variables
+   * @return Reference to a VectorVariableDivergence containing the old divergence of the coupled
+   * variable
+   * @see Kernel::_div_u_old
+   */
+  virtual const VectorVariableDivergence & coupledDivOld(const std::string & var_name,
+                                                         unsigned int comp = 0) const;
+
+  /**
+   * Returns an old divergence from two time steps previous of a coupled variable
+   * @param var_name Name of coupled variable
+   * @param comp Component number for vector of coupled variables
+   * @return Reference to a VectorVariableDivergence containing the older divergence of the coupled
+   * variable
+   * @see Kernel::_div_u_older
+   */
+  virtual const VectorVariableDivergence & coupledDivOlder(const std::string & var_name,
+                                                           unsigned int comp = 0) const;
 
   /**
    * Returns second spatial derivatives of a coupled variable
@@ -1085,6 +1136,16 @@ protected:
                                                 unsigned int comp = 0) const;
 
   /**
+   * Time derivative of a coupled array variable with respect to the coefficients
+   * @param var_name Name of coupled array variable
+   * @param comp Component number for vector of coupled array variables
+   * @return Reference to a ArrayVariableValue containing the time derivative of the coupled
+   * variable
+   */
+  const VariableValue & coupledArrayDotDu(const std::string & var_name,
+                                          unsigned int comp = 0) const;
+
+  /**
    * Returns nodal values of a coupled variable
    * @param var_name Name of coupled variable
    * @param comp Component number for vector of coupled variables
@@ -1311,6 +1372,9 @@ protected:
   /// Vector of standard finite volume coupled variables
   std::vector<MooseVariableFV<Real> *> _coupled_standard_fv_moose_vars;
 
+  /// Vector of standard linear finite volume coupled variables
+  std::vector<MooseLinearVariableFV<Real> *> _coupled_standard_linear_fv_moose_vars;
+
   /// map from new to deprecated variable names
   const std::unordered_map<std::string, std::string> & _new_to_deprecated_coupled_vars;
 
@@ -1331,7 +1395,7 @@ protected:
       _default_value;
 
   /// Will hold the default value for optional coupled variables for automatic differentiation.
-  mutable std::unordered_map<std::string, std::unique_ptr<MooseArray<DualReal>>> _ad_default_value;
+  mutable std::unordered_map<std::string, std::unique_ptr<MooseArray<ADReal>>> _ad_default_value;
 
   /// Will hold the default value for optional vector coupled variables.
   mutable std::unordered_map<std::string, std::unique_ptr<VectorVariableValue>>
@@ -1368,7 +1432,7 @@ protected:
   /// Zero value of a variable
   const VariableValue & _zero;
   const VariablePhiValue & _phi_zero;
-  const MooseArray<DualReal> & _ad_zero;
+  const MooseArray<ADReal> & _ad_zero;
 
   /// Zero gradient of a variable
   const VariableGradient & _grad_zero;
@@ -1399,6 +1463,9 @@ protected:
   /// This will always be zero because the default values for optionally coupled variables is always constant
   mutable VectorVariableCurl _default_vector_curl;
 
+  /// This will always be zero because the default values for optionally coupled variables is always constant
+  mutable VectorVariableDivergence _default_div;
+
   /**
    * This will always be zero because the default values for optionally coupled variables is always
    * constant and this is used for time derivative info
@@ -1407,9 +1474,6 @@ protected:
 
   /// This will always be zero because the default values for optionally coupled variables is always constant
   ArrayVariableGradient _default_array_gradient;
-
-  /// This will always be zero because the default values for optionally coupled variables is always constant
-  ArrayVariableCurl _default_array_curl;
 
   /**
    * Check that the right kind of variable is being coupled in
@@ -1591,7 +1655,7 @@ public:
    * Helper method to return (and insert if necessary) the default value for Automatic
    * Differentiation for an uncoupled variable.
    * @param var_name the name of the variable for which to retrieve a default value
-   * @return VariableValue * a pointer to the associated VarirableValue.
+   * @return VariableValue * a pointer to the associated VariableValue.
    */
   const ADVariableValue * getADDefaultValue(const std::string & var_name) const;
 
@@ -1599,7 +1663,7 @@ public:
    * Helper method to return (and insert if necessary) the default vector value for Automatic
    * Differentiation for an uncoupled variable.
    * @param var_name the name of the vector variable for which to retrieve a default value
-   * @return VariableVectorValue * a pointer to the associated VarirableVectorValue.
+   * @return VectorVariableValue * a pointer to the associated VectorVariableValue.
    */
   const ADVectorVariableValue * getADDefaultVectorValue(const std::string & var_name) const;
 

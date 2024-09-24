@@ -30,6 +30,7 @@
 #include "Positions.h"
 #include "Transient.h"
 #include "Backup.h"
+#include "Parser.h"
 
 #include "libmesh/mesh_tools.h"
 #include "libmesh/numeric_vector.h"
@@ -151,12 +152,13 @@ MultiApp::validParams()
   // Resetting subapps
   params.addParam<std::vector<Real>>(
       "reset_time",
-      std::vector<Real>(),
+      {},
       "The time(s) at which to reset Apps given by the 'reset_apps' parameter.  "
       "Resetting an App means that it is destroyed and recreated, possibly "
       "modeling the insertion of 'new' material for that app.");
   params.addParam<std::vector<unsigned int>>(
       "reset_apps",
+      {},
       "The Apps that will be reset when 'reset_time' is hit.  These are the App "
       "'numbers' starting with 0 corresponding to the order of the App positions.  "
       "Resetting an App means that it is destroyed and recreated, possibly modeling "
@@ -170,14 +172,15 @@ MultiApp::validParams()
 
   params.addParam<std::vector<unsigned int>>(
       "move_apps",
+      {},
       "Apps, designated by their 'numbers' starting with 0 corresponding to the order "
       "of the App positions, to be moved at move_time to move_positions");
-  params.addParam<std::vector<Point>>("move_positions",
-                                      "The positions corresponding to each move_app.");
+  params.addParam<std::vector<Point>>(
+      "move_positions", {}, "The positions corresponding to each move_app.");
 
   params.addParam<std::vector<CLIArgString>>(
       "cli_args",
-      std::vector<CLIArgString>(),
+      {},
       "Additional command line arguments to pass to the sub apps. If one set is provided the "
       "arguments are applied to all, otherwise there must be a set for each sub app.");
 
@@ -195,16 +198,16 @@ MultiApp::validParams()
                                     "Set between 0 and 2.");
   params.addDeprecatedParam<std::vector<std::string>>(
       "relaxed_variables",
-      std::vector<std::string>(),
+      {},
       "Use transformed_variables.",
       "List of subapp variables to relax during Multiapp coupling iterations");
   params.addParam<std::vector<std::string>>(
       "transformed_variables",
-      std::vector<std::string>(),
+      {},
       "List of subapp variables to use coupling algorithm on during Multiapp coupling iterations");
   params.addParam<std::vector<PostprocessorName>>(
       "transformed_postprocessors",
-      std::vector<PostprocessorName>(),
+      {},
       "List of subapp postprocessors to use coupling "
       "algorithm on during Multiapp coupling iterations");
   params.addParam<bool>("keep_solution_during_restore",
@@ -213,6 +216,13 @@ MultiApp::validParams()
                         "final solution from the previous coupling iteration"
                         "and re-uses it as the initial guess "
                         "for the next coupling iteration");
+  params.addParam<bool>(
+      "no_backup_and_restore",
+      false,
+      "True to turn off restore for this multiapp. This is useful when doing steady-state "
+      "Picard iterations where we want to use the solution of previous Picard iteration as the "
+      "initial guess of the current Picard iteration.");
+  params.deprecateParam("no_backup_and_restore", "no_restore", "01/01/2025");
 
   params.addDeprecatedParam<bool>("clone_master_mesh",
                                   false,
@@ -277,6 +287,7 @@ MultiApp::MultiApp(const InputParameters & parameters)
     _has_an_app(true),
     _cli_args(getParam<std::vector<CLIArgString>>("cli_args")),
     _keep_solution_during_restore(getParam<bool>("keep_solution_during_restore")),
+    _no_restore(getParam<bool>("no_restore")),
     _run_in_position(getParam<bool>("run_in_position")),
     _sub_app_backups(declareRestartableDataWithContext<SubAppBackups>("sub_app_backups", this)),
     _solve_step_timer(registerTimedSection("solveStep", 3, "Executing MultiApps", false)),
@@ -403,7 +414,7 @@ void
 MultiApp::createLocalApp(const unsigned int i)
 {
   createApp(i, _global_time_offset);
-  _app.parser().hitCLIFilter(_apps[i]->name(), _app.commandLine()->getArguments());
+  _app.builder().hitCLIFilter(_apps[i]->name(), _app.commandLine()->getArguments());
 }
 
 void
@@ -750,8 +761,12 @@ MultiApp::restore(bool force)
 
       for (unsigned int i = 0; i < _my_num_apps; i++)
       {
-        _end_solutions[i] =
-            _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase().solution().clone();
+        _end_solutions[i] = _apps[i]
+                                ->getExecutioner()
+                                ->feProblem()
+                                .getNonlinearSystemBase(/*nl_sys=*/0)
+                                .solution()
+                                .clone();
         auto & sub_multiapps =
             _apps[i]->getExecutioner()->feProblem().getMultiAppWarehouse().getObjects();
 
@@ -780,11 +795,11 @@ MultiApp::restore(bool force)
     {
       for (unsigned int i = 0; i < _my_num_apps; i++)
       {
-        _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase().solution() =
+        _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase(/*nl_sys=*/0).solution() =
             *_end_solutions[i];
 
         // We need to synchronize solution so that local_solution has the right values
-        _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase().update();
+        _apps[i]->getExecutioner()->feProblem().getNonlinearSystemBase(/*nl_sys=*/0).update();
       }
 
       _end_solutions.clear();
@@ -1095,17 +1110,42 @@ MultiApp::createApp(unsigned int i, Real start_time)
     if (displaced_problem)
       app_params.set<const MooseMesh *>("_master_displaced_mesh") = &displaced_problem->mesh();
   }
+
+  // If only one input file was provided, use it for all the solves
+  const auto input_index = _input_files.size() == 1 ? 0 : _first_local_app + i;
+  const auto & input_file = _input_files[input_index];
+
+  // create new parser tree for the application and parse
+  auto parser = std::make_unique<Parser>(input_file);
+
+  if (input_file.size())
+  {
+    parser->parse();
+    const auto & app_type = parser->getAppType();
+    if (app_type.empty() && _app_type.empty())
+      mooseWarning("The application type is not specified for ",
+                   full_name,
+                   ". Please use [Application] block to specify the application type.");
+    if (!app_type.empty() && app_type != _app_type &&
+        !AppFactory::instance().isRegistered(app_type))
+      mooseError("In the ",
+                 full_name,
+                 ", '",
+                 app_type,
+                 "' is not a registered application. The registered application is named: '",
+                 _app_type,
+                 "'. Please double check the [Application] block to make sure the correct "
+                 "application is provided. \n");
+  }
+
+  if (parser->getAppType().empty())
+    parser->setAppType(_app_type);
+
+  app_params.set<std::shared_ptr<Parser>>("_parser") = std::move(parser);
   _apps[i] = AppFactory::instance().createShared(_app_type, full_name, app_params, _my_comm);
   auto & app = _apps[i];
 
-  std::string input_file = "";
-  if (_input_files.size() == 1) // If only one input file was provided, use it for all the solves
-    input_file = _input_files[0];
-  else
-    input_file = _input_files[_first_local_app + i];
-
   app->setGlobalTimeOffset(start_time);
-  app->setInputFileName(input_file);
   app->setOutputFileNumbers(_app.getOutputWarehouse().getFileNumbers());
   app->setRestart(_app.isRestarting());
   app->setRecover(_app.isRecovering());

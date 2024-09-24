@@ -91,8 +91,7 @@ ADVolumeJunctionBaseUserObject::execute()
 void
 ADVolumeJunctionBaseUserObject::threadJoin(const UserObject & uo)
 {
-  const ADVolumeJunctionBaseUserObject & volume_junction_uo =
-      dynamic_cast<const ADVolumeJunctionBaseUserObject &>(uo);
+  const auto & volume_junction_uo = static_cast<const ADVolumeJunctionBaseUserObject &>(uo);
 
   // Store the data computed/retrieved in the other threads
   for (unsigned int i = 0; i < volume_junction_uo._connection_indices.size(); i++)
@@ -140,4 +139,13 @@ ADVolumeJunctionBaseUserObject::getFlux(const unsigned int & connection_index) c
 
   checkValidConnectionIndex(connection_index);
   return _flux[connection_index];
+}
+
+std::vector<const MooseVariableBase *>
+ADVolumeJunctionBaseUserObject::getJunctionVariables() const
+{
+  std::vector<const MooseVariableBase *> vars(_scalar_variable_names.size());
+  for (unsigned int i = 0; i < _scalar_variable_names.size(); i++)
+    vars[i] = getScalarVar(_scalar_variable_names[i], 0);
+  return vars;
 }

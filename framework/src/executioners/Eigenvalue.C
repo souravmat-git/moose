@@ -16,6 +16,8 @@
 #include "SlepcSupport.h"
 #include "UserObject.h"
 
+#include "libmesh/petsc_solver_exception.h"
+
 registerMooseObject("MooseApp", Eigenvalue);
 
 InputParameters
@@ -132,8 +134,8 @@ Eigenvalue::Eigenvalue(const InputParameters & parameters)
   _eigen_problem.setInitialEigenvalue(getParam<Real>("initial_eigenvalue"));
 
   // Set a flag to nonlinear eigen system
-  _eigen_problem.getNonlinearEigenSystem().precondMatrixIncludesEigenKernels(
-      getParam<bool>("precond_matrix_includes_eigen"));
+  _eigen_problem.getNonlinearEigenSystem(/*nl_sys_num=*/0)
+      .precondMatrixIncludesEigenKernels(getParam<bool>("precond_matrix_includes_eigen"));
 #else
   mooseError("SLEPc is required to use Eigenvalue executioner, please use '--download-slepc in "
              "PETSc configuration'");
@@ -154,7 +156,7 @@ Eigenvalue::init()
   {
     const auto & normpp = getParam<PostprocessorName>("normalization");
     const auto & exec = _eigen_problem.getUserObject<UserObject>(normpp).getExecuteOnEnum();
-    if (!exec.contains(EXEC_LINEAR))
+    if (!exec.isValueSet(EXEC_LINEAR))
       mooseError("Normalization postprocessor ", normpp, " requires execute_on = 'linear'");
   }
 
@@ -169,7 +171,7 @@ Eigenvalue::init()
   // a random vector as the initial guess. The motivation to offer this option is
   // that we have to initialize ONLY eigen variables in multiphysics simulation.
   // auto_initialization can be overriden by initial conditions.
-  if (getParam<bool>("auto_initialization"))
+  if (getParam<bool>("auto_initialization") && !_app.isRestarting())
     _eigen_problem.initEigenvector(1.0);
 
   // Some setup
@@ -192,10 +194,16 @@ Eigenvalue::prepareSolverOptions()
   {
     // Master app has the default data base
     if (!_app.isUltimateMaster())
-      PetscOptionsPush(_eigen_problem.petscOptionsDatabase());
+    {
+      auto ierr = PetscOptionsPush(_eigen_problem.petscOptionsDatabase());
+      LIBMESH_CHKERR(ierr);
+    }
     Moose::SlepcSupport::slepcSetOptions(_eigen_problem, _pars);
     if (!_app.isUltimateMaster())
-      PetscOptionsPop();
+    {
+      auto ierr = PetscOptionsPop();
+      LIBMESH_CHKERR(ierr);
+    }
     _eigen_problem.petscOptionsInserted() = true;
   }
 #endif
@@ -205,7 +213,7 @@ void
 Eigenvalue::checkIntegrity()
 {
   // check to make sure that we don't have any time kernels in eigenvalue simulation
-  if (_eigen_problem.getNonlinearSystemBase().containsTimeKernel())
+  if (_eigen_problem.getNonlinearSystemBase(/*nl_sys=*/0).containsTimeKernel())
     mooseError("You have specified time kernels in your eigenvalue simulation");
 }
 

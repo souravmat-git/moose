@@ -52,15 +52,27 @@ CopyNodalVarsAction::act()
 
   if (isParamValid("initial_from_file_var"))
   {
-    SystemBase * system;
-
     if (_current_task == "check_copy_nodal_vars")
       _app.setExodusFileRestart(true);
     else
     {
+      SystemBase * system;
+      SystemBase * tempSys;
       // Is this a NonlinearSystem variable or an AuxiliarySystem variable?
       if (_current_task == "copy_nodal_vars")
-        system = &_problem->getNonlinearSystemBase();
+      {
+        // This iterates through each nonlinear system and finds which one the current variable
+        // needs to be copied to
+        system = &_problem->getNonlinearSystemBase(/*nl_sys=*/0);
+        for (unsigned int i = 0; i < (*_problem).numNonlinearSystems(); i++)
+        {
+          tempSys = &_problem->getNonlinearSystemBase(i);
+          if (tempSys->hasVariable(name()))
+          {
+            system = tempSys;
+          }
+        }
+      }
       else
         system = &_problem->getAuxiliarySystem();
 

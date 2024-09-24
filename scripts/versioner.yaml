@@ -4,18 +4,36 @@
 # If adding a new control key, a change to versioner.py:influential_list will be required
 # (add that control key to 'not_libraries').
 packages:
+  tools:
+    influential:
+      - conda/tools/meta.yaml
+      - conda/tools/conda_build_config.yaml
+  mpi:
+    influential:
+      # need to remember to add apptainer/set_prompt.bash
+      # the next time we update this
+      - apptainer/mpi.def
+      - conda/mpi/meta.yaml
+      - conda/mpi/conda_build_config.yaml
+      - conda/mpi/build.sh
+    apptainer:
+  # Deprecated. The following key (mpich) is only necessary for Civet recipes until the PR
+  # responsible for this change makes it all the way into master.
+  # TODO: remove mpich when able. When you do, remove the same deprecations in test_versioner.py
+  #       (line 49) and versioner.py (107)
   mpich:
     influential:
-      - apptainer/mpich.def
-      - conda/mpich/meta.yaml
-      - conda/mpich/conda_build_config.yaml
-      - conda/mpich/build.sh
+      - apptainer/mpi.def
+      - conda/mpi/meta.yaml
+      - conda/mpi/conda_build_config.yaml
+      - conda/mpi/build.sh
     apptainer:
+  # END Deprecated mpich key
   petsc:
     dependencies:
-      - mpich
+      - mpi
     apptainer:
-      from: mpich
+      from: mpi
     influential:
       - petsc
       - apptainer/petsc.def
@@ -24,6 +42,8 @@ packages:
       - conda/petsc/build.sh
       - scripts/configure_petsc.sh
       - scripts/update_and_rebuild_petsc.sh
+      - scripts/apple-silicon-hdf5-autogen.patch
+      - scripts/tao_restore_viewer.patch
   libmesh:
     dependencies:
       - petsc
@@ -42,28 +62,32 @@ packages:
       - conda/libmesh-vtk/build.sh
   wasp:
     influential:
+      - scripts/update_and_rebuild_wasp.sh
       - framework/contrib/wasp
       - conda/wasp/meta.yaml
       - conda/wasp/conda_build_config.yaml
       - conda/wasp/build.sh
-  moose:
+  moose-dev:
     dependencies:
       - libmesh
       - wasp
     apptainer:
       from: libmesh
     influential:
-      - apptainer/moose.def
+      - apptainer/moose-dev.def
       - apptainer/remove_channels.def
-      - conda/test-tools/meta.yaml
-      - conda/test-tools/conda_build_config.yaml
+      - apptainer/files/moose-dev
+      - conda/peacock/meta.yaml
+      - conda/peacock/conda_build_config.yaml
       - conda/tools/meta.yaml
       - conda/tools/conda_build_config.yaml
-      - conda/moose/build.sh
+      - conda/moose-dev/meta.yaml
+      - conda/moose-dev/conda_build_config.yaml
+      - scripts/setup_libtorch.sh
   app:
     dependencies:
-      - moose
+      - moose-dev
     apptainer:
-      from: moose
+      from: moose-dev
     influential:
       - apptainer/app.def

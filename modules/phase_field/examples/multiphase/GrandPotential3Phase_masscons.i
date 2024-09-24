@@ -1,6 +1,6 @@
 # This is an example of implementation of the multi-phase, multi-order parameter
 # grand potential based phase-field model described in Phys. Rev. E, 98, 023309
-# (2019). It includes 3 phases with 1 grain of each phase.
+# (2018). It includes 3 phases with 1 grain of each phase.
 # This is a revised version of the model that eliminates small variations in mass
 # that have been observed with the original formulation. In this version, rather
 # than evolving the chemical potential as a field variable, we evolve the composition
@@ -164,12 +164,12 @@
     type = MatReaction
     variable = w
     v = c
-    mob_name = -1
+    reaction_rate = -1
   []
   [ca_rxn]
     type = MatReaction
     variable = w
-    mob_name = 'hoverk_a'
+    reaction_rate = 'hoverk_a'
     args = 'etaa0 etab0 etad0'
   []
   [ca_bodyforce]
@@ -182,7 +182,7 @@
   [cb_rxn]
     type = MatReaction
     variable = w
-    mob_name = 'hoverk_b'
+    reaction_rate = 'hoverk_b'
     args = 'etaa0 etab0 etad0'
   []
   [cb_bodyforce]
@@ -195,7 +195,7 @@
   [cd_rxn]
     type = MatReaction
     variable = w
-    mob_name = 'hoverk_d'
+    reaction_rate = 'hoverk_d'
     args = 'etaa0 etab0 etad0'
   []
   [cd_bodyforce]

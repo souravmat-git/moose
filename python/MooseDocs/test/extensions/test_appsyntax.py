@@ -95,7 +95,7 @@ class TestParameters(AppSyntaxTestCase):
         self.assertEqual(res(3).text(), 'Optional Parameters')
 
         # This size should match the number of optional parameters for Kernel
-        self.assertHTMLTag(res(4), 'ul', size=3)
+        self.assertHTMLTag(res(4), 'ul', size=4)
 
         self.assertHTMLTag(res(5), 'h3')
         self.assertEqual(res(5)['data-details-open'], 'close')
@@ -136,7 +136,7 @@ class TestParameters(AppSyntaxTestCase):
         self.assertEqual(res(3).text(), 'Optional Parameters')
 
         # This size should match the number of optional parameters for Kernel
-        self.assertHTMLTag(res(4), 'ul', size=3, class_='collapsible')
+        self.assertHTMLTag(res(4), 'ul', size=4, class_='collapsible')
 
         self.assertHTMLTag(res(5), 'h3')
         self.assertEqual(res(5)['data-details-open'], 'close')
@@ -155,7 +155,7 @@ class TestParameters(AppSyntaxTestCase):
         # This size should correspond to the total number of parameters for
         # Diffusion (Required + Optional + Advanced + Tagging) + 1
         # (corresponding to 'type')
-        self.assertSize(res, 17)
+        self.assertSize(res, 18)
         self.assertLatexCommand(res(0), 'chapter', size=4)
         self.assertLatexCommand(res(0,0), 'label', string=u'input-parameters')
         self.assertLatexString(res(0,1), content=u'Input')
@@ -260,7 +260,7 @@ class TestComplete(AppSyntaxTestCase):
     def testAST(self):
         ast = self.tokenize(self.TEXT)
         self.assertToken(ast(0), 'Heading', level=2, size=1)
-        self.assertToken(ast(0,0), 'AutoLink', page=u'syntax/Adaptivity/index.md', string=u'Adaptivity')
+        self.assertToken(ast(0,0), 'AutoLink', page=u'syntax/ActionComponents/index.md', string=u'ActionComponents')
 
         self.assertToken(ast(1), 'SyntaxList')
         self.assertToken(ast(1,0), 'SyntaxListItem', string=u'Moose App')

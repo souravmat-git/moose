@@ -31,6 +31,8 @@ static const std::string pin_region_ids = "pin_region_ids";
 static const std::string pin_block_names = "pin_block_names";
 static const std::string pin_region_id_map = "pin_region_id_map";
 static const std::string pin_block_name_map = "pin_block_name_map";
+static const std::string flexible_assembly_stitching = "flexible_assembly_stitching";
+static const std::string num_sectors_flexible_stitching = "num_sectors_flexible_stitching";
 
 // Geometrical quantities
 static const std::string pitch = "pitch";
@@ -52,7 +54,18 @@ static const std::string background_block_name = "background_block_name";
 static const std::string duct_region_ids = "duct_region_ids";
 static const std::string duct_block_names = "duct_block_names";
 static const std::string peripheral_ring_region_id = "peripheral_ring_region_id";
+static const std::string region_id_as_block_name = "region_id_as_block_name";
 
+// Name of a boolean metadata that indicates whether or not we skipped mesh generation in favor of
+// only generating the mesh metadata
+static const std::string bypass_meshgen = "bypass_meshgen";
+
+// Default values for setting block IDs of RGMB regions
+const subdomain_id_type PIN_BLOCK_ID_START = 10000;
+const subdomain_id_type PIN_BLOCK_ID_TRI = 9999;
+const subdomain_id_type PIN_BLOCK_ID_TRI_FLEXIBLE = 9998;
+const subdomain_id_type ASSEMBLY_BLOCK_ID_START = 20000;
+const subdomain_id_type ASSEMBLY_BLOCK_ID_TRI_FLEXIBLE = 19999;
 }
 
 /**
@@ -63,7 +76,11 @@ class ReactorGeometryMeshBuilderBase : public MeshGenerator
 public:
   static InputParameters validParams();
 
+  static void addDepletionIDParams(InputParameters & parameters);
+
   ReactorGeometryMeshBuilderBase(const InputParameters & parameters);
+
+  void generateData() override{};
 
 protected:
   /**
@@ -187,6 +204,26 @@ protected:
 
   ///The ReactorMeshParams object that is storing the reactor global information for this reactor geometry mesh
   MeshGeneratorName _reactor_params;
+  /// specify the depletion id is generated at which reactor generation level
+  enum class DepletionIDGenerationLevel
+  {
+    Pin,
+    Assembly,
+    Core
+  };
+
+  /**
+   * add depletion IDs
+   * @param input_mesh input mesh
+   * @param option option for specifying level of details
+   * @param generation_level depletion id is generated at which reactor generator level
+   * @param extrude whether input mesh is extruded, if false, assume that input mesh is defined in
+   * 2D and do not use 'plane_id` in depletion id generation
+   */
+  void addDepletionId(MeshBase & input_mesh,
+                      const MooseEnum & option,
+                      const DepletionIDGenerationLevel generation_level,
+                      const bool extrude);
 
 private:
   /// The dummy param mesh that we need to clear once we've generated (in freeReactorMeshParams)

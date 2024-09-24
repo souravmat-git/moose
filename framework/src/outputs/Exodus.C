@@ -55,7 +55,7 @@ Exodus::validParams()
   params.set<unsigned int>("padding") = 3;
 
   // Add description for the Exodus class
-  params.addClassDescription("Object for output data in the Exodus II format");
+  params.addClassDescription("Object for output data in the Exodus format");
 
   // Flag for overwriting at each timestep
   params.addParam<bool>("overwrite",
@@ -202,7 +202,7 @@ Exodus::outputSetup()
     // This makes the face information out-of-date on process 0 for distributed meshes, e.g.
     // elements will have neighbors that they didn't previously have
     if ((this->processor_id() == 0) && !lm_mesh.is_replicated())
-      moose_mesh.finiteVolumeInfoDirty();
+      moose_mesh.markFiniteVolumeInfoDirty();
   };
   serialize(_problem_ptr->mesh());
 
@@ -473,10 +473,10 @@ Exodus::output()
 
   // It is possible to have an empty file created with the following scenario. By default the
   // 'execute_on_input' flag is setup to run on INITIAL. If the 'execute_on' is set to FINAL
-  // but the simulation stops early (e.g., --half-transient) the Exodus file is created but there
-  // is no data in it, because of the initial call to write the input data seems to create the file
-  // but doesn't actually write the data into the solution/mesh is also supplied to the IO object.
-  // Then if --recover is used this empty file fails to open for appending.
+  // but the simulation stops early (e.g., --test-checkpoint-half-transient) the Exodus file is
+  // created but there is no data in it, because of the initial call to write the input data seems
+  // to create the file but doesn't actually write the data into the solution/mesh is also supplied
+  // to the IO object. Then if --recover is used this empty file fails to open for appending.
   //
   // The code below will delete any empty files that exist. Another solution is to set the
   // 'execute_on_input' flag to NONE.
@@ -502,7 +502,6 @@ Exodus::filename()
     output << "-s" << std::setw(_padding) << std::setprecision(0) << std::setfill('0') << std::right
            << _file_num;
 
-  // Return the filename
   return output.str();
 }
 

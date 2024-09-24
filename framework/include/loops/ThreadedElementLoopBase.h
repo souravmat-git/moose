@@ -113,6 +113,14 @@ public:
   virtual void onInternalSide(const Elem * elem, unsigned int side);
 
   /**
+   * Called when iterating over external sides (no side neighbor)
+   *
+   * @param elem - Element we are on
+   * @param side - local side number of the element 'elem'
+   */
+  virtual void onExternalSide(const Elem * elem, unsigned int side);
+
+  /**
    * Called when doing interface assembling
    *
    * @param elem - Element we are on
@@ -290,6 +298,8 @@ ThreadedElementLoopBase<RangeType>::operator()(const RangeType & range, bool byp
 
             postInternalSide(elem, side);
           }
+          else
+            onExternalSide(elem, side);
         } // sides
 
         postElement(elem);
@@ -381,6 +391,12 @@ ThreadedElementLoopBase<RangeType>::onInternalSide(const Elem * /*elem*/, unsign
 
 template <typename RangeType>
 void
+ThreadedElementLoopBase<RangeType>::onExternalSide(const Elem * /*elem*/, unsigned int /*side*/)
+{
+}
+
+template <typename RangeType>
+void
 ThreadedElementLoopBase<RangeType>::onInterface(const Elem * /*elem*/,
                                                 unsigned int /*side*/,
                                                 BoundaryID /*bnd_id*/)
@@ -404,7 +420,15 @@ bool
 ThreadedElementLoopBase<RangeType>::shouldComputeInternalSide(const Elem & elem,
                                                               const Elem & neighbor) const
 {
-  const dof_id_type elem_id = elem.id(), neighbor_id = neighbor.id();
+  auto level = [this](const auto & elem_arg)
+  {
+    if (_mesh.doingPRefinement())
+      return elem_arg.p_level();
+    else
+      return elem_arg.level();
+  };
+  const auto elem_id = elem.id(), neighbor_id = neighbor.id();
+  const auto elem_level = level(elem), neighbor_level = level(neighbor);
 
   // When looping over elements and then sides, we need to make sure that we do not duplicate
   // effort, e.g. if a face is shared by element 1 and element 2, then we do not want to do compute
@@ -412,8 +436,8 @@ ThreadedElementLoopBase<RangeType>::shouldComputeInternalSide(const Elem & elem,
   // to only compute when we are visiting the element that has the lower element id when element and
   // neighbor are of the same adaptivity level, and then if they are not of the same level, then
   // we only compute when we are visiting the finer element
-  return (neighbor.active() && (neighbor.level() == elem.level()) && (elem_id < neighbor_id)) ||
-         (neighbor.level() < elem.level());
+  return (neighbor.active() && (neighbor_level == elem_level) && (elem_id < neighbor_id)) ||
+         (neighbor_level < elem_level);
 }
 
 template <typename RangeType>

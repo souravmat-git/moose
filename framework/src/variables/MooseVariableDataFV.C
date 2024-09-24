@@ -36,9 +36,10 @@ MooseVariableDataFV<OutputType>::MooseVariableDataFV(const MooseVariableFV<Outpu
 
   : MooseVariableDataBase<OutputType>(var, sys, tid),
     MeshChangedInterface(var.parameters()),
+    _var(var),
     _fe_type(_var.feType()),
     _var_num(_var.number()),
-    _assembly(_subproblem.assembly(_tid, var.kind() == Moose::VAR_NONLINEAR ? sys.number() : 0)),
+    _assembly(_subproblem.assembly(_tid, var.kind() == Moose::VAR_SOLVER ? sys.number() : 0)),
     _element_type(element_type),
     _ad_zero(0),
     _need_second(false),
@@ -100,6 +101,7 @@ MooseVariableDataFV<OutputType>::uDot() const
 {
   if (_sys.solutionUDot())
   {
+    _var.requireQpComputations();
     _need_u_dot = true;
     return _u_dot;
   }
@@ -114,6 +116,7 @@ MooseVariableDataFV<OutputType>::uDotDot() const
 {
   if (_sys.solutionUDotDot())
   {
+    _var.requireQpComputations();
     _need_u_dotdot = true;
     return _u_dotdot;
   }
@@ -129,6 +132,7 @@ MooseVariableDataFV<OutputType>::uDotOld() const
 {
   if (_sys.solutionUDotOld())
   {
+    _var.requireQpComputations();
     _need_u_dot_old = true;
     return _u_dot_old;
   }
@@ -144,6 +148,7 @@ MooseVariableDataFV<OutputType>::uDotDotOld() const
 {
   if (_sys.solutionUDotDotOld())
   {
+    _var.requireQpComputations();
     _need_u_dotdot_old = true;
     return _u_dotdot_old;
   }
@@ -154,11 +159,20 @@ MooseVariableDataFV<OutputType>::uDotDotOld() const
 }
 
 template <typename OutputType>
+const typename MooseVariableDataFV<OutputType>::FieldVariableValue &
+MooseVariableDataFV<OutputType>::sln(Moose::SolutionState state) const
+{
+  _var.requireQpComputations();
+  return MooseVariableDataBase<OutputType>::sln(state);
+}
+
+template <typename OutputType>
 const typename MooseVariableDataFV<OutputType>::FieldVariableGradient &
 MooseVariableDataFV<OutputType>::gradSlnDot() const
 {
   if (_sys.solutionUDot())
   {
+    _var.requireQpComputations();
     _need_grad_dot = true;
     return _grad_u_dot;
   }
@@ -173,6 +187,7 @@ MooseVariableDataFV<OutputType>::gradSlnDotDot() const
 {
   if (_sys.solutionUDotDot())
   {
+    _var.requireQpComputations();
     _need_grad_dotdot = true;
     return _grad_u_dotdot;
   }
@@ -186,6 +201,7 @@ template <typename OutputType>
 const typename MooseVariableDataFV<OutputType>::FieldVariableSecond &
 MooseVariableDataFV<OutputType>::secondSln(Moose::SolutionState state) const
 {
+  _var.requireQpComputations();
   switch (state)
   {
     case Moose::Current:
@@ -223,6 +239,7 @@ template <typename OutputType>
 const typename MooseVariableDataFV<OutputType>::FieldVariableCurl &
 MooseVariableDataFV<OutputType>::curlSln(Moose::SolutionState state) const
 {
+  _var.requireQpComputations();
   switch (state)
   {
     case Moose::Current:
@@ -246,17 +263,6 @@ MooseVariableDataFV<OutputType>::curlSln(Moose::SolutionState state) const
     default:
       mooseError("We don't currently support curl from the previous non-linear iteration");
   }
-}
-
-namespace
-{
-template <typename T, typename T2>
-void
-assignForAllQps(const T & value, T2 & array, const unsigned int nqp)
-{
-  for (const auto qp : make_range(nqp))
-    array[qp] = value;
-}
 }
 
 template <typename OutputType>

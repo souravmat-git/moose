@@ -53,9 +53,9 @@ tot_power = 2000 # W
   []
 []
 
-[HeatStructureMaterials]
+[SolidProperties]
   [steel]
-    type = SolidMaterialProperties
+    type = ThermalFunctionSolidProperties
     rho = 8050
     k = 45
     cp = 466
@@ -109,7 +109,8 @@ tot_power = 2000 # W
     n_elems = ${core_n_elems}
     names = 'block'
     widths = '${fparse core_dia / 2.}'
-    materials = 'steel'
+    solid_properties = 'steel'
+    solid_properties_T_ref = '300'
     n_part_elems = 3
   []
 
@@ -245,7 +246,7 @@ tot_power = 2000 # W
   [core_delta_p]
     type = ParsedPostprocessor
     pp_names = 'core_p_in core_p_out'
-    function = 'core_p_in - core_p_out'
+    expression = 'core_p_in - core_p_out'
   []
 
   [hx_pri_T_out]

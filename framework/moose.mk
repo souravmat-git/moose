@@ -19,6 +19,8 @@ APPLICATION_DIR := $(FRAMEWORK_DIR)
 moose_SRC_DIRS := $(FRAMEWORK_DIR)/src
 moose_SRC_DIRS += $(FRAMEWORK_DIR)/contrib/mtwist
 moose_SRC_DIRS += $(FRAMEWORK_DIR)/contrib/pugixml
+moose_SRC_DIRS += $(FRAMEWORK_DIR)/contrib/minijson/src/minijson
+moose_SRC_DIRS += $(FRAMEWORK_DIR)/contrib/tinyhttp/src/tinyhttp
 
 #
 # pcre
@@ -40,19 +42,21 @@ hit_CONTENT   := $(shell ls $(HIT_DIR) 2> /dev/null)
 ifeq ($(hit_CONTENT),)
   $(error The HIT input file parser does not seem to be available. If set, make sure the HIT_DIR environment variable is set to the correct location of your HIT parser.)
 endif
-hit_srcfiles  := $(HIT_DIR)/parse.cc $(HIT_DIR)/lex.cc $(HIT_DIR)/braceexpr.cc
+hit_srcdir    := $(HIT_DIR)/src/hit
+hit_srcfiles  := $(hit_srcdir)/parse.cc $(hit_srcdir)/lex.cc $(hit_srcdir)/braceexpr.cc
 hit_objects   := $(patsubst %.cc, %.$(obj-suffix), $(hit_srcfiles))
 hit_LIB       := $(HIT_DIR)/libhit-$(METHOD).la
 # dependency files
 hit_deps      := $(patsubst %.cc, %.$(obj-suffix).d, $(hit_srcfiles))
 # hit command line tool
-hit_CLI_srcfiles := $(HIT_DIR)/main.cc
+hit_CLI_srcfiles := $(hit_srcdir)/main.cc
 hit_CLI          := $(HIT_DIR)/hit
+$(hit_objects): | prebuild
 
 #
 # hit python bindings
 #
-pyhit_srcfiles  := $(HIT_DIR)/hit.cpp $(HIT_DIR)/lex.cc $(HIT_DIR)/parse.cc $(HIT_DIR)/braceexpr.cc
+pyhit_srcfiles  := $(hit_srcdir)/hit.cpp $(hit_srcdir)/lex.cc $(hit_srcdir)/parse.cc $(hit_srcdir)/braceexpr.cc
 
 #
 # Dynamic library suffix
@@ -74,9 +78,6 @@ endif
 wasp_LIBS           := $(notdir $(wasp_LIBS))
 wasp_LIBS           := $(patsubst %.$(lib_suffix),%,$(wasp_LIBS))
 wasp_LIBS           := $(patsubst lib%,-l%,$(wasp_LIBS))
-ifeq ($(wasp_LIBS),)
-  $(error WASP does not seem to be available. Make sure to either run scripts/update_and_rebuild_wasp.sh in your MOOSE directory, or set WASP_DIR to a valid WASP install)
-endif
 wasp_CXXFLAGS     := -DWASP_ENABLED -I$(WASP_DIR)/include
 wasp_LDFLAGS      := -Wl,-rpath,$(WASP_DIR)/lib -L$(WASP_DIR)/lib $(wasp_LIBS)
 libmesh_CXXFLAGS  += $(wasp_CXXFLAGS)
@@ -96,10 +97,17 @@ ifeq ($(ENABLE_LIBTORCH),true)
     # libtorch (which would cause errors in the testing phase)
     libmesh_CXXFLAGS += -isystem $(LIBTORCH_DIR)/include/torch/csrc/api/include
     libmesh_CXXFLAGS += -isystem $(LIBTORCH_DIR)/include
+		libmesh_CXXFLAGS += -isystem $(LIBTORCH_DIR)/include/c10
 
     # Dynamically linking with the available pytorch library
-    libmesh_LDFLAGS += -Wl,-rpath,$(LIBTORCH_DIR)/lib
+		ifeq ($(shell uname -s),Darwin)
+			libmesh_LDFLAGS += -Wl,-rpath,$(LIBTORCH_DIR)/lib
+		else
+		  libmesh_LDFLAGS += -Wl,--copy-dt-needed-entries,-rpath,$(LIBTORCH_DIR)/lib
+		endif
+
     libmesh_LDFLAGS += -L$(LIBTORCH_DIR)/lib -ltorch
+
   else
     $(error ERROR! Cannot locate any dynamic libraries of libtorch. Make sure to install libtorch (manually or using scripts/setup_libtorch.sh) and to run the configure --with-libtorch before compiling moose!)
   endif
@@ -135,10 +143,10 @@ else
 endif
 pyhit_COMPILEFLAGS += $(wasp_CXXFLAGS) $(wasp_LDFLAGS)
 
-
+$(pyhit_srcfiles) $(hit_CLI_srcfiles): | prebuild
 hit $(pyhit_LIB) $(hit_CLI): $(pyhit_srcfiles) $(hit_CLI_srcfiles)
 	@echo "Building and linking "$@"..."
-	@bash -c '(cd "$(HIT_DIR)" && $(libmesh_CXX) -std=c++17 -w -fPIC -lstdc++ -shared $^ $(pyhit_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(pyhit_LIB))'
+	@bash -c '(cd "$(HIT_DIR)" && $(libmesh_CXX) -I$(HIT_DIR)/include -std=c++17 -w -fPIC -lstdc++ -shared $^ $(pyhit_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(pyhit_LIB))'
 	@bash -c '(cd "$(HIT_DIR)" && $(MAKE))'
 
 #
@@ -157,7 +165,7 @@ gtest_deps      := $(patsubst %.cc, %.$(no-method-obj-suffix).d, $(gtest_srcfile
 moose_config := $(FRAMEWORK_DIR)/include/base/MooseConfig.h
 moose_default_config := $(FRAMEWORK_DIR)/include/base/MooseDefaultConfig.h
 
-$(moose_config):
+$(moose_config): | prebuild
 	@echo "Copying default MOOSE configuration to: "$@"..."
 	@cp $(moose_default_config) $(moose_config)
 
@@ -170,20 +178,22 @@ all_header_dir := $(FRAMEWORK_DIR)/build/header_symlinks
 moose_all_header_dir := $(all_header_dir)
 
 define all_header_dir_rule
-$(1):
+$(1): | prebuild
 	@echo Rebuilding symlinks in $$@
-	@$$(shell mkdir -p $$@)
+	@mkdir -p $$@
 endef
 
 include_files	:= $(shell find $(FRAMEWORK_DIR)/include \( -regex "[^\#~]*\.h" ! -name "*MooseConfig.h" \))
 link_names := $(foreach i, $(include_files), $(all_header_dir)/$(notdir $(i)))
 
-# Create a rule for one symlink for one header file
+# Create a rule for one symlink for one header file.
+# The order-only prerequisite guarantees the target directory exists before
+# this rule attempts to create the symlink.
 # Args
 # 1: the header file
 # 2: the symlink to create
 define symlink_rule
-$(2): $(1)
+$(2): $(1) | $(patsubst %/, %, $(dir $(2)))
 	@ln -sf $$< $$@
 endef
 
@@ -199,7 +209,7 @@ $(eval $(call all_header_dir_rule, $(all_header_dir)))
 $(call symlink_rules, $(all_header_dir), $(include_files))
 
 moose_config_symlink := $(moose_all_header_dir)/MooseConfig.h
-$(moose_config_symlink): $(moose_config) | $(moose_all_header_dir)
+$(moose_config_symlink): $(moose_config) | $(moose_all_header_dir) prebuild
 	@echo "Symlinking MOOSE configure "$(moose_config_symlink)
 	@ln -sf $(moose_config) $(moose_config_symlink)
 
@@ -219,7 +229,7 @@ ignore_contrib_include := $(foreach ex_dir, $(IGNORE_CONTRIB_INC), $(if $(dir $(
 moose_INC_DIRS := $(filter-out $(ignore_contrib_include), $(moose_INC_DIRS))
 
 moose_INC_DIRS += $(gtest_DIR)
-moose_INC_DIRS += $(HIT_DIR)
+moose_INC_DIRS += $(HIT_DIR)/include
 moose_INCLUDE  := $(foreach i, $(moose_INC_DIRS), -I$(i))
 
 #libmesh_INCLUDE := $(moose_INCLUDE) $(libmesh_INCLUDE)
@@ -232,7 +242,9 @@ moose_LIBS := $(moose_LIB) $(pcre_LIB) $(hit_LIB)
 ### Unity Build ###
 ifeq ($(MOOSE_UNITY),true)
 
-srcsubdirs := $(shell find $(FRAMEWORK_DIR)/src -type d -not -path '*/.libs*')
+# Top level source directories in MOOSE
+srcsubdirs := $(shell find $(FRAMEWORK_DIR)/src -mindepth 1 -maxdepth 1 -type d -not -path '*/.libs*')
+allsrcsubdirs := $(shell find $(FRAMEWORK_DIR)/src -type d -not -path '*/.libs*')
 
 # This folder does not build with unity
 moose_non_unity := %/utils_nonunity
@@ -246,10 +258,10 @@ endif
 unity_src_dir := $(FRAMEWORK_DIR)/build/unity_src
 
 unity_srcsubdirs := $(filter-out $(moose_non_unity), $(srcsubdirs))
-non_unity_srcsubdirs := $(filter $(moose_non_unity), $(srcsubdirs))
+non_unity_srcsubdirs := $(filter $(moose_non_unity), $(allsrcsubdirs))
 
 define unity_dir_rule
-$(1):
+$(1): | prebuild
 	@echo Creating Unity Directory $$@
 	@mkdir -p $(1)
 endef
@@ -264,17 +276,17 @@ $(eval $(call unity_dir_rule, $(unity_src_dir)))
 # these are prereqs that must be run first - but their timestamp isn't used
 ifeq ($(UNAME10), MINGW64_NT)
 define unity_file_rule
-$(1):$(2) $(3) | $(4)
+$(1): $(2) $(3) | $(4) prebuild
 	@echo Creating Unity \(Windows\) $$@
 	$$(shell echo > $$@)
-	$$(foreach srcfile,$$(sort $$(filter-out $(3) $(4),$$^)),$$(shell echo '#include "'$$(shell cygpath -m $$(srcfile))'"' >> $$@))
+	$$(foreach srcfile,$$(sort $(2)),$$(shell echo '#include "'$$(shell cygpath -m $$(srcfile))'"' >> $$@))
 endef
 else
 define unity_file_rule
-$(1):$(2) $(3) | $(4)
+$(1): $(2) $(3) | $(4) prebuild
 	@echo Creating Unity $$@
 	$$(shell echo > $$@)
-	$$(foreach srcfile,$$(sort $$(filter-out $(3) $(4),$$^)),$$(shell echo '#include"$$(srcfile)"' >> $$@))
+	$$(foreach srcfile,$$(sort $(2)),$$(shell echo '#include"$$(srcfile)"' >> $$@))
 endef
 endif
 # 1: The directory where the unity source files will go
@@ -296,7 +308,7 @@ unity_unique_name = $(1)/$(subst /,_,$(patsubst $(2)/%,%,$(patsubst $(2)/src/%,%
 # 4. Now that we have the name of the Unity file we need to find all of the .C files that should be #included in it
 # 4a. Use find to pick up all .C files
 # 4b. Make sure we don't pick up any _Unity.C files (we shouldn't have any anyway)
-$(foreach srcsubdir,$(unity_srcsubdirs),$(eval $(call unity_file_rule,$(call unity_unique_name,$(unity_src_dir),$(FRAMEWORK_DIR),$(srcsubdir)),$(shell find $(srcsubdir) -maxdepth 1 \( -type f -o -type l \) -name "*.C"),$(srcsubdir),$(unity_src_dir))))
+$(foreach srcsubdir,$(unity_srcsubdirs),$(eval $(call unity_file_rule,$(call unity_unique_name,$(unity_src_dir),$(FRAMEWORK_DIR),$(srcsubdir)),$(shell find $(srcsubdir) \( -type f -o -type l \) -name "*.C"),$(srcsubdir),$(unity_src_dir))))
 
 app_unity_srcfiles := $(foreach srcsubdir,$(unity_srcsubdirs),$(call unity_unique_name,$(unity_src_dir),$(FRAMEWORK_DIR),$(srcsubdir)))
 
@@ -347,8 +359,11 @@ endif
 
 $(moose_revision_header): $(moose_HEADER_deps) | $(moose_all_header_dir)
 	@echo "Checking if header needs updating: "$@"..."
-	$(shell $(FRAMEWORK_DIR)/scripts/get_repo_revision.py $(FRAMEWORK_DIR) \
-	  $(moose_revision_header) MOOSE)
+	$(shell REPO_LOCATION="$(FRAMEWORK_DIR)" \
+	        HEADER_FILE="$(moose_revision_header)" \
+					APPLICATION_NAME="MOOSE" \
+					INSTALLABLE_DIRS= \
+	        $(FRAMEWORK_DIR)/scripts/get_repo_revision.py)
   # make sure the header generation step didn't fail
 	@if [ $(.SHELLSTATUS) -ne 0 ]; then \
 	echo "\nFailed to generate MooseRevision.h\n"; exit $(.SHELLSTATUS); \
@@ -367,7 +382,21 @@ endif
 libmesh_submodule_status:
 	@if [ x$(libmesh_message) != "x" ]; then printf $(libmesh_message); fi
 
-moose: $(moose_revision_header) $(moose_LIB)
+ifeq ($(wasp_LIBS),)
+  wasp_submodule_message = "\n***ERROR***\nWASP does not seem to be available.\nMake sure to either run scripts/update_and_rebuild_wasp.sh in your MOOSE directory,\nor set WASP_DIR to a valid WASP install\n"
+endif
+wasp_submodule_status:
+	@if [ x$(wasp_submodule_message) != "x" ]; then printf $(wasp_submodule_message); exit 1; fi
+
+# Pre-make for checking current dependency versions and showing useful warnings
+# if things like conda packages are out of date. The "-" in "@-" means that
+# it is allowed to not exit 0. "::" means that the rule can be appended by
+# applications that require prebuild steps.
+prebuild::
+	@-python3 $(FRAMEWORK_DIR)/../scripts/premake.py
+
+wasp_submodule_status $(moose_revision_header) $(moose_LIB): | prebuild
+moose: wasp_submodule_status $(moose_revision_header) $(moose_LIB)
 
 # [JWP] With libtool, there is only one link command, it should work whether you are creating
 # shared or static libraries, and it should be portable across Linux and Mac...
@@ -417,6 +446,8 @@ sa: $(moose_analyzer)
 -include $(wildcard $(FRAMEWORK_DIR)/contrib/gtest/*.d)
 -include $(wildcard $(FRAMEWORK_DIR)/contrib/hit/*.d)
 -include $(wildcard $(FRAMEWORK_DIR)/contrib/pugixml/src/*.d)
+-include $(wildcard $(FRAMEWORK_DIR)/contrib/tinyhttp/src/tinyhttp/*.d)
+-include $(wildcard $(FRAMEWORK_DIR)/contrib/minijson/src/minijson/*.d)
 
 #
 # exodiff
@@ -435,6 +466,7 @@ all: exodiff
 exodiff: app_INCLUDES := $(exodiff_includes)
 exodiff: libmesh_CXXFLAGS := -std=gnu++11 -O2 -felide-constructors -w
 exodiff: $(exodiff_APP)
+$(exodiff_objects): | prebuild
 $(exodiff_APP): $(exodiff_objects)
 	@echo "Linking Executable "$@"..."
 	@$(libmesh_LIBTOOL) --tag=CXX $(LIBTOOLFLAGS) --mode=link --quiet \

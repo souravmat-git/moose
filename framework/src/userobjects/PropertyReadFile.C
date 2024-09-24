@@ -24,8 +24,18 @@ PropertyReadFile::validParams()
 {
   InputParameters params = GeneralUserObject::validParams();
   params.addClassDescription("User Object to read property data from an external file and assign "
-                             "to elements.");
-  params.addRequiredParam<FileName>("prop_file_name", "Name of the property file name");
+                             "it to elements / nodes / subdomains etc.");
+
+  // Data source file(s)
+  params.addParam<std::vector<FileName>>(
+      "prop_file_name",
+      "Name(s) of the property file name. If specifying multiple files, the next file will be read "
+      "at initialization right before every execution");
+  params.addParam<FileName>("prop_file_names_csv",
+                            "Name(s) of a CSV file containing the list of the property file names "
+                            "as its first column, with no header.");
+
+  // Data organization
   params.addRequiredParam<unsigned int>("nprop", "Number of tabulated property values");
   params.addParam<unsigned int>(
       "nvoronoi", 0, "Number of voronoi tesselations/grains/nearest neighbor regions");
@@ -50,14 +60,31 @@ PropertyReadFile::validParams()
       "Periodic or non-periodic grain distribution: Default is non-periodic");
   params.addParam<bool>(
       "use_zero_based_block_indexing", true, "Are the blocks numbered starting at zero?");
+
+  // Data reading schedule
+  params.addParam<bool>(
+      "load_first_file_on_construction",
+      true,
+      "Whether to read the first CSV file on construction or on the first execution");
+
+  // Set an execution schedule to what makes sense currently
+  // We do not allow INITIAL because we read the file at construction
+  ExecFlagEnum & exec_enum = params.set<ExecFlagEnum>("execute_on", true);
+  exec_enum.removeAvailableFlags(EXEC_INITIAL, EXEC_FINAL, EXEC_LINEAR, EXEC_NONLINEAR);
+  params.setDocString("execute_on", exec_enum.getDocString());
+  // we must read the files as early as possible
+  params.set<bool>("force_preaux") = true;
+
   return params;
 }
 
 PropertyReadFile::PropertyReadFile(const InputParameters & parameters)
   : GeneralUserObject(parameters),
-    _prop_file_name(getParam<FileName>("prop_file_name")),
-    _reader(_prop_file_name),
-
+    _prop_file_names(getFileNames()),
+    _current_file_index(declareRestartableData<unsigned int>("file_index", 0)),
+    // index of files must be capped if restarting after having read all files
+    _reader(
+        _prop_file_names[std::min(_current_file_index, (unsigned int)_prop_file_names.size() - 1)]),
     _read_type(getParam<MooseEnum>("read_type").getEnum<ReadTypeEnum>()),
     _use_random_tesselation(getParam<bool>("use_random_voronoi")),
     _rand_seed(getParam<unsigned int>("rand_seed")),
@@ -69,7 +96,9 @@ PropertyReadFile::PropertyReadFile(const InputParameters & parameters)
     _nprop(getParam<unsigned int>("nprop")),
     _nvoronoi(isParamValid("ngrain") ? getParam<unsigned int>("ngrain")
                                      : getParam<unsigned int>("nvoronoi")),
-    _nblock(getParam<unsigned int>("nblock"))
+    _nblock(getParam<unsigned int>("nblock")),
+    _initialize_called_once(declareRestartableData<bool>("initialize_called", false)),
+    _load_on_construction(getParam<bool>("load_first_file_on_construction"))
 {
   if (!_use_random_tesselation && parameters.isParamSetByUser("rand_seed"))
     paramError("rand_seed",
@@ -83,7 +112,57 @@ PropertyReadFile::PropertyReadFile(const InputParameters & parameters)
   }
   _bounding_box = MooseUtils::buildBoundingBox(mesh_min, mesh_max);
 
-  readData();
+  if (_load_on_construction)
+    readData();
+}
+
+std::vector<FileName>
+PropertyReadFile::getFileNames()
+{
+  std::vector<FileName> prop_file_names;
+  // Retrieve the property file names
+  if (isParamValid("prop_file_name") && !isParamValid("prop_file_names_csv"))
+    prop_file_names = getParam<std::vector<FileName>>("prop_file_name");
+  else if (isParamValid("prop_file_names_csv") && !isParamValid("prop_file_name"))
+  {
+    MooseUtils::DelimitedFileOfStringReader file_name_reader(
+        getParam<FileName>("prop_file_names_csv"));
+    file_name_reader.setHeaderFlag(MooseUtils::DelimitedFileOfStringReader::HeaderFlag::OFF);
+    file_name_reader.read();
+    if (file_name_reader.getData().size())
+    {
+      const auto fdata = file_name_reader.getData(0);
+      for (const auto & fname : fdata)
+        prop_file_names.push_back(fname);
+    }
+  }
+  else
+    paramError("prop_file_name",
+               "The names of the property files must be provided with either 'prop_file_name' "
+               "or 'prop_file_names_csv'. Providing both or none is not supported.");
+  if (prop_file_names.empty())
+    paramError("prop_file_name", "A property file should have been specified.");
+  return prop_file_names;
+}
+
+void
+PropertyReadFile::initialize()
+{
+  // Since we read at construction, no need to re-read the file on first initialize
+  if (!_initialize_called_once)
+  {
+    _initialize_called_once = true;
+    return;
+  }
+
+  // Set then read new file, only if we have not reached the last file
+  if (_current_file_index < _prop_file_names.size())
+  {
+    _reader.setFileName(_prop_file_names[_current_file_index]);
+    readData();
+  }
+  else if (_prop_file_names.size() > 1 && _current_file_index == _prop_file_names.size())
+    mooseInfo("Last file specified has been read. The file will no longer be updated.");
 }
 
 void
@@ -91,6 +170,8 @@ PropertyReadFile::readData()
 {
   if (_read_type == ReadTypeEnum::ELEMENT && _mesh.getMesh().allow_renumbering())
     mooseWarning("CSV data is sorted by element, but mesh element renumbering is on, be careful!");
+  if (_read_type == ReadTypeEnum::NODE && _mesh.getMesh().allow_renumbering())
+    mooseWarning("CSV data is sorted by node, but mesh node renumbering is on, be careful!");
 
   _reader.setFormatFlag(MooseUtils::DelimitedFileReader::FormatFlag::ROWS);
   _reader.read();
@@ -129,20 +210,30 @@ PropertyReadFile::readData()
 
   // make sure the data from file has enough rows and columns
   if (_reader.getData().size() < nobjects)
-    mooseError(
-        "Data in ", _prop_file_name, " does not have enough rows for ", nobjects, " objects.");
+    mooseError("Data in ",
+               _prop_file_names[_current_file_index],
+               " does not have enough rows for ",
+               nobjects,
+               " objects.");
   if (_reader.getData().size() > nobjects)
     mooseWarning("Data size in ",
-                 _prop_file_name,
+                 _prop_file_names[_current_file_index],
                  " is larger than ",
                  nobjects,
                  " objects, some data will not be used.");
   for (unsigned int i = 0; i < nobjects; i++)
     if (_reader.getData(i).size() < _nprop)
-      mooseError("Row ", i, " in ", _prop_file_name, " has number of data less than ", _nprop);
+      mooseError("Row ",
+                 i,
+                 " in ",
+                 _prop_file_names[_current_file_index],
+                 " has number of data less than ",
+                 _nprop);
 
   if (_read_type == ReadTypeEnum::VORONOI || _read_type == ReadTypeEnum::GRAIN)
     initVoronoiCenterPoints();
+
+  _current_file_index++;
 }
 
 void
@@ -163,7 +254,7 @@ PropertyReadFile::initVoronoiCenterPoints()
   else
   {
     for (const auto i : make_range(_nvoronoi))
-      for (const auto j : make_range(_mesh.dimension()))
+      for (const auto j : make_range(Moose::dim))
         _center[i](j) = _reader.getData(i)[j];
   }
 }

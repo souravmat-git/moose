@@ -26,6 +26,7 @@ FEProblemSolve::validParams()
   InputParameters params = emptyInputParameters();
 
   params.addParam<std::vector<std::string>>("splitting",
+                                            {},
                                             "Top-level splitting defining a "
                                             "hierarchical decomposition into "
                                             "subsystems to help the solver.");
@@ -57,7 +58,7 @@ FEProblemSolve::validParams()
                         "be looser than the standard linear tolerance");
 
   params += Moose::PetscSupport::getPetscValidParams();
-  params.addParam<Real>("l_tol", 1.0e-5, "Linear Tolerance");
+  params.addParam<Real>("l_tol", 1.0e-5, "Linear Relative Tolerance");
   params.addParam<Real>("l_abs_tol", 1.0e-50, "Linear Absolute Tolerance");
   params.addParam<unsigned int>("l_max_its", 10000, "Max Linear Iterations");
   params.addParam<unsigned int>("nl_max_its", 50, "Max Nonlinear Iterations");
@@ -86,11 +87,19 @@ FEProblemSolve::validParams()
       "Specifies whether or not to reuse the base vector for matrix-free calculation");
   params.addParam<bool>(
       "skip_exception_check", false, "Specifies whether or not to skip exception check");
+  params.addParam<bool>("compute_initial_residual_before_preset_bcs",
+                        false,
+                        "Use the residual norm computed *before* solution modifying objects like "
+                        "preset BCs are imposed in relative convergence check.");
+  params.deprecateParam(
+      "compute_initial_residual_before_preset_bcs", "use_pre_SMO_residual", "12/31/2024");
   params.addParam<bool>(
-      "compute_initial_residual_before_preset_bcs",
+      "use_pre_SMO_residual",
       false,
-      "Use the residual norm computed *before* preset BCs are imposed in relative "
-      "convergence check");
+      "Compute the pre-SMO residual norm and use it in the relative convergence check. The "
+      "pre-SMO residual is computed at the begining of the time step before solution-modifying "
+      "objects are executed. Solution-modifying objects include preset BCs, constraints, "
+      "predictors, etc.");
   params.addParam<bool>("automatic_scaling", "Whether to use automatic scaling for the variables.");
   params.addParam<bool>(
       "compute_scaling_once",
@@ -144,12 +153,11 @@ FEProblemSolve::validParams()
   params.addParamNamesToGroup("l_tol l_abs_tol l_max_its reuse_preconditioner "
                               "reuse_preconditioner_max_linear_its",
                               "Linear Solver");
-  params.addParamNamesToGroup("solve_type nl_max_its nl_forced_its nl_max_funcs "
-                              "nl_abs_tol nl_rel_tol nl_abs_step_tol nl_rel_step_tol "
-                              "snesmf_reuse_base compute_initial_residual_before_preset_bcs "
-                              "num_grids nl_div_tol nl_abs_div_tol residual_and_jacobian_together "
-                              "n_max_nonlinear_pingpong",
-                              "Nonlinear Solver");
+  params.addParamNamesToGroup(
+      "solve_type nl_max_its nl_forced_its nl_max_funcs nl_abs_tol nl_rel_tol nl_abs_step_tol "
+      "nl_rel_step_tol snesmf_reuse_base use_pre_SMO_residual num_grids nl_div_tol nl_abs_div_tol "
+      "residual_and_jacobian_together n_max_nonlinear_pingpong",
+      "Nonlinear Solver");
   params.addParamNamesToGroup(
       "automatic_scaling compute_scaling_once off_diagonals_in_auto_scaling "
       "scaling_group_variables resid_vs_jac_scaling_param ignore_variables_for_autoscaling",
@@ -163,7 +171,7 @@ FEProblemSolve::validParams()
 }
 
 FEProblemSolve::FEProblemSolve(Executioner & ex)
-  : SolveObject(ex),
+  : NonlinearSolveObject(ex),
     _splitting(getParam<std::vector<std::string>>("splitting")),
     _num_grid_steps(getParam<unsigned int>("num_grids") - 1)
 {
@@ -207,9 +215,6 @@ FEProblemSolve::FEProblemSolve(Executioner & ex)
   es.parameters.set<unsigned int>("reuse preconditioner maximum linear iterations") =
       getParam<unsigned int>("reuse_preconditioner_max_linear_its");
 
-  _nl._compute_initial_residual_before_preset_bcs =
-      getParam<bool>("compute_initial_residual_before_preset_bcs");
-
   _problem.setSNESMFReuseBase(getParam<bool>("snesmf_reuse_base"),
                               _pars.isParamSetByUser("snesmf_reuse_base"));
 
@@ -222,6 +227,8 @@ FEProblemSolve::FEProblemSolve(Executioner & ex)
   _problem.setNonlinearAbsoluteDivergenceTolerance(getParam<Real>("nl_abs_div_tol"));
 
   _nl.setDecomposition(_splitting);
+
+  _nl.setPreSMOResidual(getParam<bool>("use_pre_SMO_residual"));
 
   if (getParam<bool>("residual_and_jacobian_together"))
     _nl.residualAndJacobianTogether();
@@ -281,11 +288,11 @@ FEProblemSolve::solve()
   // This loop is for nonlinear multigrids (developed by Alex)
   for (MooseIndex(_num_grid_steps) grid_step = 0; grid_step <= _num_grid_steps; ++grid_step)
   {
-    _problem.solve();
+    _problem.solve(_nl.number());
 
     if (_problem.shouldSolve())
     {
-      if (_problem.converged())
+      if (_problem.converged(_nl.number()))
         _console << COLOR_GREEN << " Solve Converged!" << COLOR_DEFAULT << std::endl;
       else
       {
@@ -299,5 +306,5 @@ FEProblemSolve::solve()
     if (grid_step != _num_grid_steps)
       _problem.uniformRefine();
   }
-  return _problem.converged();
+  return _problem.converged(_nl.number());
 }

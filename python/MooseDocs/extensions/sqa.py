@@ -141,7 +141,7 @@ class SQAExtension(command.CommandExtension):
                     path = os.path.join(MooseDocs.ROOT_DIR, d)
                 if not os.path.isdir(path):
                     msg = "Input directory does not exist: %s"
-                    LOG.error(msg, path)
+                    LOG.warning(msg, path)
                     continue
                 directories.append(path)
 
@@ -319,7 +319,7 @@ class SQARequirementsCommand(command.CommandComponent):
     def createToken(self, parent, info, page, settings):
         category = settings['category']
         collections = settings['collections']
-        if category == '_empty_':
+        if category == 'moose':
             return parent
 
         group_map = self.extension.get('requirement-groups', dict())
@@ -444,7 +444,7 @@ class SQACrossReferenceCommand(SQARequirementsCommand):
 
     def createToken(self, parent, info, page, settings):
         category = settings['category']
-        if category == '_empty_':
+        if category == 'moose':
             return parent
 
         design = collections.defaultdict(list)
@@ -487,7 +487,7 @@ class SQAVerificationCommand(SQARequirementsCommand):
 
     def createToken(self, parent, info, page, settings):
         category = settings['category']
-        if category == '_empty_':
+        if category == 'moose':
             return parent
 
         subcommand = info['subcommand']
@@ -515,7 +515,7 @@ class SQADependenciesCommand(command.CommandComponent):
     def createToken(self, parent, info, page, settings):
         suffix = settings['suffix']
         category = settings['category'] or None
-        if category == '_empty_':
+        if category == 'moose':
             depends = self.extension.get('categories').keys()
         else:
             depends = self.extension.dependencies(category) or \

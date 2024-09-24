@@ -57,6 +57,9 @@
     prop_names = 'rho mu'
     prop_values = '1  1'
   []
+[]
+
+[FunctorMaterials]
   [ADconst]
     type = ADGenericFunctorMaterial
     block = '1 2 3'
@@ -120,7 +123,7 @@
   []
   [sum_drops]
     type = ParsedPostprocessor
-    function = 'pdrop_mid1 + pdrop_mid2 + pdrop_mid3'
+    expression = 'pdrop_mid1 + pdrop_mid2 + pdrop_mid3'
     pp_names = 'pdrop_mid1 pdrop_mid2 pdrop_mid3'
   []
 

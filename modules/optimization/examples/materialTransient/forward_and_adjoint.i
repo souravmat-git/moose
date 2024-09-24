@@ -69,7 +69,9 @@
   []
   [data]
     type = OptimizationData
+    objective_name = objective_value
     variable = u
+    outputs = none
   []
 []
 
@@ -117,7 +119,7 @@
 [Variables]
   [u_adjoint]
     initial_condition = 0
-    nl_sys = adjoint
+    solver_sys = adjoint
     outputs = none
   []
 []

@@ -6,7 +6,11 @@ energy, deformation energy, and GB energy. Various modeling approaches have been
 applied to model GB migration. While all of the various methods predict
 similar behavior, the phase-field method has emerged as one of the more popular due to its flexibility.
 
-In MOOSE, we have implemented the multiphase grain growth model from [!cite](moelans_quantitative_2008). The variables evolve to reduce the overall free energy of the system, representing GB migration. The evolution of each grain's order parameter is defined with the Allen-Cahn equation:
+In MOOSE, we have implemented the multiphase grain growth model originally developed in
+[!cite](ChenYang1994) and [!cite](Chen1995) and further developed in
+[!cite](moelans_quantitative_2008). The variables evolve to reduce the overall free energy of
+the system, representing GB migration. The evolution of each grain's order parameter is defined
+with the Allen-Cahn equation:
 \begin{equation}
   \frac{\partial \eta_i}{\partial t} = - L \frac{\delta F}{\delta \eta_i},
 \end{equation}
@@ -22,7 +26,7 @@ where $\mu$ is the free energy weight and $\gamma=1.5$ for symmetric interfacial
 
 The model parameters $L$, $\mu$ and $\kappa$ are defined in terms of the
 GB energy $\sigma$, the diffuse GB width $w_{GB}$, and
-the GB mobility $M_{GB}$. In reality, the GB energy and mobility are anisotropic, depending on both the misorientation and inclination of the GB. However, it is common to assume that the GB properties are isotropic. In the case of isostropic GB energy and mobility and symmetric interfacial profiles ($\gamma = 1.5$), [!cite](moelans_quantitative_2008) defined expressions for the model parameters in terms of $\sigma$, $w_{GB}$, and $M_{GB}$:
+the GB mobility $M_{GB}$. In reality, the GB energy and mobility are anisotropic, depending on both the misorientation and inclination of the GB. However, it is common to assume that the GB properties are isotropic. In the case of isotropic GB energy and mobility and symmetric interfacial profiles ($\gamma = 1.5$), [!cite](moelans_quantitative_2008) defined expressions for the model parameters in terms of $\sigma$, $w_{GB}$, and $M_{GB}$:
 \begin{equation}
 L = \frac{4}{3} \frac{M_{GB}}{w_{GB}}
 \end{equation}
@@ -39,7 +43,7 @@ The grain growth model implementation in MOOSE can simulate grain growth in 2D a
 \begin{equation}
   \mathcal{R}_{\eta_i} = \left( \frac{\partial \eta_i}{\partial t},\psi_m \right) + \left( L \frac{\partial f_{loc}}{\partial \eta_i}, \psi_m \right) - \left(\kappa \nabla \eta_i, L \nabla \psi_m \right)  = 0,
 \end{equation}
-where $\psi_m$ is the test function. In standard MOOSE fashion, the various terms in the Allen-Cahn equation have been implmented in separate kernels. The MOOSE objects that are used in the grain growth model are summarized, below:
+where $\psi_m$ is the test function. In standard MOOSE fashion, the various terms in the Allen-Cahn equation have been implemented in separate kernels. The MOOSE objects that are used in the grain growth model are summarized, below:
 
 +Materials+
 
@@ -86,7 +90,7 @@ options are shown in the Table, below.
 
 The polycrystal UserObjects available for use with [`PolycrystalColoringIC`](PolycrystalColoringICAction.md) are:
 
-- [`PolycrystalVoronoi`](PolycrystalVoronoi.md) - Creates polycrystal grain structure using a Voronoi tesselation.
+- [`PolycrystalVoronoi`](PolycrystalVoronoi.md) - Creates polycrystal grain structure using a Voronoi tessellation.
 - [`PolycrystalHex`](PolycrystalHex.md) - Creates a hexagonal polycrystal grain structure.
 - [`PolycrystalCircles`](PolycrystalCircles.md) - Creates circular/spherical grains from a file defining center coordinates and radii.
 - [`PolycrystalEBSD`](PolycrystalEBSD.md) - Reconstructs grain structures from EBSD data in a specific file format. Used in conjunction with the [`EBSD Reader`](ICs/EBSD.md).
@@ -128,7 +132,9 @@ A = A_0 - 2 \pi M \gamma t,
 \end{equation}
 where $A_0$ is the initial radius of the circular grain.
 
-This case can be easily implemented using MOOSE, and the change in the area with time is outputted using a Postprocessor:
+This case can be easily implemented using MOOSE, and the change in the area with
+time is outputted using a Postprocessor, as shown in the below input which
+leverages data from [!citep](schonfelder1997molecular).
 
 !listing modules/phase_field/test/tests/grain_growth/test.i
 

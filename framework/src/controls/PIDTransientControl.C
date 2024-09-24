@@ -48,6 +48,18 @@ PIDTransientControl::validParams()
                         "Reset the PID integral when the error crosses zero and the integral is "
                         "larger than the error.");
 
+  params.addParam<Real>("maximum_output_value",
+                        std::numeric_limits<Real>::max(),
+                        "Can be used to limit the maximum value output by the PID controller.");
+  params.addParam<Real>("minimum_output_value",
+                        -std::numeric_limits<Real>::max(),
+                        "Can be used to limit the minimum value output by the PID controller.");
+  params.addRangeCheckedParam<Real>(
+      "maximum_change_rate",
+      std::numeric_limits<Real>::max(),
+      "maximum_change_rate>0",
+      "Can be used to limit the absolute rate of change per second of value "
+      "output by the PID controller.");
   return params;
 }
 
@@ -62,12 +74,21 @@ PIDTransientControl::PIDTransientControl(const InputParameters & parameters)
     _stop_time(getParam<Real>("stop_time")),
     _reset_every_timestep(getParam<bool>("reset_every_timestep")),
     _reset_integral_windup(getParam<bool>("reset_integral_windup")),
+    _maximum_output_value(getParam<Real>("maximum_output_value")),
+    _minimum_output_value(getParam<Real>("minimum_output_value")),
+    _maximum_change_rate(getParam<Real>("maximum_change_rate")),
     _integral(0),
     _integral_old(0),
     _value_old(0),
     _t_step_old(-1),
     _old_delta(0)
 {
+  if (!_fe_problem.isTransient())
+    mooseError("PIDTransientControl is only meant to be used when the problem is transient, for "
+               "example with a Transient Executioner. Support for Steady "
+               "Executioner can be added in the future, however certain parameters are currently "
+               "not well defined for use with Picard iterations.");
+
   if (isParamValid("parameter") && isParamValid("parameter_pp"))
     paramError("parameter_pp",
                "Either a controllable parameter or a postprocessor to control should be specified, "
@@ -78,10 +99,10 @@ PIDTransientControl::PIDTransientControl(const InputParameters & parameters)
     paramError(
         "reset_every_timestep",
         "Resetting the PID every time step is only supported using controlled postprocessors");
-  if (!dynamic_cast<Transient *>(_app.getExecutioner()))
+  if (_maximum_output_value <= _minimum_output_value)
     mooseError(
-        "PIDTransientControl is only supported by a Transient Executioner. If using a Steady "
-        "Executioner, add a minimum number of Picard iterations and comment this error.");
+        "The parameters maximum_output_value and minimum_output_value are inconsistent. The value "
+        "of maximum_output_value should be greater than the value of minimum_output_value.");
 }
 
 void
@@ -113,7 +134,7 @@ PIDTransientControl::execute()
     // If there were coupling/Picard iterations during the transient and they failed,
     // we need to reset the controlled value and the error integral to their initial value at the
     // beginning of the coupling process
-    if (_app.getExecutioner()->picardSolve().numPicardIts() == 1)
+    if (_app.getExecutioner()->fixedPointSolve().numFixedPointIts() == 1)
     {
       _integral = _integral_old;
       value = _value_old;
@@ -131,6 +152,15 @@ PIDTransientControl::execute()
     value += _Kint * _integral + _Kpro * delta;
     if (_dt > 0)
       value += _Kder * delta / _dt;
+
+    // If the maxmimum rate of change by the pid is fixed
+    if (_maximum_change_rate != std::numeric_limits<Real>::max())
+    {
+      value = std::min(std::max(_value_old - _dt * _maximum_change_rate, value),
+                       _value_old + _dt * _maximum_change_rate);
+    }
+    else
+      value = std::min(std::max(_minimum_output_value, value), _maximum_output_value);
 
     // Set the new value of the postprocessor
     if (isParamValid("parameter"))

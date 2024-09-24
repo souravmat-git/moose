@@ -35,10 +35,10 @@ public:
   /**
    * Called before this RM is attached
    */
-  void init(const MeshBase & mesh, const DofMap * dof_map = nullptr);
+  void init(MooseMesh & moose_mesh, const MeshBase & mesh, const DofMap * dof_map = nullptr);
 
   /**
-   * Whether or not this RM has been inited. NOTE that this just indicates that the \p init method
+   * Whether or not this RM has been init-ed. NOTE that this just indicates that the \p init method
    * has been called at least once. Conceivably this could have been during the early geometric
    * setup phase and if this relationship manager is also algebraic/coupling, we are not assured
    * that this RelationshipManager is fully initialized until the \p init call during the
@@ -129,8 +129,9 @@ protected:
   /// Whether or not this has been initialized
   bool _inited = false;
 
-  /// Pointer to the \p MooseMesh object
-  MooseMesh * const _moose_mesh;
+  /// Pointer to the \p MooseMesh object. This must be non-const because we have derived classes
+  /// that call to methods like \p nodeToElemMap which are non-const
+  MooseMesh * _moose_mesh;
 
   /// Pointer to DofMap (may be null if this is geometric only). This is useful for setting coupling
   /// matrices in call-backs from DofMap::reinit
@@ -181,7 +182,7 @@ public:
    * This returns an \p InputParameters object containing an \p ElementSideNeighborLayers
    * relationship manager with zero layers of ghosting. While zero layers may seem foolish, this is
    * actually very useful for building the correct sparsity pattern between intra-element degrees of
-   * freedom. Since this object only has meaning for building the sparsity pattern, the relationsip
+   * freedom. Since this object only has meaning for building the sparsity pattern, the relationship
    * manager type contained within the returned \p InputParameters object will be COUPLING
    */
   static InputParameters zeroLayerGhosting();

@@ -85,7 +85,7 @@ power = 1000.0
   [inner_perimeter]
     type = ParsedPostprocessor
     pp_names = 'inner_surface_area'
-    function = 'inner_surface_area / ${length}'
+    expression = 'inner_surface_area / ${length}'
     execute_on = 'INITIAL'
   []
 []
@@ -120,6 +120,7 @@ power = 1000.0
     to_multi_app = sub
     source_user_object = layered_average_heat_flux
     variable = q_ext
+    error_on_miss = true
   []
   [perimeter_transfer]
     type = MultiAppPostprocessorTransfer

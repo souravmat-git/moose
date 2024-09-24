@@ -20,18 +20,18 @@ class RunApp(Tester):
         params.addParam('test_name',          "The name of the test - populated automatically")
         params.addParam('input_switch', '-i', "The default switch used for indicating an input to the executable")
         params.addParam('errors',             ['ERROR', 'command not found', 'terminate called after throwing an instance of'], "The error messages to detect a failed run")
-        params.addParam('expect_out',         "A regular expression or literal string that must occur in the input in order for the test to be considered passing (see match_literal).")
+        params.addParam('expect_out',         "A regular expression or literal string that must occur in the output in order for the test to be considered passing (see match_literal).")
         params.addParam('match_literal', False, "Treat expect_out as a string not a regular expression.")
         params.addParam('absent_out',         "A regular expression that must be *absent* from the output for the test to pass.")
         params.addParam('should_crash', False, "Inidicates that the test is expected to crash or otherwise terminate early")
         params.addParam('executable_pattern', "A test that only runs if the executable name matches the given pattern")
         params.addParam('delete_output_before_running',  True, "Delete pre-existing output files before running test. Only set to False if you know what you're doing!")
-        params.addParam('delete_output_folders', True, "Delete output folders before running")
         params.addParam('custom_evaluation_script', False, "A .py file containing a custom function for evaluating a test's success. For syntax, please check https://mooseframework.inl.gov/python/TestHarness.html")
 
         # RunApp can also run arbitrary commands. If the "command" parameter is supplied
         # it'll be used in lieu of building up the command automatically
-        params.addParam('command',            "The command line to execute for this test.")
+        params.addParam('command',       "The command line to execute for this test")
+        params.addParam('command_proxy', "A proxy command to run that will execute the underlying test via wrapper; the intended command is set in the env variable RUNAPP_COMMAND")
 
         # Parallel/Thread testing
         params.addParam('max_parallel', 1000, "Maximum number of MPI processes this test can be run with      (Default: 1000)")
@@ -50,6 +50,8 @@ class RunApp(Tester):
         # Valgrind
         params.addParam('valgrind', 'NORMAL', "Set to (NONE, NORMAL, HEAVY) to determine which configurations where valgrind will run.")
 
+        params.addParam('libtorch_devices', ['CPU'], "The devices to use for this libtorch test ('CPU', 'CUDA', 'MPS'); default ('CPU')")
+
         return params
 
     def __init__(self, name, params):
@@ -62,8 +64,18 @@ class RunApp(Tester):
             self.force_mpi = False
 
         # Make sure that either input or command is supplied
-        if not (params.isValid('input') or params.isValid('command') or params['no_additional_cli_args']):
-            raise Exception('One of "input", "command", or "no_additional_cli_args" must be supplied for a RunApp test')
+        if not (params.isValid('input') or params.isValid('command') or params.isValid("command_proxy") or params['no_additional_cli_args']):
+            raise Exception('One of "input", "command", "command_proxy", or "no_additional_cli_args" must be supplied for a RunApp test')
+
+        if params.isValid('command_proxy'):
+            params['use_shell'] = True
+            # Not compatible with each other due to the return break in runCommand()
+            if params['no_additional_cli_args']:
+                raise Exception('The parameters "command_proxy" and "no_additional_cli_args" cannot be supplied together')
+
+        for value in params['libtorch_devices']:
+            if value.lower() not in ['cpu', 'cuda', 'mps']:
+                raise Exception(f'Unknown libtorch_device "{value}')
 
     def getInputFile(self):
         if self.specs.isValid('input'):
@@ -97,6 +109,13 @@ class RunApp(Tester):
         if self.specs.isValid('min_threads') or self.specs.isValid('max_threads'):
             if 'NONE' in options._checks['threading'] and self.getThreads(options) > 1:
                 self.addCaveats('threading_model=None')
+                self.setStatus(self.skip)
+                return False
+
+        if self.specs['libtorch']:
+            devices_lower = [x.lower() for x in self.specs['libtorch_devices']]
+            if options.libtorch_device not in devices_lower:
+                self.addCaveats(f'{options.libtorch_device} not in libtorch_devices')
                 self.setStatus(self.skip)
                 return False
 
@@ -190,9 +209,8 @@ class RunApp(Tester):
         if options.scaling and specs['scale_refine'] > 0:
             cli_args.insert(0, ' -r ' + str(specs['scale_refine']))
 
-        # The test harness should never use GDB backtraces: they don't
-        # work well when dozens of expect_err jobs run at the same time.
-        cli_args.append('--no-gdb-backtrace')
+        if specs['libtorch']:
+            cli_args.append(f'--libtorch-device {options.libtorch_device}')
 
         # Get the number of processors and threads the Tester requires
         ncpus = self.getProcs(options)
@@ -208,7 +226,12 @@ class RunApp(Tester):
             command = command + ' --n-threads=' + str(nthreads)
 
         if self.force_mpi or options.parallel or ncpus > 1:
-            command = self.mpi_command + ' -n ' + str(ncpus) + ' ' + command
+            command = f'{self.mpi_command} -n {ncpus} {command}'
+
+        # Arbitrary proxy command, but keep track of the command so that someone could use it later
+        if specs.isValid('command_proxy'):
+            command = command.replace('"', r'\"')
+            return f'RUNAPP_COMMAND="{command}" {os.path.join(specs["test_dir"], specs["command_proxy"])}'
 
         return command
 

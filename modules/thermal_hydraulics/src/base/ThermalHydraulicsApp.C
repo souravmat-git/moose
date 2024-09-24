@@ -9,7 +9,7 @@
 
 #include "ThermalHydraulicsApp.h"
 #include "THMSyntax.h"
-#include "HeatConductionApp.h"
+#include "HeatTransferApp.h"
 #include "FluidPropertiesApp.h"
 #include "NavierStokesApp.h"
 #include "RayTracingApp.h"
@@ -18,7 +18,9 @@
 #include "MiscApp.h"
 
 #include "AppFactory.h"
+#include "Simulation.h"
 
+#include "FlowModelSinglePhase.h"
 #include "SinglePhaseFluidProperties.h"
 #include "TwoPhaseFluidProperties.h"
 #include "TwoPhaseNCGFluidProperties.h"
@@ -52,6 +54,7 @@ ThermalHydraulicsApp::validParams()
   InputParameters params = MooseApp::validParams();
   params.set<bool>("use_legacy_output_syntax") = false;
   params.set<bool>("use_legacy_material_output") = false;
+  params.set<bool>("use_legacy_initial_residual_evaluation_behavior") = false;
   return params;
 }
 
@@ -88,7 +91,7 @@ ThermalHydraulicsApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
   Registry::registerObjectsTo(f, {"ThermalHydraulicsApp"});
   Registry::registerActionsTo(af, {"ThermalHydraulicsApp"});
 
-  HeatConductionApp::registerAll(f, af, s);
+  HeatTransferApp::registerAll(f, af, s);
   FluidPropertiesApp::registerAll(f, af, s);
   NavierStokesApp::registerAll(f, af, s);
   RayTracingApp::registerAll(f, af, s);
@@ -104,6 +107,15 @@ ThermalHydraulicsApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
 
   // flow models
   registerFlowModel(THM::FM_SINGLE_PHASE, FlowModelSinglePhase);
+
+  // Component variable ordering:
+  // Note that this particular order ({rhoA, rhoEA, rhouA}) corresponds to the
+  // the alphabetic ordering, which was the ordering used before this ordering
+  // feature was implemented. We preserve this order for ease of transition,
+  // but an order such as {rhoA, rhouA, rhoEA} may work as well.
+  Simulation::setComponentVariableOrder(FlowModelSinglePhase::RHOA, 0);
+  Simulation::setComponentVariableOrder(FlowModelSinglePhase::RHOEA, 1);
+  Simulation::setComponentVariableOrder(FlowModelSinglePhase::RHOUA, 2);
 }
 
 const std::string &
@@ -121,6 +133,14 @@ void
 ThermalHydraulicsApp::registerApps()
 {
   registerApp(ThermalHydraulicsApp);
+
+  HeatTransferApp::registerApps();
+  FluidPropertiesApp::registerApps();
+  NavierStokesApp::registerApps();
+  RayTracingApp::registerApps();
+  RdgApp::registerApps();
+  SolidPropertiesApp::registerApps();
+  MiscApp::registerApps();
 }
 
 const std::string &

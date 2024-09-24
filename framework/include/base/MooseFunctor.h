@@ -30,6 +30,92 @@
 namespace Moose
 {
 /**
+ * An enumeration of possible functor evaluation kinds. The available options are value, gradient,
+ * time derivative (dot), and gradient of time derivative (gradDot)
+ */
+enum class FunctorEvaluationKind
+{
+  Value,
+  Gradient,
+  Dot,
+  GradDot
+};
+
+/**
+ * A structure that defines the return type of a functor based on the type of the functor and the
+ * requested evaluation kind, e.g. value, gradient, time derivative, or gradient of time derivative
+ */
+template <typename, FunctorEvaluationKind>
+struct FunctorReturnType;
+
+/**
+ * The return type for a value evaluation is just the type of the functor
+ */
+template <typename T>
+struct FunctorReturnType<T, FunctorEvaluationKind::Value>
+{
+  typedef T type;
+};
+
+/**
+ * The return type of a gradient evaluation is the rank increment of a value return type. So if the
+ * value type is Real, then a gradient will be a VectorValue<Real>. This also allows for containers
+ * of mathematical types. So if a value type is std::vector<Real>, then the gradient type will be
+ * std::vector<VectorValue<Real>>
+ */
+template <typename T>
+struct FunctorReturnType<T, FunctorEvaluationKind::Gradient>
+{
+  typedef typename MetaPhysicL::ReplaceAlgebraicType<
+      T,
+      typename TensorTools::IncrementRank<typename MetaPhysicL::ValueType<T>::type>::type>::type
+      type;
+};
+
+/**
+ * The return type of a time derivative evaluation is the same as the value type
+ */
+template <typename T>
+struct FunctorReturnType<T, FunctorEvaluationKind::Dot>
+{
+  typedef T type;
+};
+
+/**
+ * The return type of a gradient of time derivative evaluation is the same as the gradient type
+ */
+template <typename T>
+struct FunctorReturnType<T, FunctorEvaluationKind::GradDot>
+{
+  typedef typename FunctorReturnType<T, FunctorEvaluationKind::Gradient>::type type;
+};
+
+/**
+ * This structure takes an evaluation kind as a template argument and defines a constant expression
+ * indicating the associated gradient kind
+ */
+template <FunctorEvaluationKind>
+struct FunctorGradientEvaluationKind;
+
+/**
+ * The gradient kind associated with a value is simply the gradient
+ */
+template <>
+struct FunctorGradientEvaluationKind<FunctorEvaluationKind::Value>
+{
+  static constexpr FunctorEvaluationKind value = FunctorEvaluationKind::Gradient;
+};
+
+/**
+ * The gradient kind associated with a time derivative is the gradient of the time derivative
+ */
+template <>
+struct FunctorGradientEvaluationKind<FunctorEvaluationKind::Dot>
+{
+  static constexpr FunctorEvaluationKind value = FunctorEvaluationKind::GradDot;
+};
+
+/**
  * Abstract base class that can be used to hold collections of functors
  */
 class FunctorAbstract : public FaceArgInterface
@@ -52,7 +138,6 @@ class FunctorBase : public FunctorAbstract
 {
 public:
   using FunctorType = FunctorBase<T>;
-  using FunctorReturnType = T;
   using ValueType = T;
   /// This rigmarole makes it so that a user can create functors that return containers (std::vector,
   /// std::array). This logic will make it such that if a user requests a functor type T that is a
@@ -61,17 +146,25 @@ public:
   /// std::vector<Real>, then GradientType will be std::vector<VectorValue<Real>>. As another
   /// example: T = std::array<VectorValue<Real>, 1> -> GradientType = std::array<TensorValue<Real>,
   /// 1>
-  using GradientType = typename MetaPhysicL::ReplaceAlgebraicType<
-      T,
-      typename TensorTools::IncrementRank<typename MetaPhysicL::ValueType<T>::type>::type>::type;
+  using GradientType = typename FunctorReturnType<T, FunctorEvaluationKind::Gradient>::type;
   using DotType = ValueType;
 
   virtual ~FunctorBase() = default;
   FunctorBase(const MooseFunctorName & name,
               const std::set<ExecFlagType> & clearance_schedule = {EXEC_ALWAYS})
-    : _clearance_schedule(clearance_schedule), _functor_name(name)
+    : _always_evaluate(true), _functor_name(name)
+
   {
+    setCacheClearanceSchedule(clearance_schedule);
   }
+
+  /**
+   * Perform a generic evaluation based on the supplied template argument \p FET and supplied
+   * spatial and temporal arguments
+   */
+  template <FunctorEvaluationKind FET, typename Space, typename State>
+  typename FunctorReturnType<T, FET>::type genericEvaluate(const Space & r,
+                                                           const State & state) const;
 
   /// Return the functor name
   const MooseFunctorName & functorName() const { return _functor_name; }
@@ -178,7 +271,17 @@ public:
    * @return A face with possibly changed sidedness depending on whether we aren't defined on both
    * sides of the face
    */
-  Moose::FaceArg checkFace(const Moose::FaceArg & face) const;
+  void checkFace(const Moose::FaceArg & face) const;
+
+  /**
+   * Whether this functor supports evaluation with FaceArg
+   */
+  virtual bool supportsFaceArg() const = 0;
+
+  /**
+   * Whether this functor supports evaluation with ElemSideQpArg
+   */
+  virtual bool supportsElemSideQpArg() const = 0;
 
 protected:
   /** @name Functor evaluation routines
@@ -410,6 +513,9 @@ private:
   /// How often to clear the material property cache
   std::set<ExecFlagType> _clearance_schedule;
 
+  /// Boolean to check if we always need evaluation
+  bool _always_evaluate;
+
   // Data for traditional element-quadrature point property evaluations which are useful for
   // caching implementation
 
@@ -490,7 +596,7 @@ template <typename T>
 typename FunctorBase<T>::ValueType
 FunctorBase<T>::operator()(const ElemArg & elem, const StateArg & state) const
 {
-  if (_clearance_schedule.count(EXEC_ALWAYS))
+  if (_always_evaluate)
     return evaluate(elem, state);
 
   mooseAssert(state.state == 0,
@@ -503,15 +609,15 @@ template <typename T>
 typename FunctorBase<T>::ValueType
 FunctorBase<T>::operator()(const FaceArg & face_in, const StateArg & state) const
 {
-  const auto face = checkFace(face_in);
+  checkFace(face_in);
 
-  if (_clearance_schedule.count(EXEC_ALWAYS))
-    return evaluate(face, state);
+  if (_always_evaluate)
+    return evaluate(face_in, state);
 
   mooseAssert(state.state == 0,
               "Cached evaluations are only currently supported for the current state.");
 
-  return queryFVArgCache(_face_arg_to_value, face);
+  return queryFVArgCache(_face_arg_to_value, face_in);
 }
 
 template <typename T>
@@ -549,7 +655,7 @@ template <typename T>
 typename FunctorBase<T>::ValueType
 FunctorBase<T>::operator()(const ElemQpArg & elem_qp, const StateArg & state) const
 {
-  if (_clearance_schedule.count(EXEC_ALWAYS))
+  if (_always_evaluate)
     return evaluate(elem_qp, state);
 
   const auto elem_id = elem_qp.elem->id();
@@ -570,7 +676,7 @@ template <typename T>
 typename FunctorBase<T>::ValueType
 FunctorBase<T>::operator()(const ElemSideQpArg & elem_side_qp, const StateArg & state) const
 {
-  if (_clearance_schedule.count(EXEC_ALWAYS))
+  if (_always_evaluate)
     return evaluate(elem_side_qp, state);
 
   const Elem * const elem = elem_side_qp.elem;
@@ -607,6 +713,9 @@ template <typename T>
 void
 FunctorBase<T>::setCacheClearanceSchedule(const std::set<ExecFlagType> & clearance_schedule)
 {
+  if (clearance_schedule.count(EXEC_ALWAYS))
+    _always_evaluate = true;
+
   _clearance_schedule = clearance_schedule;
 }
 
@@ -618,27 +727,26 @@ FunctorBase<T>::operator()(const NodeArg & node, const StateArg & state) const
 }
 
 template <typename T>
-FaceArg
-FunctorBase<T>::checkFace(const Moose::FaceArg & face) const
+void
+FunctorBase<T>::checkFace(const Moose::FaceArg &
+#if DEBUG
+                              face
+#endif
+) const
 {
+#if DEBUG
   const Elem * const elem = face.face_side;
   const FaceInfo * const fi = face.fi;
   mooseAssert(fi, "face info should be non-null");
-  auto ret_face = face;
   bool check_elem_def = false;
   bool check_neighbor_def = false;
+  // We check if the functor is defined on both sides of the face
   if (!elem)
   {
     if (!hasFaceSide(*fi, true))
-    {
-      ret_face.face_side = fi->neighborPtr();
       check_neighbor_def = true;
-    }
     else if (!hasFaceSide(*fi, false))
-    {
-      ret_face.face_side = fi->elemPtr();
       check_elem_def = true;
-    }
   }
   else if (elem == fi->elemPtr())
     check_elem_def = true;
@@ -672,8 +780,7 @@ FunctorBase<T>::checkFace(const Moose::FaceArg & face) const
         "producer (e.g. residual object, postprocessor, etc.) has requested evaluation there.\n",
         additional_message);
   }
-
-  return ret_face;
+#endif
 }
 
 template <typename T>
@@ -745,7 +852,8 @@ template <typename T>
 typename FunctorBase<T>::GradientType
 FunctorBase<T>::gradient(const FaceArg & face, const StateArg & state) const
 {
-  return evaluateGradient(checkFace(face), state);
+  checkFace(face);
+  return evaluateGradient(face, state);
 }
 
 template <typename T>
@@ -787,7 +895,8 @@ template <typename T>
 typename FunctorBase<T>::DotType
 FunctorBase<T>::dot(const FaceArg & face, const StateArg & state) const
 {
-  return evaluateDot(checkFace(face), state);
+  checkFace(face);
+  return evaluateDot(face, state);
 }
 
 template <typename T>
@@ -829,7 +938,8 @@ template <typename T>
 typename FunctorBase<T>::GradientType
 FunctorBase<T>::gradDot(const FaceArg & face, const StateArg & state) const
 {
-  return evaluateGradDot(checkFace(face), state);
+  checkFace(face);
+  return evaluateGradDot(face, state);
 }
 
 template <typename T>
@@ -868,6 +978,21 @@ FunctorBase<T>::hasFaceSide(const FaceInfo & fi, const bool fi_elem_side) const
     return hasBlocks(fi.elem().subdomain_id());
   else
     return fi.neighborPtr() && hasBlocks(fi.neighbor().subdomain_id());
+}
+
+template <typename T>
+template <FunctorEvaluationKind FET, typename Space, typename State>
+typename FunctorReturnType<T, FET>::type
+FunctorBase<T>::genericEvaluate(const Space & r, const State & state) const
+{
+  if constexpr (FET == FunctorEvaluationKind::Value)
+    return (*this)(r, state);
+  else if constexpr (FET == FunctorEvaluationKind::Gradient)
+    return gradient(r, state);
+  else if constexpr (FET == FunctorEvaluationKind::Dot)
+    return dot(r, state);
+  else
+    return gradDot(r, state);
 }
 
 /**
@@ -1012,6 +1137,9 @@ public:
     return _wrapped->hasFaceSide(fi, fi_elem_side);
   }
 
+  bool supportsFaceArg() const override final { return true; }
+  bool supportsElemSideQpArg() const override final { return true; }
+
 protected:
   ///@{
   /**
@@ -1139,7 +1267,6 @@ class ConstantFunctor final : public FunctorBase<T>
 {
 public:
   using typename FunctorBase<T>::FunctorType;
-  using typename FunctorBase<T>::FunctorReturnType;
   using typename FunctorBase<T>::ValueType;
   using typename FunctorBase<T>::GradientType;
   using typename FunctorBase<T>::DotType;
@@ -1156,6 +1283,9 @@ public:
   virtual bool isConstant() const override { return true; }
 
   bool hasBlocks(SubdomainID /* id */) const override { return true; }
+
+  bool supportsFaceArg() const override final { return true; }
+  bool supportsElemSideQpArg() const override final { return true; }
 
 private:
   ValueType evaluate(const ElemArg &, const StateArg &) const override { return _value; }
@@ -1202,7 +1332,6 @@ class NullFunctor final : public FunctorBase<T>
 {
 public:
   using typename FunctorBase<T>::FunctorType;
-  using typename FunctorBase<T>::FunctorReturnType;
   using typename FunctorBase<T>::ValueType;
   using typename FunctorBase<T>::GradientType;
   using typename FunctorBase<T>::DotType;
@@ -1211,6 +1340,9 @@ public:
 
   // For backwards compatiblity of unit testing
   bool hasFaceSide(const FaceInfo & fi, bool) const override;
+
+  bool supportsFaceArg() const override final { return false; }
+  bool supportsElemSideQpArg() const override final { return false; }
 
 private:
   ValueType evaluate(const ElemArg &, const StateArg &) const override

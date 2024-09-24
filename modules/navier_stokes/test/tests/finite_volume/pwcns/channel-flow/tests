@@ -13,6 +13,16 @@
     design = 'PINSFVEnergyTimeDerivative.md'
     recover = false # see #19126
   []
+  [transient-gas]
+    type = 'CSVDiff'
+    input = 2d-transient-gas.i
+    csvdiff = 2d-transient-gas_out.csv
+    abs_zero = 1e-9
+    issues = '#21245'
+    requirement = 'The system shall be able to solve transient relaxations within the weakly compressible approximation, using the time derivative of the specific enthalpy for the time derivative.'
+    design = 'PINSFVEnergyTimeDerivative.md'
+    recover = false # see #19126
+  []
   [transient-action]
     type = 'Exodiff'
     input = 2d-transient-action.i
@@ -21,6 +31,17 @@
     abs_zero = 1e-9
     issues = '#19472'
     requirement = 'The system shall be able to solve weakly compressible transient problems with the NSFV action syntax.'
+    valgrind = HEAVY
+    recover = false # see #19126
+  []
+  [transient-physics]
+    type = 'Exodiff'
+    input = 2d-transient-physics.i
+    exodiff = 2d-transient-physics_out.e
+    method = "!dbg"
+    abs_zero = 1e-9
+    issues = '#25642'
+    requirement = 'The system shall be able to solve weakly compressible transient problems with flow physics syntax.'
     valgrind = HEAVY
     recover = false # see #19126
   []

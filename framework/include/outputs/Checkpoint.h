@@ -11,21 +11,24 @@
 
 // MOOSE includes
 #include "FileOutput.h"
+#include "AutoCheckpointAction.h"
 
 #include <deque>
 #include <filesystem>
 
 /**
- * Shortcut for determining what type of autosave this checkpoint is.
- * NONE: Not an autosave checkpoint
- * MODIFIED_EXISTING: We took an existing checkpoint and enabled autosave checks on it.
- * SYSTEM_AUTOSAVE: These checkpoints run in the background and output only when sent a signal.
+ * Enumerated type for determining what type of checkpoint this is.
+ * SYSTEM_CREATED: This type of checkpoint is created automatically by the
+ *   system for the purpose of writing checkpoints at regularly scheduled
+ *   walltime intervals or when sent a signal.
+ * USER_CREATED: Checkpoint is requested by the user in the input
+ *   file, and can be used by the system to also output at walltime intervals or
+ *   when sent a signal.
  */
-enum AutosaveType : unsigned short
+enum CheckpointType : unsigned short
 {
-  NONE,
-  MODIFIED_EXISTING,
-  SYSTEM_AUTOSAVE
+  SYSTEM_CREATED,
+  USER_CREATED
 };
 
 class MaterialPropertyStorage;
@@ -40,6 +43,12 @@ struct CheckpointFileNames
 
   /// Filenames for restartable data
   std::vector<std::filesystem::path> restart;
+
+  bool operator==(const CheckpointFileNames & rhs) const
+  {
+    // Compare the relevant members for equality
+    return (this->checkpoint == rhs.checkpoint) && (this->restart == rhs.restart);
+  }
 };
 
 /**
@@ -53,6 +62,9 @@ struct CheckpointFileNames
  */
 class Checkpoint : public FileOutput
 {
+
+  friend class AutoCheckpointAction;
+
 public:
   static InputParameters validParams();
 
@@ -73,11 +85,18 @@ public:
    */
   std::string directory() const;
 
-  /// Output all necessary data for a single timestep.
-  virtual void outputStep(const ExecFlagType & type) override;
-
   /// Sets the autosave flag manually if the object has already been initialized.
-  void setAutosaveFlag(AutosaveType flag) { _is_autosave = flag; }
+  void setAutosaveFlag(CheckpointType flag) { _checkpoint_type = flag; }
+
+  /**
+   * Gathers and records information used later for console output
+   * @return A stringstream containing the following entries:
+   * Wall Time Interval : interval length in seconds, if any, otherwise "Disabled"
+   * User Checkpoint    : name of user-define checkpoint, if any, otherwise "Disabled"
+   * # Checkpoints Kept : value if the 'num_files' parameter
+   * Execute On         : value of the 'execute_on' parameter
+   */
+  std::stringstream checkpointInfo() const;
 
 protected:
   /**
@@ -92,8 +111,11 @@ protected:
 private:
   void updateCheckpointFiles(CheckpointFileNames file_struct);
 
+  /// Determines if the requested values of execute_on are valid for checkpoints
+  void validateExecuteOn() const;
+
   /// Determines if this checkpoint is an autosave, and what kind of autosave it is.
-  AutosaveType _is_autosave;
+  CheckpointType _checkpoint_type;
 
   /// Max no. of output files to store
   unsigned int _num_files;

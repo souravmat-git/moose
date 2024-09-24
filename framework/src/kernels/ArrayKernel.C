@@ -31,7 +31,7 @@ ArrayKernel::ArrayKernel(const InputParameters & parameters)
     MooseVariableInterface<RealEigenVector>(this,
                                             false,
                                             "variable",
-                                            Moose::VarKindType::VAR_NONLINEAR,
+                                            Moose::VarKindType::VAR_SOLVER,
                                             Moose::VarFieldType::VAR_FIELD_ARRAY),
     _var(*mooseVariable()),
     _test(_var.phi()),
@@ -53,7 +53,7 @@ ArrayKernel::ArrayKernel(const InputParameters & parameters)
   {
     ArrayMooseVariable * var = &_subproblem.getArrayVariable(_tid, _save_in_strings[i]);
 
-    if (_fe_problem.getNonlinearSystemBase().hasVariable(_save_in_strings[i]))
+    if (_fe_problem.getNonlinearSystemBase(_sys.number()).hasVariable(_save_in_strings[i]))
       paramError("save_in", "cannot use solution variable as save-in variable");
 
     if (var->feType() != _var.feType())
@@ -73,7 +73,7 @@ ArrayKernel::ArrayKernel(const InputParameters & parameters)
   {
     ArrayMooseVariable * var = &_subproblem.getArrayVariable(_tid, _diag_save_in_strings[i]);
 
-    if (_fe_problem.getNonlinearSystemBase().hasVariable(_diag_save_in_strings[i]))
+    if (_fe_problem.getNonlinearSystemBase(_sys.number()).hasVariable(_diag_save_in_strings[i]))
       paramError("diag_save_in", "cannot use solution variable as diag save-in variable");
 
     if (var->feType() != _var.feType())

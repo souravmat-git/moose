@@ -17,6 +17,7 @@
 #include "ActionFactory.h"
 #include "AddAuxVariableAction.h"
 #include "MooseUtils.h"
+#include "BlockRestrictionDebugOutput.h"
 
 registerMooseAction("MooseApp", SetupDebugAction, "add_output");
 
@@ -45,6 +46,7 @@ SetupDebugAction::validParams()
   ExecFlagEnum print_on = MooseUtils::getDefaultExecFlagEnum();
   print_on.addAvailableFlags(EXEC_TRANSFER);
   print_on.addAvailableFlags(EXEC_FAILED);
+  print_on.addAvailableFlags(EXEC_ALWAYS);
   params.addParam<ExecFlagEnum>(
       "show_execution_order",
       print_on,
@@ -59,6 +61,10 @@ SetupDebugAction::validParams()
       "Add a AuxVariable named \"pid\" that shows the partitioning for each process");
   params.addParam<bool>(
       "show_functors", false, "Whether to print information about the functors in the problem");
+  params.addParam<MultiMooseEnum>(
+      "show_block_restriction",
+      BlockRestrictionDebugOutput::getScopes("none"),
+      "Print out active objects like variables supplied for each block.");
 
   params.addClassDescription("Adds various debugging type output to the simulation system.");
 
@@ -142,4 +148,15 @@ SetupDebugAction::act()
   // Add functor output
   if (getParam<bool>("show_functors"))
     _problem->setFunctorOutput(getParam<bool>("show_functors"));
+
+  // Block-restriction
+  const MultiMooseEnum & block_restriction_scope =
+      _pars.get<MultiMooseEnum>("show_block_restriction");
+  if (block_restriction_scope.isValid() && !block_restriction_scope.contains("none"))
+  {
+    const std::string type = "BlockRestrictionDebugOutput";
+    auto params = _factory.getValidParams(type);
+    params.set<MultiMooseEnum>("scope") = block_restriction_scope;
+    _problem->addOutput(type, "_moose_block_restriction_debug_output", params);
+  }
 }

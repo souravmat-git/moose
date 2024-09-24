@@ -23,6 +23,7 @@
 #include "MooseTypes.h"
 #include "PiecewiseByBlockLambdaFunctor.h"
 #include "libmesh/elem.h"
+#include "MooseMain.h"
 
 #include <memory>
 
@@ -37,7 +38,7 @@ TEST(ContainerFunctors, Test)
   MultiMooseEnum coord_type_enum("XYZ RZ RSPHERICAL", "XYZ");
 
   constexpr auto nx = 2;
-  auto app = AppFactory::createAppShared("MooseUnitApp", 1, (char **)argv);
+  auto app = Moose::createMooseApp("MooseUnitApp", 1, (char **)argv);
   auto * factory = &app->getFactory();
   std::string mesh_type = "MeshGeneratorMesh";
 
@@ -65,8 +66,9 @@ TEST(ContainerFunctors, Test)
   mesh->setCoordSystem({}, coord_type_enum);
   mooseAssert(mesh->getAxisymmetricRadialCoord() == 0,
               "This should be 0 because we haven't set anything.");
+  mesh->buildFiniteVolumeInfo();
+  mesh->computeFiniteVolumeCoords();
   const auto & all_fi = mesh->allFaceInfo();
-  mesh->computeFaceInfoFaceCoords();
   std::vector<const FaceInfo *> faces(all_fi.size());
   for (const auto i : index_range(all_fi))
     faces[i] = &all_fi[i];
@@ -89,7 +91,8 @@ TEST(ContainerFunctors, Test)
   for (const auto limiter_type : limiter_types)
     for (const auto * const face : faces)
     {
-      const auto face_arg = Moose::FaceArg({face, limiter_type, true, false, nullptr});
+      const auto elem = vector_functor.isInternalFace(*face) ? nullptr : face->elemPtr();
+      const auto face_arg = Moose::FaceArg({face, limiter_type, true, false, elem});
       const auto current_time = Moose::currentState();
       EXPECT_TRUE(vector_functor(face_arg, current_time)[0] == 1.);
       EXPECT_TRUE(array_functor(face_arg, current_time)[0] == 1.);

@@ -33,7 +33,8 @@ InputParameters
 MooseVariableFE<RealVectorValue>::validParams()
 {
   auto params = MooseVariableField<RealVectorValue>::validParams();
-  params.addClassDescription("Represents vector field variables, e.g. Vector Lagrange or Nedelec");
+  params.addClassDescription(
+      "Represents vector field variables, e.g. Vector Lagrange, Nedelec or Raviart-Thomas");
   return params;
 }
 
@@ -77,20 +78,6 @@ MooseVariableFE<OutputType>::MooseVariableFE(const InputParameters & parameters)
                                                       this->_assembly.qRuleFace(), // Place holder
                                                       this->_assembly.node(),      // Place holder
                                                       this->_assembly.lowerDElem());
-}
-
-template <typename OutputType>
-Moose::VarFieldType
-MooseVariableFE<OutputType>::fieldType() const
-{
-  if (std::is_same<OutputType, Real>::value)
-    return Moose::VarFieldType::VAR_FIELD_STANDARD;
-  else if (std::is_same<OutputType, RealVectorValue>::value)
-    return Moose::VarFieldType::VAR_FIELD_VECTOR;
-  else if (std::is_same<OutputType, RealEigenVector>::value)
-    return Moose::VarFieldType::VAR_FIELD_ARRAY;
-  else
-    mooseError("Unknown variable field type");
 }
 
 template <typename OutputType>
@@ -217,16 +204,23 @@ MooseVariableFE<OutputType>::getElementalValueOlder(const Elem * elem, unsigned 
 
 template <typename OutputType>
 void
-MooseVariableFE<OutputType>::insert(NumericVector<Number> & residual)
+MooseVariableFE<OutputType>::insert(NumericVector<Number> & vector)
 {
-  _element_data->insert(residual);
+  _element_data->insert(vector);
 }
 
 template <typename OutputType>
 void
-MooseVariableFE<OutputType>::add(NumericVector<Number> & residual)
+MooseVariableFE<OutputType>::insertLower(NumericVector<Number> & vector)
 {
-  _element_data->add(residual);
+  _lower_data->insert(vector);
+}
+
+template <typename OutputType>
+void
+MooseVariableFE<OutputType>::add(NumericVector<Number> & vector)
+{
+  _element_data->add(vector);
 }
 
 template <typename OutputType>
@@ -703,24 +697,17 @@ MooseVariableFE<OutputType>::setDofValues(const DenseVector<OutputData> & values
 
 template <typename OutputType>
 void
+MooseVariableFE<OutputType>::setLowerDofValues(const DenseVector<OutputData> & values)
+{
+  _lower_data->setDofValues(values);
+}
+
+template <typename OutputType>
+void
 MooseVariableFE<OutputType>::insertNodalValue(NumericVector<Number> & residual,
                                               const OutputData & v)
 {
   _element_data->insertNodalValue(residual, v);
-}
-
-template <typename OutputType>
-bool
-MooseVariableFE<OutputType>::isArray() const
-{
-  return std::is_same<OutputType, RealEigenVector>::value;
-}
-
-template <typename OutputType>
-bool
-MooseVariableFE<OutputType>::isVector() const
-{
-  return std::is_same<OutputType, RealVectorValue>::value;
 }
 
 template <typename OutputType>
@@ -738,6 +725,13 @@ MooseVariableFE<OutputType>::curlPhi() const
 }
 
 template <typename OutputType>
+const typename MooseVariableFE<OutputType>::FieldVariablePhiDivergence &
+MooseVariableFE<OutputType>::divPhi() const
+{
+  return _element_data->divPhi();
+}
+
+template <typename OutputType>
 const typename MooseVariableFE<OutputType>::FieldVariablePhiSecond &
 MooseVariableFE<OutputType>::secondPhiFace() const
 {
@@ -749,6 +743,13 @@ const typename MooseVariableFE<OutputType>::FieldVariablePhiCurl &
 MooseVariableFE<OutputType>::curlPhiFace() const
 {
   return _element_data->curlPhiFace();
+}
+
+template <typename OutputType>
+const typename MooseVariableFE<OutputType>::FieldVariablePhiDivergence &
+MooseVariableFE<OutputType>::divPhiFace() const
+{
+  return _element_data->divPhiFace();
 }
 
 template <typename OutputType>
@@ -766,6 +767,13 @@ MooseVariableFE<OutputType>::curlPhiNeighbor() const
 }
 
 template <typename OutputType>
+const typename MooseVariableFE<OutputType>::FieldVariablePhiDivergence &
+MooseVariableFE<OutputType>::divPhiNeighbor() const
+{
+  return _neighbor_data->divPhi();
+}
+
+template <typename OutputType>
 const typename MooseVariableFE<OutputType>::FieldVariablePhiSecond &
 MooseVariableFE<OutputType>::secondPhiFaceNeighbor() const
 {
@@ -777,6 +785,13 @@ const typename MooseVariableFE<OutputType>::FieldVariablePhiCurl &
 MooseVariableFE<OutputType>::curlPhiFaceNeighbor() const
 {
   return _neighbor_data->curlPhiFace();
+}
+
+template <typename OutputType>
+const typename MooseVariableFE<OutputType>::FieldVariablePhiDivergence &
+MooseVariableFE<OutputType>::divPhiFaceNeighbor() const
+{
+  return _neighbor_data->divPhiFace();
 }
 
 template <typename OutputType>
@@ -798,6 +813,13 @@ bool
 MooseVariableFE<OutputType>::computingCurl() const
 {
   return _element_data->computingCurl();
+}
+
+template <typename OutputType>
+bool
+MooseVariableFE<OutputType>::computingDiv() const
+{
+  return _element_data->computingDiv();
 }
 
 template <typename OutputType>
@@ -918,7 +940,7 @@ MooseVariableFE<OutputType>::computeSolution(const Elem * const elem,
       Moose::derivInsert(dof_values.back().derivatives(), dof_index, 1.);
     if (computing_dot)
     {
-      if (_var_kind == Moose::VAR_NONLINEAR)
+      if (_var_kind == Moose::VAR_SOLVER)
       {
         dof_values_dot.push_back(dof_values.back());
         _time_integrator->computeADTimeDerivatives(
@@ -966,7 +988,8 @@ MooseVariableFE<OutputType>::evaluateOnElement(const ElemQpArg & elem_qp,
                                                const bool cache_eligible) const
 {
   mooseAssert(this->hasBlocks(elem_qp.elem->subdomain_id()),
-              "This variable doesn't exist in the requested block!");
+              "Variable " + this->name() + " doesn't exist on block " +
+                  std::to_string(elem_qp.elem->subdomain_id()));
 
   const Elem * const elem = elem_qp.elem;
   if (!cache_eligible || (elem != _current_elem_qp_functor_elem))
@@ -975,8 +998,7 @@ MooseVariableFE<OutputType>::evaluateOnElement(const ElemQpArg & elem_qp,
 
     using FEBaseType = typename FEBaseHelper<OutputType>::type;
     std::unique_ptr<FEBaseType> fe(FEBaseType::build(elem->dim(), _fe_type));
-    std::unique_ptr<QBase> qrule(QBase::build(
-        qrule_template->type(), qrule_template->get_dim(), qrule_template->get_order()));
+    auto qrule = qrule_template->clone();
 
     const auto & phi = fe->get_phi();
     const auto & dphi = fe->get_dphi();
@@ -1122,9 +1144,12 @@ template <typename OutputType>
 typename MooseVariableFE<OutputType>::DotType
 MooseVariableFE<OutputType>::evaluateDot(const ElemQpArg & elem_qp, const StateArg & state) const
 {
-  mooseAssert(_time_integrator && _time_integrator->dt(),
+  mooseAssert(_time_integrator,
               "A time derivative is being requested but we do not have a time integrator so we'll "
               "have no idea how to compute it");
+  mooseAssert(_time_integrator->dt(),
+              "A time derivative is being requested but the time integrator wants to perform a 0s "
+              "time step");
   evaluateOnElement(elem_qp, state, /*query_cache=*/true);
   const auto qp = elem_qp.qp;
   mooseAssert(qp < _current_elem_qp_functor_dot.size(),
@@ -1136,9 +1161,12 @@ template <typename OutputType>
 typename MooseVariableFE<OutputType>::DotType
 MooseVariableFE<OutputType>::evaluateDot(const ElemArg & elem_arg, const StateArg & state) const
 {
-  mooseAssert(_time_integrator && _time_integrator->dt(),
+  mooseAssert(_time_integrator,
               "A time derivative is being requested but we do not have a time integrator so we'll "
               "have no idea how to compute it");
+  mooseAssert(_time_integrator->dt(),
+              "A time derivative is being requested but the time integrator wants to perform a 0s "
+              "time step");
   const QMonomial qrule(elem_arg.elem->dim(), CONSTANT);
   // We can use whatever we want for the point argument since it won't be used
   const ElemQpArg elem_qp_arg{elem_arg.elem, /*qp=*/0, &qrule, Point(0, 0, 0)};
@@ -1150,9 +1178,12 @@ template <typename OutputType>
 typename MooseVariableFE<OutputType>::GradientType
 MooseVariableFE<OutputType>::evaluateGradDot(const ElemArg & elem_arg, const StateArg & state) const
 {
-  mooseAssert(_time_integrator && _time_integrator->dt(),
+  mooseAssert(_time_integrator,
               "A time derivative is being requested but we do not have a time integrator so we'll "
               "have no idea how to compute it");
+  mooseAssert(_time_integrator->dt(),
+              "A time derivative is being requested but the time integrator wants to perform a 0s "
+              "time step");
   const QMonomial qrule(elem_arg.elem->dim(), CONSTANT);
   // We can use whatever we want for the point argument since it won't be used
   const ElemQpArg elem_qp_arg{elem_arg.elem, /*qp=*/0, &qrule, Point(0, 0, 0)};
@@ -1167,7 +1198,8 @@ MooseVariableFE<OutputType>::evaluateOnElementSide(const ElemSideQpArg & elem_si
                                                    const bool cache_eligible) const
 {
   mooseAssert(this->hasBlocks(elem_side_qp.elem->subdomain_id()),
-              "This variable doesn't exist in the requested block!");
+              "Variable " + this->name() + " doesn't exist on block " +
+                  std::to_string(elem_side_qp.elem->subdomain_id()));
 
   const Elem * const elem = elem_side_qp.elem;
   const auto side = elem_side_qp.side;
@@ -1178,8 +1210,7 @@ MooseVariableFE<OutputType>::evaluateOnElementSide(const ElemSideQpArg & elem_si
 
     using FEBaseType = typename FEBaseHelper<OutputType>::type;
     std::unique_ptr<FEBaseType> fe(FEBaseType::build(elem->dim(), _fe_type));
-    std::unique_ptr<QBase> qrule(QBase::build(
-        qrule_template->type(), qrule_template->get_dim(), qrule_template->get_order()));
+    auto qrule = qrule_template->clone();
 
     const auto & phi = fe->get_phi();
     const auto & dphi = fe->get_dphi();

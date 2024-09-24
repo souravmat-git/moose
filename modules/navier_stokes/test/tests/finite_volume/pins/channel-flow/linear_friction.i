@@ -35,13 +35,14 @@ rho = 1
 
     friction_types = 'darcy'
     friction_coeffs = 'friction_W'
+    standard_friction_formulation = true
 
     mass_advection_interpolation = 'average'
     momentum_advection_interpolation = 'average'
   []
 []
 
-[Materials]
+[FunctorMaterials]
   [const]
     type = ADGenericFunctorMaterial
     prop_names = 'rho mu'

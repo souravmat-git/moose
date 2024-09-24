@@ -19,6 +19,7 @@
 // libMesh includes
 #include "libmesh/cell_tet4.h"
 #include "libmesh/cell_tet10.h"
+#include "libmesh/cell_tet14.h"
 #include "libmesh/cell_hex8.h"
 #include "libmesh/cell_hex20.h"
 #include "libmesh/cell_hex27.h"
@@ -51,7 +52,7 @@ TraceRay::TraceRay(RayTracingStudy & study, const THREAD_ID tid)
     _tid(tid),
     _backface_culling(false),
     _current_normals(nullptr),
-    _results(FAILED_TRACES + 1)
+    _results(ENDED_STATIONARY + 1)
 {
 }
 
@@ -213,6 +214,15 @@ TraceRay::exitsElem(const Elem * elem,
       break;
     case TET10:
       intersected = exitsElem<Tet10, Tet4>(elem,
+                                           incoming_side,
+                                           intersection_point,
+                                           intersected_side,
+                                           intersected_extrema,
+                                           intersection_distance,
+                                           normals);
+      break;
+    case TET14:
+      intersected = exitsElem<Tet14, Tet4>(elem,
                                            incoming_side,
                                            intersection_point,
                                            intersected_side,
@@ -1022,7 +1032,7 @@ TraceRay::trace(const std::shared_ptr<Ray> & ray)
   traceAssert(_current_elem->active(), "Current element is not active");
   traceAssert(!ray->invalidCurrentPoint(), "Current point is invalid");
   traceAssert(ray->shouldContinue(), "Ray should not continue");
-  if (_study.verifyRays() && !ray->invalidCurrentIncomingSide() &&
+  if (_study.verifyRays() && !ray->invalidCurrentIncomingSide() && ray->maxDistance() > 0 &&
       !_study.sideIsNonPlanar(_current_elem, _incoming_side) &&
       !_study.sideIsIncoming(_current_elem, _incoming_side, ray->direction(), _tid))
     failTrace("Ray incoming side is not incoming", /* warning = */ false, __LINE__);
@@ -1101,13 +1111,23 @@ TraceRay::trace(const std::shared_ptr<Ray> & ray)
     _intersected_extrema.invalidate();
     _intersection_distance = RayTracingCommon::invalid_distance;
 
+    // Stationary ray
+    if (ray->stationary())
+    {
+      mooseAssert(ray->invalidDirection(), "Should have an invalid direction");
+      _exits_elem = true;
+      _intersection_point = _incoming_point;
+      _intersected_extrema = _last_intersected_extrema;
+      _intersection_distance = 0;
+      ++_results[ENDED_STATIONARY];
+    }
     // If we haven't hit a vertex or an edge, do the normal exit algorithm first.
     // In the case of a Ray that previously moved through point neighbors due to
     // being at a vertex/edge, this will be true because we do not communicate the
     // vertex/edge intersection. The previous processor already set us up for
     // the best intersection because it already computed it and chose to
-    // send it our way as such.
-    if (!_last_intersected_extrema.atExtrema())
+    // send it our way as such
+    else if (!_last_intersected_extrema.atExtrema())
     {
       traceAssert(_current_elem->processor_id() == _pid, "Trace elem not on processor");
       debugRay("Didn't hit vertex or edge: doing normal exits elem check");
@@ -1265,9 +1285,12 @@ TraceRay::trace(const std::shared_ptr<Ray> & ray)
     debugRay("  _intersection_distance = ", _intersection_distance);
 
     // Increment intersections
-    debugRay("Incrementing ray intersections by 1 to ", ray->intersections() + 1);
-    ray->addIntersection();
-    _results[INTERSECTIONS]++;
+    if (_intersection_distance > 0)
+    {
+      debugRay("Incrementing ray intersections by 1 to ", ray->intersections() + 1);
+      ray->addIntersection();
+      _results[INTERSECTIONS]++;
+    }
 
     // Increment distance
     ray->addDistance(_intersection_distance);
@@ -1602,6 +1625,9 @@ TraceRay::trace(const std::shared_ptr<Ray> & ray)
 void
 TraceRay::onCompleteTrace(const std::shared_ptr<Ray> & ray)
 {
+  for (RayKernelBase * rk : _study.currentRayKernels(_tid))
+    rk->postTrace();
+
   debugRay("Called onCompleteTrace()\n", (*_current_ray)->getInfo());
   if (_intersection_distance > 0)
     possiblyAddDebugRayMeshPoint(_incoming_point, _intersection_point);
@@ -1619,6 +1645,8 @@ TraceRay::onCompleteTrace(const std::shared_ptr<Ray> & ray)
       if (_study.auxDataOnCacheTraces())
         _current_cached_trace->lastPoint()._aux_data = ray->auxData();
     }
+
+    mooseAssert(ray->stationary() == _current_cached_trace->stationary(), "Stationary mismatch");
   }
 }
 
@@ -2023,9 +2051,10 @@ TraceRay::onSegment(const std::shared_ptr<Ray> & ray)
       traceAssert(_elem_side_builder(*_current_elem, _incoming_side)
                       .close_to_point(_incoming_point, LOOSE_TRACE_TOLERANCE),
                   "Incoming point is not on incoming side");
-      traceAssert(
-          _study.sideIsIncoming(_current_elem, _incoming_side, (*_current_ray)->direction(), _tid),
-          "Incoming side is not incoming");
+      if (ray->intersections() != 0 && ray->maxDistance() != 0)
+        traceAssert(_study.sideIsIncoming(
+                        _current_elem, _incoming_side, (*_current_ray)->direction(), _tid),
+                    "Incoming side is not incoming");
     }
   }
 #endif

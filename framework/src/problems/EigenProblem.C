@@ -42,12 +42,15 @@ EigenProblem::validParams()
       "active_eigen_index",
       0,
       "Which eigenvector is used to compute residual and also associated to nonlinear variable");
+  params.addParam<PostprocessorName>("bx_norm", "A postprocessor describing the norm of Bx");
 
   return params;
 }
 
 EigenProblem::EigenProblem(const InputParameters & parameters)
-  : FEProblemBase(parameters),
+  : FEProblemBase(parameters)
+#ifdef LIBMESH_HAVE_SLEPC
+    ,
     // By default, we want to compute an eigenvalue only (smallest or largest)
     _n_eigen_pairs_required(1),
     _generalized_eigenvalue_problem(false),
@@ -60,7 +63,11 @@ EigenProblem::EigenProblem(const InputParameters & parameters)
     _constant_matrices(false),
     _has_normalization(false),
     _normal_factor(1.0),
-    _first_solve(declareRestartableData<bool>("first_solve", true))
+    _first_solve(declareRestartableData<bool>("first_solve", true)),
+    _bx_norm_name(isParamValid("bx_norm")
+                      ? std::make_optional(getParam<PostprocessorName>("bx_norm"))
+                      : std::nullopt)
+#endif
 {
 #ifdef LIBMESH_HAVE_SLEPC
   if (_nl_sys_names.size() > 1)
@@ -74,11 +81,12 @@ EigenProblem::EigenProblem(const InputParameters & parameters)
     nl = std::make_shared<NonlinearEigenSystem>(*this, sys_name);
     _nl_eigen = std::dynamic_pointer_cast<NonlinearEigenSystem>(nl);
     _current_nl_sys = nl.get();
+    _solver_systems[i] = std::dynamic_pointer_cast<SolverSystem>(nl);
   }
 
   _aux = std::make_shared<AuxiliarySystem>(*this, "aux0");
 
-  newAssemblyArray(_nl);
+  newAssemblyArray(_solver_systems);
 
   FEProblemBase::initNullSpaceVectors(parameters, _nl);
 
@@ -146,7 +154,7 @@ EigenProblem::setEigenproblemType(Moose::EigenProblemType eigen_problem_type)
 void
 EigenProblem::execute(const ExecFlagType & exec_type)
 {
-  if (exec_type == EXEC_INITIAL)
+  if (exec_type == EXEC_INITIAL && !_app.isRestarting())
     // we need to scale the solution properly and we can do this only all initial setup of
     // depending objects by the residual evaluations has been done to this point.
     preScaleEigenVector(std::pair<Real, Real>(_initial_eigenvalue, 0));
@@ -165,7 +173,7 @@ EigenProblem::computeJacobianTag(const NumericVector<Number> & soln,
   // specific system tags that we need for this instance
   _nl_eigen->disassociateDefaultMatrixTags();
 
-  // Clear FE tags and first add the specific tag assoicated with the Jacobian
+  // Clear FE tags and first add the specific tag associated with the Jacobian
   _fe_matrix_tags.clear();
   _fe_matrix_tags.insert(tag);
 
@@ -179,16 +187,16 @@ EigenProblem::computeJacobianTag(const NumericVector<Number> & soln,
 
   _nl_eigen->associateMatrixToTag(jacobian, tag);
 
+  setCurrentNonlinearSystem(_nl_eigen->number());
   computeJacobianTags(_fe_matrix_tags);
 
   _nl_eigen->disassociateMatrixFromTag(jacobian, tag);
 }
 
 void
-EigenProblem::computeMatricesTags(
-    const NumericVector<Number> & soln,
-    const std::vector<std::unique_ptr<SparseMatrix<Number>>> & jacobians,
-    const std::set<TagID> & tags)
+EigenProblem::computeMatricesTags(const NumericVector<Number> & soln,
+                                  const std::vector<SparseMatrix<Number> *> & jacobians,
+                                  const std::set<TagID> & tags)
 {
   TIME_SECTION("computeMatricesTags", 3);
 
@@ -210,6 +218,7 @@ EigenProblem::computeMatricesTags(
   for (auto tag : tags)
     _nl_eigen->associateMatrixToTag(*(jacobians[i++]), tag);
 
+  setCurrentNonlinearSystem(_nl_eigen->number());
   computeJacobianTags(tags);
 
   i = 0;
@@ -225,9 +234,9 @@ EigenProblem::computeJacobianBlocks(std::vector<JacobianBlock *> & blocks,
   setCurrentNonlinearSystem(nl_sys_num);
 
   if (_displaced_problem)
-    _aux->compute(EXEC_PRE_DISPLACE);
+    computeSystems(EXEC_PRE_DISPLACE);
 
-  _aux->compute(EXEC_NONLINEAR);
+  computeSystems(EXEC_NONLINEAR);
 
   _currently_computing_jacobian = true;
 
@@ -249,7 +258,7 @@ EigenProblem::computeJacobianAB(const NumericVector<Number> & soln,
   // specific system tags that we need for this instance
   _nl_eigen->disassociateDefaultMatrixTags();
 
-  // Clear FE tags and first add the specific tags assoicated with the Jacobian
+  // Clear FE tags and first add the specific tags associated with the Jacobian
   _fe_matrix_tags.clear();
   _fe_matrix_tags.insert(tagA);
   _fe_matrix_tags.insert(tagB);
@@ -265,6 +274,7 @@ EigenProblem::computeJacobianAB(const NumericVector<Number> & soln,
   _nl_eigen->associateMatrixToTag(jacobianA, tagA);
   _nl_eigen->associateMatrixToTag(jacobianB, tagB);
 
+  setCurrentNonlinearSystem(_nl_eigen->number());
   computeJacobianTags(_fe_matrix_tags);
 
   _nl_eigen->disassociateMatrixFromTag(jacobianA, tagA);
@@ -296,6 +306,7 @@ EigenProblem::computeResidualTag(const NumericVector<Number> & soln,
 
   _nl_eigen->setSolution(soln);
 
+  setCurrentNonlinearSystem(_nl_eigen->number());
   computeResidualTags(_fe_vector_tags);
 
   _nl_eigen->disassociateVectorFromTag(residual, tag);
@@ -416,7 +427,7 @@ EigenProblem::preScaleEigenVector(const std::pair<Real, Real> & eig)
   // Eigenvalue magnitude
   Real v = std::sqrt(eig.first * eig.first + eig.second * eig.second);
   // Scaling factor
-  Real factor = 1 / v / _nl_eigen->residualVectorBX().l2_norm();
+  Real factor = 1 / v / (bxNormProvided() ? formNorm() : _nl_eigen->residualVectorBX().l2_norm());
   // Scale eigenvector
   if (!MooseUtils::absoluteFuzzyEqual(factor, 1))
     scaleEigenvector(factor);
@@ -452,7 +463,7 @@ EigenProblem::postScaleEigenVector()
 
     unsigned int itr = 0;
 
-    while (!MooseUtils::absoluteFuzzyEqual(v, c))
+    while (!MooseUtils::relativeFuzzyEqual(v, c))
     {
       // If postprocessor is not defined on eigen variables, scaling might not work
       if (itr > 10)
@@ -510,7 +521,10 @@ EigenProblem::solve(const unsigned int nl_sys_num)
 #if !PETSC_RELEASE_LESS_THAN(3, 12, 0)
   // Master has the default database
   if (!_app.isUltimateMaster())
-    PetscOptionsPush(_petsc_option_data_base);
+  {
+    auto ierr = PetscOptionsPush(_petsc_option_data_base);
+    LIBMESH_CHKERR(ierr);
+  }
 #endif
 
   setCurrentNonlinearSystem(nl_sys_num);
@@ -582,7 +596,10 @@ EigenProblem::solve(const unsigned int nl_sys_num)
 
 #if !PETSC_RELEASE_LESS_THAN(3, 12, 0)
   if (!_app.isUltimateMaster())
-    PetscOptionsPop();
+  {
+    auto ierr = PetscOptionsPop();
+    LIBMESH_CHKERR(ierr);
+  }
 #endif
 
   // sync solutions in displaced problem
@@ -604,7 +621,17 @@ EigenProblem::setNormalization(const PostprocessorName & pp, const Real value)
 void
 EigenProblem::init()
 {
-#if !PETSC_RELEASE_LESS_THAN(3, 13, 0)
+#if PETSC_RELEASE_LESS_THAN(3, 13, 0)
+  // Prior to Slepc 3.13 we did not have a nonlinear eigenvalue solver so we must always assemble
+  // before the solve
+  _nl_eigen->sys().attach_assemble_function(Moose::assemble_matrix);
+#else
+  if (isNonlinearEigenvalueSolver())
+    // We don't need to assemble before the solve
+    _nl_eigen->sys().assemble_before_solve = false;
+  else
+    _nl_eigen->sys().attach_assemble_function(Moose::assemble_matrix);
+
   // If matrix_free=true, this tells Libmesh to use shell matrices
   _nl_eigen->sys().use_shell_matrices(solverParams()._eigen_matrix_free &&
                                       !solverParams()._eigen_matrix_vector_mult);
@@ -618,7 +645,10 @@ EigenProblem::init()
 bool
 EigenProblem::nlConverged(unsigned int)
 {
-  return _nl_eigen->converged();
+  if (_solve)
+    return _nl_eigen->converged();
+  else
+    return true;
 }
 
 bool
@@ -632,9 +662,16 @@ EigenProblem::isNonlinearEigenvalueSolver() const
 }
 
 void
-EigenProblem::initPetscOutput()
+EigenProblem::initPetscOutputAndSomeSolverSettings()
 {
   _app.getOutputWarehouse().solveSetup();
 }
 
+Real
+EigenProblem::formNorm()
+{
+  mooseAssert(_bx_norm_name,
+              "We should not get here unless a bx_norm postprocessor has been provided");
+  return getPostprocessorValueByName(*_bx_norm_name);
+}
 #endif

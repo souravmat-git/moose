@@ -288,7 +288,7 @@ class TestHarness:
             checks['boost'] = set(['ALL'])
             checks['fparser_jit'] = set(['ALL'])
             checks['libpng'] = set(['ALL'])
-            checks['liborch'] = set(['ALL'])
+            checks['libtorch'] = set(['ALL'])
             checks['libtorch_version'] = 'N/A'
         else:
             checks['compiler'] = util.getCompilers(self.libmesh_dir)
@@ -560,9 +560,7 @@ class TestHarness:
                 # Part 1:
                 part1_params = part1.parameters()
                 part1_params['test_name'] += '_part1'
-                part1_params['cli_args'].append('--half-transient')
-                if self.options.recoversuffix == 'cpr':
-                    part1_params['cli_args'].append('Outputs/checkpoint=true')
+                part1_params['cli_args'].append('--test-checkpoint-half-transient')
                 if self.options.recoversuffix == 'cpa':
                     part1_params['cli_args'].append('Outputs/out/type=Checkpoint')
                     part1_params['cli_args'].append('Outputs/out/binary=false')
@@ -1034,6 +1032,7 @@ class TestHarness:
         # Options that pass straight through to the executable
         parser.add_argument('--parallel-mesh', action='store_true', dest='parallel_mesh', help='Deprecated, use --distributed-mesh instead')
         parser.add_argument('--distributed-mesh', action='store_true', dest='distributed_mesh', help='Pass "--distributed-mesh" to executable')
+        parser.add_argument('--libtorch-device', action='store', dest='libtorch_device', type=str, choices=['cpu', 'cuda', 'mps'], default='cpu', help='Run libtorch tests with this device')
         parser.add_argument('--error', action='store_true', help='Run the tests with warnings as errors (Pass "--error" to executable)')
         parser.add_argument('--error-unused', action='store_true', help='Run the tests with errors on unused parameters (Pass "--error-unused" to executable)')
         parser.add_argument('--error-deprecated', action='store_true', help='Run the tests with errors on deprecations')

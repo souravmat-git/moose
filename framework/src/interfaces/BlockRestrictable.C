@@ -46,7 +46,8 @@ BlockRestrictable::BlockRestrictable(const MooseObject * moose_object, bool init
                                                   : NULL),
     _boundary_ids(_empty_boundary_ids),
     _blk_tid(moose_object->isParamValid("_tid") ? moose_object->getParam<THREAD_ID>("_tid") : 0),
-    _blk_name(moose_object->getParam<std::string>("_object_name"))
+    _blk_name(moose_object->getParam<std::string>("_object_name")),
+    _blk_dim(libMesh::invalid_uint)
 {
   if (initialize)
     initializeBlockRestrictable(moose_object);
@@ -63,7 +64,8 @@ BlockRestrictable::BlockRestrictable(const MooseObject * moose_object,
                                                   : NULL),
     _boundary_ids(boundary_ids),
     _blk_tid(moose_object->isParamValid("_tid") ? moose_object->getParam<THREAD_ID>("_tid") : 0),
-    _blk_name(moose_object->getParam<std::string>("_object_name"))
+    _blk_name(moose_object->getParam<std::string>("_object_name")),
+    _blk_dim(libMesh::invalid_uint)
 {
   initializeBlockRestrictable(moose_object);
 }
@@ -161,6 +163,10 @@ BlockRestrictable::initializeBlockRestrictable(const MooseObject * moose_object)
           msg << sep << id;
         sep = ", ";
       }
+      std::vector<SubdomainID> valid_ids_vec(valid_ids.begin(), valid_ids.end());
+      auto valid_names = _blk_mesh->getSubdomainNames(valid_ids_vec);
+      msg << "\nBlocks names (resp. ids) that do exist: " << Moose::stringify(valid_names) << " ("
+          << Moose::stringify(valid_ids) << ")";
       moose_object->paramError("block", msg.str());
     }
   }
@@ -352,4 +358,11 @@ BlockRestrictable::checkVariable(const MooseVariableFieldBase & variable) const
                "': ",
                var_ids);
   }
+}
+
+unsigned int
+BlockRestrictable::blocksMaxDimension() const
+{
+  mooseAssert(_blk_dim != libMesh::invalid_uint, "Block restriction not initialized");
+  return _blk_dim;
 }

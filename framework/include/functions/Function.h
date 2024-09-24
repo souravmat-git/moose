@@ -18,7 +18,6 @@
 #include "MeshChangedInterface.h"
 #include "ScalarCoupleable.h"
 #include "MooseFunctor.h"
-#include "MooseADWrapper.h"
 #include "ChainedReal.h"
 
 // libMesh
@@ -101,7 +100,16 @@ public:
    * \param p The Point in space (x,y,z)
    * \return A vector of the curl of the function evaluated at the time and location
    */
-  virtual RealVectorValue vectorCurl(Real t, const Point & p) const;
+  virtual RealVectorValue curl(Real t, const Point & p) const;
+
+  /**
+   * Override this to evaluate the divergence of the vector function at a point (t,x,y,z),
+   * by default this returns zero, you must override it.
+   * \param t The time
+   * \param p The Point in space (x,y,z)
+   * \return A scalar of the divergence of the function evaluated at the time and location
+   */
+  virtual Real div(Real t, const Point & p) const;
 
   using Moose::FunctorBase<Real>::gradient;
   /**
@@ -140,6 +148,9 @@ public:
   void customSetup(const ExecFlagType & exec_type) override;
 
   bool hasBlocks(SubdomainID) const override { return true; }
+
+  bool supportsFaceArg() const override final { return true; }
+  bool supportsElemSideQpArg() const override final { return true; }
 
 private:
   using typename Moose::FunctorBase<Real>::ValueType;
@@ -197,7 +208,7 @@ template <typename U>
 auto
 Function::value(const U & t) const
 {
-  static const MooseADWrapper<Point, MooseIsADType<U>::value> p;
+  static const Moose::GenericType<Point, Moose::IsADType<U>::value> p;
   return value(t, p);
 }
 
@@ -205,7 +216,7 @@ template <typename U>
 auto
 Function::value(const U & t, const U & x, const U & y, const U & z) const
 {
-  MooseADWrapper<Point, MooseIsADType<U>::value> p(x, y, z);
+  Moose::GenericType<Point, Moose::IsADType<U>::value> p(x, y, z);
   return value(t, p);
 }
 
@@ -213,7 +224,7 @@ template <typename U>
 auto
 Function::timeDerivative(const U & t) const
 {
-  static const MooseADWrapper<Point, MooseIsADType<U>::value> p;
+  static const Moose::GenericType<Point, Moose::IsADType<U>::value> p;
   return timeDerivative(t, p);
 }
 
@@ -221,6 +232,6 @@ template <typename U>
 auto
 Function::timeDerivative(const U & t, const U & x, const U & y, const U & z) const
 {
-  MooseADWrapper<Point, MooseIsADType<U>::value> p(x, y, z);
+  Moose::GenericType<Point, Moose::IsADType<U>::value> p(x, y, z);
   return timeDerivative(t, p);
 }

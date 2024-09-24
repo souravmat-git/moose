@@ -42,7 +42,7 @@ INSFVMixingLengthReynoldsStress::validParams()
 
 INSFVMixingLengthReynoldsStress::INSFVMixingLengthReynoldsStress(const InputParameters & params)
   : INSFVFluxKernel(params),
-    _dim(_subproblem.mesh().dimension()),
+    _dim(blocksMaxDimension()),
     _axis_index(getParam<MooseEnum>("momentum_component")),
     _u(getFunctor<ADReal>("u")),
     _v(params.isParamValid("v") ? &getFunctor<ADReal>("v") : nullptr),
@@ -54,7 +54,7 @@ INSFVMixingLengthReynoldsStress::INSFVMixingLengthReynoldsStress(const InputPara
     mooseError(
         "In two or more dimensions, the v velocity must be supplied using the 'v' parameter");
   if (_dim >= 3 && !_w)
-    mooseError("In threedimensions, the w velocity must be supplied using the 'w' parameter");
+    mooseError("In three dimensions, the w velocity must be supplied using the 'w' parameter");
 }
 
 ADReal

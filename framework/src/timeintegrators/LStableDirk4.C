@@ -66,9 +66,9 @@ LStableDirk4::computeTimeDerivatives()
 }
 
 void
-LStableDirk4::computeADTimeDerivatives(DualReal & ad_u_dot,
+LStableDirk4::computeADTimeDerivatives(ADReal & ad_u_dot,
                                        const dof_id_type & dof,
-                                       DualReal & /*ad_u_dotdot*/) const
+                                       ADReal & /*ad_u_dotdot*/) const
 {
   computeTimeDerivativeHelper(ad_u_dot, _solution_old(dof));
 }
@@ -93,22 +93,29 @@ LStableDirk4::solve()
     // This ensures that all the Output objects in the OutputWarehouse
     // have had solveSetup() called, and sets the default solver
     // parameters for PETSc.
-    _fe_problem.initPetscOutput();
+    _fe_problem.initPetscOutputAndSomeSolverSettings();
 
     _console << "Stage " << _stage << std::endl;
 
     // Set the time for this stage
     _fe_problem.time() = time_old + _c[_stage - 1] * _dt;
 
+    // If we previously used coloring, destroy the old object so it doesn't leak when we allocate a
+    // new object in the following lines
+    _nl.destroyColoring();
+
+    // Potentially setup finite differencing contexts for the solve
+    _nl.potentiallySetupFiniteDifferencing();
+
     // Do the solve
-    _fe_problem.getNonlinearSystemBase().system().solve();
+    _nl.system().solve();
 
     // Update the iteration counts
     _n_nonlinear_iterations += getNumNonlinearIterationsLastSolve();
     _n_linear_iterations += getNumLinearIterationsLastSolve();
 
     // Abort time step immediately on stage failure - see TimeIntegrator doc page
-    if (!_fe_problem.converged())
+    if (!_fe_problem.converged(_nl.number()))
       return;
   }
 }

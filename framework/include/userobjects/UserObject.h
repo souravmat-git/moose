@@ -31,6 +31,7 @@
 class FEProblemBase;
 class SubProblem;
 class Assembly;
+class SystemBase;
 
 /**
  * Base class for user-specific data
@@ -47,7 +48,6 @@ class UserObject : public MooseObject,
                    protected Restartable,
                    protected MeshMetaDataInterface,
                    protected MeshChangedInterface,
-                   protected ScalarCoupleable,
                    protected PerfGraphInterface,
                    public DependencyResolverInterface
 {
@@ -190,6 +190,11 @@ public:
 
   const std::set<std::string> & getSuppliedItems() override { return _supplied_uo; }
 
+  /**
+   * @returns the number of the system associated with this object
+   */
+  unsigned int systemNumber() const;
+
 protected:
   virtual void addPostprocessorDependencyHelper(const PostprocessorName & name) const override;
   virtual void
@@ -202,6 +207,10 @@ protected:
 
   /// Reference to the FEProblemBase for this user object
   FEProblemBase & _fe_problem;
+
+  /// Reference to the system object for this user object. This should correspond to a nonlinear
+  /// system (either through the FEProblemBase or the DisplacedProblem)
+  SystemBase & _sys;
 
   /// Thread ID of this postprocessor
   const THREAD_ID _tid;

@@ -14,6 +14,7 @@
 #include "FEProblemBase.h"
 #include "NonlinearSystemBase.h"
 #include "NS.h"
+#include "NavierStokesMethods.h"
 
 registerMooseObject("NavierStokesApp", INSADMaterial);
 
@@ -50,8 +51,9 @@ INSADMaterial::INSADMaterial(const InputParameters & parameters)
     _coupled_force_strong_residual(
         declareADProperty<RealVectorValue>("coupled_force_strong_residual")),
     _mesh_velocity(declareADProperty<RealVectorValue>("mesh_velocity")),
-    _convected_mesh_strong_residual(
-        declareADProperty<RealVectorValue>("convected_mesh_strong_residual")),
+    _relative_velocity(declareADProperty<RealVectorValue>("relative_velocity")),
+    _advected_mesh_strong_residual(
+        declareADProperty<RealVectorValue>("advected_mesh_strong_residual")),
     // _mms_function_strong_residual(declareProperty<RealVectorValue>("mms_function_strong_residual")),
     _use_displaced_mesh(getParam<bool>("use_displaced_mesh")),
     _ad_q_point(_bnd ? _assembly.adQPointsFace() : _assembly.adQPoints()),
@@ -73,6 +75,21 @@ INSADMaterial::INSADMaterial(const InputParameters & parameters)
 }
 
 void
+INSADMaterial::resolveOptionalProperties()
+{
+  Material::resolveOptionalProperties();
+
+  for (const auto sub_id : this->blockIDs())
+    if ((_object_tracker->get<bool>("has_boussinesq", sub_id)))
+    {
+      _boussinesq_alphas[sub_id] = &getPossiblyConstantGenericMaterialPropertyByName<Real, true>(
+          _object_tracker->get<MaterialPropertyName>("alpha", sub_id), _material_data, 0);
+      _ref_temps[sub_id] = &getPossiblyConstantGenericMaterialPropertyByName<Real, false>(
+          _object_tracker->get<MaterialPropertyName>("ref_temp", sub_id), _material_data, 0);
+    }
+}
+
+void
 INSADMaterial::subdomainSetup()
 {
   if ((_has_transient = _object_tracker->get<bool>("has_transient", _current_subdomain_id)))
@@ -80,24 +97,20 @@ INSADMaterial::subdomainSetup()
   else
     _velocity_dot = nullptr;
 
-  if ((_has_boussinesq = _object_tracker->get<bool>("has_boussinesq", _current_subdomain_id)))
+  if (auto alpha_it = _boussinesq_alphas.find(_current_subdomain_id);
+      alpha_it != _boussinesq_alphas.end())
   {
-    // Material property retrieval through MaterialPropertyInterface APIs can only happen during
-    // object contruction because we're going to check for material property dependency resolution.
-    // So we have to go through MaterialData here. We already performed the material property
-    // requests through the MaterialPropertyInterface APIs in the INSAD kernels, so we should be
-    // safe for dependencies
-    _boussinesq_alpha = &_material_data.getProperty<Real, true>(
-        _object_tracker->get<MaterialPropertyName>("alpha", _current_subdomain_id), 0, *this);
+    _has_boussinesq = true;
+    _boussinesq_alpha = alpha_it->second;
     auto & temp_var = _subproblem.getStandardVariable(
         _tid, _object_tracker->get<std::string>("temperature", _current_subdomain_id));
     addMooseVariableDependency(&temp_var);
     _temperature = &temp_var.adSln();
-    _ref_temp = &_material_data.getProperty<Real, false>(
-        _object_tracker->get<MaterialPropertyName>("ref_temp", _current_subdomain_id), 0, *this);
+    _ref_temp = libmesh_map_find(_ref_temps, _current_subdomain_id);
   }
   else
   {
+    _has_boussinesq = false;
     _boussinesq_alpha = nullptr;
     _temperature = nullptr;
     _ref_temp = nullptr;
@@ -112,15 +125,14 @@ INSADMaterial::subdomainSetup()
   // Setup data for Arbitrary Lagrangian Eulerian (ALE) simulations in which the simulation domain
   // is displacing. We will need to subtract the mesh velocity from the velocity solution in order
   // to get the correct material velocity for the momentum convection term.
-  if ((_has_convected_mesh =
-           _object_tracker->get<bool>("has_convected_mesh", _current_subdomain_id)))
+  if ((_has_advected_mesh = _object_tracker->get<bool>("has_advected_mesh", _current_subdomain_id)))
   {
     auto & disp_x = _subproblem.getStandardVariable(
         _tid, _object_tracker->get<VariableName>("disp_x", _current_subdomain_id));
     addMooseVariableDependency(&disp_x);
     _disp_x_dot = &disp_x.adUDot();
     _disp_x_sys_num = disp_x.sys().number();
-    _disp_x_num = (disp_x.kind() == Moose::VarKindType::VAR_NONLINEAR) &&
+    _disp_x_num = (disp_x.kind() == Moose::VarKindType::VAR_SOLVER) &&
                           (_disp_x_sys_num == _fe_problem.currentNonlinearSystem().number())
                       ? disp_x.number()
                       : libMesh::invalid_uint;
@@ -132,7 +144,7 @@ INSADMaterial::subdomainSetup()
       _disp_y_dot = &disp_y.adUDot();
       _disp_y_sys_num = disp_y.sys().number();
       _disp_y_num =
-          disp_y.kind() == (Moose::VarKindType::VAR_NONLINEAR &&
+          disp_y.kind() == (Moose::VarKindType::VAR_SOLVER &&
                             (_disp_y_sys_num == _fe_problem.currentNonlinearSystem().number()))
               ? disp_y.number()
               : libMesh::invalid_uint;
@@ -151,7 +163,7 @@ INSADMaterial::subdomainSetup()
       _disp_z_dot = &disp_z.adUDot();
       _disp_z_sys_num = disp_z.sys().number();
       _disp_z_num =
-          disp_z.kind() == (Moose::VarKindType::VAR_NONLINEAR &&
+          disp_z.kind() == (Moose::VarKindType::VAR_SOLVER &&
                             (_disp_z_sys_num == _fe_problem.currentNonlinearSystem().number()))
               ? disp_z.number()
               : libMesh::invalid_uint;
@@ -195,12 +207,8 @@ INSADMaterial::subdomainSetup()
 void
 INSADMaterial::computeQpProperties()
 {
-  _mass_strong_residual[_qp] = -_grad_velocity[_qp].tr();
-  if (_coord_sys == Moose::COORD_RZ)
-    // Subtract u_r / r
-    _mass_strong_residual[_qp] -=
-        _velocity[_qp](_rz_radial_coord) / (_use_displaced_mesh ? _ad_q_point[_qp](_rz_radial_coord)
-                                                                : _q_point[_qp](_rz_radial_coord));
+  _mass_strong_residual[_qp] = -NS::divergence(
+      _grad_velocity[_qp], _velocity[_qp], _ad_q_point[_qp], _coord_sys, _rz_radial_coord);
 
   _advective_strong_residual[_qp] = _rho[_qp] * _grad_velocity[_qp] * _velocity[_qp];
   if (_has_transient)
@@ -210,16 +218,17 @@ INSADMaterial::computeQpProperties()
   if (_has_boussinesq)
     _boussinesq_strong_residual[_qp] = (*_boussinesq_alpha)[_qp] * _gravity_vector * _rho[_qp] *
                                        ((*_temperature)[_qp] - (*_ref_temp)[_qp]);
+  _relative_velocity[_qp] = _velocity[_qp];
 
-  if (_has_convected_mesh)
+  if (_has_advected_mesh)
   {
     _mesh_velocity[_qp](0) = (*_disp_x_dot)[_qp];
     if (_disp_y_dot)
       _mesh_velocity[_qp](1) = (*_disp_y_dot)[_qp];
     if (_disp_z_dot)
       _mesh_velocity[_qp](2) = (*_disp_z_dot)[_qp];
-    _convected_mesh_strong_residual[_qp] =
-        -_rho[_qp] * _grad_velocity[_qp].left_multiply(_mesh_velocity[_qp]);
+    _relative_velocity[_qp] -= _mesh_velocity[_qp];
+    _advected_mesh_strong_residual[_qp] = -_rho[_qp] * _grad_velocity[_qp] * _mesh_velocity[_qp];
   }
 
   if (_has_coupled_force)

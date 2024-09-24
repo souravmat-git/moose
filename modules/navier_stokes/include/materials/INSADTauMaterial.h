@@ -90,11 +90,15 @@ protected:
   /// The velocity system number
   const unsigned int _vel_sys_number;
 
+  /// The speed of the medium. This is the norm of the relative velocity, e.g. the velocity minus
+  /// the mesh velocity, at the current _qp
+  ADReal _speed;
+
   using T::_ad_q_point;
+  using T::_advected_mesh_strong_residual;
   using T::_advective_strong_residual;
   using T::_assembly;
   using T::_boussinesq_strong_residual;
-  using T::_convected_mesh_strong_residual;
   using T::_coord_sys;
   using T::_coupled_force_strong_residual;
   using T::_current_elem;
@@ -109,8 +113,8 @@ protected:
   using T::_grad_p;
   using T::_grad_velocity;
   using T::_gravity_strong_residual;
+  using T::_has_advected_mesh;
   using T::_has_boussinesq;
-  using T::_has_convected_mesh;
   using T::_has_coupled_force;
   using T::_has_gravity;
   using T::_has_transient;
@@ -120,6 +124,7 @@ protected:
   using T::_q_point;
   using T::_qp;
   using T::_qrule;
+  using T::_relative_velocity;
   using T::_rho;
   using T::_rz_axial_coord;
   using T::_rz_radial_coord;
@@ -186,7 +191,7 @@ INSADTauMaterialTempl<T>::computeHMax()
   for (unsigned int n_outer = 0; n_outer < _current_elem->n_vertices(); n_outer++)
     for (unsigned int n_inner = n_outer + 1; n_inner < _current_elem->n_vertices(); n_inner++)
     {
-      VectorValue<DualReal> diff = (_current_elem->point(n_outer) - _current_elem->point(n_inner));
+      VectorValue<ADReal> diff = (_current_elem->point(n_outer) - _current_elem->point(n_inner));
       for (const auto i : index_range(disps))
       {
         const auto disp_num = disps[i];
@@ -303,28 +308,34 @@ INSADTauMaterialTempl<T>::viscousTermRZ()
   // equivalent to the Cartesian Laplacian plus a 1/r * du_i/dr term. And of course we are
   // applying a minus sign here because the strong form is -\nabala^2 * \vec{u}
   //
-  // Another note: libMesh implements grad(v) as dvi/dxj
+  // Another note: libMesh implements grad(v) as dvi/dxj or more obviously:
+  //
+  // grad(v) = (vx_x vx_y)
+  //           (vy_x vy_y)
+  //
+  // so, the gradient of the velocity with respect to the radial coordinate will correspond to a
+  // *column* slice
 
-  const auto r = _ad_q_point[_qp](_rz_radial_coord);
+  const auto & r = _ad_q_point[_qp](_rz_radial_coord);
 
-  if (_viscous_form == NS::ViscousForm::Laplace)
-    _viscous_strong_residual[_qp] +=
-        // u_r
-        // Additional term from vector Laplacian
-        ADRealVectorValue(_mu[_qp] * (_velocity[_qp](_rz_radial_coord) / (r * r) -
-                                      // Additional term from scalar Laplacian
-                                      _grad_velocity[_qp](_rz_radial_coord, _rz_radial_coord) / r),
-                          // u_z
-                          // Additional term from scalar Laplacian
-                          -_mu[_qp] * _grad_velocity[_qp](_rz_axial_coord, _rz_radial_coord) / r,
-                          0);
-  else
-    _viscous_strong_residual[_qp] +=
-        ADRealVectorValue(2. * _mu[_qp] *
-                              (_velocity[_qp](_rz_radial_coord) / (r * r) -
-                               _grad_velocity[_qp](_rz_radial_coord, _rz_radial_coord) / r),
-                          -_mu[_qp] / r * (_grad_velocity[_qp](1, 0) + _grad_velocity[_qp](0, 1)),
-                          0);
+  {
+    // Do the "Laplace" form. This will be present in *both* Laplace and Traction forms
+    ADRealVectorValue rz_term;
+    for (const auto i : make_range((unsigned int)2))
+      rz_term(i) = -_mu[_qp] * _grad_velocity[_qp](i, _rz_radial_coord) / r;
+    rz_term(_rz_radial_coord) += _mu[_qp] * _velocity[_qp](_rz_radial_coord) / (r * r);
+    _viscous_strong_residual[_qp] += rz_term;
+  }
+  if (_viscous_form == NS::ViscousForm::Traction)
+  {
+    ADRealVectorValue rz_term;
+    for (const auto i : make_range((unsigned int)2))
+      // This is the transpose of the above
+      rz_term(i) = -_mu[_qp] * _grad_velocity[_qp](_rz_radial_coord, i) / r;
+    // This is the same as above (since the transpose of the diagonal is the diagonal)
+    rz_term(_rz_radial_coord) += _mu[_qp] * _velocity[_qp](_rz_radial_coord) / (r * r);
+    _viscous_strong_residual[_qp] += rz_term;
+  }
 }
 
 template <typename T>
@@ -335,8 +346,8 @@ INSADTauMaterialTempl<T>::computeQpProperties()
 
   const auto nu = _mu[_qp] / _rho[_qp];
   const auto transient_part = _has_transient ? 4. / (_dt * _dt) : 0.;
-  const auto speed = NS::computeSpeed(_velocity[_qp]);
-  _tau[_qp] = _alpha / std::sqrt(transient_part + (2. * speed / _hmax) * (2. * speed / _hmax) +
+  _speed = NS::computeSpeed(_relative_velocity[_qp]);
+  _tau[_qp] = _alpha / std::sqrt(transient_part + (2. * _speed / _hmax) * (2. * _speed / _hmax) +
                                  9. * (4. * nu / (_hmax * _hmax)) * (4. * nu / (_hmax * _hmax)));
 
   _momentum_strong_residual[_qp] =
@@ -351,8 +362,8 @@ INSADTauMaterialTempl<T>::computeQpProperties()
   if (_has_boussinesq)
     _momentum_strong_residual[_qp] += _boussinesq_strong_residual[_qp];
 
-  if (_has_convected_mesh)
-    _momentum_strong_residual[_qp] += _convected_mesh_strong_residual[_qp];
+  if (_has_advected_mesh)
+    _momentum_strong_residual[_qp] += _advected_mesh_strong_residual[_qp];
 
   if (_has_coupled_force)
     _momentum_strong_residual[_qp] += _coupled_force_strong_residual[_qp];

@@ -22,6 +22,7 @@ using namespace HeatConduction;
 static const std::string directions[3] = {"x", "y", "z"};
 
 // geometric quantities
+static const std::string pebble_diameter = "pebble_diameter";
 static const std::string infinite_porosity = "infinite_porosity";
 static const std::string axis = "axis";
 static const std::string center = "center";
@@ -119,6 +120,7 @@ static const std::string k_s = "k_s";
 static const std::string cp = "cp";
 static const std::string cv = "cv";
 static const std::string mu = "mu";
+static const std::string mu_t = "mu_t";
 static const std::string k = "k";
 static const std::string thermal_diffusivity = "thermal_diffusivity";
 static const std::string alpha = "alpha";
@@ -131,6 +133,12 @@ static const std::string Reynolds_interstitial = "Re_i";
 static const std::string c = "c";
 static const std::string speed = "speed";
 static const std::string sound_speed = "sound_speed";
+
+// Two phase mixture materials
+static const std::string latent_heat = "latent_heat";
+static const std::string T_liquidus = "T_liquidus";
+static const std::string T_solidus = "T_solidus";
+static const std::string alpha_exchange = "alpha_exchange";
 
 // other Navier-Stokes terms
 static const std::string component = "component";
@@ -152,6 +160,29 @@ static const std::string C = "C";
 static const std::string Z = "Z";
 static const std::string K = "K";
 static const std::string mass_flux = "mass_flux";
+
+// Turbuelnce
+
+// Turbulence variables
+static const std::string TKE = "k";
+static const std::string TKED = "epsilon";
+
+/**
+ * Wall treatment options
+ */
+enum class WallTreatmentEnum
+{
+  EQ_NEWTON = 0,
+  EQ_INCREMENTAL = 1,
+  EQ_LINEARIZED = 2,
+  NEQ = 3
+};
+
+// Turbulence constants
+static constexpr Real von_karman_constant = 0.4187;
+static constexpr Real E_turb_constant = 9.793;
+// Lower limit for mu_t
+static constexpr Real mu_t_low_limit = 1.0e-8;
 }
 
 namespace NS_DEFAULT_VALUES

@@ -2,7 +2,7 @@
 //* https://www.mooseframework.org
 //*
 //* All rights reserved, see COPYRIGHT for full restrictions
-//* https://github.com/idaholab/moose/blob/primary/COPYRIGHT
+//* https://github.com/idaholab/moose/blob/master/COPYRIGHT
 //*
 //* Licensed under LGPL 2.1, please see LICENSE for details
 //* https://www.gnu.org/licenses/lgpl-2.1.html
@@ -62,14 +62,6 @@ public:
   const std::vector<Real> & getPrimaryArea(const dof_id_type primary_elem_id) const;
 
 protected:
-  /**
-   * Builds the mapping using the extracted mesh information
-   *
-   * @param[in] axis_point  Any point on the axis of the 1D or 2D boundary
-   * @param[in] axis_direction  Direction of the axis for the 1D or 2D boundary
-   */
-  void buildMapping(const Point & axis_point, const RealVectorValue & axis_direction);
-
   /// Map of primary element ID to area for each quadrature point
   std::map<dof_id_type, std::vector<Real>> _primary_elem_id_to_area;
 };

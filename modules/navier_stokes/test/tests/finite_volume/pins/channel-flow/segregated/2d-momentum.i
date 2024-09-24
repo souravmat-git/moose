@@ -41,19 +41,19 @@ pressure_tag = "pressure_grad"
   [superficial_vel_x]
     type = PINSFVSuperficialVelocityVariable
     initial_condition = 1
-    nl_sys = u_system
+    solver_sys = u_system
     two_term_boundary_expansion = false
   []
   [superficial_vel_y]
     type = PINSFVSuperficialVelocityVariable
     initial_condition = 1e-6
-    nl_sys = v_system
+    solver_sys = v_system
     two_term_boundary_expansion = false
   []
   [pressure]
     type = INSFVPressureVariable
     two_term_boundary_expansion = false
-    nl_sys = pressure_system
+    solver_sys = pressure_system
   []
 []
 
@@ -94,8 +94,9 @@ pressure_tag = "pressure_grad"
     momentum_component = 'y'
     Darcy_name = 'Darcy_coefficient'
     Forchheimer_name = 'Forchheimer_coefficient'
-    porosity = 'porosity'
     rho = ${rho}
+    speed = speed
+    mu = ${mu}
   []
 
   [v_advection]
@@ -126,8 +127,9 @@ pressure_tag = "pressure_grad"
     momentum_component = 'y'
     Darcy_name = 'Darcy_coefficient'
     Forchheimer_name = 'Forchheimer_coefficient'
-    porosity = 'porosity'
     rho = ${rho}
+    speed = speed
+    mu = ${mu}
   []
 
   [p_diffusion]
@@ -215,16 +217,22 @@ pressure_tag = "pressure_grad"
   #####################################################################
 []
 
-[Materials]
+[FunctorMaterials]
   [darcy]
     type = ADGenericVectorFunctorMaterial
     prop_names = 'Darcy_coefficient Forchheimer_coefficient'
     prop_values = '0.01 0.02 0.03 0.01 0.02 0.03'
   []
+  [speed]
+    type = PINSFVSpeedFunctorMaterial
+    superficial_vel_x = superficial_vel_x
+    superficial_vel_y = superficial_vel_y
+    porosity = porosity
+  []
 []
 
 [Executioner]
-  type = SIMPLE
+  type = SIMPLENonlinearAssembly
   momentum_l_abs_tol = 1e-14
   pressure_l_abs_tol = 1e-14
   momentum_l_tol = 0

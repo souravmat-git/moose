@@ -200,11 +200,16 @@ Ny = 5
     pressure = pressure
   []
   [u_friction]
-    type = INSFVMomentumFriction
+    type = PINSFVMomentumFriction
     variable = vel_x
     momentum_component = 'x'
-    linear_coef_name = 'Darcy_coefficient'
-    quadratic_coef_name = 'Forchheimer_coefficient'
+    u = vel_x
+    v = vel_y
+    Darcy_name = 'Darcy_coeff'
+    Forchheimer_name = 'Forchheimer_coeff'
+    rho = ${rho_liquid}
+    mu = ${mu}
+    standard_friction_formulation = false
   []
 
   [v_time]
@@ -234,11 +239,16 @@ Ny = 5
     pressure = pressure
   []
   [v_friction]
-    type = INSFVMomentumFriction
+    type = PINSFVMomentumFriction
     variable = vel_y
     momentum_component = 'y'
-    linear_coef_name = 'Darcy_coefficient'
-    quadratic_coef_name = 'Forchheimer_coefficient'
+    u = vel_x
+    v = vel_y
+    Darcy_name = 'Darcy_coeff'
+    Forchheimer_name = 'Forchheimer_coeff'
+    rho = ${rho_liquid}
+    mu = ${mu}
+    standard_friction_formulation = false
   []
 
   [T_time]
@@ -336,25 +346,30 @@ Ny = 5
   []
 []
 
-[Materials]
+[FunctorMaterials]
   [ins_fv]
-    type = INSFVEnthalpyMaterial
+    type = INSFVEnthalpyFunctorMaterial
     rho = rho_mixture
     cp = cp_mixture
     temperature = 'T'
   []
   [eff_cp]
-    type = NSFVMixtureMaterial
+    type = NSFVMixtureFunctorMaterial
     phase_2_names = '${cp_solid} ${k_solid} ${rho_solid}'
     phase_1_names = '${cp_liquid} ${k_liquid} ${rho_liquid}'
     prop_names = 'cp_mixture k_mixture rho_mixture'
     phase_1_fraction = fl
   []
   [mushy_zone_resistance]
-    type = INSFVMushyPorousFrictionMaterial
+    type = INSFVMushyPorousFrictionFunctorMaterial
     liquid_fraction = 'fl'
     mu = '${mu}'
     rho_l = '${rho_liquid}'
+  []
+  [friction]
+    type = ADGenericVectorFunctorMaterial
+    prop_names = 'Darcy_coeff Forchheimer_coeff'
+    prop_values = 'darcy_coef darcy_coef darcy_coef fch_coef fch_coef fch_coef'
   []
 []
 

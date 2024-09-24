@@ -16,7 +16,7 @@
   [u]
   []
   [u_adjoint]
-    nl_sys = adjoint
+    solver_sys = adjoint
   []
 []
 
@@ -69,6 +69,8 @@
   [measure_data]
     type = OptimizationData
     variable = u
+    objective_name = objective_value
+    outputs = none
   []
 []
 

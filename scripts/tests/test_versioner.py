@@ -45,7 +45,11 @@ class Test(unittest.TestCase):
 
         for hash in [None, 'HEAD']:
             for package in versioner.entities:
-                if package == 'app':
+                # TODO: deprecate mpich by skipping it. It populates in entities because we are
+                #       allowing 'mpich' as a deprecated library in versioner.yaml. But we do not
+                #       have any hashes to verify with here in unittests. Remove this deprecation
+                #       when it gets removed from versioner.yaml keys
+                if package in ['app', 'mpich']:
                     continue
 
                 def run(library, args=[]):
@@ -103,7 +107,7 @@ class Test(unittest.TestCase):
 
     def testGetApp(self):
         app_name, git_root, git_hash = Versioner.get_app()
-        self.assertEqual('moose-combined', app_name)
+        self.assertEqual('moose', app_name)
         self.assertEqual(MOOSE_DIR, git_root)
 
         # still need to test _in_ an app

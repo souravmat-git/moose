@@ -356,6 +356,9 @@ setFreeNonlinearPowerIterations(unsigned int free_power_iterations)
   // -snes_no_convergence_test is a perfect option, but it was removed from PETSc
   Moose::PetscSupport::setSinglePetscOption("-snes_rtol", "0.99999999999");
   Moose::PetscSupport::setSinglePetscOption("-eps_max_it", stringify(free_power_iterations));
+  // We always want the number of free power iterations respected so we don't want to stop early if
+  // we've satisfied a convergence criterion. Consequently we make this tolerance very tight
+  Moose::PetscSupport::setSinglePetscOption("-eps_tol", "1e-50");
 }
 
 void
@@ -367,6 +370,7 @@ clearFreeNonlinearPowerIterations(const InputParameters & params)
                                             stringify(params.get<unsigned int>("nl_max_its")));
   Moose::PetscSupport::setSinglePetscOption("-snes_rtol",
                                             stringify(params.get<Real>("nl_rel_tol")));
+  Moose::PetscSupport::setSinglePetscOption("-eps_tol", stringify(params.get<Real>("eigen_tol")));
 }
 
 void
@@ -497,6 +501,9 @@ slepcSetOptions(EigenProblem & eigen_problem, const InputParameters & params)
   // can be overriden
   setSlepcEigenSolverTolerances(eigen_problem, params);
   setEigenSolverOptions(eigen_problem.solverParams(), params);
+  // when Bx norm postprocessor is provided, we switch off the sign normalization
+  if (eigen_problem.bxNormProvided())
+    Moose::PetscSupport::setSinglePetscOption("-eps_power_sign_normalization", "0");
   setEigenProblemOptions(eigen_problem.solverParams());
   setWhichEigenPairsOptions(eigen_problem.solverParams());
   Moose::PetscSupport::addPetscOptionsFromCommandline();
@@ -513,15 +520,16 @@ mooseEPSFormMatrices(EigenProblem & eigen_problem, EPS eps, Vec x, void * ctx)
   PetscFunctionBegin;
 
   if (eigen_problem.constantMatrices() && eigen_problem.wereMatricesFormed())
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
 
   if (eigen_problem.onLinearSolver())
     // We reach here during linear iteration when solve type is PJFNKMO.
     // We will use the matrices assembled at the beginning of this Newton
     // iteration for the following residual evaluation.
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
 
   NonlinearEigenSystem & eigen_nl = eigen_problem.getCurrentNonlinearEigenSystem();
+  auto & sys = eigen_nl.sys();
   SNES snes = eigen_nl.getSNES();
   // Rest ST state so that we can retrieve matrices
   ierr = EPSGetST(eps, &st);
@@ -542,73 +550,146 @@ mooseEPSFormMatrices(EigenProblem & eigen_problem, EPS eps, Vec x, void * ctx)
   }
   // Form A and B
   std::vector<Mat> mats = {A, B};
+  std::vector<SparseMatrix<Number> *> libmesh_mats = {&sys.get_matrix_A(), &sys.get_matrix_B()};
   moosePetscSNESFormMatricesTags(
-      snes, x, mats, ctx, {eigen_nl.nonEigenMatrixTag(), eigen_nl.eigenMatrixTag()});
+      snes, x, mats, libmesh_mats, ctx, {eigen_nl.nonEigenMatrixTag(), eigen_nl.eigenMatrixTag()});
   eigen_problem.wereMatricesFormed(true);
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-void
-moosePetscSNESFormMatrixTag(SNES /*snes*/, Vec x, Mat mat, void * ctx, TagID tag)
+namespace
 {
-  EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
-  NonlinearSystemBase & nl = eigen_problem->currentNonlinearSystem();
-  System & sys = nl.system();
+void
+updateCurrentLocalSolution(CondensedEigenSystem & sys, Vec x)
+{
+  auto & dof_map = sys.get_dof_map();
 
   PetscVector<Number> X_global(x, sys.comm());
 
-  PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
+  if (dof_map.n_constrained_dofs())
+  {
+    sys.copy_sub_to_super(X_global, *sys.solution);
+    // Set the constrained dof values
+    dof_map.enforce_constraints_exactly(sys);
+    sys.update();
+  }
+  else
+  {
+    PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
 
-  // Use the system's update() to get a good local version of the
-  // parallel solution.  This operation does not modify the incoming
-  // "x" vector, it only localizes information from "x" into
-  // sys.current_local_solution.
-  X_global.swap(X_sys);
-  sys.update();
-  X_global.swap(X_sys);
+    // Use the system's update() to get a good local version of the
+    // parallel solution.  This operation does not modify the incoming
+    // "x" vector, it only localizes information from "x" into
+    // sys.current_local_solution.
+    X_global.swap(X_sys);
+    sys.update();
+    X_global.swap(X_sys);
+  }
+}
 
-  PetscMatrix<Number> libmesh_mat(mat, sys.comm());
+std::unique_ptr<NumericVector<Number>>
+createWrappedResidual(CondensedEigenSystem & sys, Vec r)
+{
+  auto & dof_map = sys.get_dof_map();
 
-  // Set the dof maps
-  libmesh_mat.attach_dof_map(sys.get_dof_map());
+  if (dof_map.n_constrained_dofs())
+    return sys.solution->zero_clone();
+  else
+  {
+    auto R = std::make_unique<PetscVector<Number>>(r, sys.comm());
+    R->zero();
+    return R;
+  }
+}
+
+void
+evaluateResidual(EigenProblem & eigen_problem, Vec x, Vec r, TagID tag)
+{
+  auto & nl = eigen_problem.getCurrentNonlinearEigenSystem();
+  auto & sys = nl.sys();
+  auto & dof_map = sys.get_dof_map();
+
+  updateCurrentLocalSolution(sys, x);
+  auto R = createWrappedResidual(sys, r);
+
+  eigen_problem.computeResidualTag(*sys.current_local_solution.get(), *R, tag);
+
+  R->close();
+
+  if (dof_map.n_constrained_dofs())
+  {
+    PetscVector<Number> sub_r(r, sys.comm());
+    sys.copy_super_to_sub(*R, sub_r);
+  }
+}
+}
+
+void
+moosePetscSNESFormMatrixTag(
+    SNES /*snes*/, Vec x, Mat eigen_mat, SparseMatrix<Number> & all_dofs_mat, void * ctx, TagID tag)
+{
+  EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
+  auto & nl = eigen_problem->getCurrentNonlinearEigenSystem();
+  auto & sys = nl.sys();
+  auto & dof_map = sys.get_dof_map();
+
+#ifndef NDEBUG
+  auto & petsc_all_dofs_mat = cast_ref<PetscMatrix<Number> &>(all_dofs_mat);
+  mooseAssert(
+      !dof_map.n_constrained_dofs() == (eigen_mat == petsc_all_dofs_mat.mat()),
+      "If we do not have constrained dofs, then eigen_mat and all_dofs_mat should be the same. "
+      "Conversely, if we do have constrained dofs, they must be different");
+#endif
+
+  updateCurrentLocalSolution(sys, x);
 
   if (!eigen_problem->constJacobian())
-    libmesh_mat.zero();
+    all_dofs_mat.zero();
 
-  eigen_problem->computeJacobianTag(*sys.current_local_solution.get(), libmesh_mat, tag);
+  eigen_problem->computeJacobianTag(*sys.current_local_solution.get(), all_dofs_mat, tag);
+
+  if (dof_map.n_constrained_dofs())
+  {
+    PetscMatrix<Number> wrapped_eigen_mat(eigen_mat, sys.comm());
+    sys.copy_super_to_sub(all_dofs_mat, wrapped_eigen_mat);
+  }
 }
 
 void
-moosePetscSNESFormMatricesTags(
-    SNES /*snes*/, Vec x, std::vector<Mat> & mats, void * ctx, const std::set<TagID> & tags)
+moosePetscSNESFormMatricesTags(SNES /*snes*/,
+                               Vec x,
+                               std::vector<Mat> & eigen_mats,
+                               std::vector<SparseMatrix<Number> *> & all_dofs_mats,
+                               void * ctx,
+                               const std::set<TagID> & tags)
 {
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
-  NonlinearSystemBase & nl = eigen_problem->currentNonlinearSystem();
-  System & sys = nl.system();
+  auto & nl = eigen_problem->getCurrentNonlinearEigenSystem();
+  auto & sys = nl.sys();
+  auto & dof_map = sys.get_dof_map();
 
-  PetscVector<Number> X_global(x, sys.comm());
+#ifndef NDEBUG
+  for (const auto i : index_range(eigen_mats))
+    mooseAssert(!dof_map.n_constrained_dofs() ==
+                    (eigen_mats[i] == cast_ptr<PetscMatrix<Number> *>(all_dofs_mats[i])->mat()),
+                "If we do not have constrained dofs, then mat and libmesh_mat should be the same. "
+                "Conversely, if we do have constrained dofs, they must be different");
+#endif
 
-  PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
+  updateCurrentLocalSolution(sys, x);
 
-  // Use the system's update() to get a good local version of the
-  // parallel solution.  This operation does not modify the incoming
-  // "x" vector, it only localizes information from "x" into
-  // sys.current_local_solution.
-  X_global.swap(X_sys);
-  sys.update();
-  X_global.swap(X_sys);
-
-  std::vector<std::unique_ptr<SparseMatrix<Number>>> jacobians;
-
-  for (auto & mat : mats)
-  {
-    jacobians.emplace_back(std::make_unique<PetscMatrix<Number>>(mat, sys.comm()));
-    jacobians.back()->attach_dof_map(sys.get_dof_map());
+  for (auto * const all_dofs_mat : all_dofs_mats)
     if (!eigen_problem->constJacobian())
-      jacobians.back()->zero();
-  }
+      all_dofs_mat->zero();
 
-  eigen_problem->computeMatricesTags(*sys.current_local_solution.get(), jacobians, tags);
+  eigen_problem->computeMatricesTags(*sys.current_local_solution.get(), all_dofs_mats, tags);
+
+  if (dof_map.n_constrained_dofs())
+    for (const auto i : index_range(eigen_mats))
+    {
+      PetscMatrix<Number> wrapped_eigen_mat(eigen_mats[i], sys.comm());
+      sys.copy_super_to_sub(*all_dofs_mats[i], wrapped_eigen_mat);
+    }
 }
 
 PetscErrorCode
@@ -637,7 +718,7 @@ mooseSlepcEigenFormFunctionMFFD(void * ctx, Vec x, Vec r)
 
   eigen_problem->onLinearSolver(false);
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -651,6 +732,7 @@ mooseSlepcEigenFormJacobianA(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
 
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
   NonlinearEigenSystem & eigen_nl = eigen_problem->getCurrentNonlinearEigenSystem();
+  auto & sys = eigen_nl.sys();
 
   // If both jacobian and preconditioning are shell matrices,
   // and then assemble them and return
@@ -676,7 +758,7 @@ mooseSlepcEigenFormJacobianA(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
       ierr = MatAssemblyEnd(jac, MAT_FINAL_ASSEMBLY);
       CHKERRQ(ierr);
     }
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
 
   ierr = PetscObjectTypeCompare((PetscObject)pc, MATSHELL, &pisshell);
@@ -693,46 +775,51 @@ mooseSlepcEigenFormJacobianA(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
     ierr = MatAssemblyEnd(pc, MAT_FINAL_ASSEMBLY);
     CHKERRQ(ierr);
 
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
 
   // Jacobian and precond matrix are the same
   if (jac == pc)
   {
     if (!pisshell)
-      moosePetscSNESFormMatrixTag(snes, x, pc, ctx, eigen_nl.precondMatrixTag());
+      moosePetscSNESFormMatrixTag(
+          snes, x, pc, sys.get_matrix_A(), ctx, eigen_nl.precondMatrixTag());
 
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
   else
   {
     if (!jisshell && !jismffd && !pisshell) // We need to form both Jacobian and precond matrix
     {
       std::vector<Mat> mats = {jac, pc};
-      moosePetscSNESFormMatricesTags(
-          snes, x, mats, ctx, {eigen_nl.nonEigenMatrixTag(), eigen_nl.precondMatrixTag()});
-      PetscFunctionReturn(0);
+      std::vector<SparseMatrix<Number> *> libmesh_mats = {&sys.get_matrix_A(),
+                                                          &sys.get_precond_matrix()};
+      std::set<TagID> tags = {eigen_nl.nonEigenMatrixTag(), eigen_nl.precondMatrixTag()};
+      moosePetscSNESFormMatricesTags(snes, x, mats, libmesh_mats, ctx, tags);
+      PetscFunctionReturn(PETSC_SUCCESS);
     }
     if (!pisshell) // We need to form only precond matrix
     {
-      moosePetscSNESFormMatrixTag(snes, x, pc, ctx, eigen_nl.precondMatrixTag());
+      moosePetscSNESFormMatrixTag(
+          snes, x, pc, sys.get_precond_matrix(), ctx, eigen_nl.precondMatrixTag());
       ierr = MatAssemblyBegin(jac, MAT_FINAL_ASSEMBLY);
       CHKERRQ(ierr);
       ierr = MatAssemblyEnd(jac, MAT_FINAL_ASSEMBLY);
       CHKERRQ(ierr);
-      PetscFunctionReturn(0);
+      PetscFunctionReturn(PETSC_SUCCESS);
     }
     if (!jisshell && !jismffd) // We need to form only Jacobian matrix
     {
-      moosePetscSNESFormMatrixTag(snes, x, jac, ctx, eigen_nl.nonEigenMatrixTag());
+      moosePetscSNESFormMatrixTag(
+          snes, x, jac, sys.get_matrix_A(), ctx, eigen_nl.nonEigenMatrixTag());
       ierr = MatAssemblyBegin(pc, MAT_FINAL_ASSEMBLY);
       CHKERRQ(ierr);
       ierr = MatAssemblyEnd(pc, MAT_FINAL_ASSEMBLY);
       CHKERRQ(ierr);
-      PetscFunctionReturn(0);
+      PetscFunctionReturn(PETSC_SUCCESS);
     }
   }
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -746,6 +833,7 @@ mooseSlepcEigenFormJacobianB(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
 
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
   NonlinearEigenSystem & eigen_nl = eigen_problem->getCurrentNonlinearEigenSystem();
+  auto & sys = eigen_nl.sys();
 
   // If both jacobian and preconditioning are shell matrices,
   // and then assemble them and return
@@ -767,7 +855,7 @@ mooseSlepcEigenFormJacobianB(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
     ierr = MatAssemblyEnd(pc, MAT_FINAL_ASSEMBLY);
     CHKERRQ(ierr);
 
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
 
   if (jac != pc && (!jshell && !jshell))
@@ -775,38 +863,22 @@ mooseSlepcEigenFormJacobianB(SNES snes, Vec x, Mat jac, Mat pc, void * ctx)
             PETSC_ERR_ARG_INCOMP,
             "Jacobian and precond matrices should be the same for eigen kernels \n");
 
-  moosePetscSNESFormMatrixTag(snes, x, pc, ctx, eigen_nl.eigenMatrixTag());
+  moosePetscSNESFormMatrixTag(snes, x, pc, sys.get_matrix_B(), ctx, eigen_nl.eigenMatrixTag());
 
   if (eigen_problem->negativeSignEigenKernel())
-    MatScale(pc, -1.);
+  {
+    ierr = MatScale(pc, -1.);
+    CHKERRQ(ierr);
+  }
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 void
 moosePetscSNESFormFunction(SNES /*snes*/, Vec x, Vec r, void * ctx, TagID tag)
 {
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
-  NonlinearSystemBase & nl = eigen_problem->currentNonlinearSystem();
-  System & sys = nl.system();
-
-  PetscVector<Number> X_global(x, sys.comm()), R(r, sys.comm());
-
-  PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
-
-  // Use the system's update() to get a good local version of the
-  // parallel solution.  This operation does not modify the incoming
-  // "x" vector, it only localizes information from "x" into
-  // sys.current_local_solution.
-  X_global.swap(X_sys);
-  sys.update();
-  X_global.swap(X_sys);
-
-  R.zero();
-
-  eigen_problem->computeResidualTag(*sys.current_local_solution.get(), R, tag);
-
-  R.close();
+  evaluateResidual(*eigen_problem, x, r, tag);
 }
 
 PetscErrorCode
@@ -840,12 +912,12 @@ mooseSlepcEigenFormFunctionA(SNES snes, Vec x, Vec r, void * ctx)
     ierr = MatMult(A, x, r);
     CHKERRQ(ierr);
 
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
 
   moosePetscSNESFormFunction(snes, x, r, ctx, eigen_nl.nonEigenVectorTag());
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -883,9 +955,12 @@ mooseSlepcEigenFormFunctionB(SNES snes, Vec x, Vec r, void * ctx)
     moosePetscSNESFormFunction(snes, x, r, ctx, eigen_nl.eigenVectorTag());
 
   if (eigen_problem->negativeSignEigenKernel())
-    VecScale(r, -1.);
+  {
+    ierr = VecScale(r, -1.);
+    CHKERRQ(ierr);
+  }
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -897,7 +972,8 @@ mooseSlepcEigenFormFunctionAB(SNES /*snes*/, Vec x, Vec Ax, Vec Bx, void * ctx)
 
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
   NonlinearEigenSystem & eigen_nl = eigen_problem->getCurrentNonlinearEigenSystem();
-  System & sys = eigen_nl.system();
+  auto & sys = eigen_nl.sys();
+  auto & dof_map = sys.get_dof_map();
 
   if (eigen_problem->solverParams()._eigen_matrix_vector_mult &&
       (eigen_problem->onLinearSolver() || eigen_problem->constantMatrices()))
@@ -924,92 +1000,112 @@ mooseSlepcEigenFormFunctionAB(SNES /*snes*/, Vec x, Vec Ax, Vec Bx, void * ctx)
     CHKERRQ(ierr);
 
     if (eigen_problem->negativeSignEigenKernel())
-      VecScale(Bx, -1.);
+    {
+      ierr = VecScale(Bx, -1.);
+      CHKERRQ(ierr);
+    }
 
-    PetscFunctionReturn(0);
+    PetscFunctionReturn(PETSC_SUCCESS);
   }
 
-  PetscVector<Number> X_global(x, sys.comm()), AX(Ax, sys.comm()), BX(Bx, sys.comm());
-
-  PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
-
-  // Use the system's update() to get a good local version of the
-  // parallel solution.  This operation does not modify the incoming
-  // "x" vector, it only localizes information from "x" into
-  // sys.current_local_solution.
-  X_global.swap(X_sys);
-  sys.update();
-  X_global.swap(X_sys);
-
-  if (!eigen_problem->constJacobian())
-  {
-    AX.zero();
-    BX.zero();
-  }
+  updateCurrentLocalSolution(sys, x);
+  auto AX = createWrappedResidual(sys, Ax);
+  auto BX = createWrappedResidual(sys, Bx);
 
   eigen_problem->computeResidualAB(*sys.current_local_solution.get(),
-                                   AX,
-                                   BX,
+                                   *AX,
+                                   *BX,
                                    eigen_nl.nonEigenVectorTag(),
                                    eigen_nl.eigenVectorTag());
 
-  AX.close();
-  BX.close();
+  AX->close();
+  BX->close();
+
+  if (dof_map.n_constrained_dofs())
+  {
+    PetscVector<Number> sub_Ax(Ax, sys.comm());
+    sys.copy_super_to_sub(*AX, sub_Ax);
+    PetscVector<Number> sub_Bx(Bx, sys.comm());
+    sys.copy_super_to_sub(*BX, sub_Bx);
+  }
 
   if (eigen_problem->negativeSignEigenKernel())
-    VecScale(Bx, -1.);
+  {
+    ierr = VecScale(Bx, -1.);
+    CHKERRQ(ierr);
+  }
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode
+mooseSlepcEigenFormNorm(SNES /*snes*/, Vec /*Bx*/, PetscReal * norm, void * ctx)
+{
+  PetscFunctionBegin;
+  auto * const eigen_problem = static_cast<EigenProblem *>(ctx);
+  *norm = eigen_problem->formNorm();
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 void
 attachCallbacksToMat(EigenProblem & eigen_problem, Mat mat, bool eigen)
 {
-  PetscObjectComposeFunction((PetscObject)mat,
-                             "formJacobian",
-                             eigen ? Moose::SlepcSupport::mooseSlepcEigenFormJacobianB
-                                   : Moose::SlepcSupport::mooseSlepcEigenFormJacobianA);
-  PetscObjectComposeFunction((PetscObject)mat,
-                             "formFunction",
-                             eigen ? Moose::SlepcSupport::mooseSlepcEigenFormFunctionB
-                                   : Moose::SlepcSupport::mooseSlepcEigenFormFunctionA);
+  // Recall that we are solving the potentially nonlinear problem:
+  // F(x) = A(x) - \lambda B(x) = 0
+  //
+  // To solve this, we can use Newton's method: J \Delta x = -F
+  // Generally we will approximate J using matrix free methods. However, in order to solve the
+  // linearized system efficiently, we typically will need preconditioning. Typically we will build
+  // the preconditioner only from A, but we also have the option to include information from B
 
-  PetscObjectComposeFunction(
+  // Attach the Jacobian computation function. If \p mat is the "eigen" matrix corresponding to B,
+  // then attach our JacobianB computation routine, else the matrix corresponds to A, and we attach
+  // the JacobianA computation routine
+  auto ierr = PetscObjectComposeFunction((PetscObject)mat,
+                                         "formJacobian",
+                                         eigen ? Moose::SlepcSupport::mooseSlepcEigenFormJacobianB
+                                               : Moose::SlepcSupport::mooseSlepcEigenFormJacobianA);
+  LIBMESH_CHKERR(ierr);
+
+  // Attach the residual computation function. If \p mat is the "eigen" matrix corresponding to B,
+  // then attach our FunctionB computation routine, else the matrix corresponds to A, and we attach
+  // the FunctionA computation routine
+  ierr = PetscObjectComposeFunction((PetscObject)mat,
+                                    "formFunction",
+                                    eigen ? Moose::SlepcSupport::mooseSlepcEigenFormFunctionB
+                                          : Moose::SlepcSupport::mooseSlepcEigenFormFunctionA);
+  LIBMESH_CHKERR(ierr);
+
+  // It's also beneficial to be able to evaluate both A and B residuals at once
+  ierr = PetscObjectComposeFunction(
       (PetscObject)mat, "formFunctionAB", Moose::SlepcSupport::mooseSlepcEigenFormFunctionAB);
+  LIBMESH_CHKERR(ierr);
 
+  // Users may choose to provide a custom measure of the norm of B (Bx for a linear system)
+  if (eigen_problem.bxNormProvided())
+  {
+    ierr = PetscObjectComposeFunction(
+        (PetscObject)mat, "formNorm", Moose::SlepcSupport::mooseSlepcEigenFormNorm);
+    LIBMESH_CHKERR(ierr);
+  }
+
+  // Finally we need to attach the "context" object, which is our EigenProblem, to the matrices so
+  // that eventually when we get callbacks from SLEPc we can call methods on the EigenProblem
   PetscContainer container;
-  PetscContainerCreate(eigen_problem.comm().get(), &container);
-  PetscContainerSetPointer(container, &eigen_problem);
-  PetscObjectCompose((PetscObject)mat, "formJacobianCtx", nullptr);
-  PetscObjectCompose((PetscObject)mat, "formJacobianCtx", (PetscObject)container);
-  PetscObjectCompose((PetscObject)mat, "formFunctionCtx", nullptr);
-  PetscObjectCompose((PetscObject)mat, "formFunctionCtx", (PetscObject)container);
-  PetscContainerDestroy(&container);
-}
-
-void
-mooseMatMult(EigenProblem & eigen_problem, Vec x, Vec r, TagID tag)
-{
-  NonlinearSystemBase & nl = eigen_problem.currentNonlinearSystem();
-  System & sys = nl.system();
-
-  PetscVector<Number> X_global(x, sys.comm()), R(r, sys.comm());
-
-  PetscVector<Number> & X_sys = *cast_ptr<PetscVector<Number> *>(sys.solution.get());
-
-  // Use the system's update() to get a good local version of the
-  // parallel solution.  This operation does not modify the incoming
-  // "x" vector, it only localizes information from "x" into
-  // sys.current_local_solution.
-  X_global.swap(X_sys);
-  sys.update();
-  X_global.swap(X_sys);
-
-  R.zero();
-
-  eigen_problem.computeResidualTag(*sys.current_local_solution.get(), R, tag);
-
-  R.close();
+  ierr = PetscContainerCreate(eigen_problem.comm().get(), &container);
+  LIBMESH_CHKERR(ierr);
+  ierr = PetscContainerSetPointer(container, &eigen_problem);
+  LIBMESH_CHKERR(ierr);
+  ierr = PetscObjectCompose((PetscObject)mat, "formJacobianCtx", (PetscObject)container);
+  LIBMESH_CHKERR(ierr);
+  ierr = PetscObjectCompose((PetscObject)mat, "formFunctionCtx", (PetscObject)container);
+  if (eigen_problem.bxNormProvided())
+  {
+    ierr = PetscObjectCompose((PetscObject)mat, "formNormCtx", (PetscObject)container);
+    LIBMESH_CHKERR(ierr);
+  }
+  ierr = PetscContainerDestroy(&container);
+  LIBMESH_CHKERR(ierr);
 }
 
 PetscErrorCode
@@ -1017,7 +1113,8 @@ mooseMatMult_Eigen(Mat mat, Vec x, Vec r)
 {
   PetscFunctionBegin;
   void * ctx = nullptr;
-  MatShellGetContext(mat, &ctx);
+  auto ierr = MatShellGetContext(mat, &ctx);
+  CHKERRQ(ierr);
 
   if (!ctx)
     mooseError("No context is set for shell matrix ");
@@ -1025,12 +1122,15 @@ mooseMatMult_Eigen(Mat mat, Vec x, Vec r)
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
   NonlinearEigenSystem & eigen_nl = eigen_problem->getCurrentNonlinearEigenSystem();
 
-  mooseMatMult(*eigen_problem, x, r, eigen_nl.eigenVectorTag());
+  evaluateResidual(*eigen_problem, x, r, eigen_nl.eigenVectorTag());
 
   if (eigen_problem->negativeSignEigenKernel())
-    VecScale(r, -1.);
+  {
+    ierr = VecScale(r, -1.);
+    CHKERRQ(ierr);
+  }
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1038,7 +1138,8 @@ mooseMatMult_NonEigen(Mat mat, Vec x, Vec r)
 {
   PetscFunctionBegin;
   void * ctx = nullptr;
-  MatShellGetContext(mat, &ctx);
+  auto ierr = MatShellGetContext(mat, &ctx);
+  CHKERRQ(ierr);
 
   if (!ctx)
     mooseError("No context is set for shell matrix ");
@@ -1046,19 +1147,21 @@ mooseMatMult_NonEigen(Mat mat, Vec x, Vec r)
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
   NonlinearEigenSystem & eigen_nl = eigen_problem->getCurrentNonlinearEigenSystem();
 
-  mooseMatMult(*eigen_problem, x, r, eigen_nl.nonEigenVectorTag());
+  evaluateResidual(*eigen_problem, x, r, eigen_nl.nonEigenVectorTag());
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 void
 setOperationsForShellMat(EigenProblem & eigen_problem, Mat mat, bool eigen)
 {
-  MatShellSetContext(mat, &eigen_problem);
-  MatShellSetOperation(mat,
-                       MATOP_MULT,
-                       eigen ? (void (*)(void))mooseMatMult_Eigen
-                             : (void (*)(void))mooseMatMult_NonEigen);
+  auto ierr = MatShellSetContext(mat, &eigen_problem);
+  LIBMESH_CHKERR(ierr);
+  ierr = MatShellSetOperation(mat,
+                              MATOP_MULT,
+                              eigen ? (void (*)(void))mooseMatMult_Eigen
+                                    : (void (*)(void))mooseMatMult_NonEigen);
+  LIBMESH_CHKERR(ierr);
 }
 
 PETSC_EXTERN PetscErrorCode
@@ -1070,7 +1173,7 @@ registerPCToPETSc()
   ierr = PCRegister("moosepc", PCCreate_MoosePC);
   CHKERRQ(ierr);
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PETSC_EXTERN PetscErrorCode
@@ -1083,15 +1186,16 @@ PCCreate_MoosePC(PC pc)
   pc->ops->setup = PCSetUp_MoosePC;
   pc->ops->apply = PCApply_MoosePC;
 
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PCDestroy_MoosePC(PC /*pc*/)
+PetscErrorCode
+PCDestroy_MoosePC(PC /*pc*/)
 {
   PetscFunctionBegin;
   /* We do not need to do anything right now, but later we may have some data we need to free here
    */
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1108,7 +1212,7 @@ PCView_MoosePC(PC /*pc*/, PetscViewer viewer)
     ierr = PetscViewerASCIIPrintf(viewer, "  %s\n", "moosepc");
     CHKERRQ(ierr);
   }
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1119,6 +1223,7 @@ PCApply_MoosePC(PC pc, Vec x, Vec y)
   PetscContainer container;
   PetscErrorCode ierr;
 
+  PetscFunctionBegin;
   ierr = PCGetOperators(pc, &Amat, &Pmat);
   CHKERRQ(ierr);
   ierr = PetscObjectQuery((PetscObject)Pmat, "formFunctionCtx", (PetscObject *)&container);
@@ -1145,7 +1250,7 @@ PCApply_MoosePC(PC pc, Vec x, Vec y)
 
   preconditioner->apply(x_vec, y_vec);
 
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1156,6 +1261,7 @@ PCSetUp_MoosePC(PC pc)
   Mat Amat, Pmat;
   PetscContainer container;
 
+  PetscFunctionBegin;
   ierr = PCGetOperators(pc, &Amat, &Pmat);
   CHKERRQ(ierr);
   ierr = PetscObjectQuery((PetscObject)Pmat, "formFunctionCtx", (PetscObject *)&container);
@@ -1181,7 +1287,7 @@ PCSetUp_MoosePC(PC pc)
 
   preconditioner->setup();
 
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1196,6 +1302,7 @@ mooseSlepcStoppingTest(EPS eps,
   PetscErrorCode ierr;
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(ctx);
 
+  PetscFunctionBegin;
   ierr = EPSStoppingBasic(eps, its, max_it, nconv, nev, reason, NULL);
   LIBMESH_CHKERR(ierr);
 
@@ -1210,7 +1317,7 @@ mooseSlepcStoppingTest(EPS eps,
     *reason = EPS_CONVERGED_USER;
     eps->nconv = 1;
   }
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1219,6 +1326,7 @@ mooseSlepcEPSGetSNES(EPS eps, SNES * snes)
   PetscErrorCode ierr;
   PetscBool same, nonlinear;
 
+  PetscFunctionBegin;
   ierr = PetscObjectTypeCompare((PetscObject)eps, EPSPOWER, &same);
   LIBMESH_CHKERR(ierr);
 
@@ -1234,7 +1342,7 @@ mooseSlepcEPSGetSNES(EPS eps, SNES * snes)
   ierr = EPSPowerGetSNES(eps, snes);
   LIBMESH_CHKERR(ierr);
 
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1244,6 +1352,7 @@ mooseSlepcEPSSNESSetUpOptionPrefix(EPS eps)
   SNES snes;
   const char * prefix = nullptr;
 
+  PetscFunctionBegin;
   ierr = mooseSlepcEPSGetSNES(eps, &snes);
   LIBMESH_CHKERR(ierr);
   // There is an extra "eps_power" in snes that users do not like it.
@@ -1255,7 +1364,7 @@ mooseSlepcEPSSNESSetUpOptionPrefix(EPS eps)
   ierr = SNESSetOptionsPrefix(snes, prefix);
   LIBMESH_CHKERR(ierr);
 
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1266,6 +1375,7 @@ mooseSlepcEPSSNESSetCustomizePC(EPS eps)
   KSP ksp;
   PC pc;
 
+  PetscFunctionBegin;
   // Get SNES from EPS
   ierr = mooseSlepcEPSGetSNES(eps, &snes);
   LIBMESH_CHKERR(ierr);
@@ -1278,7 +1388,7 @@ mooseSlepcEPSSNESSetCustomizePC(EPS eps)
   // Set PC type
   ierr = PCSetType(pc, "moosepc");
   LIBMESH_CHKERR(ierr);
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1288,6 +1398,7 @@ mooseSlepcEPSSNESKSPSetPCSide(FEProblemBase & problem, EPS eps)
   SNES snes;
   KSP ksp;
 
+  PetscFunctionBegin;
   // Get SNES from EPS
   ierr = mooseSlepcEPSGetSNES(eps, &snes);
   LIBMESH_CHKERR(ierr);
@@ -1298,7 +1409,7 @@ mooseSlepcEPSSNESKSPSetPCSide(FEProblemBase & problem, EPS eps)
   Moose::PetscSupport::petscSetDefaultPCSide(problem, ksp);
 
   Moose::PetscSupport::petscSetDefaultKSPNormType(problem, ksp);
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode
@@ -1312,9 +1423,10 @@ mooseSlepcEPSMonitor(EPS eps,
                      void * mctx)
 {
   ST st;
-  PetscErrorCode ierr = 0;
+  auto ierr = (PetscErrorCode)0;
   PetscScalar eigenr, eigeni;
 
+  PetscFunctionBegin;
   EigenProblem * eigen_problem = static_cast<EigenProblem *>(mctx);
   auto & console = eigen_problem->console();
 
@@ -1333,7 +1445,7 @@ mooseSlepcEPSMonitor(EPS eps,
   console << " Iteration " << its << std::setprecision(10) << std::fixed
           << (inverse ? " k-eigenvalue = " : " eigenvalue = ") << eigenvalue << std::endl;
 
-  return 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 } // namespace SlepcSupport

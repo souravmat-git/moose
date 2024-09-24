@@ -4,7 +4,7 @@ The input file for this step can be found here: [s1_testmodel.i](https://github.
 
 ## Input File Blocks
 
-We are going to start with the simplest input file we can. We will add on more features and make the model more accurate as we go. We will be using the [Split Cahn-Hilliard](Phase_Field_Equations.md) method because it converges faster than the direct method. The basic blocks we need are: Mesh, Variables, ICs, BCs, Kernels, Materials, Precoditioning, Executioner, and Outputs.
+We are going to start with the simplest input file we can. We will add on more features and make the model more accurate as we go. We will be using the [Split Cahn-Hilliard](Phase_Field_Equations.md) method because it converges faster than the direct method. The basic blocks we need are: Mesh, Variables, ICs, BCs, Kernels, Materials, Preconditioning, Executioner, and Outputs.
 
 ### Mesh
 
@@ -161,7 +161,7 @@ The split Cahn-Hilliard has the best convergence properties when we use the [New
 
 ### Executioner
 
-The executioner block tells MOOSE how to solve the problem. Many of the values in this block are arbitrary and you can experiment with changing them to see how they change the solution. See the the [Executioner](/syntax/Preconditioning/index.html) and [Preconditioning](/syntax/Executioner/index.html) pages for more information on these systems.
+The executioner block tells MOOSE how to solve the problem. Many of the values in this block are arbitrary and you can experiment with changing them to see how they change the solution. See the [Executioner](/syntax/Preconditioning/index.html) and [Preconditioning](/syntax/Executioner/index.html) pages for more information on these systems.
 
 Right now our main interest is in seeing if the model is working. So we shortened the time that the simulation runs to just be long enough to see if the grain is becoming circular.
 

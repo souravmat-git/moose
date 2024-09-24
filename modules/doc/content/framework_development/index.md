@@ -1,6 +1,6 @@
 # Framework Development
 
-The articles attached to this page are useful if you intend on contributing to the MOOSE reposistory. Information about the repository
+The articles attached to this page are useful if you intend on contributing to the MOOSE repository. Information about the repository
 structure, code standards, testing, and software quality are all available here. If you are new to Git, we've created some information
 about how to get up and running here as well.
 
@@ -55,6 +55,8 @@ For development of MOOSE-based applications see [Application Development](applic
 [MooseUtils Namespace](MooseUtils.md) - Basic utilities used throughout the framework
 
 [Utils](utils/index.md) - Basic utilities used throughout the framework
+
+[framework_development/error_warning_messaging.md] - How to emit error, warning, and informational messages
 
 [System Integrity Checking](sanity_checking.md) - Parsing and system integrity checks
 

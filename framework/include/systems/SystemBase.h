@@ -38,6 +38,7 @@ class SubProblem;
 class SystemBase;
 class TimeIntegrator;
 class InputParameters;
+class FEProblemBase;
 
 // libMesh forward declarations
 namespace libMesh
@@ -85,7 +86,10 @@ class SystemBase : public libMesh::ParallelObject, public ConsoleStreamInterface
 
 {
 public:
-  SystemBase(SubProblem & subproblem, const std::string & name, Moose::VarKindType var_kind);
+  SystemBase(SubProblem & subproblem,
+             FEProblemBase & fe_problem,
+             const std::string & name,
+             Moose::VarKindType var_kind);
   virtual ~SystemBase() {}
 
   /**
@@ -93,10 +97,12 @@ public:
    * @return The number of this system
    */
   unsigned int number() const;
-  virtual MooseMesh & mesh() { return _mesh; }
-  virtual const MooseMesh & mesh() const { return _mesh; }
-  virtual SubProblem & subproblem() { return _subproblem; }
-  virtual const SubProblem & subproblem() const { return _subproblem; }
+  MooseMesh & mesh() { return _mesh; }
+  const MooseMesh & mesh() const { return _mesh; }
+  SubProblem & subproblem() { return _subproblem; }
+  const SubProblem & subproblem() const { return _subproblem; }
+  FEProblemBase & feProblem() { return _fe_problem; }
+  const FEProblemBase & feProblem() const { return _fe_problem; }
 
   /**
    * Applies scaling factors to the system's variables
@@ -145,19 +151,32 @@ public:
   virtual const System & system() const = 0;
 
   /**
-   * Initialize the system
+   * This is called prior to the libMesh system has been init'd. MOOSE system wrappers can use this
+   * method to add vectors and matrices to the libMesh system
    */
-  virtual void init(){};
+  virtual void preInit() {}
+
+  /*
+   * This is called after the libMesh system has been init'd. This can be used to initialize MOOSE
+   * system data that relies on the libMesh system data already being initialized
+   */
+  virtual void postInit() {}
+
+  /**
+   * Reinitialize the system when the degrees of freedom in this system have changed. This is called
+   * after the libMesh system has been reinit'd
+   */
+  virtual void reinit() {}
 
   /**
    * Called only once, just before the solve begins so objects can do some precalculations
    */
-  virtual void initializeObjects(){};
+  virtual void initializeObjects() {}
 
   /**
    * Update the system (doing libMesh magic)
    */
-  virtual void update(bool update_libmesh_system = true);
+  void update();
 
   /**
    * Solve the system (using libMesh magic)
@@ -219,21 +238,25 @@ public:
       const unsigned int state,
       Moose::SolutionIterationType iteration_type = Moose::SolutionIterationType::Time) const;
 
+  /**
+   * Add u_dot, u_dotdot, u_dot_old and u_dotdot_old
+   * vectors if requested by the time integrator
+   */
+  virtual void addDotVectors();
+
   virtual Number & duDotDu() { return _du_dot_du; }
   virtual Number & duDotDotDu() { return _du_dotdot_du; }
   virtual const Number & duDotDu() const { return _du_dot_du; }
   virtual const Number & duDotDotDu() const { return _du_dotdot_du; }
 
-  // non-const getters
-  virtual NumericVector<Number> * solutionUDot() = 0;
-  virtual NumericVector<Number> * solutionUDotOld() = 0;
-  virtual NumericVector<Number> * solutionUDotDot() = 0;
-  virtual NumericVector<Number> * solutionUDotDotOld() = 0;
-  // const getters
-  virtual const NumericVector<Number> * solutionUDot() const = 0;
-  virtual const NumericVector<Number> * solutionUDotOld() const = 0;
-  virtual const NumericVector<Number> * solutionUDotDot() const = 0;
-  virtual const NumericVector<Number> * solutionUDotDotOld() const = 0;
+  virtual NumericVector<Number> * solutionUDot() { return _u_dot; }
+  virtual NumericVector<Number> * solutionUDotDot() { return _u_dotdot; }
+  virtual NumericVector<Number> * solutionUDotOld() { return _u_dot_old; }
+  virtual NumericVector<Number> * solutionUDotDotOld() { return _u_dotdot_old; }
+  virtual const NumericVector<Number> * solutionUDot() const { return _u_dot; }
+  virtual const NumericVector<Number> * solutionUDotDot() const { return _u_dotdot; }
+  virtual const NumericVector<Number> * solutionUDotOld() const { return _u_dot_old; }
+  virtual const NumericVector<Number> * solutionUDotDotOld() const { return _u_dotdot_old; }
 
   virtual void saveOldSolutions();
   virtual void restoreOldSolutions();
@@ -399,7 +422,7 @@ public:
   /**
    * Returns a reference to a serialized version of the solution vector for this subproblem
    */
-  virtual NumericVector<Number> & serializedSolution() = 0;
+  virtual NumericVector<Number> & serializedSolution();
 
   virtual NumericVector<Number> & residualCopy()
   {
@@ -544,6 +567,18 @@ public:
   virtual unsigned int nVariables() const;
 
   /**
+   * Get the number of field variables in this system
+   * @return the number of field variables
+   */
+  unsigned int nFieldVariables() const;
+
+  /**
+   * Get the number of finite volume variables in this system
+   * @return the number of finite volume variables
+   */
+  unsigned int nFVVariables() const;
+
+  /**
    * Gets the maximum number of dofs used by any one variable on any one element
    *
    * @return The max
@@ -645,17 +680,14 @@ public:
    * Reinit assembly info for a side of an element
    * @param elem The element
    * @param side Side of of the element
-   * @param bnd_id Boundary id on that side
    * @param tid Thread ID
    */
-  virtual void
-  reinitElemFace(const Elem * elem, unsigned int side, BoundaryID bnd_id, THREAD_ID tid);
+  virtual void reinitElemFace(const Elem * elem, unsigned int side, THREAD_ID tid);
 
   /**
    * Compute the values of the variables at all the current points.
    */
-  virtual void
-  reinitNeighborFace(const Elem * elem, unsigned int side, BoundaryID bnd_id, THREAD_ID tid);
+  virtual void reinitNeighborFace(const Elem * elem, unsigned int side, THREAD_ID tid);
 
   /**
    * Compute the values of the variables at all the current points.
@@ -859,9 +891,6 @@ public:
 
   std::shared_ptr<TimeIntegrator> getSharedTimeIntegrator() { return _time_integrator; }
 
-  /// caches the dof indices of provided variables in MooseMesh's FaceInfo data structure
-  void cacheVarIndicesByFace(const std::vector<VariableName> & vars);
-
   /// Whether or not there are variables to be restarted from an Exodus mesh file
   bool hasVarCopy() const { return _var_to_copy.size() > 0; }
 
@@ -906,13 +935,33 @@ public:
    */
   Moose::VarKindType varKind() const { return _var_kind; }
 
+  /**
+   * Reference to the container vector which hold gradients at dofs (if it can be interpreted).
+   * Mainly used for finite volume systems.
+   */
+  const std::vector<std::unique_ptr<NumericVector<Number>>> & gradientContainer() const
+  {
+    return _raw_grad_container;
+  }
+
+  /**
+   * Compute time derivatives, auxiliary variables, etc.
+   * @param type Our current execution stage
+   */
+  virtual void compute(ExecFlagType type) = 0;
+
 protected:
   /**
    * Internal getter for solution owned by libMesh.
    */
   virtual NumericVector<Number> & solutionInternal() const = 0;
 
+  /// The subproblem for whom this class holds variable data, etc; this can either be the governing
+  /// finite element/volume problem or a subjugate displaced problem
   SubProblem & _subproblem;
+
+  /// the governing finite element/volume problem
+  FEProblemBase & _fe_problem;
 
   MooseApp & _app;
   Factory & _factory;
@@ -930,6 +979,16 @@ protected:
 
   std::vector<std::string> _vars_to_be_zeroed_on_residual;
   std::vector<std::string> _vars_to_be_zeroed_on_jacobian;
+
+  /// solution vector for u^dot
+  NumericVector<Number> * _u_dot;
+  /// solution vector for u^dotdot
+  NumericVector<Number> * _u_dotdot;
+
+  /// old solution vector for u^dot
+  NumericVector<Number> * _u_dot_old;
+  /// old solution vector for u^dotdot
+  NumericVector<Number> * _u_dotdot_old;
 
   Real _du_dot_du;
   Real _du_dotdot_du;
@@ -977,6 +1036,15 @@ protected:
 
   /// Container for the dof indices of a given variable
   std::vector<dof_id_type> _var_all_dof_indices;
+
+  /// Serialized version of the solution vector, or nullptr if a
+  /// serialized solution is not needed
+  std::unique_ptr<NumericVector<Number>> _serialized_solution;
+
+  /// A cache for storing gradients at dof locations. We store it on the system
+  /// because we create copies of variables on each thread and that would
+  /// lead to increased data duplication when using threading-based parallelism.
+  std::vector<std::unique_ptr<NumericVector<Number>>> _raw_grad_container;
 
 private:
   /**

@@ -25,8 +25,8 @@ pressure_tag = "pressure_grad"
     xmax = 1
     ymin = 0
     ymax = 1
-    nx = 20
-    ny = 20
+    nx = 10
+    ny = 10
   []
 []
 
@@ -48,24 +48,24 @@ pressure_tag = "pressure_grad"
   [vel_x]
     type = INSFVVelocityVariable
     initial_condition = 0.0
-    nl_sys = u_system
+    solver_sys = u_system
     two_term_boundary_expansion = false
   []
   [vel_y]
     type = INSFVVelocityVariable
     initial_condition = 0.0
-    nl_sys = v_system
+    solver_sys = v_system
     two_term_boundary_expansion = false
   []
   [pressure]
     type = INSFVPressureVariable
-    nl_sys = pressure_system
+    solver_sys = pressure_system
     initial_condition = 0.2
     two_term_boundary_expansion = false
   []
   [T_fluid]
     type = INSFVEnergyVariable
-    nl_sys = energy_system
+    solver_sys = energy_system
     two_term_boundary_expansion = false
   []
 []
@@ -217,9 +217,9 @@ pressure_tag = "pressure_grad"
   []
 []
 
-[Materials]
+[FunctorMaterials]
   [ins_fv]
-    type = INSFVEnthalpyMaterial
+    type = INSFVEnthalpyFunctorMaterial
     temperature = 'T_fluid'
     rho = ${rho}
     cp = ${cp}
@@ -227,7 +227,7 @@ pressure_tag = "pressure_grad"
 []
 
 [Executioner]
-  type = SIMPLE
+  type = SIMPLENonlinearAssembly
   rhie_chow_user_object = 'rc'
   momentum_systems = 'u_system v_system'
   pressure_system = 'pressure_system'

@@ -107,6 +107,7 @@
     file_value = u
     variable = u
     execute_on = timestep_end
+    objective_name = objective_value
     outputs = none
   []
 []
@@ -150,7 +151,7 @@
 
 [Variables]
   [u_adjoint]
-    nl_sys = adjoint
+    solver_sys = adjoint
     outputs = none
   []
 []

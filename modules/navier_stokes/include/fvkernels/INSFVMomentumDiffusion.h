@@ -12,8 +12,10 @@
 #include "MathFVUtils.h"
 #include "INSFVFluxKernel.h"
 #include "INSFVMomentumResidualObject.h"
+#include "INSFVVelocityVariable.h"
+#include "SolutionInvalidInterface.h"
 
-class INSFVMomentumDiffusion : public INSFVFluxKernel
+class INSFVMomentumDiffusion : public INSFVFluxKernel, public SolutionInvalidInterface
 {
 public:
   static InputParameters validParams();
@@ -41,4 +43,20 @@ protected:
 
   /// The a coefficient for the neighbor
   ADReal _an = 0;
+
+  /// x-velocity
+  const Moose::Functor<ADReal> * const _u_var;
+  /// y-velocity
+  const Moose::Functor<ADReal> * const _v_var;
+  /// z-velocity
+  const Moose::Functor<ADReal> * const _w_var;
+
+  /// Boolean parameter to include the complete momentum expansion
+  const bool _complete_expansion;
+
+  /// Boolean parameter to limit interpolation
+  const bool _limit_interpolation;
+
+  /// dimension
+  const unsigned int _dim;
 };

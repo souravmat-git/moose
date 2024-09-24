@@ -81,7 +81,6 @@ public:
   using DoFValue = typename MooseVariableField<OutputType>::DoFValue;
 
   using FunctorArg = typename Moose::ADType<OutputType>::type;
-  using typename Moose::FunctorBase<FunctorArg>::FunctorReturnType;
   using typename Moose::FunctorBase<FunctorArg>::ValueType;
   using typename Moose::FunctorBase<FunctorArg>::GradientType;
   using typename Moose::FunctorBase<FunctorArg>::DotType;
@@ -140,12 +139,14 @@ public:
    */
   bool computingCurl() const override final;
 
+  /**
+   * Whether or not this variable is computing the divergence
+   */
+  bool computingDiv() const override final;
+
   bool isNodal() const override { return _element_data->isNodal(); }
   bool hasDoFsOnNodes() const override { return _element_data->hasDoFsOnNodes(); }
   FEContinuity getContinuity() const override { return _element_data->getContinuity(); };
-  Moose::VarFieldType fieldType() const override;
-  bool isArray() const override;
-  bool isVector() const override;
   const Node * const & node() const { return _element_data->node(); }
   const dof_id_type & nodalDofIndex() const override { return _element_data->nodalDofIndex(); }
   virtual bool isNodalDefined() const override;
@@ -197,6 +198,7 @@ public:
   }
   const FieldVariablePhiSecond & secondPhi() const override final;
   const FieldVariablePhiCurl & curlPhi() const override final;
+  const FieldVariablePhiDivergence & divPhi() const override final;
 
   const FieldVariablePhiValue & phiFace() const override final { return _element_data->phiFace(); }
   const FieldVariablePhiGradient & gradPhiFace() const override final
@@ -209,6 +211,7 @@ public:
   }
   const FieldVariablePhiSecond & secondPhiFace() const override final;
   const FieldVariablePhiCurl & curlPhiFace() const;
+  const FieldVariablePhiDivergence & divPhiFace() const;
 
   const FieldVariablePhiValue & phiNeighbor() const override final { return _neighbor_data->phi(); }
   const FieldVariablePhiGradient & gradPhiNeighbor() const override final
@@ -221,6 +224,7 @@ public:
   }
   const FieldVariablePhiSecond & secondPhiNeighbor() const override final;
   const FieldVariablePhiCurl & curlPhiNeighbor() const;
+  const FieldVariablePhiDivergence & divPhiNeighbor() const;
 
   const FieldVariablePhiValue & phiFaceNeighbor() const override final
   {
@@ -236,6 +240,7 @@ public:
   }
   const FieldVariablePhiSecond & secondPhiFaceNeighbor() const override final;
   const FieldVariablePhiCurl & curlPhiFaceNeighbor() const;
+  const FieldVariablePhiDivergence & divPhiFaceNeighbor() const;
 
   virtual const FieldVariablePhiValue & phiLower() const override { return _lower_data->phi(); }
   const FieldVariablePhiGradient & gradPhiLower() const { return _lower_data->gradPhi(); }
@@ -270,7 +275,7 @@ public:
   {
     return _element_data->vectorTagDofValue(tag);
   }
-  const FieldVariableValue & matrixTagValue(TagID tag) const
+  const FieldVariableValue & matrixTagValue(TagID tag) const override
   {
     return _element_data->matrixTagValue(tag);
   }
@@ -319,6 +324,14 @@ public:
   const FieldVariableCurl & curlSln() const { return _element_data->curlSln(Moose::Current); }
   const FieldVariableCurl & curlSlnOld() const { return _element_data->curlSln(Moose::Old); }
   const FieldVariableCurl & curlSlnOlder() const { return _element_data->curlSln(Moose::Older); }
+
+  /// element divergence
+  const FieldVariableDivergence & divSln() const { return _element_data->divSln(Moose::Current); }
+  const FieldVariableDivergence & divSlnOld() const { return _element_data->divSln(Moose::Old); }
+  const FieldVariableDivergence & divSlnOlder() const
+  {
+    return _element_data->divSln(Moose::Older);
+  }
 
   /// AD
   const ADTemplateVariableValue<OutputType> & adSln() const override
@@ -453,6 +466,20 @@ public:
     return _neighbor_data->curlSln(Moose::Older);
   }
 
+  /// neighbor solution divergence
+  const FieldVariableDivergence & divSlnNeighbor() const
+  {
+    return _neighbor_data->divSln(Moose::Current);
+  }
+  const FieldVariableDivergence & divSlnOldNeighbor() const
+  {
+    return _neighbor_data->divSln(Moose::Old);
+  }
+  const FieldVariableDivergence & divSlnOlderNeighbor() const
+  {
+    return _neighbor_data->divSln(Moose::Older);
+  }
+
   /// neighbor dots
   const FieldVariableValue & uDotNeighbor() const { return _neighbor_data->uDot(); }
   const FieldVariableValue & uDotDotNeighbor() const { return _neighbor_data->uDotDot(); }
@@ -480,7 +507,8 @@ public:
   /**
    * Set local DOF values and evaluate the values on quadrature points
    */
-  void setDofValues(const DenseVector<OutputData> & values) override;
+  virtual void setDofValues(const DenseVector<OutputData> & values) override;
+  virtual void setLowerDofValues(const DenseVector<OutputData> & values) override;
 
   /**
    * Write a nodal value to the passed-in solution vector
@@ -520,18 +548,23 @@ public:
    * @return Variable value
    */
   OutputData getElementalValueOlder(const Elem * elem, unsigned int idx = 0) const;
+
   /**
    * Set the current local DOF values to the input vector
    */
-  void insert(NumericVector<Number> & residual) override;
+  virtual void insert(NumericVector<Number> & vector) override;
+  virtual void insertLower(NumericVector<Number> & vector) override;
+
   /**
    * Add the current local DOF values to the input vector
    */
-  void add(NumericVector<Number> & residual) override;
+  virtual void add(NumericVector<Number> & vector) override;
+
   /**
    * Add passed in local DOF values onto the current solution
    */
   void addSolution(const DenseVector<Number> & v);
+
   /**
    * Add passed in local neighbor DOF values onto the current solution
    */
@@ -659,7 +692,7 @@ public:
   }
 
   const DoFValue & nodalVectorTagValue(TagID tag) const override;
-  const DoFValue & nodalMatrixTagValue(TagID tag) const;
+  const DoFValue & nodalMatrixTagValue(TagID tag) const override;
 
   const typename Moose::ADType<OutputType>::type & adNodalValue() const;
 
@@ -673,6 +706,9 @@ public:
   virtual void meshChanged() override;
   virtual void residualSetup() override;
   virtual void jacobianSetup() override;
+
+  bool supportsFaceArg() const override final { return true; }
+  bool supportsElemSideQpArg() const override final { return true; }
 
 protected:
   usingMooseVariableFieldMembers;
@@ -823,3 +859,49 @@ MooseVariableFE<OutputType>::setActiveTags(const std::set<TagID> & vtags)
   _neighbor_data->setActiveTags(vtags);
   _lower_data->setActiveTags(vtags);
 }
+
+// Declare all the specializations, as the template specialization declarations below must know
+template <>
+InputParameters MooseVariableFE<Real>::validParams();
+template <>
+InputParameters MooseVariableFE<RealVectorValue>::validParams();
+template <>
+InputParameters MooseVariableFE<RealEigenVector>::validParams();
+template <>
+RealEigenVector
+MooseVariableFE<RealEigenVector>::getValue(const Elem * elem,
+                                           const std::vector<std::vector<Real>> & phi) const;
+template <>
+RealVectorArrayValue MooseVariableFE<RealEigenVector>::getGradient(
+    const Elem * elem, const std::vector<std::vector<RealVectorValue>> & grad_phi) const;
+template <>
+void MooseVariableFE<RealEigenVector>::evaluateOnElement(const ElemQpArg &,
+                                                         const StateArg &,
+                                                         bool) const;
+template <>
+void MooseVariableFE<RealEigenVector>::evaluateOnElementSide(const ElemSideQpArg &,
+                                                             const StateArg &,
+                                                             bool) const;
+template <>
+typename MooseVariableFE<RealEigenVector>::ValueType
+MooseVariableFE<RealEigenVector>::evaluate(const ElemQpArg &, const StateArg &) const;
+template <>
+typename MooseVariableFE<RealEigenVector>::ValueType
+MooseVariableFE<RealEigenVector>::evaluate(const ElemSideQpArg &, const StateArg &) const;
+template <>
+typename MooseVariableFE<RealEigenVector>::GradientType
+MooseVariableFE<RealEigenVector>::evaluateGradient(const ElemQpArg &, const StateArg &) const;
+template <>
+typename MooseVariableFE<RealEigenVector>::GradientType
+MooseVariableFE<RealEigenVector>::evaluateGradient(const ElemSideQpArg &, const StateArg &) const;
+template <>
+typename MooseVariableFE<RealEigenVector>::DotType
+MooseVariableFE<RealEigenVector>::evaluateDot(const ElemQpArg &, const StateArg &) const;
+template <>
+typename MooseVariableFE<RealEigenVector>::DotType
+MooseVariableFE<RealEigenVector>::evaluateDot(const ElemSideQpArg &, const StateArg &) const;
+
+// Prevent implicit instantiation in other translation units where these classes are used
+extern template class MooseVariableFE<Real>;
+extern template class MooseVariableFE<RealVectorValue>;
+extern template class MooseVariableFE<RealEigenVector>;

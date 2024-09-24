@@ -27,7 +27,7 @@ NodalBC::NodalBC(const InputParameters & parameters)
     MooseVariableInterface<Real>(this,
                                  true,
                                  "variable",
-                                 Moose::VarKindType::VAR_NONLINEAR,
+                                 Moose::VarKindType::VAR_SOLVER,
                                  Moose::VarFieldType::VAR_FIELD_STANDARD),
     _var(*mooseVariable()),
     _current_node(_var.node()),
@@ -159,7 +159,7 @@ NodalBC::computeResidualAndJacobian()
 {
   computeResidual();
 
-  for (const auto & [ivariable, jvariable] : _fe_problem.couplingEntries(_tid))
+  for (const auto & [ivariable, jvariable] : _fe_problem.couplingEntries(_tid, _sys.number()))
   {
     const unsigned int ivar = ivariable->number();
     const unsigned int jvar = jvariable->number();

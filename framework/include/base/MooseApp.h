@@ -9,9 +9,18 @@
 
 #pragma once
 
+#ifdef LIBTORCH_ENABLED
+// Libtorch includes
+#include <torch/types.h>
+#include <torch/mps.h>
+#include <torch/cuda.h>
+#include <c10/core/DeviceType.h>
+#endif
+
 // MOOSE includes
 #include "Moose.h"
 #include "Parser.h"
+#include "Builder.h"
 #include "ActionWarehouse.h"
 #include "Factory.h"
 #include "ActionFactory.h"
@@ -26,7 +35,7 @@
 #include "MeshGeneratorSystem.h"
 #include "RestartableDataReader.h"
 #include "Backup.h"
-
+#include "MooseBase.h"
 #include "libmesh/parallel_object.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/point.h"
@@ -54,6 +63,10 @@ namespace libMesh
 {
 class ExodusII_IO;
 }
+namespace hit
+{
+class Node;
+}
 
 /**
  * Base class for MOOSE-based applications
@@ -67,9 +80,15 @@ class ExodusII_IO;
  */
 class MooseApp : public ConsoleStreamInterface,
                  public PerfGraphInterface,
-                 public libMesh::ParallelObject
+                 public libMesh::ParallelObject,
+                 public MooseBase
 {
 public:
+#ifdef LIBTORCH_ENABLED
+  /// Get the device torch is supposed to be running on.
+  torch::DeviceType getLibtorchDevice() const { return _libtorch_device; }
+#endif
+
   /**
    * Stores configuration options relating to the fixed-point solving
    * capability.  This is used for communicating input-file-based config from
@@ -96,15 +115,6 @@ public:
   TheWarehouse & theWarehouse() { return *_the_warehouse; }
 
   /**
-   * Get the name of the object. In the case of MooseApp, the name of the object is *NOT* the name
-   * of the application. It's the name of the created application which is usually "main". If you
-   * have subapps, then each individual subapp will have a unique name which typically comes from
-   * the input file (e.g. sub0, sub1, etc...).
-   * @return The name of the object
-   */
-  const std::string & name() const { return _name; }
-
-  /**
    * Get printable name of the application.
    */
   virtual std::string getPrintableName() const { return "Application"; }
@@ -125,13 +135,6 @@ public:
   InputParameters & parameters() { return _pars; }
 
   /**
-   * Get the type of this object as a string. This is a string version of the class name (e.g.
-   * MooseTestApp).
-   * @return The the type of the object
-   */
-  const std::string & type() const { return _type; }
-
-  /**
    * The RankMap is a useful object for determining how the processes
    * are laid out on the physical nodes of the cluster
    */
@@ -145,7 +148,10 @@ public:
   /**
    * Get the SolutionInvalidity for this app
    */
+  ///@{
   SolutionInvalidity & solutionInvalidity() { return _solution_invalidity; }
+  const SolutionInvalidity & solutionInvalidity() const { return _solution_invalidity; }
+  ///@}
 
   ///@{
   /**
@@ -209,9 +215,9 @@ public:
   const ActionWarehouse & actionWarehouse() const { return _action_warehouse; }
 
   /**
-   * Returns a writable reference to the parser
+   * Returns a writable reference to the builder
    */
-  Parser & parser() { return _parser; }
+  Moose::Builder & builder() { return _builder; }
 
   /**
    * Returns a writable reference to the syntax object.
@@ -219,17 +225,14 @@ public:
   Syntax & syntax() { return _syntax; }
 
   /**
-   * Set the input file name.
+   * @return the input file names set in the Parser
    */
-  void setInputFileName(const std::string & input_file_name);
+  const std::vector<std::string> & getInputFileNames() const;
 
   /**
-   * Returns the input file name that was set with setInputFileName
+   * @return The last input filename set (if any)
    */
-  std::string getInputFileName() const
-  {
-    return _input_filenames.empty() ? "" : _input_filenames.back();
-  }
+  const std::string & getLastInputFileName() const;
 
   /**
    * Override the selection of the output file base name.
@@ -349,6 +352,11 @@ public:
   void addExecutorParams(const std::string & type,
                          const std::string & name,
                          const InputParameters & params);
+
+  /**
+   * @return The Parser
+   **/
+  Parser & parser();
 
 private:
   /**
@@ -515,7 +523,7 @@ public:
    *  Whether or not this simulation should only run half its transient (useful for testing
    * recovery)
    */
-  bool halfTransient() const { return _half_transient; }
+  bool testCheckpointHalfTransient() const { return _test_checkpoint_half_transient; }
 
   /**
    * Store a map of outputter names and file numbers
@@ -546,6 +554,7 @@ public:
    * Get the OutputWarehouse objects
    */
   OutputWarehouse & getOutputWarehouse();
+  const OutputWarehouse & getOutputWarehouse() const;
 
   /**
    * Get SystemInfo object
@@ -936,6 +945,15 @@ public:
   /// The file suffix for restartable data
   std::filesystem::path restartFolderBase(const std::filesystem::path & folder_base) const;
 
+  /**
+   * @return The hit node that is responsible for creating the current action that is running,
+   * if any
+   *
+   * Can be used to link objects that are created by an action to the action that
+   * created them in input
+   */
+  const hit::Node * getCurrentActionHitNode() const;
+
 private:
   /**
    * Purge this relationship manager from meshes and DofMaps and finally from us. This method is
@@ -948,6 +966,16 @@ private:
    * preexisting RMs using this method
    */
   void removeRelationshipManager(std::shared_ptr<RelationshipManager> relationship_manager);
+
+#ifdef LIBTORCH_ENABLED
+  /**
+   * Function to determine the device which should be used by libtorch on this
+   * application. We use this function to decide what is available on different
+   * builds.
+   * @param device Enum to describe if a cpu or a gpu should be used.
+   */
+  torch::DeviceType determineLibtorchDeviceType(const MooseEnum & device) const;
+#endif
 
 public:
   /**
@@ -1095,9 +1123,6 @@ protected:
   /// The MPI communicator this App is going to use
   const std::shared_ptr<Parallel::Communicator> _comm;
 
-  /// Input file names used
-  std::vector<std::string> _input_filenames;
-
   /// The output file basename
   std::string _output_file_base;
 
@@ -1139,7 +1164,10 @@ protected:
   OutputWarehouse _output_warehouse;
 
   /// Parser for parsing the input file
-  Parser _parser;
+  const std::shared_ptr<Parser> _parser;
+
+  /// Builder for building app related parser tree
+  Moose::Builder _builder;
 
   /// Where the restartable data is held (indexed on tid)
   std::vector<RestartableDataMap> _restartable_data;
@@ -1235,7 +1263,7 @@ protected:
   std::string _restart_recover_base;
 
   /// Whether or not this simulation should only run half its transient (useful for testing recovery)
-  bool _half_transient;
+  bool _test_checkpoint_half_transient;
 
   /// Map of outputer name and file number (used by MultiApps to propagate file numbers down through the multiapps)
   std::map<std::string, unsigned int> _output_file_numbers;
@@ -1333,12 +1361,14 @@ private:
    * Take an input relationship manager, clone it, and then initialize it with provided mesh and
    * optional \p dof_map
    * @param template_rm The relationship manager template from which we will clone
+   * @param moose_mesh The moose mesh to use for initialization
    * @param mesh The mesh to use for initialization
    * @param dof_map An optional parameter that, if provided, will be used to help init the cloned
    * relationship manager
    * @return a reference to the cloned and initialized relationship manager
    */
   RelationshipManager & createRMFromTemplateAndInit(const RelationshipManager & template_rm,
+                                                    MooseMesh & moose_mesh,
                                                     MeshBase & mesh,
                                                     const DofMap * dof_map = nullptr);
 
@@ -1451,6 +1481,11 @@ private:
   /// the backup will not be filled yet.
   std::unique_ptr<Backup> * const _initial_backup;
 
+#ifdef LIBTORCH_ENABLED
+  /// The libtorch device this app is using.
+  const torch::DeviceType _libtorch_device;
+#endif
+
   // Allow FEProblemBase to set the recover/restart state, so make it a friend
   friend class FEProblemBase;
   friend class Restartable;
@@ -1468,7 +1503,7 @@ template <typename T>
 const T &
 MooseApp::getParam(const std::string & name) const
 {
-  return InputParameters::getParamHelper(name, _pars, static_cast<T *>(0));
+  return InputParameters::getParamHelper(name, _pars, static_cast<T *>(0), this);
 }
 
 template <typename T>
@@ -1478,13 +1513,13 @@ MooseApp::getRenamedParam(const std::string & old_name, const std::string & new_
   // this enables having a default on the new parameter but bypassing it with the old one
   // Most important: accept new parameter
   if (isParamSetByUser(new_name) && !isParamValid(old_name))
-    return InputParameters::getParamHelper(new_name, _pars, static_cast<T *>(0));
+    return InputParameters::getParamHelper(new_name, _pars, static_cast<T *>(0), this);
   // Second most: accept old parameter
   else if (isParamValid(old_name) && !isParamSetByUser(new_name))
-    return InputParameters::getParamHelper(old_name, _pars, static_cast<T *>(0));
+    return InputParameters::getParamHelper(old_name, _pars, static_cast<T *>(0), this);
   // Third most: accept default for new parameter
   else if (isParamValid(new_name) && !isParamValid(old_name))
-    return InputParameters::getParamHelper(new_name, _pars, static_cast<T *>(0));
+    return InputParameters::getParamHelper(new_name, _pars, static_cast<T *>(0), this);
   // Refuse: no default, no value passed
   else if (!isParamValid(old_name) && !isParamValid(new_name))
     mooseError(_pars.blockFullpath() + ": parameter '" + new_name +

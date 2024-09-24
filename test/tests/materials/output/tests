@@ -12,6 +12,13 @@
 
       detail = 'outputting all properties within a material definition;'
     []
+    [ad_all]
+      type = 'Exodiff'
+      input = 'output.i'
+      exodiff = 'ad_output_out.e'
+      cli_args = "Materials/test_material/type=ADOutputTestMaterial Outputs/file_base=ad_output_out"
+      detail = 'outputting all AD properties within a material definition;'
+    []
     [all_via_outputs]
       # Test the ability for Output objects to enable all material property output
       type = 'Exodiff'
@@ -90,7 +97,7 @@
     input = output_steady.i
     expect_err = "The material property output real_property has the same name as an existing variable, either use the material declare_suffix parameter to disambiguate"
     cli_args = "AuxVariables/real_property/order=CONSTANT AuxVariables/real_property/family=MONOMIAL"
-    requirement = "The system shall error if an existing variable shares the same name as an auxiliary variable used for material output"
+    requirement = "The system shall report an error if an existing variable shares the same name as an auxiliary variable used for material output"
   []
   [invalid_outputs]
     type = RunException
@@ -98,7 +105,7 @@
     expect_err = "The output object 'garbage' is not a defined output object"
     cli_args = 'Outputs/exodus=false Materials/test_material/outputs=garbage'
 
-    requirement = "The system shall error if the supplied output options for material data output "
+    requirement = "The system shall report an error if the supplied output options for material data output "
                   "are not consistent with the list of available outputs."
   []
   [warn_unsupported_types]
@@ -112,7 +119,7 @@
     type = RunApp
     input = output_warning.i
     allow_warnings = true
-    expect_out = "The following total 103 aux variables:"
+    expect_out = "The following total 145 aux variables:"
     requirement = "The system shall show the field variable names for outputting material data added by materials."
     prereq = warn_unsupported_types
   []

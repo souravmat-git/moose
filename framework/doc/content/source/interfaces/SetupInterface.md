@@ -1,7 +1,7 @@
 # SetupInterface (execute_on)
 
 Most user-facing objects in MOOSE inherit from the SetupInterface class. This class provides two
-features to objects. Foremost, it provides the the "execute_on" parameter, which, as the name
+features to objects. Foremost, it provides the "execute_on" parameter, which, as the name
 suggests, dictates when the object is to be executed. Secondly, it adds virtual setup methods that
 allow derived classes to perform setup applications prior to execution.
 
@@ -26,7 +26,7 @@ ALWAYS | Union of all the above flags.
 The "execute_on" parameter can be set to a single flag or multiple flags. For example, it may be
 desirable to only execute an object initially because the state of the auxiliary computation does not
 vary. In the input file snippet below, the [ElementLengthAux](/ElementLengthAux.md) computation only
-needs to be computed initially, thus the "exeucte_on" parameter is set as such.
+needs to be computed initially, thus the "execute_on" parameter is set as such.
 
 !listing test/tests/auxkernels/element_length/element_length.i block=AuxKernels
 

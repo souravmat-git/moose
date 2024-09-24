@@ -73,14 +73,14 @@
 #ifdef SCALAR_TRANSPORT_ENABLED
 #include "ScalarTransportApp.h"
 #endif
+#ifdef SOLID_MECHANICS_ENABLED
+#include "SolidMechanicsApp.h"
+#endif
 #ifdef SOLID_PROPERTIES_ENABLED
 #include "SolidPropertiesApp.h"
 #endif
 #ifdef STOCHASTIC_TOOLS_ENABLED
 #include "StochasticToolsApp.h"
-#endif
-#ifdef TENSOR_MECHANICS_ENABLED
-#include "TensorMechanicsApp.h"
 #endif
 #ifdef THERMAL_HYDRAULICS_ENABLED
 #include "ThermalHydraulicsApp.h"
@@ -110,6 +110,106 @@ void
 ModulesApp::registerApps()
 {
   registerApp(ModulesApp);
+
+#ifdef CHEMICAL_REACTIONS_ENABLED
+  ChemicalReactionsApp::registerApps();
+#endif
+
+#ifdef CONTACT_ENABLED
+  ContactApp::registerApps();
+#endif
+
+#ifdef ELECTROMAGNETICS_ENABLED
+  ElectromagneticsApp::registerApps();
+#endif
+
+#ifdef FSI_ENABLED
+  FsiApp::registerApps();
+#endif
+
+#ifdef FLUID_PROPERTIES_ENABLED
+  FluidPropertiesApp::registerApps();
+#endif
+
+#ifdef FUNCTIONAL_EXPANSION_TOOLS_ENABLED
+  FunctionalExpansionToolsApp::registerApps();
+#endif
+
+#ifdef GEOCHEMISTRY_ENABLED
+  GeochemistryApp::registerApps();
+#endif
+
+#ifdef HEAT_TRANSFER_ENABLED
+  HeatTransferApp::registerApps();
+#endif
+
+#ifdef LEVEL_SET_ENABLED
+  LevelSetApp::registerApps();
+#endif
+
+#ifdef MISC_ENABLED
+  MiscApp::registerApps();
+#endif
+
+#ifdef NAVIER_STOKES_ENABLED
+  NavierStokesApp::registerApps();
+#endif
+
+#ifdef OPTIMIZATION_ENABLED
+  OptimizationApp::registerApps();
+#endif
+
+#ifdef PERIDYNAMICS_ENABLED
+  PeridynamicsApp::registerApps();
+#endif
+
+#ifdef PHASE_FIELD_ENABLED
+  PhaseFieldApp::registerApps();
+#endif
+
+#ifdef POROUS_FLOW_ENABLED
+  PorousFlowApp::registerApps();
+#endif
+
+#ifdef RAY_TRACING_ENABLED
+  RayTracingApp::registerApps();
+#endif
+
+#ifdef RDG_ENABLED
+  RdgApp::registerApps();
+#endif
+
+#ifdef REACTOR_ENABLED
+  ReactorApp::registerApps();
+#endif
+
+#ifdef RICHARDS_ENABLED
+  RichardsApp::registerApps();
+#endif
+
+#ifdef SCALAR_TRANSPORT_ENABLED
+  ScalarTransportApp::registerApps();
+#endif
+
+#ifdef SOLID_MECHANICS_ENABLED
+  SolidMechanicsApp::registerApps();
+#endif
+
+#ifdef SOLID_PROPERTIES_ENABLED
+  SolidPropertiesApp::registerApps();
+#endif
+
+#ifdef STOCHASTIC_TOOLS_ENABLED
+  StochasticToolsApp::registerApps();
+#endif
+
+#ifdef THERMAL_HYDRAULICS_ENABLED
+  ThermalHydraulicsApp::registerApps();
+#endif
+
+#ifdef XFEM_ENABLED
+  XFEMApp::registerApps();
+#endif
 }
 
 void
@@ -180,16 +280,16 @@ ModulesApp::registerObjects(Factory & factory)
   RichardsApp::registerObjects(factory);
 #endif
 
+#ifdef SOLID_MECHANICS_ENABLED
+  SolidMechanicsApp::registerObjects(factory);
+#endif
+
 #ifdef SOLID_PROPERTIES_ENABLED
   SolidPropertiesApp::registerObjects(factory);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
   StochasticToolsApp::registerObjects(factory);
-#endif
-
-#ifdef TENSOR_MECHANICS_ENABLED
-  TensorMechanicsApp::registerObjects(factory);
 #endif
 
 #ifdef THERMAL_HYDRAULICS_ENABLED
@@ -271,16 +371,16 @@ ModulesApp::associateSyntax(Syntax & syntax, ActionFactory & action_factory)
   RichardsApp::associateSyntax(syntax, action_factory);
 #endif
 
+#ifdef SOLID_MECHANICS_ENABLED
+  SolidMechanicsApp::associateSyntax(syntax, action_factory);
+#endif
+
 #ifdef SOLID_PROPERTIES_ENABLED
   SolidPropertiesApp::associateSyntax(syntax, action_factory);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
   StochasticToolsApp::associateSyntax(syntax, action_factory);
-#endif
-
-#ifdef TENSOR_MECHANICS_ENABLED
-  TensorMechanicsApp::associateSyntax(syntax, action_factory);
 #endif
 
 #ifdef THERMAL_HYDRAULICS_ENABLED
@@ -358,16 +458,16 @@ ModulesApp::registerExecFlags(Factory & factory)
   RichardsApp::registerExecFlags(factory);
 #endif
 
+#ifdef SOLID_MECHANICS_ENABLED
+  SolidMechanicsApp::registerExecFlags(factory);
+#endif
+
 #ifdef SOLID_PROPERTIES_ENABLED
   SolidPropertiesApp::registerExecFlags(factory);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
   StochasticToolsApp::registerExecFlags(factory);
-#endif
-
-#ifdef TENSOR_MECHANICS_ENABLED
-  TensorMechanicsApp::registerExecFlags(factory);
 #endif
 
 #ifdef THERMAL_HYDRAULICS_ENABLED
@@ -406,6 +506,10 @@ ModulesApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
 
 #ifdef FSI_ENABLED
   FsiApp::registerAll(f, af, s);
+#endif
+
+#ifdef FUNCTIONAL_EXPANSION_TOOLS_ENABLED
+  FunctionalExpansionToolsApp::registerAll(f, af, s);
 #endif
 
 #ifdef GEOCHEMISTRY_ENABLED
@@ -464,16 +568,16 @@ ModulesApp::registerAll(Factory & f, ActionFactory & af, Syntax & s)
   ScalarTransportApp::registerAll(f, af, s);
 #endif
 
+#ifdef SOLID_MECHANICS_ENABLED
+  SolidMechanicsApp::registerAll(f, af, s);
+#endif
+
 #ifdef SOLID_PROPERTIES_ENABLED
   SolidPropertiesApp::registerAll(f, af, s);
 #endif
 
 #ifdef STOCHASTIC_TOOLS_ENABLED
   StochasticToolsApp::registerAll(f, af, s);
-#endif
-
-#ifdef TENSOR_MECHANICS_ENABLED
-  TensorMechanicsApp::registerAll(f, af, s);
 #endif
 
 #ifdef THERMAL_HYDRAULICS_ENABLED

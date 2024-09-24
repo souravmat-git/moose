@@ -52,8 +52,14 @@ PressureDrop::PressureDrop(const InputParameters & parameters)
     paramError("pressure", "Pressure must be a variable");
   const auto * const pressure_var = &_subproblem.getVariable(_tid, pressure_name);
   _qp_integration = dynamic_cast<const MooseVariableFE<Real> *>(pressure_var);
+
+  checkFunctorSupportsSideIntegration<Real>("pressure", _qp_integration);
+  if (_weighting_functor)
+    checkFunctorSupportsSideIntegration<RealVectorValue>("weighting_functor", _qp_integration);
+
   if (!_qp_integration)
     Moose::FV::setInterpolationMethod(*this, _weight_interp_method, "weighting_interp_method");
+
   else if (parameters.isParamSetByUser("weighting_interp_method"))
     paramError("weighting_interp_method", "Face interpolation only specified for finite volume");
 
@@ -103,7 +109,8 @@ PressureDrop::initialize()
   _weight_downstream = 0;
 
   // Build the face infos in all cases, needed to detect upstream/downstream status
-  _mesh.faceInfo(nullptr, 0);
+  if (_mesh.isFiniteVolumeInfoDirty())
+    _mesh.setupFiniteVolumeMeshData();
 }
 
 void
@@ -119,6 +126,7 @@ PressureDrop::execute()
   bool upstream = false;
   bool status_known = false;
   getFaceInfos();
+
   for (auto & fi : _face_infos)
   {
     for (const auto bdy : fi->boundaryIDs())
@@ -217,22 +225,27 @@ PressureDrop::computeFaceInfoWeightedPressureIntegral(const FaceInfo * const fi)
   const Moose::ElemQpArg elem_arg = {_current_elem, _qp, _qrule, _q_point[_qp]};
   const auto state = determineState();
   mooseAssert(_qp == 0, "Only one quadrature point");
+  mooseAssert(_pressure.hasFaceSide(*fi, true) || _pressure.hasFaceSide(*fi, true),
+              "Pressure must be defined at least on one side of the face!");
+  const auto * elem = _pressure.hasFaceSide(*fi, true) ? fi->elemPtr() : fi->neighborPtr();
 
   if (_weighting_functor)
   {
+    mooseAssert(_pressure.hasFaceSide(*fi, true) == _weighting_functor->hasFaceSide(*fi, true),
+                "Pressure and weighting functor have to be defined on the same side of the face!");
     const auto ssf = Moose::FaceArg(
         {fi,
          Moose::FV::limiterType(_weight_interp_method),
          MetaPhysicL::raw_value((*_weighting_functor)(elem_arg, state)) * fi->normal() > 0,
          correct_skewness,
-         nullptr});
+         elem});
     const auto face_weighting = MetaPhysicL::raw_value((*_weighting_functor)(ssf, state));
     return fi->normal() * face_weighting * _pressure(ssf, state);
   }
   else
   {
     const auto ssf = Moose::FaceArg(
-        {fi, Moose::FV::limiterType(_weight_interp_method), true, correct_skewness, nullptr});
+        {fi, Moose::FV::limiterType(_weight_interp_method), true, correct_skewness, elem});
     return _pressure(ssf, state);
   }
 }
@@ -255,7 +268,7 @@ PressureDrop::computeFaceInfoWeightIntegral(const FaceInfo * fi) const
          Moose::FV::limiterType(_weight_interp_method),
          MetaPhysicL::raw_value((*_weighting_functor)(elem_arg, state)) * fi->normal() > 0,
          correct_skewness,
-         nullptr});
+         _weighting_functor->hasFaceSide(*fi, true) ? fi->elemPtr() : fi->neighborPtr()});
     return fi->normal() * MetaPhysicL::raw_value((*_weighting_functor)(ssf, state));
   }
   else
@@ -290,7 +303,7 @@ PressureDrop::computeQpWeightIntegral() const
 void
 PressureDrop::threadJoin(const UserObject & y)
 {
-  const PressureDrop & pps = static_cast<const PressureDrop &>(y);
+  const auto & pps = static_cast<const PressureDrop &>(y);
   _weighted_pressure_upstream += pps._weighted_pressure_upstream;
   _weighted_pressure_downstream += pps._weighted_pressure_downstream;
   _weight_upstream += pps._weight_upstream;

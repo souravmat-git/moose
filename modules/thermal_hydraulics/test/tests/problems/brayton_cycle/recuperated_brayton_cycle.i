@@ -152,9 +152,9 @@ hs_power = 105750
   []
 []
 
-[HeatStructureMaterials]
+[SolidProperties]
   [steel]
-    type = SolidMaterialProperties
+    type = ThermalFunctionSolidProperties
     rho = 8050
     k = 45
     cp = 466
@@ -472,7 +472,8 @@ hs_power = 105750
     n_elems = ${fparse n_elems3/2}
     n_part_elems = 2
     names = recuperator
-    materials = steel
+    solid_properties = steel
+    solid_properties_T_ref = '300'
     inner_radius = ${D1}
   []
   # heat transfer from recuperator to cold leg
@@ -532,7 +533,8 @@ hs_power = 105750
     n_elems = ${n_elems4}
     n_part_elems = 2
     names = core
-    materials = steel
+    solid_properties = steel
+    solid_properties_T_ref = '300'
   []
   [total_power]
     type = TotalPower
@@ -843,7 +845,7 @@ hs_power = 105750
   [shaft_RPM]
     type = ParsedPostprocessor
     pp_names = 'shaft_speed'
-    function = '(shaft_speed * 60) /( 2 * ${fparse pi})'
+    expression = '(shaft_speed * 60) /( 2 * ${fparse pi})'
     execute_on = 'INITIAL TIMESTEP_END'
   []
 
@@ -868,7 +870,7 @@ hs_power = 105750
   [compressor_torque]
     type = ParsedPostprocessor
     pp_names = 'comp_dissipation_torque comp_isentropic_torque comp_friction_torque'
-    function = 'comp_dissipation_torque + comp_isentropic_torque + comp_friction_torque'
+    expression = 'comp_dissipation_torque + comp_isentropic_torque + comp_friction_torque'
   []
   [p_in_comp]
     type = PointValue
@@ -885,7 +887,7 @@ hs_power = 105750
   [p_ratio_comp]
     type = ParsedPostprocessor
     pp_names = 'p_in_comp p_out_comp'
-    function = 'p_out_comp / p_in_comp'
+    expression = 'p_out_comp / p_in_comp'
     execute_on = 'INITIAL TIMESTEP_END'
   []
   [T_in_comp]
@@ -903,7 +905,7 @@ hs_power = 105750
   [T_ratio_comp]
     type = ParsedPostprocessor
     pp_names = 'T_in_comp T_out_comp'
-    function = '(T_out_comp - T_in_comp) / T_out_comp'
+    expression = '(T_out_comp - T_in_comp) / T_out_comp'
     execute_on = 'INITIAL TIMESTEP_END'
   []
   [mfr_comp]
@@ -936,7 +938,7 @@ hs_power = 105750
   [turbine_torque]
     type = ParsedPostprocessor
     pp_names = 'turb_dissipation_torque turb_isentropic_torque turb_friction_torque'
-    function = 'turb_dissipation_torque + turb_isentropic_torque + turb_friction_torque'
+    expression = 'turb_dissipation_torque + turb_isentropic_torque + turb_friction_torque'
   []
   [p_in_turb]
     type = PointValue
@@ -953,7 +955,7 @@ hs_power = 105750
   [p_ratio_turb]
     type = ParsedPostprocessor
     pp_names = 'p_in_turb p_out_turb'
-    function = 'p_in_turb / p_out_turb'
+    expression = 'p_in_turb / p_out_turb'
     execute_on = 'INITIAL TIMESTEP_END'
   []
   [T_in_turb]

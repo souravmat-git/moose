@@ -30,11 +30,13 @@ NodalKernelBase::validParams()
   params.addParamNamesToGroup("use_displaced_mesh", "Advanced");
   params.addParam<std::vector<AuxVariableName>>(
       "save_in",
+      {},
       "The name of auxiliary variables to save this BC's residual contributions to.  "
       "Everything about that variable must match everything about this variable (the "
       "type, what blocks it's on, etc.)");
   params.addParam<std::vector<AuxVariableName>>(
       "diag_save_in",
+      {},
       "The name of auxiliary variables to save this BC's diagonal jacobian "
       "contributions to.  Everything about that variable must match everything "
       "about this variable (the type, what blocks it's on, etc.)");
@@ -52,7 +54,7 @@ NodalKernelBase::NodalKernelBase(const InputParameters & parameters)
     MooseVariableInterface<Real>(this,
                                  true,
                                  "variable",
-                                 Moose::VarKindType::VAR_NONLINEAR,
+                                 Moose::VarKindType::VAR_SOLVER,
                                  Moose::VarFieldType::VAR_FIELD_STANDARD),
     _fe_problem(*getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
     _var(*mooseVariable()),

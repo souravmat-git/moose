@@ -29,8 +29,8 @@ PiecewiseByBlockFunctorMaterialTempl<T>::validParams()
   auto params = FunctorMaterial::validParams();
   params.addClassDescription("Computes a property value on a per-subdomain basis");
   // Somehow min gcc doesn't know the typename of params here
-  params.template addRequiredParam<MaterialPropertyName>("prop_name",
-                                                         "The name of the property to declare");
+  params.template addRequiredParam<MooseFunctorName>("prop_name",
+                                                     "The name of the property to declare");
   params.template addRequiredParam<std::map<std::string, std::string>>(
       "subdomain_to_prop_value",
       "Map from subdomain to property value. The value may be a constant"
@@ -43,6 +43,8 @@ PiecewiseByBlockFunctorMaterialTempl<T>::PiecewiseByBlockFunctorMaterialTempl(
     const InputParameters & params)
   : FunctorMaterial(params)
 {
+  // Ultimately this can impose more caching than the original functors, but not less
+  const std::set<ExecFlagType> clearance_schedule(_execute_enum.begin(), _execute_enum.end());
   for (const auto & map_pr :
        getParam<std::map<std::string, std::string>>("subdomain_to_prop_value"))
   {
@@ -51,7 +53,8 @@ PiecewiseByBlockFunctorMaterialTempl<T>::PiecewiseByBlockFunctorMaterialTempl(
     addFunctorPropertyByBlocks<T>(
         "prop_name",
         [&functor](const auto & r, const auto & t) -> T { return functor(r, t); },
-        std::set<SubdomainID>({_mesh.getSubdomainID(map_pr.first)}));
+        std::set<SubdomainID>({_mesh.getSubdomainID(map_pr.first)}),
+        clearance_schedule);
   }
 }
 

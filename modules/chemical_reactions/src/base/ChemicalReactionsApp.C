@@ -19,6 +19,7 @@ ChemicalReactionsApp::validParams()
 
   params.set<bool>("automatic_automatic_scaling") = false;
   params.set<bool>("use_legacy_material_output") = false;
+  params.set<bool>("use_legacy_initial_residual_evaluation_behavior") = false;
 
   return params;
 }
@@ -42,7 +43,8 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("AddSecondarySpeciesAction", "ReactionNetwork/SolidKineticReactions");
   registerSyntax("AddCoupledEqSpeciesAction", "ReactionNetwork/AqueousEquilibriumReactions");
   registerSyntax("AddCoupledSolidKinSpeciesAction", "ReactionNetwork/SolidKineticReactions");
-  registerSyntax("ChemicalCompositionAction", "ChemicalComposition");
+  registerSyntax("CommonChemicalCompositionAction", "ChemicalComposition");
+  registerSyntax("ChemicalCompositionAction", "ChemicalComposition/*");
 }
 
 void

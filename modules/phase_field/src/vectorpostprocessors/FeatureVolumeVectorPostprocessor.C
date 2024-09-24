@@ -15,6 +15,7 @@
 #include "GrainTrackerInterface.h"
 #include "MooseMesh.h"
 #include "MooseVariable.h"
+#include "SystemBase.h"
 
 #include "libmesh/quadrature.h"
 
@@ -58,7 +59,7 @@ FeatureVolumeVectorPostprocessor::FeatureVolumeVectorPostprocessor(
     _percolated(declareVector("percolated")),
     _vars(_feature_counter.getFECoupledVars()),
     _mesh(_subproblem.mesh()),
-    _assembly(_subproblem.assembly(_tid)),
+    _assembly(_subproblem.assembly(_tid, _sys.number())),
     _q_point(_assembly.qPoints()),
     _qrule(_assembly.qRule()),
     _JxW(_assembly.JxW()),
@@ -145,7 +146,7 @@ FeatureVolumeVectorPostprocessor::execute()
             _fe_problem.setCurrentSubdomainID(elem, 0);
             _fe_problem.prepare(elem, 0);
             _fe_problem.reinitElem(elem, 0);
-            _fe_problem.reinitElemFace(elem, (*elem_it)->_side, (*elem_it)->_bnd_id, 0);
+            _fe_problem.reinitElemFace(elem, (*elem_it)->_side, 0);
 
             const auto & var_to_features = _feature_counter.getVarToFeatureVector(elem->id());
 

@@ -15,7 +15,7 @@ pressure_tag = "pressure_grad"
     dim = 2
     dx = '5 5'
     dy = '1.0'
-    ix = '20 20'
+    ix = '10 10'
     iy = '5'
     subdomain_id = '1 2'
   []
@@ -44,30 +44,30 @@ pressure_tag = "pressure_grad"
   [superficial_vel_x]
     type = PINSFVSuperficialVelocityVariable
     initial_condition = ${u_inlet}
-    nl_sys = u_system
+    solver_sys = u_system
     two_term_boundary_expansion = false
   []
   [superficial_vel_y]
     type = PINSFVSuperficialVelocityVariable
     initial_condition = 1e-6
-    nl_sys = v_system
+    solver_sys = v_system
     two_term_boundary_expansion = false
   []
   [pressure]
     type = INSFVPressureVariable
     two_term_boundary_expansion = false
-    nl_sys = pressure_system
+    solver_sys = pressure_system
   []
   [T_fluid]
     type = INSFVEnergyVariable
     two_term_boundary_expansion = false
-    nl_sys = energy_system
+    solver_sys = energy_system
     initial_condition = 200
   []
   [T_solid]
     type = MooseVariableFVReal
     two_term_boundary_expansion = false
-    nl_sys = solid_energy_system
+    solver_sys = solid_energy_system
     initial_condition = 200
   []
 []
@@ -252,21 +252,21 @@ pressure_tag = "pressure_grad"
   []
 []
 
-[Materials]
+[FunctorMaterials]
   [constants]
     type = ADGenericFunctorMaterial
     prop_names = 'h_cv cp'
     prop_values = '0.1 ${cp}'
   []
   [ins_fv]
-    type = INSFVEnthalpyMaterial
+    type = INSFVEnthalpyFunctorMaterial
     rho = ${rho}
     temperature = 'T_fluid'
   []
 []
 
 [Executioner]
-  type = SIMPLE
+  type = SIMPLENonlinearAssembly
   momentum_l_abs_tol = 1e-14
   pressure_l_abs_tol = 1e-14
   energy_l_abs_tol = 1e-14

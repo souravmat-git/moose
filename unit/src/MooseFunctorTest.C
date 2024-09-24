@@ -16,6 +16,7 @@
 #include "MeshGeneratorMesh.h"
 #include "GeneratedMeshGenerator.h"
 #include "AppFactory.h"
+#include "MooseMain.h"
 #include "PiecewiseByBlockLambdaFunctor.h"
 #include "ADWrapperFunctor.h"
 #include "RawValueFunctor.h"
@@ -36,6 +37,9 @@ public:
   TestFunctor() : FunctorBase<T>("test"){};
 
   bool hasBlocks(SubdomainID) const override { return true; }
+
+  bool supportsFaceArg() const override { return true; }
+  bool supportsElemSideQpArg() const override { return true; }
 
 private:
   ValueType evaluate(const ElemArg &, const StateArg &) const override final { return 0; }
@@ -303,7 +307,7 @@ TEST(MooseFunctorTest, testArgs)
   MultiMooseEnum coord_type_enum("XYZ RZ RSPHERICAL", "XYZ");
 
   const auto nx = 2;
-  auto app = AppFactory::createAppShared("MooseUnitApp", 1, (char **)argv);
+  std::shared_ptr<MooseApp> app = Moose::createMooseApp("MooseUnitApp", 1, (char **)argv);
   auto * factory = &app->getFactory();
   std::string mesh_type = "MeshGeneratorMesh";
 
@@ -330,8 +334,9 @@ TEST(MooseFunctorTest, testArgs)
   mesh->prepare(nullptr);
   mesh->setCoordSystem({}, coord_type_enum);
   // Build the face info
+  mesh->buildFiniteVolumeInfo();
+  mesh->computeFiniteVolumeCoords();
   const auto & all_fi = mesh->allFaceInfo();
-  mesh->computeFaceInfoFaceCoords();
 
   // Test VectorComponentFunctor
   {

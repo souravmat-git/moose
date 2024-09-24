@@ -25,6 +25,7 @@ ShaftConnectedPump1Phase::validParams()
   params.makeParamRequired<Real>("A_ref");
   params.addRequiredParam<BoundaryName>("inlet", "Pump inlet");
   params.addRequiredParam<BoundaryName>("outlet", "Pump outlet");
+  params.set<std::vector<BoundaryName>>("connections") = {};
   params.suppressParameter<std::vector<BoundaryName>>("connections");
   params.addRequiredParam<Real>("omega_rated", "Rated pump speed [rad/s]");
   params.addRequiredParam<Real>("volumetric_rated", "Rated pump volumetric flow rate [m^3/s]");
@@ -106,7 +107,7 @@ ShaftConnectedPump1Phase::buildVolumeJunctionUserObject()
     InputParameters params = _factory.getValidParams(class_name);
     params.set<std::vector<BoundaryName>>("boundary") = _boundary_names;
     params.set<std::vector<Real>>("normals") = _normals;
-    params.set<std::vector<processor_id_type>>("processor_ids") = _proc_ids;
+    params.set<std::vector<processor_id_type>>("processor_ids") = getConnectedProcessorIDs();
     params.set<std::vector<UserObjectName>>("numerical_flux_names") = _numerical_flux_names;
     params.set<Real>("volume") = _volume;
     params.set<std::vector<VariableName>>("A") = {FlowModel::AREA};
@@ -152,16 +153,17 @@ ShaftConnectedPump1Phase::addVariables()
   VolumeJunction1Phase::addVariables();
 
   getTHMProblem().addSimVariable(false, _head_var_name, FEType(FIRST, SCALAR));
-  getTHMProblem().addConstantScalarIC(_head_var_name, 0);
-
   getTHMProblem().addSimVariable(false, _hydraulic_torque_var_name, FEType(FIRST, SCALAR));
-  getTHMProblem().addConstantScalarIC(_hydraulic_torque_var_name, 0);
-
   getTHMProblem().addSimVariable(false, _friction_torque_var_name, FEType(FIRST, SCALAR));
-  getTHMProblem().addConstantScalarIC(_friction_torque_var_name, 0);
-
   getTHMProblem().addSimVariable(false, _moment_of_inertia_var_name, FEType(FIRST, SCALAR));
-  getTHMProblem().addConstantScalarIC(_moment_of_inertia_var_name, _inertia_const);
+
+  if (!_app.isRestarting())
+  {
+    getTHMProblem().addConstantScalarIC(_head_var_name, 0);
+    getTHMProblem().addConstantScalarIC(_hydraulic_torque_var_name, 0);
+    getTHMProblem().addConstantScalarIC(_friction_torque_var_name, 0);
+    getTHMProblem().addConstantScalarIC(_moment_of_inertia_var_name, _inertia_const);
+  }
 }
 
 void
@@ -169,39 +171,19 @@ ShaftConnectedPump1Phase::addMooseObjects()
 {
   VolumeJunction1Phase::addMooseObjects();
 
+  const std::vector<std::pair<std::string, VariableName>> quantities = {
+      {"pump_head", _head_var_name},
+      {"hydraulic_torque", _hydraulic_torque_var_name},
+      {"friction_torque", _friction_torque_var_name},
+      {"moment_of_inertia", _moment_of_inertia_var_name}};
+  for (const auto & quantity_and_name : quantities)
   {
-    std::string class_name = "PumpHeadAux";
+    const std::string class_name = "ShaftConnectedPump1PhaseAux";
     InputParameters params = _factory.getValidParams(class_name);
-    params.set<AuxVariableName>("variable") = _head_var_name;
+    params.set<AuxVariableName>("variable") = quantity_and_name.second;
+    params.set<MooseEnum>("quantity") = quantity_and_name.first;
     params.set<UserObjectName>("pump_uo") = getShaftConnectedUserObjectName();
-
-    getTHMProblem().addAuxScalarKernel(class_name, Component::genName(name(), "head_aux"), params);
-  }
-  {
-    std::string class_name = "PumpHydraulicTorqueAux";
-    InputParameters params = _factory.getValidParams(class_name);
-    params.set<AuxVariableName>("variable") = _hydraulic_torque_var_name;
-    params.set<UserObjectName>("pump_uo") = getShaftConnectedUserObjectName();
-
     getTHMProblem().addAuxScalarKernel(
-        class_name, Component::genName(name(), "hydraulic_torque_aux"), params);
-  }
-  {
-    std::string class_name = "PumpFrictionAux";
-    InputParameters params = _factory.getValidParams(class_name);
-    params.set<AuxVariableName>("variable") = _friction_torque_var_name;
-    params.set<UserObjectName>("pump_uo") = getShaftConnectedUserObjectName();
-
-    getTHMProblem().addAuxScalarKernel(
-        class_name, Component::genName(name(), "friction_torque_aux"), params);
-  }
-  {
-    std::string class_name = "PumpInertiaAux";
-    InputParameters params = _factory.getValidParams(class_name);
-    params.set<AuxVariableName>("variable") = _moment_of_inertia_var_name;
-    params.set<UserObjectName>("pump_uo") = getShaftConnectedUserObjectName();
-
-    getTHMProblem().addAuxScalarKernel(
-        class_name, Component::genName(name(), "inertia_aux"), params);
+        class_name, genName(name(), quantity_and_name.first + "_aux"), params);
   }
 }

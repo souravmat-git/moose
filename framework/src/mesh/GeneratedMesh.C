@@ -9,6 +9,8 @@
 
 #include "GeneratedMesh.h"
 
+#include "MooseApp.h"
+
 #include "libmesh/mesh_generation.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/periodic_boundaries.h"
@@ -67,7 +69,7 @@ GeneratedMesh::validParams()
       "bias_z>=0.5 & bias_z<=2",
       "The amount by which to grow (or shrink) the cells in the z-direction.");
 
-  params.addParamNamesToGroup("dim", "Main");
+  params.addParamNamesToGroup("dim", "Required");
 
   params.addClassDescription(
       "Create a line, square, or cube mesh with uniformly spaced or biased elements.");
@@ -150,7 +152,7 @@ GeneratedMesh::getMaxInDimension(unsigned int component) const
 std::unique_ptr<MooseMesh>
 GeneratedMesh::safeClone() const
 {
-  return std::make_unique<GeneratedMesh>(*this);
+  return _app.getFactory().copyConstruct(*this);
 }
 
 void

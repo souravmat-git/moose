@@ -9,20 +9,28 @@
 
 #pragma once
 
+#include "MooseTypes.h"
+
 #include <string>
+
+class ParallelParamObject;
 
 /**
  * Interface for objects that need to resolve data file paths (MooseObject and Action)
  */
-template <class T>
 class DataFileInterface
 {
 public:
   /**
+   * The parameter type this interface expects for a data file name.
+   */
+  using DataFileParameterType = DataFileName;
+
+  /**
    * Constructing the object
    * @param parent Parent object (either MooseObject or Action) for params and  output
    */
-  DataFileInterface(const T & parent);
+  DataFileInterface(const ParallelParamObject & parent);
 
   /**
    * Returns the path of a data file for a given FileName type parameter, searching
@@ -43,5 +51,5 @@ public:
                                     const std::string * param = nullptr) const;
 
 private:
-  const T & _parent;
+  const ParallelParamObject & _parent;
 };

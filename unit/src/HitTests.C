@@ -7,7 +7,7 @@
 //* Licensed under LGPL 2.1, please see LICENSE for details
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#include "hit.h"
+#include "hit/hit.h"
 #include "Parser.h"
 
 #include "gtest_include.h"
@@ -348,7 +348,7 @@ TEST(HitTests, BraceExpressions)
        "     }",
        "foo",
        "42",
-       hit::Field::Kind::Int},
+       hit::Field::Kind::String},
       {"fparse", "foo=${fparse 40 + 2}\n", "foo", "42", hit::Field::Kind::Float},
       {"fparse-dep-chain",
        "foo=${fparse 42} bar=${fparse foo}",
@@ -920,8 +920,7 @@ TEST(HitTests, FileIncludeMissing)
   }
   catch (std::exception & err)
   {
-    EXPECT_EQ("TESTCASE line:4 column:3 : could not find 'missing_file.i'\n",
-              std::string(err.what()));
+    EXPECT_EQ("TESTCASE:4.3: could not find 'missing_file.i'\n", std::string(err.what()));
   }
 }
 
@@ -963,7 +962,7 @@ TEST(HitTests, FileIncludeCircular)
   }
   catch (std::exception & err)
   {
-    EXPECT_EQ("./include_file_02.i line:3 column:3 : file include would create circular reference "
+    EXPECT_EQ("./include_file_02.i:3.3: file include would create circular reference "
               "'include_file_01.i'\n",
               std::string(err.what()));
   }
@@ -971,4 +970,284 @@ TEST(HitTests, FileIncludeCircular)
   // delete two extra files that were put on disk to be parsed from includes
   std::remove("include_file_01.i");
   std::remove("include_file_02.i");
+}
+
+// test scenario where nested file include is first element in included file
+TEST(HitTests, FileIncludeFirstField)
+{
+  // base input file defines parameter after all content from included files
+  std::string file_a = R"INPUT(
+!include fileB.i
+param_03 = 30
+)INPUT";
+
+  // write input to file on disk that includes another file as first element
+  std::ofstream file_b("fileB.i");
+  file_b << R"INPUT(
+!include fileC.i
+param_02 = 20
+)INPUT";
+  file_b.close();
+
+  // write input to file on disk that another file includes as first element
+  std::ofstream file_c("fileC.i");
+  file_c << R"INPUT(
+param_01 = 10
+)INPUT";
+  file_c.close();
+
+  // parse the base input string to consume all contents from included files
+  auto root = hit::parse("FILE-A", file_a);
+
+  // delete two extra files that were put on disk to be parsed from includes
+  std::remove("fileB.i");
+  std::remove("fileC.i");
+
+  // expected content from all include files when the parse tree is rendered
+  std::string render_expect = R"INPUT(
+param_01 = 10
+param_02 = 20
+param_03 = 30
+)INPUT";
+
+  // check that all file content is included when the parse tree is rendered
+  EXPECT_EQ(render_expect, "\n" + root->render() + "\n");
+}
+
+// test capability that blocks of the same name are merged into single block
+TEST(HitTests, BlockMerge)
+{
+  // input that has multiple blocks of the same name and split child content
+  std::string input = R"INPUT(
+[Block_01]
+
+  param_01_a = value_01_a
+  param_01_b = value_01_b
+
+  [Subblock_01_01]
+    param_01_01_a = value_01_01_a
+    param_01_01_b = value_01_01_b
+  []
+[]
+
+[Block_02]
+
+  param_02_a = value_02_a
+  param_02_b = value_02_b
+
+  [Subblock_02_01]
+    param_02_01_a = value_02_01_a
+    param_02_01_b = value_02_01_b
+  []
+[]
+
+[Block_02]
+
+  param_02_c = value_02_c
+  param_02_d = value_02_d
+
+  [Subblock_02_01]
+    param_02_01_c = value_02_01_c
+    param_02_01_d = value_02_01_d
+  []
+
+  [Subblock_02_02]
+    param_02_02_a = value_02_02_a
+    param_02_02_b = value_02_02_b
+  []
+[]
+
+[Block_01]
+
+  [Subblock_01_02]
+    param_01_02_a = value_01_02_a
+    param_01_02_b = value_01_02_b
+  []
+
+  param_01_c = value_01_c
+  param_01_d = value_01_d
+[]
+
+[Block_01]
+
+  param_01_e = value_01_e
+  param_01_f = value_01_f
+
+  [Subblock_01_01]
+    param_01_01_c = value_01_01_c
+    param_01_01_d = value_01_01_d
+  []
+
+  param_01_g = value_01_g
+  param_01_h = value_01_h
+[]
+)INPUT";
+
+  // parse input string which merges content from blocks that have same name
+  auto root = hit::parse("TESTCASE", input);
+
+  // expected content from all merged blocks when the parse tree is rendered
+  std::string render_expect = R"INPUT(
+[Block_01]
+
+  param_01_a = value_01_a
+  param_01_b = value_01_b
+
+  [Subblock_01_01]
+    param_01_01_a = value_01_01_a
+    param_01_01_b = value_01_01_b
+
+    param_01_01_c = value_01_01_c
+    param_01_01_d = value_01_01_d
+  []
+
+  [Subblock_01_02]
+    param_01_02_a = value_01_02_a
+    param_01_02_b = value_01_02_b
+  []
+
+  param_01_c = value_01_c
+  param_01_d = value_01_d
+
+  param_01_e = value_01_e
+  param_01_f = value_01_f
+
+  param_01_g = value_01_g
+  param_01_h = value_01_h
+[]
+
+[Block_02]
+
+  param_02_a = value_02_a
+  param_02_b = value_02_b
+
+  [Subblock_02_01]
+    param_02_01_a = value_02_01_a
+    param_02_01_b = value_02_01_b
+
+    param_02_01_c = value_02_01_c
+    param_02_01_d = value_02_01_d
+  []
+
+  param_02_c = value_02_c
+  param_02_d = value_02_d
+
+  [Subblock_02_02]
+    param_02_02_a = value_02_02_a
+    param_02_02_b = value_02_02_b
+  []
+[]
+)INPUT";
+
+  // check that merging of blocks is correct when the parse tree is rendered
+  EXPECT_EQ(render_expect, "\n" + root->render() + "\n");
+}
+
+// test ability to override values of parameters when using included inputs
+TEST(HitTests, ParamOverrideSuccess)
+{
+  // base input that includes content from file to be written on disk below
+  std::string file_a = R"INPUT(
+[Block]
+  param_01 :=         value_01_from_file_a
+  param_02 :override= value_02_from_file_a
+  param_03 =          value_03_from_file_a
+  param_04 =          value_04_from_file_a
+  param_05 =          value_05_from_file_a
+[]
+!include file_b.i
+)INPUT";
+
+  // write content to file on disk that gets included from base input above
+  std::ofstream file_b("file_b.i");
+  file_b << R"INPUT(
+[Block]
+  param_01 =          value_01_from_file_b
+  param_02 =          value_02_from_file_b
+  param_03 :=         value_03_from_file_b
+  param_04 :override= value_04_from_file_b
+  param_05 =          value_05_from_file_b
+[]
+)INPUT";
+  file_b.close();
+
+  // parse base input string to also consume all content from included file
+  auto root = hit::parse("FILE-A", file_a);
+
+  // delete extra file which was put on disk to be parsed from base include
+  std::remove("file_b.i");
+
+  // expected render after parameter conflicts are resolved using overrides
+  std::string render_expect = R"INPUT(
+[Block]
+  param_01 = value_01_from_file_a
+  param_02 = value_02_from_file_a
+  param_03 = value_03_from_file_b
+  param_04 = value_04_from_file_b
+  param_05 = value_05_from_file_a
+  param_05 = value_05_from_file_b
+[]
+)INPUT";
+
+  // check override resolution is as expected when parse tree gets rendered
+  EXPECT_EQ(render_expect, "\n" + root->render() + "\n");
+
+  // expected origin information of input after override conflicts resolved
+  std::string tree_expect = R"INPUT(
+/                            - fname: FILE-A                          line:  2 column:  1
+/Block                       - fname: FILE-A                          line:  2 column:  1
+/Block/param_01 (value_01_from_file_a) - fname: FILE-A                          line:  3 column:  3
+/Block/param_02 (value_02_from_file_a) - fname: FILE-A                          line:  4 column:  3
+/Block/param_03 (value_03_from_file_b) - fname: ./file_b.i                      line:  5 column:  3
+/Block/param_04 (value_04_from_file_b) - fname: ./file_b.i                      line:  6 column:  3
+/Block/param_05 (value_05_from_file_a) - fname: FILE-A                          line:  7 column:  3
+/Block/param_05 (value_05_from_file_b) - fname: ./file_b.i                      line:  7 column:  3
+)INPUT";
+
+  // traverse parse tree recursively to capture origin information of input
+  std::ostringstream tree_actual;
+  tree_list(root, tree_actual);
+
+  // check parameter origin locations resolved by overrides are as expected
+  EXPECT_EQ(tree_expect, "\n" + tree_actual.str());
+}
+
+// test error condition of conflicting parameters both specifying overrides
+TEST(HitTests, ParamOverrideFailure)
+{
+  // base input that includes content from file to be written on disk below
+  std::string file_a = R"INPUT(
+[Block]
+  param_01 := value_01_from_file_a
+[]
+!include file_b.i
+)INPUT";
+
+  // write content to file on disk that gets included from base input above
+  std::ofstream file_b("file_b.i");
+  file_b << R"INPUT(
+[Block]
+  param_01 :override= value_01_from_file_b
+[]
+)INPUT";
+  file_b.close();
+
+  // expected error if parameter is specified more than once using override
+  std::string error_expect = R"INPUT(
+FILE-A:3.3: 'Block/param_01' specified more than once with override syntax
+)INPUT";
+
+  // parse and expect error due to parameter specified using override twice
+  try
+  {
+    hit::parse("FILE-A", file_a);
+    FAIL() << "Exception was not thrown";
+  }
+  catch (hit::ParseError & err)
+  {
+    EXPECT_EQ(error_expect, "\n" + std::string(err.what()) + "\n");
+  }
+
+  // delete extra file which was put on disk to be parsed from base include
+  std::remove("file_b.i");
 }
