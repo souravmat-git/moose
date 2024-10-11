@@ -612,6 +612,13 @@ public:
   virtual void restoreOldSolutions();
 
   /**
+   * Declare that we need up to old (1) or older (2) solution states for a given type of iteration
+   * @param oldest_needed oldest solution state needed
+   * @param iteration_type the type of iteration for which old/older states are needed
+   */
+  void needSolutionState(unsigned int oldest_needed, Moose::SolutionIterationType iteration_type);
+
+  /**
    * Output the current step.
    * Will ensure that everything is in the proper state to be outputted.
    * Then tell the OutputWarehouse to do its thing
@@ -2588,7 +2595,10 @@ protected:
   void meshChangedHelper(bool intermediate_change = false);
 
   /// Helper to check for duplicate variable names across systems or within a single system
-  bool duplicateVariableCheck(const std::string & var_name, const FEType & type, bool is_aux);
+  bool duplicateVariableCheck(const std::string & var_name,
+                              const FEType & type,
+                              bool is_aux,
+                              const std::set<SubdomainID> * const active_subdomains);
 
   void computeUserObjectsInternal(const ExecFlagType & type,
                                   const Moose::AuxGroup & group,
@@ -2677,6 +2687,9 @@ protected:
 
   /// Indicates that we need to compute variable values for previous Newton iteration
   bool _needs_old_newton_iter;
+
+  /// Indicates we need to save the previous NL iteration variable values
+  bool _previous_nl_solution_required;
 
   /// Indicates if nonlocal coupling is required/exists
   bool _has_nonlocal_coupling;
