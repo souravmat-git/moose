@@ -27,6 +27,7 @@
 const ExecFlagType EXEC_NONE = registerDefaultExecFlag("NONE");
 const ExecFlagType EXEC_INITIAL = registerDefaultExecFlag("INITIAL");
 const ExecFlagType EXEC_LINEAR = registerDefaultExecFlag("LINEAR");
+const ExecFlagType EXEC_NONLINEAR_CONVERGENCE = registerDefaultExecFlag("NONLINEAR_CONVERGENCE");
 const ExecFlagType EXEC_NONLINEAR = registerDefaultExecFlag("NONLINEAR");
 const ExecFlagType EXEC_POSTCHECK = registerDefaultExecFlag("POSTCHECK");
 const ExecFlagType EXEC_TIMESTEP_END = registerDefaultExecFlag("TIMESTEP_END");
@@ -169,7 +170,9 @@ addActionTypes(Syntax & syntax)
   registerMooseObjectTask("add_time_steppers",            TimeStepper,               false);
   registerMooseObjectTask("add_time_stepper",             TimeStepper,               false);
   registerTask           ("compose_time_stepper",                                    true);
+  registerMooseObjectTask("setup_time_integrators",       TimeIntegrator,            false);
   registerMooseObjectTask("setup_time_integrator",        TimeIntegrator,            false);
+  registerMooseObjectTask("add_convergence",              Convergence,            false);
 
   registerMooseObjectTask("add_preconditioning",          MoosePreconditioner,       false);
   registerMooseObjectTask("add_field_split",              Split,                     false);
@@ -197,6 +200,7 @@ addActionTypes(Syntax & syntax)
   registerMooseObjectTask("add_output",                   Output,                    false);
 
   registerMooseObjectTask("add_control",                  Control,                   false);
+  registerMooseObjectTask("add_chain_control",            ChainControl,              false);
   registerMooseObjectTask("add_partitioner",              MoosePartitioner,          false);
 
   // clang-format on
@@ -276,6 +280,10 @@ addActionTypes(Syntax & syntax)
   registerTask("create_problem_custom", false);
   registerTask("create_problem_complete", false);
 
+  registerTask("add_default_convergence", true);
+
+  registerTask("chain_control_setup", true);
+
   // Action for setting up the signal-based checkpoint
   registerTask("auto_checkpoint_action", true);
   /**************************/
@@ -326,7 +334,7 @@ addActionTypes(Syntax & syntax)
                            "(init_component_physics)" // components must add their blocks to physics before init_physics
                            "(init_physics)"
                            "(setup_postprocessor_data)"
-                           "(setup_time_integrator)"
+                           "(setup_time_integrator, setup_time_integrators)"
                            "(setup_executioner)"
                            "(setup_executioner_complete)"
                            "(setup_component)"  // no particular reason for that placement
@@ -340,6 +348,8 @@ addActionTypes(Syntax & syntax)
                            "(add_mortar_variable)"
                            "(setup_variable_complete)"
                            "(setup_quadrature)"
+                           "(add_convergence)"
+                           "(add_default_convergence)"
                            "(add_periodic_bc)"
                            "(add_user_object, add_corrector, add_mesh_modifier)"
                            "(add_distribution)"
@@ -389,7 +399,8 @@ addActionTypes(Syntax & syntax)
                            "(coupling_functor_check)"
                            "(delete_remote_elements_after_late_geometric_ghosting)"
                            "(init_problem)"
-                           "(add_control)"
+                           "(add_control, add_chain_control)"
+                           "(chain_control_setup)"
                            "(check_output)"
                            "(check_integrity)"
                            "(create_application_block)");
@@ -493,6 +504,8 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
 
   registerSyntax("AddMeshDivisionAction", "MeshDivisions/*");
   syntax.registerSyntaxType("MeshDivisions/*", "MeshDivisionName");
+  registerSyntax("AddConvergenceAction", "Convergence/*");
+  syntax.registerSyntaxType("Convergence/*", "ConvergenceName");
 
   registerSyntax("GlobalParamsAction", "GlobalParams");
 
@@ -566,7 +579,10 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntaxTask("AddTimeStepperAction", "Executioner/TimeStepper", "add_time_stepper");
   registerSyntaxTask(
       "ComposeTimeStepperAction", "Executioner/TimeSteppers", "compose_time_stepper");
-  registerSyntax("SetupTimeIntegratorAction", "Executioner/TimeIntegrator");
+  registerSyntaxTask(
+      "SetupTimeIntegratorAction", "Executioner/TimeIntegrators/*", "setup_time_integrators");
+  registerSyntaxTask(
+      "SetupTimeIntegratorAction", "Executioner/TimeIntegrator", "setup_time_integrator");
   syntax.registerSyntaxType("Executors/*", "ExecutorName");
 
   registerSyntax("SetupQuadratureAction", "Executioner/Quadrature");
@@ -593,6 +609,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntax("AddConstraintAction", "Constraints/*");
 
   registerSyntax("AddControlAction", "Controls/*");
+  registerSyntax("AddChainControlAction", "ChainControls/*");
   registerSyntax("AddBoundAction", "Bounds/*");
   registerSyntax("AddBoundsVectorsAction", "Bounds");
 

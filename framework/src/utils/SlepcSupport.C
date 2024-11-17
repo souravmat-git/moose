@@ -119,6 +119,7 @@ getSlepcEigenProblemValidParams()
       "eigen_problem_type which_eigen_pairs n_eigen_pairs n_basis_vectors eigen_tol eigen_max_its "
       "free_power_iterations extra_power_iterations",
       "Eigen Solver");
+  params.addParamNamesToGroup("l_abs_tol", "Linear solver");
 
   return params;
 }
@@ -495,15 +496,15 @@ setEigenSolverOptions(SolverParams & solver_params, const InputParameters & para
 void
 slepcSetOptions(EigenProblem & eigen_problem, const InputParameters & params)
 {
-  Moose::PetscSupport::petscSetOptions(eigen_problem.getPetscOptions(),
-                                       eigen_problem.solverParams());
+  Moose::PetscSupport::petscSetOptions(
+      eigen_problem.getPetscOptions(), eigen_problem.solverParams(), &eigen_problem);
   // Call "SolverTolerances" first, so some solver specific tolerance such as "eps_max_it"
   // can be overriden
   setSlepcEigenSolverTolerances(eigen_problem, params);
   setEigenSolverOptions(eigen_problem.solverParams(), params);
   // when Bx norm postprocessor is provided, we switch off the sign normalization
   if (eigen_problem.bxNormProvided())
-    Moose::PetscSupport::setSinglePetscOption("-eps_power_sign_normalization", "0");
+    Moose::PetscSupport::setSinglePetscOption("-eps_power_sign_normalization", "0", &eigen_problem);
   setEigenProblemOptions(eigen_problem.solverParams());
   setWhichEigenPairsOptions(eigen_problem.solverParams());
   Moose::PetscSupport::addPetscOptionsFromCommandline();
@@ -950,6 +951,13 @@ mooseSlepcEigenFormFunctionB(SNES snes, Vec x, Vec r, void * ctx)
 
     ierr = MatMult(B, x, r);
     CHKERRQ(ierr);
+
+    if (eigen_problem->bxNormProvided())
+    {
+      // User has provided a postprocessor. We need it updated
+      updateCurrentLocalSolution(eigen_nl.sys(), x);
+      eigen_problem->execute(EXEC_LINEAR);
+    }
   }
   else
     moosePetscSNESFormFunction(snes, x, r, ctx, eigen_nl.eigenVectorTag());
@@ -1003,6 +1011,13 @@ mooseSlepcEigenFormFunctionAB(SNES /*snes*/, Vec x, Vec Ax, Vec Bx, void * ctx)
     {
       ierr = VecScale(Bx, -1.);
       CHKERRQ(ierr);
+    }
+
+    if (eigen_problem->bxNormProvided())
+    {
+      // User has provided a postprocessor. We need it updated
+      updateCurrentLocalSolution(sys, x);
+      eigen_problem->execute(EXEC_LINEAR);
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);

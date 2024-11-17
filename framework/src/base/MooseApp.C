@@ -427,6 +427,7 @@ MooseApp::MooseApp(InputParameters parameters)
                                ? parameters.get<const MooseMesh *>("_master_displaced_mesh")
                                : nullptr),
     _mesh_generator_system(*this),
+    _chain_control_system(*this),
     _rd_reader(*this, _restartable_data),
     _execute_flags(moose::internal::ExecFlagRegistry::getExecFlagRegistry().getFlags()),
     _output_buffer_cache(nullptr),
@@ -1715,6 +1716,9 @@ MooseApp::runInputs()
           cmd_name,
           " --run <dir>\" again.");
     }
+
+    // Set this application as the app name for the moose_test_runner script that we're running
+    setenv("MOOSE_TEST_RUNNER_APP_NAME", appBinaryName().c_str(), true);
 
     Moose::out << "Working Directory: " << working_dir << "\nRunning Command: " << cmd << std::endl;
     mooseAssert(comm().size() == 1, "Should be run in serial");

@@ -35,6 +35,7 @@
 #include "Parser.h"
 #include "ElementH1Error.h"
 #include "Function.h"
+#include "Convergence.h"
 #include "NonlinearSystem.h"
 #include "LinearSystem.h"
 #include "SolverSystem.h"
@@ -349,7 +350,7 @@ FEProblemBase::validParams()
       "material_dependency_check check_uo_aux_state error_on_jacobian_nonzero_reallocation",
       "Simulation checks");
   params.addParamNamesToGroup("use_nonlinear previous_nl_solution_required nl_sys_names "
-                              "ignore_zeros_in_jacobian",
+                              "ignore_zeros_in_jacobian identify_variable_groups_in_nl",
                               "Nonlinear system(s)");
   params.addParamNamesToGroup(
       "restart_file_base force_restart allow_initial_conditions_with_restart", "Restart");
@@ -381,6 +382,8 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
     _t_step(declareRecoverableData<int>("t_step")),
     _dt(declareRestartableData<Real>("dt")),
     _dt_old(declareRestartableData<Real>("dt_old")),
+    _set_nonlinear_convergence_name(false),
+    _need_to_add_default_nonlinear_convergence(false),
     _linear_sys_names(getParam<std::vector<LinearSystemName>>("linear_sys_names")),
     _num_linear_sys(_linear_sys_names.size()),
     _linear_systems(_num_linear_sys, nullptr),
@@ -464,6 +467,7 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
             ? getParam<bool>("error_on_jacobian_nonzero_reallocation")
             : _app.errorOnJacobianNonzeroReallocation()),
     _ignore_zeros_in_jacobian(getParam<bool>("ignore_zeros_in_jacobian")),
+    _preserve_matrix_sparsity_pattern(true),
     _force_restart(getParam<bool>("force_restart")),
     _allow_ics_during_restart(getParam<bool>("allow_initial_conditions_with_restart")),
     _skip_nl_system_check(getParam<bool>("skip_nl_system_check")),
@@ -490,14 +494,18 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
 
   for (const auto i : index_range(_nl_sys_names))
   {
-    _nl_sys_name_to_num[_nl_sys_names[i]] = i;
-    _solver_sys_name_to_num[_nl_sys_names[i]] = i;
+    const auto & name = _nl_sys_names[i];
+    _nl_sys_name_to_num[name] = i;
+    _solver_sys_name_to_num[name] = i;
+    _solver_sys_names.push_back(name);
   }
 
   for (const auto i : index_range(_linear_sys_names))
   {
-    _linear_sys_name_to_num[_linear_sys_names[i]] = i;
-    _solver_sys_name_to_num[_linear_sys_names[i]] = i + _num_nl_sys;
+    const auto & name = _linear_sys_names[i];
+    _linear_sys_name_to_num[name] = i;
+    _solver_sys_name_to_num[name] = i + _num_nl_sys;
+    _solver_sys_names.push_back(name);
   }
 
   _nonlocal_cm.resize(_nl_sys_names.size());
@@ -969,6 +977,14 @@ FEProblemBase::initialSetup()
 
   unsigned int n_threads = libMesh::n_threads();
 
+  // Convergence initial setup
+  {
+    TIME_SECTION("convergenceInitialSetup", 5, "Initializing Convergence objects");
+
+    for (THREAD_ID tid = 0; tid < n_threads; tid++)
+      _convergences.initialSetup(tid);
+  }
+
   // UserObject initialSetup
   std::set<std::string> depend_objects_ic = _ics.getDependObjects();
   std::set<std::string> depend_objects_aux = _aux->getDependObjects();
@@ -1017,7 +1033,7 @@ FEProblemBase::initialSetup()
     computeUserObjects(EXEC_INITIAL, Moose::PRE_IC);
 
     {
-      TIME_SECTION("ICiniitalSetup", 5, "Setting Up Initial Conditions");
+      TIME_SECTION("ICinitialSetup", 5, "Setting Up Initial Conditions");
 
       for (THREAD_ID tid = 0; tid < n_threads; tid++)
         _ics.initialSetup(tid);
@@ -1144,12 +1160,12 @@ FEProblemBase::initialSetup()
 
   for (auto & sys : _solver_systems)
   {
-    auto ti = sys->getTimeIntegrator();
+    const auto & tis = sys->getTimeIntegrators();
 
-    if (ti)
     {
       TIME_SECTION("timeIntegratorInitialSetup", 5, "Initializing Time Integrator");
-      ti->initialSetup();
+      for (auto & ti : tis)
+        ti->initialSetup();
     }
   }
 
@@ -2378,6 +2394,31 @@ FEProblemBase::addFunction(const std::string & type,
   }
 }
 
+void
+FEProblemBase::addConvergence(const std::string & type,
+                              const std::string & name,
+                              InputParameters & parameters)
+{
+  parallel_object_only();
+
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
+  {
+    std::shared_ptr<Convergence> conv = _factory.create<Convergence>(type, name, parameters, tid);
+    _convergences.addObject(conv, tid);
+  }
+}
+
+void
+FEProblemBase::addDefaultNonlinearConvergence(const InputParameters & params_to_apply)
+{
+  const std::string class_name = "DefaultNonlinearConvergence";
+  InputParameters params = _factory.getValidParams(class_name);
+  params.applyParameters(params_to_apply);
+  params.applyParameters(parameters());
+  params.set<bool>("added_as_default") = true;
+  addConvergence(class_name, getNonlinearConvergenceName(), params);
+}
+
 bool
 FEProblemBase::hasFunction(const std::string & name, const THREAD_ID tid)
 {
@@ -2427,6 +2468,28 @@ FEProblemBase::getFunction(const std::string & name, const THREAD_ID tid)
     mooseError("No function named ", name, " of appropriate type");
 
   return *ret;
+}
+
+bool
+FEProblemBase::hasConvergence(const std::string & name, const THREAD_ID tid) const
+{
+  return _convergences.hasActiveObject(name, tid);
+}
+
+Convergence &
+FEProblemBase::getConvergence(const std::string & name, const THREAD_ID tid) const
+{
+  auto * const ret = dynamic_cast<Convergence *>(_convergences.getActiveObject(name, tid).get());
+  if (!ret)
+    mooseError("The Convergence object '", name, "' does not exist.");
+
+  return *ret;
+}
+
+const std::vector<std::shared_ptr<Convergence>> &
+FEProblemBase::getConvergenceObjects(const THREAD_ID tid) const
+{
+  return _convergences.getActiveObjects(tid);
 }
 
 void
@@ -3588,6 +3651,17 @@ FEProblemBase::getMaterialData(Moose::MaterialDataType type, const THREAD_ID tid
   }
 
   mooseError("FEProblemBase::getMaterialData(): Invalid MaterialDataType ", type);
+}
+
+void
+FEProblemBase::setPreserveMatrixSparsityPattern(bool preserve)
+{
+  if (_ignore_zeros_in_jacobian && preserve)
+    paramWarning(
+        "ignore_zeros_in_jacobian",
+        "We likely cannot preserve the sparsity pattern if ignoring zeros in the Jacobian, which "
+        "leads to removing those entries from the Jacobian sparsity pattern");
+  _preserve_matrix_sparsity_pattern = preserve;
 }
 
 bool
@@ -6108,7 +6182,7 @@ FEProblemBase::solve(const unsigned int nl_sys_num)
   // We did not add PETSc options to database yet
   if (!_is_petsc_options_inserted)
   {
-    Moose::PetscSupport::petscSetOptions(_petsc_options, _solver_params);
+    Moose::PetscSupport::petscSetOptions(_petsc_options, _solver_params, this);
     _is_petsc_options_inserted = true;
   }
 #endif
@@ -6271,7 +6345,7 @@ FEProblemBase::solveLinearSystem(const unsigned int linear_sys_num,
   // We did not add PETSc options to database yet
   if (!_is_petsc_options_inserted)
   {
-    Moose::PetscSupport::petscSetOptions(options, solver_params);
+    Moose::PetscSupport::petscSetOptions(options, solver_params, this);
     _is_petsc_options_inserted = true;
   }
 #endif
@@ -6485,10 +6559,10 @@ FEProblemBase::addTimeIntegrator(const std::string & type,
   {
     nl->addDotVectors();
 
-    auto tag_udot = nl->getTimeIntegrator()->uDotFactorTag();
+    auto tag_udot = nl->getTimeIntegrators()[0]->uDotFactorTag();
     if (!nl->hasVector(tag_udot))
       nl->associateVectorToTag(*nl->solutionUDot(), tag_udot);
-    auto tag_udotdot = nl->getTimeIntegrator()->uDotDotFactorTag();
+    auto tag_udotdot = nl->getTimeIntegrators()[0]->uDotDotFactorTag();
     if (!nl->hasVector(tag_udotdot) && uDotDotRequested())
       nl->associateVectorToTag(*nl->solutionUDotDot(), tag_udotdot);
   }
@@ -7401,7 +7475,7 @@ FEProblemBase::computePostCheck(NonlinearImplicitSystem & sys,
   if (vectorTagExists(Moose::PREVIOUS_NL_SOLUTION_TAG))
   {
     _current_nl_sys->setPreviousNewtonSolution(old_soln);
-    _aux->setPreviousNewtonSolution();
+    _aux->copyCurrentIntoPreviousNL();
   }
 
   // MOOSE doesn't change the search_direction
@@ -8293,137 +8367,6 @@ FEProblemBase::getVariableNames()
   return names;
 }
 
-MooseNonlinearConvergenceReason
-FEProblemBase::checkNonlinearConvergence(std::string & msg,
-                                         const PetscInt it,
-                                         const Real xnorm,
-                                         const Real snorm,
-                                         const Real fnorm,
-                                         const Real rtol,
-                                         const Real divtol,
-                                         const Real stol,
-                                         const Real abstol,
-                                         const PetscInt nfuncs,
-                                         const PetscInt max_funcs,
-                                         const Real div_threshold)
-{
-  TIME_SECTION("checkNonlinearConvergence", 5, "Checking Nonlinear Convergence");
-  mooseAssert(_current_nl_sys, "This should be non-null");
-
-  nonlinearConvergenceSetup();
-
-  if (_fail_next_nonlinear_convergence_check)
-  {
-    _fail_next_nonlinear_convergence_check = false;
-    return MooseNonlinearConvergenceReason::DIVERGED_FNORM_NAN;
-  }
-
-  NonlinearSystemBase & system = *_current_nl_sys;
-  MooseNonlinearConvergenceReason reason = MooseNonlinearConvergenceReason::ITERATING;
-
-  Real fnorm_old;
-  // This is the first residual before any iterations have been done, but after solution-modifying
-  // objects (if any) have been imposed on the solution vector.  We save it, and use it to detect
-  // convergence if system.usePreSMOResidual() == false.
-  if (it == 0)
-  {
-    system.setInitialResidual(fnorm);
-    fnorm_old = fnorm;
-    _n_nl_pingpong = 0;
-  }
-  else
-    fnorm_old = system._last_nl_rnorm;
-
-  // Check for nonlinear residual pingpong.
-  // Pingpong will always start from a residual increase
-  if ((_n_nl_pingpong % 2 == 1 && !(fnorm > fnorm_old)) ||
-      (_n_nl_pingpong % 2 == 0 && fnorm > fnorm_old))
-    _n_nl_pingpong += 1;
-  else
-    _n_nl_pingpong = 0;
-
-  std::ostringstream oss;
-  if (fnorm != fnorm)
-  {
-    oss << "Failed to converge, function norm is NaN\n";
-    reason = MooseNonlinearConvergenceReason::DIVERGED_FNORM_NAN;
-  }
-  else if ((it >= _nl_forced_its) && fnorm < abstol)
-  {
-    oss << "Converged due to function norm " << fnorm << " < " << abstol << '\n';
-    reason = MooseNonlinearConvergenceReason::CONVERGED_FNORM_ABS;
-  }
-  else if (nfuncs >= max_funcs)
-  {
-    oss << "Exceeded maximum number of function evaluations: " << nfuncs << " > " << max_funcs
-        << '\n';
-    reason = MooseNonlinearConvergenceReason::DIVERGED_FUNCTION_COUNT;
-  }
-  else if ((it >= _nl_forced_its) && it && fnorm > system._last_nl_rnorm && fnorm >= div_threshold)
-  {
-    oss << "Nonlinear solve was blowing up!\n";
-    reason = MooseNonlinearConvergenceReason::DIVERGED_LINE_SEARCH;
-  }
-
-  if ((it >= _nl_forced_its) && it && reason == MooseNonlinearConvergenceReason::ITERATING)
-  {
-    // Set the reference residual depending on what the user asks us to use.
-    const auto ref_residual = system.referenceResidual();
-    if (checkRelativeConvergence(it, fnorm, ref_residual, rtol, abstol, oss))
-      reason = MooseNonlinearConvergenceReason::CONVERGED_FNORM_RELATIVE;
-    else if (snorm < stol * xnorm)
-    {
-      oss << "Converged due to small update length: " << snorm << " < " << stol << " * " << xnorm
-          << '\n';
-      reason = MooseNonlinearConvergenceReason::CONVERGED_SNORM_RELATIVE;
-    }
-    else if (divtol > 0 && fnorm > ref_residual * divtol)
-    {
-      oss << "Diverged due to residual " << fnorm << " > divergence tolerance " << divtol
-          << " * initial residual " << ref_residual << '\n';
-      reason = MooseNonlinearConvergenceReason::DIVERGED_DTOL;
-    }
-    else if (_nl_abs_div_tol > 0 && fnorm > _nl_abs_div_tol)
-    {
-      oss << "Diverged due to residual " << fnorm << " > absolute divergence tolerance "
-          << _nl_abs_div_tol << '\n';
-      reason = MooseNonlinearConvergenceReason::DIVERGED_DTOL;
-    }
-    else if (_n_nl_pingpong > _n_max_nl_pingpong)
-    {
-      oss << "Diverged due to maximum nonlinear residual pingpong achieved" << '\n';
-      reason = MooseNonlinearConvergenceReason::DIVERGED_NL_RESIDUAL_PINGPONG;
-    }
-  }
-
-  system._last_nl_rnorm = fnorm;
-  system._current_nl_its = static_cast<unsigned int>(it);
-
-  msg = oss.str();
-  if (_app.multiAppLevel() > 0)
-    MooseUtils::indentMessage(_app.name(), msg);
-
-  return reason;
-}
-
-bool
-FEProblemBase::checkRelativeConvergence(const PetscInt /*it*/,
-                                        const Real fnorm,
-                                        const Real ref_residual,
-                                        const Real rtol,
-                                        const Real /*abstol*/,
-                                        std::ostringstream & oss)
-{
-  if (_fail_next_nonlinear_convergence_check)
-    return false;
-  if (fnorm <= ref_residual * rtol)
-  {
-    oss << "Converged due to function norm " << fnorm << " < relative tolerance (" << rtol << ")\n";
-    return true;
-  }
-  return false;
-}
-
 SolverParams &
 FEProblemBase::solverParams()
 {
@@ -8819,6 +8762,15 @@ FEProblemBase::resizeMaterialData(const Moose::MaterialDataType data_type,
                                   const THREAD_ID tid)
 {
   getMaterialData(data_type, tid).resize(nqp);
+}
+
+ConvergenceName
+FEProblemBase::getNonlinearConvergenceName() const
+{
+  if (_set_nonlinear_convergence_name)
+    return _nonlinear_convergence_name;
+  else
+    mooseError("The nonlinear convergence name has not been set.");
 }
 
 void
