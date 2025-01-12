@@ -121,15 +121,6 @@ RankFourTensorTempl<T>::zero()
 }
 
 template <typename T>
-RankFourTensorTempl<T> &
-RankFourTensorTempl<T>::operator=(const RankFourTensorTempl<T> & a)
-{
-  for (auto i : make_range(N4))
-    _vals[i] = a._vals[i];
-  return *this;
-}
-
-template <typename T>
 template <template <typename> class Tensor, typename T2>
 auto
 RankFourTensorTempl<T>::operator*(const Tensor<T2> & b) const ->
@@ -930,11 +921,11 @@ RankFourTensorTempl<T>::sum3x3() const
 }
 
 template <typename T>
-VectorValue<T>
+libMesh::VectorValue<T>
 RankFourTensorTempl<T>::sum3x1() const
 {
   // used for volumetric locking correction
-  VectorValue<T> a(3);
+  libMesh::VectorValue<T> a(3);
   a(0) = (*this)(0, 0, 0, 0) + (*this)(0, 0, 1, 1) + (*this)(0, 0, 2, 2); // C0000 + C0011 + C0022
   a(1) = (*this)(1, 1, 0, 0) + (*this)(1, 1, 1, 1) + (*this)(1, 1, 2, 2); // C1100 + C1111 + C1122
   a(2) = (*this)(2, 2, 0, 0) + (*this)(2, 2, 1, 1) + (*this)(2, 2, 2, 2); // C2200 + C2211 + C2222

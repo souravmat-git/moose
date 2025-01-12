@@ -146,7 +146,7 @@ public:
     ONLY_LIST,
   };
 
-  virtual EquationSystems & es() override { return _req.set().es(); }
+  virtual libMesh::EquationSystems & es() override { return _req.set().es(); }
   virtual MooseMesh & mesh() override { return _mesh; }
   virtual const MooseMesh & mesh() const override { return _mesh; }
   const MooseMesh & mesh(bool use_displaced) const override;
@@ -168,12 +168,13 @@ public:
    * @param cm coupling matrix to be set
    * @param nl_sys_num which nonlinear system we are setting the coupling matrix for
    */
-  void setCouplingMatrix(std::unique_ptr<CouplingMatrix> cm, const unsigned int nl_sys_num);
+  void setCouplingMatrix(std::unique_ptr<libMesh::CouplingMatrix> cm,
+                         const unsigned int nl_sys_num);
 
   // DEPRECATED METHOD
-  void setCouplingMatrix(CouplingMatrix * cm, const unsigned int nl_sys_num);
+  void setCouplingMatrix(libMesh::CouplingMatrix * cm, const unsigned int nl_sys_num);
 
-  const CouplingMatrix * couplingMatrix(const unsigned int nl_sys_num) const override;
+  const libMesh::CouplingMatrix * couplingMatrix(const unsigned int nl_sys_num) const override;
 
   /// Set custom coupling matrix for variables requiring nonlocal contribution
   void setNonlocalCouplingMatrix();
@@ -226,7 +227,7 @@ public:
   virtual bool hasScalarVariable(const std::string & var_name) const override;
   virtual MooseVariableScalar & getScalarVariable(const THREAD_ID tid,
                                                   const std::string & var_name) override;
-  virtual System & getSystem(const std::string & var_name) override;
+  virtual libMesh::System & getSystem(const std::string & var_name) override;
 
   /**
    * Set the MOOSE variables to be reinited on each element.
@@ -266,10 +267,10 @@ public:
   virtual void setActiveScalarVariableCoupleableMatrixTags(std::set<TagID> & mtags,
                                                            const THREAD_ID tid) override;
 
-  virtual void createQRules(QuadratureType type,
-                            Order order,
-                            Order volume_order = INVALID_ORDER,
-                            Order face_order = INVALID_ORDER,
+  virtual void createQRules(libMesh::QuadratureType type,
+                            libMesh::Order order,
+                            libMesh::Order volume_order = libMesh::INVALID_ORDER,
+                            libMesh::Order face_order = libMesh::INVALID_ORDER,
                             SubdomainID block = Moose::ANY_BLOCK_ID,
                             bool allow_negative_qweights = true);
 
@@ -280,9 +281,9 @@ public:
    * lower than or equal to the current volume/elem quadrature rule order,
    * then nothing is done (i.e. this function is idempotent).
    */
-  void bumpVolumeQRuleOrder(Order order, SubdomainID block);
+  void bumpVolumeQRuleOrder(libMesh::Order order, SubdomainID block);
 
-  void bumpAllQRuleOrder(Order order, SubdomainID block);
+  void bumpAllQRuleOrder(libMesh::Order order, SubdomainID block);
 
   /**
    * @return The maximum number of quadrature points in use on any element in this problem.
@@ -292,7 +293,7 @@ public:
   /**
    * @return The maximum order for all scalar variables in this problem's systems.
    */
-  Order getMaxScalarOrder() const;
+  libMesh::Order getMaxScalarOrder() const;
 
   /**
    * @return Flag indicating nonlocal coupling exists or not.
@@ -411,8 +412,8 @@ public:
    * getEvaluableElementRange() returns the element range that is evaluable based on both the
    * nonlinear dofmap and the auxliary dofmap.
    */
-  const ConstElemRange & getEvaluableElementRange();
-  const ConstElemRange & getNonlinearEvaluableElementRange();
+  const libMesh::ConstElemRange & getEvaluableElementRange();
+  const libMesh::ConstElemRange & getNonlinearEvaluableElementRange();
   ///@}
 
   ///@{
@@ -427,8 +428,8 @@ public:
    * getCurrentAlgebraicBndNodeRange returns the boundary node ranges that contributes
    * to the system
    */
-  const ConstElemRange & getCurrentAlgebraicElementRange();
-  const ConstNodeRange & getCurrentAlgebraicNodeRange();
+  const libMesh::ConstElemRange & getCurrentAlgebraicElementRange();
+  const libMesh::ConstNodeRange & getCurrentAlgebraicNodeRange();
   const ConstBndNodeRange & getCurrentAlgebraicBndNodeRange();
   ///@}
 
@@ -450,8 +451,8 @@ public:
    * @param range A pointer to the const range object representing the algebraic
    *              elements, nodes, or boundary nodes.
    */
-  void setCurrentAlgebraicElementRange(ConstElemRange * range);
-  void setCurrentAlgebraicNodeRange(ConstNodeRange * range);
+  void setCurrentAlgebraicElementRange(libMesh::ConstElemRange * range);
+  void setCurrentAlgebraicNodeRange(libMesh::ConstNodeRange * range);
   void setCurrentAlgebraicBndNodeRange(ConstBndNodeRange * range);
   ///@}
 
@@ -488,7 +489,7 @@ public:
    */
   virtual void checkExceptionAndStopSolve(bool print_message = true);
 
-  virtual bool nlConverged(const unsigned int nl_sys_num) override;
+  virtual bool solverSystemConverged(const unsigned int solver_sys_num) override;
   virtual unsigned int nNonlinearIterations(const unsigned int nl_sys_num) const override;
   virtual unsigned int nLinearIterations(const unsigned int nl_sys_num) const override;
   virtual Real finalNonlinearResidual(const unsigned int nl_sys_num) const override;
@@ -798,14 +799,14 @@ public:
                               InputParameters & params);
 
   virtual void addAuxVariable(const std::string & var_name,
-                              const FEType & type,
+                              const libMesh::FEType & type,
                               const std::set<SubdomainID> * const active_subdomains = NULL);
   virtual void addAuxArrayVariable(const std::string & var_name,
-                                   const FEType & type,
+                                   const libMesh::FEType & type,
                                    unsigned int components,
                                    const std::set<SubdomainID> * const active_subdomains = NULL);
   virtual void addAuxScalarVariable(const std::string & var_name,
-                                    Order order,
+                                    libMesh::Order order,
                                     Real scale_factor = 1.,
                                     const std::set<SubdomainID> * const active_subdomains = NULL);
   virtual void addAuxKernel(const std::string & kernel_name,
@@ -870,7 +871,7 @@ public:
    * This is needed when elements/boundary nodes are added to a specific subdomain
    * at an intermediate step
    */
-  void projectInitialConditionOnCustomRange(ConstElemRange & elem_range,
+  void projectInitialConditionOnCustomRange(libMesh::ConstElemRange & elem_range,
                                             ConstBndNodeRange & bnd_node_range);
 
   // Materials /////
@@ -1301,6 +1302,18 @@ public:
   void execTransfers(ExecFlagType type);
 
   /**
+   * Computes the residual of a nonlinear system using whatever is sitting in the current
+   * solution vector then returns the L2 norm.
+   */
+  Real computeResidualL2Norm(NonlinearSystemBase & sys);
+
+  /**
+   * Computes the residual of a linear system using whatever is sitting in the current
+   * solution vector then returns the L2 norm.
+   */
+  Real computeResidualL2Norm(LinearSystem & sys);
+
+  /**
    * Computes the residual using whatever is sitting in the current solution vector then returns the
    * L2 norm.
    *
@@ -1311,50 +1324,50 @@ public:
   /**
    * This function is called by Libmesh to form a residual.
    */
-  virtual void computeResidualSys(NonlinearImplicitSystem & sys,
-                                  const NumericVector<Number> & soln,
-                                  NumericVector<Number> & residual);
+  virtual void computeResidualSys(libMesh::NonlinearImplicitSystem & sys,
+                                  const NumericVector<libMesh::Number> & soln,
+                                  NumericVector<libMesh::Number> & residual);
   /**
    * This function is called by Libmesh to form a residual. This is deprecated.
    * We should remove this as soon as RattleSnake is fixed.
    */
-  void computeResidual(NonlinearImplicitSystem & sys,
-                       const NumericVector<Number> & soln,
-                       NumericVector<Number> & residual);
+  void computeResidual(libMesh::NonlinearImplicitSystem & sys,
+                       const NumericVector<libMesh::Number> & soln,
+                       NumericVector<libMesh::Number> & residual);
 
   /**
    * Form a residual with default tags (nontime, time, residual).
    */
-  virtual void computeResidual(const NumericVector<Number> & soln,
-                               NumericVector<Number> & residual,
+  virtual void computeResidual(const NumericVector<libMesh::Number> & soln,
+                               NumericVector<libMesh::Number> & residual,
                                const unsigned int nl_sys_num);
 
   /**
    * Form a residual and Jacobian with default tags
    */
-  void computeResidualAndJacobian(const NumericVector<Number> & soln,
-                                  NumericVector<Number> & residual,
-                                  SparseMatrix<Number> & jacobian);
+  void computeResidualAndJacobian(const NumericVector<libMesh::Number> & soln,
+                                  NumericVector<libMesh::Number> & residual,
+                                  libMesh::SparseMatrix<libMesh::Number> & jacobian);
 
   /**
    * Form a residual vector for a given tag
    */
-  virtual void computeResidualTag(const NumericVector<Number> & soln,
-                                  NumericVector<Number> & residual,
+  virtual void computeResidualTag(const NumericVector<libMesh::Number> & soln,
+                                  NumericVector<libMesh::Number> & residual,
                                   TagID tag);
   /**
    * Form a residual vector for a given tag and "residual" tag
    */
-  virtual void computeResidualType(const NumericVector<Number> & soln,
-                                   NumericVector<Number> & residual,
+  virtual void computeResidualType(const NumericVector<libMesh::Number> & soln,
+                                   NumericVector<libMesh::Number> & residual,
                                    TagID tag);
 
   /**
    * Form a residual vector for a set of tags. It should not be called directly
    * by users.
    */
-  virtual void computeResidualInternal(const NumericVector<Number> & soln,
-                                       NumericVector<Number> & residual,
+  virtual void computeResidualInternal(const NumericVector<libMesh::Number> & soln,
+                                       NumericVector<libMesh::Number> & residual,
                                        const std::set<TagID> & tags);
   /**
    * Form multiple residual vectors and each is associated with one tag
@@ -1364,28 +1377,28 @@ public:
   /**
    * Form a Jacobian matrix. It is called by Libmesh.
    */
-  virtual void computeJacobianSys(NonlinearImplicitSystem & sys,
-                                  const NumericVector<Number> & soln,
-                                  SparseMatrix<Number> & jacobian);
+  virtual void computeJacobianSys(libMesh::NonlinearImplicitSystem & sys,
+                                  const NumericVector<libMesh::Number> & soln,
+                                  libMesh::SparseMatrix<libMesh::Number> & jacobian);
   /**
    * Form a Jacobian matrix with the default tag (system).
    */
-  virtual void computeJacobian(const NumericVector<Number> & soln,
-                               SparseMatrix<Number> & jacobian,
+  virtual void computeJacobian(const NumericVector<libMesh::Number> & soln,
+                               libMesh::SparseMatrix<libMesh::Number> & jacobian,
                                const unsigned int nl_sys_num);
 
   /**
    * Form a Jacobian matrix for a given tag.
    */
-  virtual void computeJacobianTag(const NumericVector<Number> & soln,
-                                  SparseMatrix<Number> & jacobian,
+  virtual void computeJacobianTag(const NumericVector<libMesh::Number> & soln,
+                                  libMesh::SparseMatrix<libMesh::Number> & jacobian,
                                   TagID tag);
 
   /**
    * Form a Jacobian matrix for multiple tags. It should not be called directly by users.
    */
-  virtual void computeJacobianInternal(const NumericVector<Number> & soln,
-                                       SparseMatrix<Number> & jacobian,
+  virtual void computeJacobianInternal(const NumericVector<libMesh::Number> & soln,
+                                       libMesh::SparseMatrix<libMesh::Number> & jacobian,
                                        const std::set<TagID> & tags);
 
   /**
@@ -1417,7 +1430,7 @@ public:
    * @param jvar the block-column of the Jacobian
    *
    */
-  virtual void computeJacobianBlock(SparseMatrix<Number> & jacobian,
+  virtual void computeJacobianBlock(libMesh::SparseMatrix<libMesh::Number> & jacobian,
                                     libMesh::System & precond_system,
                                     unsigned int ivar,
                                     unsigned int jvar);
@@ -1431,9 +1444,9 @@ public:
    * @param compute_gradients A flag to disable the computation of new gradients during the
    * assembly, can be used to lag gradients
    */
-  void computeLinearSystemSys(LinearImplicitSystem & sys,
-                              SparseMatrix<Number> & system_matrix,
-                              NumericVector<Number> & rhs,
+  void computeLinearSystemSys(libMesh::LinearImplicitSystem & sys,
+                              libMesh::SparseMatrix<libMesh::Number> & system_matrix,
+                              NumericVector<libMesh::Number> & rhs,
                               const bool compute_gradients = true);
 
   /**
@@ -1447,15 +1460,15 @@ public:
    * @param compute_gradients A flag to disable the computation of new gradients during the
    * assembly, can be used to lag gradients
    */
-  void computeLinearSystemTags(const NumericVector<Number> & soln,
-                               SparseMatrix<Number> & system_matrix,
-                               NumericVector<Number> & rhs,
+  void computeLinearSystemTags(const NumericVector<libMesh::Number> & soln,
+                               libMesh::SparseMatrix<libMesh::Number> & system_matrix,
+                               NumericVector<libMesh::Number> & rhs,
                                const std::set<TagID> & vector_tags,
                                const std::set<TagID> & matrix_tags,
                                const bool compute_gradients = true);
 
-  virtual Real computeDamping(const NumericVector<Number> & soln,
-                              const NumericVector<Number> & update);
+  virtual Real computeDamping(const NumericVector<libMesh::Number> & soln,
+                              const NumericVector<libMesh::Number> & update);
 
   /**
    * Check to see whether the problem should update the solution
@@ -1469,28 +1482,28 @@ public:
    * @param ghosted_solution  Ghosted solution vector
    * @return true if the solution was modified, false otherwise
    */
-  virtual bool updateSolution(NumericVector<Number> & vec_solution,
-                              NumericVector<Number> & ghosted_solution);
+  virtual bool updateSolution(NumericVector<libMesh::Number> & vec_solution,
+                              NumericVector<libMesh::Number> & ghosted_solution);
 
   /**
    * Perform cleanup tasks after application of predictor to solution vector
    * @param ghosted_solution  Ghosted solution vector
    */
-  virtual void predictorCleanup(NumericVector<Number> & ghosted_solution);
+  virtual void predictorCleanup(NumericVector<libMesh::Number> & ghosted_solution);
 
-  virtual void computeBounds(NonlinearImplicitSystem & sys,
-                             NumericVector<Number> & lower,
-                             NumericVector<Number> & upper);
-  virtual void computeNearNullSpace(NonlinearImplicitSystem & sys,
-                                    std::vector<NumericVector<Number> *> & sp);
-  virtual void computeNullSpace(NonlinearImplicitSystem & sys,
-                                std::vector<NumericVector<Number> *> & sp);
-  virtual void computeTransposeNullSpace(NonlinearImplicitSystem & sys,
-                                         std::vector<NumericVector<Number> *> & sp);
-  virtual void computePostCheck(NonlinearImplicitSystem & sys,
-                                const NumericVector<Number> & old_soln,
-                                NumericVector<Number> & search_direction,
-                                NumericVector<Number> & new_soln,
+  virtual void computeBounds(libMesh::NonlinearImplicitSystem & sys,
+                             NumericVector<libMesh::Number> & lower,
+                             NumericVector<libMesh::Number> & upper);
+  virtual void computeNearNullSpace(libMesh::NonlinearImplicitSystem & sys,
+                                    std::vector<NumericVector<libMesh::Number> *> & sp);
+  virtual void computeNullSpace(libMesh::NonlinearImplicitSystem & sys,
+                                std::vector<NumericVector<libMesh::Number> *> & sp);
+  virtual void computeTransposeNullSpace(libMesh::NonlinearImplicitSystem & sys,
+                                         std::vector<NumericVector<libMesh::Number> *> & sp);
+  virtual void computePostCheck(libMesh::NonlinearImplicitSystem & sys,
+                                const NumericVector<libMesh::Number> & old_soln,
+                                NumericVector<libMesh::Number> & search_direction,
+                                NumericVector<libMesh::Number> & new_soln,
                                 bool & changed_search_direction,
                                 bool & changed_new_soln);
 
@@ -1514,23 +1527,25 @@ public:
    * @param residual The vector to add the cached contributions to.
    * @param tid The thread id.
    */
-  virtual void addCachedResidualDirectly(NumericVector<Number> & residual, const THREAD_ID tid);
+  virtual void addCachedResidualDirectly(NumericVector<libMesh::Number> & residual,
+                                         const THREAD_ID tid);
 
-  virtual void setResidual(NumericVector<Number> & residual, const THREAD_ID tid) override;
-  virtual void setResidualNeighbor(NumericVector<Number> & residual, const THREAD_ID tid) override;
+  virtual void setResidual(NumericVector<libMesh::Number> & residual, const THREAD_ID tid) override;
+  virtual void setResidualNeighbor(NumericVector<libMesh::Number> & residual,
+                                   const THREAD_ID tid) override;
 
   virtual void addJacobian(const THREAD_ID tid) override;
   virtual void addJacobianNeighbor(const THREAD_ID tid) override;
   virtual void addJacobianNeighborLowerD(const THREAD_ID tid) override;
   virtual void addJacobianLowerD(const THREAD_ID tid) override;
-  virtual void addJacobianBlockTags(SparseMatrix<Number> & jacobian,
+  virtual void addJacobianBlockTags(libMesh::SparseMatrix<libMesh::Number> & jacobian,
                                     unsigned int ivar,
                                     unsigned int jvar,
                                     const DofMap & dof_map,
                                     std::vector<dof_id_type> & dof_indices,
                                     const std::set<TagID> & tags,
                                     const THREAD_ID tid);
-  virtual void addJacobianNeighbor(SparseMatrix<Number> & jacobian,
+  virtual void addJacobianNeighbor(libMesh::SparseMatrix<libMesh::Number> & jacobian,
                                    unsigned int ivar,
                                    unsigned int jvar,
                                    const DofMap & dof_map,
@@ -1706,7 +1721,7 @@ public:
    * This is needed when elements/boundary nodes are added to a specific subdomain
    * at an intermediate step
    */
-  void initElementStatefulProps(const ConstElemRange & elem_range, const bool threaded);
+  void initElementStatefulProps(const libMesh::ConstElemRange & elem_range, const bool threaded);
 
   /**
    * Method called to perform a series of sanity checks before a simulation is run. This method
@@ -2205,16 +2220,12 @@ public:
   /**
    * Sets the nonlinear convergence object name if there is one
    */
-  void setNonlinearConvergenceName(const ConvergenceName & convergence_name)
-  {
-    _nonlinear_convergence_name = convergence_name;
-    _set_nonlinear_convergence_name = true;
-  }
+  void setNonlinearConvergenceNames(const std::vector<ConvergenceName> & convergence_names);
 
   /**
-   * Gets the nonlinear convergence object name if there is one
+   * Gets the nonlinear convergence object name(s).
    */
-  ConvergenceName getNonlinearConvergenceName() const;
+  std::vector<ConvergenceName> getNonlinearConvergenceNames() const;
 
   /**
    * Setter for whether we're computing the scaling jacobian
@@ -2272,6 +2283,12 @@ public:
    * @return the solver system number corresponding to the provided \p solver_sys_name
    */
   unsigned int solverSysNum(const SolverSystemName & solver_sys_name) const override;
+
+  /**
+   * @return the system number for the provided \p variable_name
+   * Can be nonlinear or auxiliary
+   */
+  unsigned int systemNumForVariable(const VariableName & variable_name) const;
 
   /**
    * Whether it will skip further residual evaluations and fail the next nonlinear convergence check
@@ -2333,9 +2350,9 @@ public:
   void clearCurrentResidualVectorTags();
 
   /**
-   * Clear the current Jacobian vector tag data structure ... if someone creates it
+   * Clear the current Jacobian matrix tag data structure ... if someone creates it
    */
-  void clearCurrentJacobianVectorTags() {}
+  void clearCurrentJacobianMatrixTags() {}
 
   using SubProblem::doingPRefinement;
   virtual void doingPRefinement(bool doing_p_refinement,
@@ -2358,6 +2375,10 @@ public:
    * @returns the nolinear system names in the problem
    */
   const std::vector<NonlinearSystemName> & getNonlinearSystemNames() const { return _nl_sys_names; }
+  /**
+   * @returns the linear system names in the problem
+   */
+  const std::vector<LinearSystemName> & getLinearSystemNames() const { return _linear_sys_names; }
 
 protected:
   /// Create extra tagged vectors and matrices
@@ -2398,8 +2419,8 @@ private:
 protected:
   bool _initialized;
 
-  /// Nonlinear convergence name
-  ConvergenceName _nonlinear_convergence_name;
+  /// Nonlinear system(s) convergence name(s)
+  std::vector<ConvergenceName> _nonlinear_convergence_names;
 
   std::set<TagID> _fe_vector_tags;
 
@@ -2422,7 +2443,7 @@ protected:
   Real & _dt_old;
 
   /// Flag that the nonlinear convergence name has been set
-  bool _set_nonlinear_convergence_name;
+  bool _set_nonlinear_convergence_names;
   /// Flag that the problem needs to add the default nonlinear convergence
   bool _need_to_add_default_nonlinear_convergence;
 
@@ -2477,8 +2498,8 @@ protected:
   /// The auxiliary system
   std::shared_ptr<AuxiliarySystem> _aux;
 
-  Moose::CouplingType _coupling;                    ///< Type of variable coupling
-  std::vector<std::unique_ptr<CouplingMatrix>> _cm; ///< Coupling matrix for variables.
+  Moose::CouplingType _coupling;                             ///< Type of variable coupling
+  std::vector<std::unique_ptr<libMesh::CouplingMatrix>> _cm; ///< Coupling matrix for variables.
 
   /// Dimension of the subspace spanned by the vectors with a given prefix
   std::map<std::string, unsigned int> _subspace_dim;
@@ -2585,7 +2606,7 @@ protected:
 
   /// Helper to check for duplicate variable names across systems or within a single system
   bool duplicateVariableCheck(const std::string & var_name,
-                              const FEType & type,
+                              const libMesh::FEType & type,
                               bool is_aux,
                               const std::set<SubdomainID> * const active_subdomains);
 
@@ -2720,7 +2741,7 @@ protected:
   unsigned int _max_qps;
 
   /// Maximum scalar variable order
-  Order _max_scalar_order;
+  libMesh::Order _max_scalar_order;
 
   /// Indicates whether or not this executioner has a time integrator (during setup)
   bool _has_time_integrator;
@@ -2757,12 +2778,12 @@ protected:
 
   std::shared_ptr<LineSearch> _line_search;
 
-  std::unique_ptr<ConstElemRange> _evaluable_local_elem_range;
-  std::unique_ptr<ConstElemRange> _nl_evaluable_local_elem_range;
-  std::unique_ptr<ConstElemRange> _aux_evaluable_local_elem_range;
+  std::unique_ptr<libMesh::ConstElemRange> _evaluable_local_elem_range;
+  std::unique_ptr<libMesh::ConstElemRange> _nl_evaluable_local_elem_range;
+  std::unique_ptr<libMesh::ConstElemRange> _aux_evaluable_local_elem_range;
 
-  std::unique_ptr<ConstElemRange> _current_algebraic_elem_range;
-  std::unique_ptr<ConstNodeRange> _current_algebraic_node_range;
+  std::unique_ptr<libMesh::ConstElemRange> _current_algebraic_elem_range;
+  std::unique_ptr<libMesh::ConstNodeRange> _current_algebraic_node_range;
   std::unique_ptr<ConstBndNodeRange> _current_algebraic_bnd_node_range;
 
   /// Automatic differentiaion (AD) flag which indicates whether any consumer has
@@ -3084,7 +3105,7 @@ FEProblemBase::assembly(const THREAD_ID tid, const unsigned int sys_num) const
   return *_assembly[tid][sys_num];
 }
 
-inline const CouplingMatrix *
+inline const libMesh::CouplingMatrix *
 FEProblemBase::couplingMatrix(const unsigned int i) const
 {
   return _cm[i].get();

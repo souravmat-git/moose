@@ -27,6 +27,9 @@ import pyhit
 
 import argparse
 
+# Directory the test harness is in
+testharness_dir = os.path.dirname(os.path.realpath(__file__))
+
 def readTestRoot(fname):
 
     root = pyhit.load(fname)
@@ -1002,27 +1005,28 @@ class TestHarness:
         # Now that the scheduler is setup, initialize the results storage
         # Save executable-under-test name to self.executable
         exec_suffix = 'Windows' if platform.system() == 'Windows' else ''
-        self.executable = app_name + '-' + self.options.method + exec_suffix
+        executable = f'{app_name}-{self.options.method}{exec_suffix}'
         self.app_name = app_name
 
-        # if the executable has a slash - assume it is a file path
-        if '/' in app_name:
-            self.executable = os.path.abspath(self.executable)
-        # look for executable in PATH - if not there, check other places.
-        elif os.path.exists(os.path.join(os.getcwd(), self.executable)):
-            # it's in the current working directory
-            self.executable = os.getcwd() + '/' + self.executable
-        elif os.path.exists(os.path.join(self._rootdir, self.executable)):
-            # it's in the testroot file's directory
-            self.executable = self.executable
-            # we may be hopping around between multiple (module)
-            # subdirectories of tests - so the executable needs to be an
-            # absolute path.
-            self.executable = os.path.abspath(os.path.join(self._rootdir, self.executable))
+        # Find the app executable
+        self.executable = None
+        if os.path.isabs(executable):
+            self.executable = executable
         else:
-            # it's (hopefully) in an installed location
-            mydir = os.path.dirname(os.path.realpath(__file__))
-            self.executable = os.path.join(mydir, '../../../..', 'bin', self.executable)
+            # Directories to search in
+            dirs = [self._orig_cwd, os.getcwd(), self._rootdir,
+                    os.path.join(testharness_dir, '../../../../bin')]
+            dirs = list(dict.fromkeys(dirs)) # remove duplicates
+            for dir in dirs:
+                path = os.path.join(dir, executable)
+                if os.path.exists(path):
+                    self.executable = path
+                    break
+            if self.executable is None and shutil.which(executable):
+                self.executable = shutil.which(executable)
+
+        if self.executable is not None:
+            self.executable = os.path.normpath(self.executable)
 
         # Create the output dir if they ask for it. It is easier to ask for forgiveness than permission
         if self.options.output_dir:
@@ -1089,6 +1093,7 @@ class TestHarness:
         parser.add_argument('--error-unused', action='store_true', help='Run the tests with errors on unused parameters (Pass "--error-unused" to executable)')
         parser.add_argument('--error-deprecated', action='store_true', help='Run the tests with errors on deprecations')
         parser.add_argument('--allow-unused',action='store_true', help='Run the tests without errors on unused parameters (Pass "--allow-unused" to executable)')
+        parser.add_argument('--allow-warnings',action='store_true', help='Run the tests with warnings not as errors (Do not pass "--error" to executable)')
         # Option to use for passing unwrapped options to the executable
         parser.add_argument('--cli-args', nargs='?', type=str, dest='cli_args', help='Append the following list of arguments to the command line (Encapsulate the command in quotes)')
         parser.add_argument('--dry-run', action='store_true', dest='dry_run', help="Pass --dry-run to print commands to run, but don't actually run them")
@@ -1154,11 +1159,9 @@ class TestHarness:
         # Try to guess the --hpc option if --hpc-host is set
         if self.options.hpc_host and not self.options.hpc:
             hpc_host = self.options.hpc_host[0]
-            if 'sawtooth' in hpc_host or 'lemhi' in hpc_host:
-                self.options.hpc = 'pbs'
-            elif 'bitterroot' in hpc_host:
-                self.options.hpc = 'slurm'
-            if self.options.hpc:
+            hpc_config = TestHarness.queryHPCCluster(hpc_host)
+            if hpc_config is not None:
+                self.options.hpc = hpc_config.scheduler
                 print(f'INFO: Setting --hpc={self.options.hpc} for known host {hpc_host}')
 
         self.options.runtags = [tag for tag in self.options.run.split(',') if tag != '']
@@ -1197,6 +1200,9 @@ class TestHarness:
                 self.options.input_file_name = os.path.basename(opts.spec_file)
         if opts.verbose and opts.quiet:
             print('Do not be an oxymoron with --verbose and --quiet')
+            sys.exit(1)
+        if opts.error and opts.allow_warnings:
+            print(f'ERROR: Cannot use --error and --allow-warnings together')
             sys.exit(1)
 
         # Setup absolute paths and output paths
@@ -1244,3 +1250,29 @@ class TestHarness:
 
     def getOptions(self):
         return self.options
+
+    # Helper tuple for storing information about a cluster
+    HPCCluster = namedtuple('HPCCluster', ['scheduler', 'apptainer_modules'])
+    # The modules that we want to load when running in a non-moduled
+    # container on INL HPC
+    inl_modules = ['use.moose', 'moose-dev-container-openmpi/5.0.5_0']
+    # Define INL HPC clusters
+    hpc_configs = {'sawtooth': HPCCluster(scheduler='pbs',
+                                          apptainer_modules=inl_modules),
+                   'bitterroot': HPCCluster(scheduler='slurm',
+                                            apptainer_modules=inl_modules)}
+
+    @staticmethod
+    def queryHPCCluster(hostname: str):
+        """
+        Attempt to get the HPC cluster configuration given a host
+
+        Args:
+            hostname: The HPC system hostname
+        Returns:
+            HPCCluster: The config, if found, otherwise None
+        """
+        for host, config in TestHarness.hpc_configs.items():
+            if host in hostname:
+                return config
+        return None

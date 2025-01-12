@@ -533,24 +533,24 @@ TEST_F(MooseServerTest, DocumentOpenAndDiagnostics)
   wasp::DataObject didopen_notification;
   std::stringstream didopen_errors;
 
-  EXPECT_TRUE(wasp::lsp::buildDidOpenNotification(didopen_notification,
+  ASSERT_TRUE(wasp::lsp::buildDidOpenNotification(didopen_notification,
                                                   didopen_errors,
                                                   document_uri,
                                                   document_language_id,
                                                   document_version,
                                                   document_text_open));
 
-  EXPECT_TRUE(didopen_errors.str().empty());
+  ASSERT_TRUE(didopen_errors.str().empty());
 
   // handle the built didopen notification with the moose_server
 
   wasp::DataObject diagnostics_notification;
 
-  EXPECT_TRUE(
+  ASSERT_TRUE(
       moose_server->handleDidOpenNotification(didopen_notification, diagnostics_notification))
       << moose_server->getErrors();
 
-  EXPECT_TRUE(moose_server->getErrors().empty());
+  ASSERT_TRUE(moose_server->getErrors().empty());
 
   // check set of messages built from the moose_server diagnostics notification
 
@@ -1262,7 +1262,7 @@ TEST_F(MooseServerTest, DefinitionObjectTypeSource)
   // expected locations with zero-based lines and columns
 
   std::string locations_expect = R"INPUT(
-document_uri: "file://...absolute.../framework/src/executioners/Transient.C"    location_start: [38.0]    location_end: [38.1000]
+document_uri: "file://...absolute.../framework/src/executioners/Transient.C"    location_start: [16.0]    location_end: [16.1000]
 )INPUT";
 
   EXPECT_EQ(locations_expect, "\n" + locations_actual.str());

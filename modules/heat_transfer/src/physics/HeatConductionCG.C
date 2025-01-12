@@ -182,6 +182,19 @@ HeatConductionCG::addFEBCs()
     }
     else
     {
+      // Check sizes
+      if (convective_boundaries.size() != boundary_T_fluid.size())
+        paramError("fixed_convection_T_fluid",
+                   "Should be as many convection boundaries (" +
+                       std::to_string(convective_boundaries.size()) +
+                       ") as fixed convection temperatures (" +
+                       std::to_string(boundary_T_fluid.size()) + ")");
+      if (convective_boundaries.size() != boundary_htc.size())
+        paramError("fixed_convection_htc",
+                   "Should be as many convection boundaries (" +
+                       std::to_string(convective_boundaries.size()) +
+                       ") as fixed convection heat exchange coefficients (" +
+                       std::to_string(boundary_htc.size()) + ")");
       for (const auto i : index_range(convective_boundaries))
       {
         params.set<std::vector<BoundaryName>>("boundary") = {convective_boundaries[i]};
@@ -197,7 +210,7 @@ HeatConductionCG::addFEBCs()
 }
 
 void
-HeatConductionCG::addNonlinearVariables()
+HeatConductionCG::addSolverVariables()
 {
   if (variableExists(_temperature_name, /*error_if_aux=*/true))
     return;
@@ -205,6 +218,7 @@ HeatConductionCG::addNonlinearVariables()
   const std::string variable_type = "MooseVariable";
   // defaults to linear lagrange FE family
   InputParameters params = getFactory().getValidParams(variable_type);
+  params.set<SolverSystemName>("solver_sys") = getSolverSystem(_temperature_name);
 
   getProblem().addVariable(variable_type, _temperature_name, params);
 }

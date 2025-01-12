@@ -30,6 +30,8 @@
 
 #include <regex>
 
+using namespace libMesh;
+
 InputParameters
 SubProblem::validParams()
 {
@@ -133,6 +135,18 @@ SubProblem::vectorTagExists(const TagName & tag_name) const
       return true;
 
   return false;
+}
+
+void
+SubProblem::addNotZeroedVectorTag(const TagID tag)
+{
+  _not_zeroed_tagged_vectors.insert(tag);
+}
+
+bool
+SubProblem::vectorTagNotZeroed(const TagID tag) const
+{
+  return _not_zeroed_tagged_vectors.count(tag);
 }
 
 const VectorTag &
@@ -690,6 +704,14 @@ SubProblem::checkBoundaryMatProps()
     mooseError(errors.str());
 }
 
+bool
+SubProblem::nlConverged(const unsigned int nl_sys_num)
+{
+  mooseAssert(nl_sys_num < numNonlinearSystems(),
+              "The nonlinear system number is higher than the number of systems we have!");
+  return solverSystemConverged(nl_sys_num);
+}
+
 void
 SubProblem::markMatPropRequested(const std::string & prop_name)
 {
@@ -772,6 +794,21 @@ unsigned int
 SubProblem::getAxisymmetricRadialCoord() const
 {
   return mesh().getAxisymmetricRadialCoord();
+}
+
+bool
+SubProblem::hasLinearVariable(const std::string & var_name) const
+{
+  for (const auto i : make_range(numLinearSystems()))
+    if (systemBaseLinear(i).hasVariable(var_name))
+      return true;
+  return false;
+}
+
+bool
+SubProblem::hasAuxiliaryVariable(const std::string & var_name) const
+{
+  return systemBaseAuxiliary().hasVariable(var_name);
 }
 
 template <typename T>

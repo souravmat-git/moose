@@ -18,6 +18,9 @@
 
 #include "libmesh/petsc_solver_exception.h"
 
+// Needed for LIBMESH_CHECK_ERR
+using libMesh::PetscSolverException;
+
 registerMooseObject("MooseApp", Eigenvalue);
 
 InputParameters
@@ -194,16 +197,13 @@ Eigenvalue::prepareSolverOptions()
   {
     // Master app has the default data base
     if (!_app.isUltimateMaster())
-    {
-      auto ierr = PetscOptionsPush(_eigen_problem.petscOptionsDatabase());
-      LIBMESH_CHKERR(ierr);
-    }
+      LibmeshPetscCall(PetscOptionsPush(_eigen_problem.petscOptionsDatabase()));
+
     Moose::SlepcSupport::slepcSetOptions(_eigen_problem, _pars);
+
     if (!_app.isUltimateMaster())
-    {
-      auto ierr = PetscOptionsPop();
-      LIBMESH_CHKERR(ierr);
-    }
+      LibmeshPetscCall(PetscOptionsPop());
+
     _eigen_problem.petscOptionsInserted() = true;
   }
 #endif

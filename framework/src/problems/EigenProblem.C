@@ -26,6 +26,9 @@
 #include "libmesh/eigen_solver.h"
 #include "libmesh/enum_eigen_solver_type.h"
 
+// Needed for LIBMESH_CHECK_ERR
+using libMesh::PetscSolverException;
+
 registerMooseObject("MooseApp", EigenProblem);
 
 InputParameters
@@ -296,8 +299,8 @@ EigenProblem::computeResidualTag(const NumericVector<Number> & soln,
   // specific system tags that we need for this instance
   _nl_eigen->disassociateDefaultVectorTags();
 
-  // Clear FE tags and first add the specific tag associated with the residual
-  _fe_vector_tags.clear();
+  // add the specific tag associated with the residual
+  mooseAssert(_fe_vector_tags.empty(), "This should be empty indicating a clean starting state");
   _fe_vector_tags.insert(tag);
 
   // Add any other user-added vector residual tags if they have associated vectors
@@ -312,6 +315,7 @@ EigenProblem::computeResidualTag(const NumericVector<Number> & soln,
 
   setCurrentNonlinearSystem(_nl_eigen->number());
   computeResidualTags(_fe_vector_tags);
+  _fe_vector_tags.clear();
 
   _nl_eigen->disassociateVectorFromTag(residual, tag);
 }
@@ -329,8 +333,8 @@ EigenProblem::computeResidualAB(const NumericVector<Number> & soln,
   // specific system tags that we need for this instance
   _nl_eigen->disassociateDefaultVectorTags();
 
-  // Clear FE tags and first add the specific tags associated with the residual
-  _fe_vector_tags.clear();
+  // add the specific tags associated with the residual
+  mooseAssert(_fe_vector_tags.empty(), "This should be empty indicating a clean starting state");
   _fe_vector_tags.insert(tagA);
   _fe_vector_tags.insert(tagB);
 
@@ -346,6 +350,7 @@ EigenProblem::computeResidualAB(const NumericVector<Number> & soln,
   _nl_eigen->setSolution(soln);
 
   computeResidualTags(_fe_vector_tags);
+  _fe_vector_tags.clear();
 
   _nl_eigen->disassociateVectorFromTag(residualA, tagA);
   _nl_eigen->disassociateVectorFromTag(residualB, tagB);
@@ -535,10 +540,7 @@ EigenProblem::solve(const unsigned int nl_sys_num)
 #if !PETSC_RELEASE_LESS_THAN(3, 12, 0)
   // Master has the default database
   if (!_app.isUltimateMaster())
-  {
-    auto ierr = PetscOptionsPush(_petsc_option_data_base);
-    LIBMESH_CHKERR(ierr);
-  }
+    LibmeshPetscCall(PetscOptionsPush(_petsc_option_data_base));
 #endif
 
   setCurrentNonlinearSystem(nl_sys_num);
@@ -610,10 +612,7 @@ EigenProblem::solve(const unsigned int nl_sys_num)
 
 #if !PETSC_RELEASE_LESS_THAN(3, 12, 0)
   if (!_app.isUltimateMaster())
-  {
-    auto ierr = PetscOptionsPop();
-    LIBMESH_CHKERR(ierr);
-  }
+    LibmeshPetscCall(PetscOptionsPop());
 #endif
 
   // sync solutions in displaced problem
@@ -657,7 +656,7 @@ EigenProblem::init()
 }
 
 bool
-EigenProblem::nlConverged(unsigned int)
+EigenProblem::solverSystemConverged(unsigned int)
 {
   if (_solve)
     return _nl_eigen->converged();

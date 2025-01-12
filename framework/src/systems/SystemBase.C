@@ -32,6 +32,8 @@
 #include "libmesh/string_to_enum.h"
 #include "libmesh/fe_interface.h"
 
+using namespace libMesh;
+
 /// Free function used for a libMesh callback
 void
 extraSendList(std::vector<dof_id_type> & send_list, void * context)
@@ -651,7 +653,6 @@ SystemBase::closeTaggedVector(const TagID tag)
                "' in system '",
                name(),
                "' because there is no vector associated with that tag");
-
   getVector(tag).close();
 }
 
@@ -677,8 +678,8 @@ SystemBase::zeroTaggedVector(const TagID tag)
                "' in system '",
                name(),
                "' because there is no vector associated with that tag");
-
-  getVector(tag).zero();
+  if (!_subproblem.vectorTagNotZeroed(tag))
+    getVector(tag).zero();
 }
 
 void

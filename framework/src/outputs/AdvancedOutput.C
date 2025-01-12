@@ -26,6 +26,8 @@
 
 #include "libmesh/fe_interface.h"
 
+using namespace libMesh;
+
 // A function, only available in this file, for adding the AdvancedOutput parameters. This is
 // used to eliminate code duplication between the difference specializations of the validParams
 // function.
@@ -482,7 +484,7 @@ AdvancedOutput::initAvailableLists()
 void
 AdvancedOutput::initExecutionTypes(const std::string & name, ExecFlagEnum & input)
 {
-  // Build the input paramemter name
+  // Build the input parameter name
   std::string param_name = "execute_";
   param_name += name + "_on";
 
